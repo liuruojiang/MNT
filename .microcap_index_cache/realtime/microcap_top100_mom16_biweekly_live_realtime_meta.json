@@ -1,0 +1,15 @@
+{
+  "snapshot_time": "2026-03-30 14:30:28.602341",
+  "latest_anchor_trade_date": "2026-03-18",
+  "latest_rebalance": "2026-03-05",
+  "effective_rebalance": "2026-03-05",
+  "rebalance_effective_date": "2026-03-06",
+  "quote_source": "live_or_prev_close_fallback",
+  "hedge_quote_source": "index_spot_latest",
+  "member_price_count": 100,
+  "member_count": 100,
+  "microcap_rt_close": 46661757.086659595,
+  "hedge_rt_close": 7760.75,
+  "tail_jitter_risk": "normal",
+  "tail_jitter_note": ""
+}

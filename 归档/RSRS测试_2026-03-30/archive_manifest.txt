@@ -1,0 +1,12 @@
+﻿RSRS archive created: 2026-03-30
+Strategy root: C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略
+Copied from RSRS workspace: C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\RSRS
+Archive root: C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\归档\RSRS测试_2026-03-30
+
+Copied items:
+test_v61_ab_rsrs_replacement.py
+test_v61_ab_rsrs_filter.py
+scan_v61_suba_rsrs_filter_nm.py
+outputs_v61_rsrs_replacement
+outputs_v61_rsrs_filter
+outputs_v61_rsrs_filter_scan

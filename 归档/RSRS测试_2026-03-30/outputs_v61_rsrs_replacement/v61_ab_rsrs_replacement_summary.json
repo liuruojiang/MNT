@@ -1,0 +1,101 @@
+{
+  "rsrs_params": {
+    "n": 18,
+    "m": 600,
+    "signal": "right_skew",
+    "threshold": 0.0
+  },
+  "sub_a_common_start": "2012-12-12",
+  "sub_b_common_start": "2005-06-14",
+  "sub_a_proxy_map": {
+    "1.H20955": "sh515100",
+    "0.399606": "sz399606",
+    "1.H00016": "sh000016",
+    "1.H00852": "sh000852",
+    "1.H00905": "sh000905",
+    "1.H11077": "sh511260"
+  },
+  "sub_b_emxc_ohlc_proxy": "EEM before 2017-08-01, EMXC afterwards, both anchored to local EMXC_spliced close",
+  "results": [
+    {
+      "strategy": "Sub-A_baseline_full",
+      "start": "2010-09-29",
+      "end": "2026-03-27",
+      "days": 3762,
+      "annual": 0.22836235995500798,
+      "max_dd": -0.31198281080586104,
+      "sharpe": 0.9390709361639209,
+      "total_return": 23.195541884966296
+    },
+    {
+      "strategy": "Sub-A_RSRS_full",
+      "start": "2010-09-29",
+      "end": "2026-03-27",
+      "days": 3762,
+      "annual": 0.13751587688466982,
+      "max_dd": -0.4085871487165357,
+      "sharpe": 0.5912010114787629,
+      "total_return": 6.359082612755718
+    },
+    {
+      "strategy": "Sub-A_baseline_same_start",
+      "start": "2012-12-12",
+      "end": "2026-03-27",
+      "days": 3226,
+      "annual": 0.26777855662589944,
+      "max_dd": -0.31198281080586077,
+      "sharpe": 1.078403583683926,
+      "total_return": 22.39462170590769
+    },
+    {
+      "strategy": "Sub-A_RSRS_same_start",
+      "start": "2012-12-12",
+      "end": "2026-03-27",
+      "days": 3226,
+      "annual": 0.156424055663396,
+      "max_dd": -0.40858714871653673,
+      "sharpe": 0.6384905748575348,
+      "total_return": 5.8964227086457415
+    },
+    {
+      "strategy": "Sub-B_baseline_full",
+      "start": "2003-08-22",
+      "end": "2026-03-18",
+      "days": 6987,
+      "annual": 0.13257066524661743,
+      "max_dd": -0.20543896643991336,
+      "sharpe": 0.7450045886463531,
+      "total_return": 15.607319299973291
+    },
+    {
+      "strategy": "Sub-B_RSRS_full",
+      "start": "2003-08-22",
+      "end": "2026-03-18",
+      "days": 6987,
+      "annual": 0.04572228743434614,
+      "max_dd": -0.3607901832466548,
+      "sharpe": 0.32545484141728337,
+      "total_return": 1.7431129272140042
+    },
+    {
+      "strategy": "Sub-B_baseline_same_start",
+      "start": "2005-06-14",
+      "end": "2026-03-18",
+      "days": 6532,
+      "annual": 0.1284752219146137,
+      "max_dd": -0.20543896643991305,
+      "sharpe": 0.7191830388566056,
+      "total_return": 11.292768474300013
+    },
+    {
+      "strategy": "Sub-B_RSRS_same_start",
+      "start": "2005-06-14",
+      "end": "2026-03-18",
+      "days": 6532,
+      "annual": 0.04981227595744775,
+      "max_dd": -0.3607901832466548,
+      "sharpe": 0.33660240414778364,
+      "total_return": 1.7431129272140042
+    }
+  ]
+}
