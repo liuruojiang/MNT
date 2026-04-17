@@ -88,11 +88,9 @@ class StrategyADelayedEntryTests(unittest.TestCase):
 
         out = self.mod.run_cn_strategy(close_df, ["AAA", "BBB"])
 
-        self.assertEqual(out["holding"].iloc[0], "cash")
-        self.assertEqual(out["holding"].iloc[1], "cash")
-        self.assertEqual(out["holding"].iloc[2], "cash")
-        self.assertEqual(out["holding"].iloc[3], "AAA")
-        self.assertEqual(out.index[3], pd.Timestamp("2026-01-06"))
+        self.assertEqual(out.loc[pd.Timestamp("2026-01-05"), "holding"], "cash")
+        self.assertEqual(out.loc[pd.Timestamp("2026-01-06"), "holding"], "AAA")
+        self.assertTrue(bool(out.loc[pd.Timestamp("2026-01-06"), "is_signal"]))
 
     def test_stays_in_cash_when_no_down_day_arrives(self):
         close_df = _base_frame()
@@ -115,13 +113,14 @@ class StrategyADelayedEntryTests(unittest.TestCase):
 
     def test_cancels_pending_entry_when_target_changes_during_wait(self):
         close_df = _base_frame()
-        close_df["CCC"] = [100, 100, 101, 102, 103, 102, 101, 100]
+        close_df["AAA"] = [100, 101, 102, 103, 104, 105, 106, 107]
+        close_df["CCC"] = [100, 100, 100, 100, 101, 102, 101, 100]
 
         def fake_bias(series, bias_n=None, mom_day=None):
             if series.name == "AAA":
-                values = [-1, -1, 3, 3, -1, -1, -1, -1]
+                values = [-1, -1, -1, -1, 3, -1, -1, -1]
             elif series.name == "CCC":
-                values = [-1, -1, -1, -1, 4, 4, 4, 4]
+                values = [-1, -1, -1, -1, -1, 4, 4, 4]
             else:
                 values = [-1] * len(series)
             return pd.Series(values, index=series.index, dtype=float)
@@ -141,7 +140,7 @@ class StrategyADelayedEntryTests(unittest.TestCase):
 
         def fake_bias(series, bias_n=None, mom_day=None):
             if series.name == "AAA":
-                values = [-1, -1, 3, 3, 3, -2, -2, -2]
+                values = [-1, -1, -1, -1, 3, 3, -2, -2]
             else:
                 values = [-1] * len(series)
             return pd.Series(values, index=series.index, dtype=float)
@@ -154,9 +153,9 @@ class StrategyADelayedEntryTests(unittest.TestCase):
 
         out = self.mod.run_cn_strategy(close_df, ["AAA", "BBB"])
 
-        self.assertEqual(out["holding"].iloc[3], "AAA")
-        self.assertEqual(out["holding"].iloc[4], "cash")
-        self.assertTrue(bool(out["is_signal"].iloc[4]))
+        self.assertEqual(out.loc[pd.Timestamp("2026-01-06"), "holding"], "AAA")
+        self.assertEqual(out.loc[pd.Timestamp("2026-01-07"), "holding"], "cash")
+        self.assertTrue(bool(out.loc[pd.Timestamp("2026-01-07"), "is_signal"]))
 
 
 if __name__ == "__main__":

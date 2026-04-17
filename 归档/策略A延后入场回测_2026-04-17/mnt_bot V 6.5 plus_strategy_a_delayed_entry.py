@@ -1028,6 +1028,9 @@ def run_cn_strategy(close_df, equity_codes):
         r2_dict[code] = calc_rolling_r2(close_df[code])
     start_idx = CN_BIAS_N + CN_MOM_DAY
     holding = "cash"
+    pending_entry_target = None
+    pending_entry_since = None
+    await_fresh_entry_signal = False
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -1047,24 +1050,69 @@ def run_cn_strategy(close_df, equity_codes):
                     if best in r2_dict and i < len(r2_dict[best]) else np.nan
                 if not np.isnan(r2_val) and r2_val >= CN_R2_THRESHOLD:
                     ideal = best
-        target = ideal if ideal != holding else None
-        if target is not None:
+        signal_target = ideal if ideal != holding else None
+        trade_target = None
+        is_signal = False
+
+        if holding == "cash":
+            if await_fresh_entry_signal:
+                if ideal == "cash":
+                    await_fresh_entry_signal = False
+            elif pending_entry_target is not None:
+                if ideal != pending_entry_target:
+                    pending_entry_target = None
+                    pending_entry_since = None
+                    await_fresh_entry_signal = True
+                else:
+                    prev_close = close_df.iloc[i - 1][pending_entry_target] if i > 0 else np.nan
+                    curr_close = close_df.iloc[i][pending_entry_target]
+                    is_down_day = (
+                        pd.notna(prev_close)
+                        and pd.notna(curr_close)
+                        and float(curr_close) < float(prev_close)
+                    )
+                    if is_down_day:
+                        trade_target = pending_entry_target
+                        pending_entry_target = None
+                        pending_entry_since = None
+                        is_signal = True
+            elif ideal != "cash":
+                pending_entry_target = ideal
+                pending_entry_since = date
+        else:
+            if signal_target is not None:
+                trade_target = signal_target
+                is_signal = True
+                pending_entry_target = None
+                pending_entry_since = None
+                await_fresh_entry_signal = False
+
+        if trade_target is not None:
             old_h = holding
-            cost = (1 - CN_COMMISSION) if (old_h == "cash" or target == "cash") \
+            cost = (1 - CN_COMMISSION) if (old_h == "cash" or trade_target == "cash") \
                 else (1 - CN_COMMISSION) ** 2
             if old_h == "cash":
                 day_ret = (1 + CN_RF_DAILY) * cost - 1
             else:
                 asset_ret = close_df.iloc[i][old_h] / close_df.iloc[i-1][old_h] - 1
                 day_ret = (1 + asset_ret) * cost - 1
-            holding = target
+            holding = trade_target
         else:
             if holding == "cash":
                 day_ret = CN_RF_DAILY
             else:
                 day_ret = close_df.iloc[i][holding] / close_df.iloc[i-1][holding] - 1
-        rows.append({"date": date, "return": day_ret, "holding": holding,
-                      "is_signal": target is not None, "target": target, "weight": 1.0})
+        rows.append({
+            "date": date,
+            "return": day_ret,
+            "holding": holding,
+            "is_signal": is_signal,
+            "target": trade_target,
+            "weight": 1.0,
+            "pending_entry_target": pending_entry_target,
+            "pending_entry_since": pending_entry_since,
+            "await_fresh_entry_signal": await_fresh_entry_signal,
+        })
     df = pd.DataFrame(rows).set_index("date")
     # 波动率缩放 (v6.1): cash日scale=1.0, 权益日scale=target_vol/realized_vol
     raw_ret = df["return"].values.copy()
