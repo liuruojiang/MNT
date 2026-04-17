@@ -1,4 +1,4 @@
-﻿# poe: name=Strategy-Signal-V65
+# poe: name=Strategy-Signal-V65
 # poe: privacy_shield=half
 """V6.5"""
 import requests
@@ -72,6 +72,15 @@ CN_CSINDEX_CANDIDATES = {
     "H20955": ["H20955", "H30269"],
 }
 # (国债已改用H11077全收益指数，无需ETF拼接)
+
+# 代理全收益指数，使用价格指数用于从第三方(EastMoney/Sina)获取数据，规避中证官网实时失效问题
+CN_H_PROXY_SECIDS = {
+    "1.H20955": "1.000827", # 中证红利低波100 -> 中证红利低波动100指数(价格)
+    "1.H00016": "1.000016", # 上证50全收益 -> 上证50(价格)
+    "1.H00852": "1.000852", # 中证1000全收益 -> 中证1000(价格)
+    "1.H00905": "1.000905", # 中证500全收益 -> 中证500(价格)
+    "1.H11077": "1.000012", # 上证10年期国债全收益 -> 上证国债指数
+}
 
 # ─────────────────────────────────────────────
 # A股 Sub-A-DK 多空策略
@@ -462,10 +471,74 @@ def _fetch_cn_h_proxy(secid):
             time.sleep(1)
     raise last_err or ValueError(f"H proxy returned no usable data for {secid} -> {proxy_secid}")
 
+
+def _stitch_cn_proxy_returns(base_df, proxy_df):
+    """Extend a total-return series with proxy price-index returns after the overlap date."""
+    if base_df is None or len(base_df) == 0:
+        return proxy_df
+    if proxy_df is None or len(proxy_df) == 0:
+        return base_df
+    if "close" not in base_df.columns or "close" not in proxy_df.columns:
+        return base_df
+
+    base = base_df[["close"]].copy().sort_index()
+    proxy = proxy_df[["close"]].copy().sort_index()
+    overlap = base.index.intersection(proxy.index)
+    if len(overlap) == 0:
+        return base
+
+    anchor = overlap[-1]
+    stitched = base.loc[:anchor].copy()
+    proxy_tail = proxy.loc[anchor:, "close"].dropna()
+    if len(proxy_tail) <= 1:
+        return stitched
+
+    last_close = float(stitched.iloc[-1]["close"])
+    rows = []
+    prev_proxy = float(proxy_tail.iloc[0])
+    for dt, px in proxy_tail.iloc[1:].items():
+        px = float(px)
+        if prev_proxy <= 0:
+            prev_proxy = px
+            continue
+        last_close *= px / prev_proxy
+        rows.append((dt, last_close))
+        prev_proxy = px
+    if rows:
+        ext = pd.DataFrame(rows, columns=["date", "close"]).set_index("date")
+        stitched = pd.concat([stitched, ext], axis=0)
+    return stitched[~stitched.index.duplicated(keep="last")].sort_index()
+
+
+def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
+    """Map a live proxy level to the strategy series by applying the latest proxy return."""
+    if df is None or len(df) == 0 or proxy_df is None or len(proxy_df) == 0:
+        return realtime_proxy_close
+    if "close" not in df.columns or "close" not in proxy_df.columns:
+        return realtime_proxy_close
+
+    last_date = df.index[-1]
+    proxy_hist = proxy_df.loc[:last_date, "close"].dropna()
+    if len(proxy_hist) == 0:
+        return realtime_proxy_close
+
+    prev_proxy_close = float(proxy_hist.iloc[-1])
+    last_close = float(df.iloc[-1]["close"])
+    if prev_proxy_close <= 0 or last_close <= 0:
+        return realtime_proxy_close
+    return last_close * (float(realtime_proxy_close) / prev_proxy_close)
+
+
 def _fetch_cn_realtime_close(secid):
     """从东方财富实时行情API获取指数/ETF最新收盘价(收盘后)或现价(盘中)。
     返回 float(收盘价) 或 None(失败/非交易日)。
     仅在日K线API缺失当天数据时用于补充。"""
+    
+    # 如果有对应的价格指数代理，则使用代理代码获取实时数据
+    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
+    if proxy_secid:
+        secid = proxy_secid
+
     try:
         url = (f"https://push2.eastmoney.com/api/qt/stock/get"
                f"?secid={secid}"
@@ -507,6 +580,12 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
+    if secid in CN_H_PROXY_SECIDS:
+        try:
+            proxy_df, _ = _fetch_cn_h_proxy(secid)
+            realtime_close = _project_proxy_realtime_close(df, proxy_df, realtime_close)
+        except _DATA_FETCH_ERRORS:
+            pass
     # 与最后一行收盘价对比，完全相同说明可能是非交易日(节假日)
     last_close = float(df.iloc[-1]["close"]) if "close" in df.columns else None
     if last_close is not None and abs(realtime_close - last_close) < 0.001:
@@ -527,94 +606,6 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if msg:
         msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
     return df
-
-def fetch_cn_kline(secid):
-    code = secid.split('.')[1]
-    last_err = None
-    attempts = []
-    if code.startswith('H'):
-        # H-prefix全收益指数: 优先走中证官网, 官网候选代码都失败后才回退到第三方源
-        try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                return df, source
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"csindex:{e}")
-            time.sleep(1)
-        if secid in CN_H_PROXY_SECIDS:
-            try:
-                df, source = _fetch_cn_h_proxy(secid)
-                if df is not None and len(df) > 50:
-                    return df, source
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"proxy:{e}")
-                time.sleep(1)
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    else:
-        # ETF/普通指数: EastMoney优先, Sina备用
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    for name, fetcher in sources:
-        try:
-            df = fetcher()
-            if df is not None and len(df) > 50:
-                return df, name
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            time.sleep(1)
-    raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}")
-
-def fetch_cn_kline(secid):
-    code = secid.split('.')[1]
-    last_err = None
-    attempts = []
-    if code.startswith('H'):
-        # H-prefix 全收益指数: 中证官网优先, 再走价格指数代理, 最后才回退第三方 H 代码.
-        try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                return df, source
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"csindex:{e}")
-            time.sleep(1)
-        if secid in CN_H_PROXY_SECIDS:
-            try:
-                df, source = _fetch_cn_h_proxy(secid)
-                if df is not None and len(df) > 50:
-                    return df, source
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"proxy:{e}")
-                time.sleep(1)
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    else:
-        # ETF/普通指数: EastMoney 优先, Sina 备用.
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    for name, fetcher in sources:
-        try:
-            df = fetcher()
-            if df is not None and len(df) > 50:
-                return df, name
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"{name}:{e}")
-            time.sleep(1)
-    attempts_text = " | ".join(attempts[-4:]) if attempts else str(last_err)
-    raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}")
 
 def _cn_cache_path(secid):
     base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
@@ -640,40 +631,49 @@ def _load_cn_official_cache(secid):
     return df.set_index("date").sort_index()
 
 def fetch_cn_kline(secid):
-    code = secid.split(".")[1]
+    """
+    修改为由代理价格指数读取来切换数据源（放弃从csindex读取以规避其实时失效和反爬问题）。
+    全收益指数H打头的代码会被映射到实时支持良好的价格指数代码。
+    """
+    code = secid.split('.')[1] if '.' in secid else secid
     last_err = None
     attempts = []
-    if code.startswith("H"):
+
+    if code.startswith('H'):
+        base_df = None
+        base_source = None
         try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                _save_cn_official_cache(secid, df)
-                return df, source
+            base_df, base_source = _fetch_cn_csindex_with_candidates(code)
+            if base_df is not None and len(base_df) > 50:
+                _save_cn_official_cache(secid, base_df)
         except _DATA_FETCH_ERRORS as e:
             last_err = e
             attempts.append(f"csindex:{e}")
             time.sleep(1)
-        for name, fetcher in [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]:
             try:
-                df = fetcher()
-                if df is not None and len(df) > 50:
-                    return df, name
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"{name}:{e}")
-                time.sleep(1)
+                base_df = _load_cn_official_cache(secid)
+                if base_df is not None and len(base_df) > 50:
+                    cache_date = base_df.index[-1].strftime("%Y-%m-%d")
+                    base_source = f"csindex-cache:{cache_date}"
+            except (OSError, ValueError, KeyError) as cache_err:
+                attempts.append(f"cache:{cache_err}")
+
+        proxy_df = None
+        proxy_source = None
         try:
-            df = _load_cn_official_cache(secid)
-            if df is not None and len(df) > 50:
-                cache_date = df.index[-1].strftime("%Y-%m-%d")
-                return df, f"csindex-cache:{cache_date}"
-        except (OSError, ValueError, KeyError) as e:
-            if last_err is None:
-                last_err = e
-            attempts.append(f"cache:{e}")
+            proxy_df, proxy_source = _fetch_cn_h_proxy(secid)
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f"proxy:{e}")
+            time.sleep(1)
+
+        if base_df is not None and len(base_df) > 50:
+            if proxy_df is not None and len(proxy_df) > 50:
+                stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
+                return stitched, f"{base_source}+{proxy_source}"
+            return base_df, base_source
+        if proxy_df is not None and len(proxy_df) > 50:
+            return proxy_df, proxy_source
     else:
         for name, fetcher in [
             ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
@@ -687,6 +687,7 @@ def fetch_cn_kline(secid):
                 last_err = e
                 attempts.append(f"{name}:{e}")
                 time.sleep(1)
+
     attempts_text = " | ".join(attempts[-5:]) if attempts else str(last_err)
     raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}")
 
@@ -919,6 +920,35 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
                   f"{', '.join(supplemented[:5])}"
                   f"{'...' if len(supplemented) > 5 else ''}"
                   f" 共{len(supplemented)}个 [snapshot]\n")
+
+def build_ibit_spliced(frame, proxy_ticker="BTC-USD", live_ticker="IBIT"):
+    """Use BTC history before IBIT listed, then switch to scaled IBIT returns."""
+    if proxy_ticker not in frame.columns:
+        raise ValueError(f"{proxy_ticker} column is required to build IBIT splice")
+
+    proxy = pd.to_numeric(frame[proxy_ticker], errors="coerce").astype(float).copy().rename(proxy_ticker)
+    if live_ticker not in frame.columns:
+        return proxy
+
+    live = pd.to_numeric(frame[live_ticker], errors="coerce").astype(float).reindex(proxy.index)
+    overlap = pd.concat(
+        [proxy.rename("proxy"), live.rename("live")],
+        axis=1,
+    ).dropna()
+    if overlap.empty:
+        return proxy
+
+    switch_date = overlap.index[0]
+    live_base = float(overlap.loc[switch_date, "live"])
+    if abs(live_base) < 1e-12:
+        return proxy
+
+    scale_factor = float(overlap.loc[switch_date, "proxy"]) / live_base
+    switch_mask = proxy.index >= switch_date
+    post_listing = live.loc[switch_mask].ffill()
+    proxy.loc[switch_mask] = post_listing * scale_factor
+    return proxy
+
 
 def _cn_signal_days(close_df, start_idx):
     week_best = {}
@@ -3071,6 +3101,17 @@ class CombinedStrategyBase:
         for secid in CN_STOCK_CODES:
             name = CN_NAMES.get(secid, secid)
             msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{cn_sources[secid]}]\n")
+        # 数据新鲜度检查: 收盘后如果部分指数缺少当天数据，发出警告
+        _cn_open_now, _bj_now_check = is_cn_market_open()
+        _is_cn_trading_day = _bj_today_cn.weekday() < 5  # 简单判断工作日
+        _cn_after_close = _is_cn_trading_day and not _cn_open_now and _bj_now_check.hour >= 15
+        if _cn_after_close:
+            _stale_codes = [secid for secid in CN_STOCK_CODES
+                            if cn_raw[secid].index[-1].date() < _bj_today_cn]
+            if _stale_codes:
+                _stale_names = "、".join(CN_NAMES.get(s, s) for s in _stale_codes)
+                msg.write(f"  ⚠️ **数据延迟:** {_stale_names} 尚未更新到今天({_bj_today_cn})，"
+                          f"信号可能不准确，请稍后重新查询\n")
         msg.write(f"  合并截至: {cn_close.index[-1].strftime('%Y-%m-%d')}\n")
         msg.write("⏳ 正在获取美股数据...\n")
         us_raw, us_sources = {}, {}
@@ -3113,6 +3154,11 @@ class CombinedStrategyBase:
             if t in us_raw:
                 us_rot_close = us_rot_close.join(
                     us_raw[t][["close"]].rename(columns={"close": t}), how="left")
+        if "BTC-USD" in us_rot_close.columns and "IBIT" in us_raw and "close" in us_raw["IBIT"].columns:
+            us_rot_close["BTC-USD"] = build_ibit_spliced(pd.DataFrame({
+                "BTC-USD": us_rot_close["BTC-USD"],
+                "IBIT": us_raw["IBIT"]["close"].reindex(us_rot_close.index),
+            }))
         prod_proxies = list(set(
             [c["proxy"] for c in PROD_PORTFOLIO.values()] + [PROD_CASH]))
         _late_prod = {"BTC-USD", "DBMF"}
@@ -5965,4 +6011,3 @@ class CombinedStrategyV65(CombinedStrategyBase):
 if __name__ == "__main__":
     bot = CombinedStrategyV65()
     bot.run()
-
