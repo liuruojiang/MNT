@@ -2825,6 +2825,49 @@ def _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=None):
         return scaled
     return raw
 
+def _build_subc_vs_info(subc_daily, actual_scale,
+                        target_vol=None, vol_window=None,
+                        min_lev=None, max_lev=None, threshold=None):
+    """Build Sub-C display info from the latest close."""
+    if target_vol is None:
+        target_vol = PROD_VS_TARGET_VOL
+    if vol_window is None:
+        vol_window = PROD_VS_VOL_WINDOW
+    if min_lev is None:
+        min_lev = PROD_VS_MIN_LEV
+    if max_lev is None:
+        max_lev = PROD_VS_MAX_LEV
+    if threshold is None:
+        threshold = PROD_VS_THRESHOLD
+
+    current_scale = float(actual_scale.iloc[-1]) if len(actual_scale) > 0 else 1.0
+    prev_actual_scale = float(actual_scale.iloc[-2]) if len(actual_scale) >= 2 else current_scale
+
+    rv = subc_daily.rolling(vol_window).std() * np.sqrt(US_TRADING_DAYS)
+    realized_vol = float(rv.iloc[-1]) if len(rv) > 0 and not pd.isna(rv.iloc[-1]) else None
+
+    if realized_vol is None or realized_vol <= 0:
+        next_target_scale = current_scale
+    else:
+        next_target_scale = float(np.clip(target_vol / realized_vol, min_lev, max_lev))
+
+    if abs(next_target_scale - current_scale) >= threshold - 1e-9:
+        next_scale = next_target_scale
+    else:
+        next_scale = current_scale
+
+    pending_adjustment = abs(next_scale - current_scale) > 0.001
+    return {
+        "realized_vol": realized_vol,
+        "actual_scale": current_scale,
+        "current_scale": current_scale,
+        "prev_actual_scale": prev_actual_scale,
+        "target_scale": next_target_scale,
+        "next_target_scale": next_target_scale,
+        "next_scale": next_scale,
+        "pending_adjustment": pending_adjustment,
+    }
+
 def generate_signal_excel(date_str, signal_info, rebalance_records):
     output = io.BytesIO()
     with xlsxwriter.Workbook(output, {"in_memory": True}) as wb:
@@ -2953,7 +2996,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
 class CombinedStrategyBase:
     """共享基类: 数据获取、策略执行、信号计算、资金管理"""
 
-    def _fetch_data(self, msg):
+    def _fetch_data(self, msg, include_us_live_snapshot=False):
         msg.write("⏳ 正在获取A股数据...\n")
         cn_raw, cn_sources = {}, {}
         for secid in CN_STOCK_CODES:
@@ -3002,7 +3045,8 @@ class CombinedStrategyBase:
                 us_sources[ticker] = source
             time.sleep(0.1)
         # 美股实时补充: 盘中或日K线延迟时用实时行情API补充当日价格
-        _supplement_us_today_close(us_raw, US_ALL_TICKERS, msg)
+        if include_us_live_snapshot:
+            _supplement_us_today_close(us_raw, US_ALL_TICKERS, msg)
         rot_tickers = US_ROT_POOL + ["BIL"]
         _late_rot = {"BTC-USD", "EMXC"}
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
@@ -3279,15 +3323,7 @@ class CombinedStrategyBase:
                 prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
             _, _vs_actual_scale, _ = _apply_subc_vol_scaling(
                 _subc_daily, us_prod_daily)
-            _vs_rv = _subc_daily.rolling(PROD_VS_VOL_WINDOW).std() * np.sqrt(US_TRADING_DAYS)
-            _vs_target_scale = (PROD_VS_TARGET_VOL / _vs_rv).clip(
-                PROD_VS_MIN_LEV, PROD_VS_MAX_LEV)
-            subc_vs_info = {
-                "realized_vol": float(_vs_rv.iloc[-1]) if len(_vs_rv) > 0 and not pd.isna(_vs_rv.iloc[-1]) else None,
-                "target_scale": float(_vs_target_scale.iloc[-2]) if len(_vs_target_scale) >= 2 else 1.0,
-                "actual_scale": float(_vs_actual_scale.iloc[-1]) if len(_vs_actual_scale) > 0 else 1.0,
-                "prev_actual_scale": float(_vs_actual_scale.iloc[-2]) if len(_vs_actual_scale) >= 2 else 1.0,
-            }
+            subc_vs_info = _build_subc_vs_info(_subc_daily, _vs_actual_scale)
         return {
             "cn_result": cn_result, "cn_dk_result": cn_dk_result,
             "us_rot_result": us_rot_result,
@@ -3798,35 +3834,40 @@ class CombinedStrategyV61(CombinedStrategyBase):
                     for name, cfg in PROD_PORTFOLIO.items():
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
-                _vs_prev = _vs.get("prev_actual_scale", _vs_scale)
-                _vs_changed = abs(_vs_scale - _vs_prev) > 0.001
+                _vs_current = _vs.get("current_scale", _vs_scale)
+                _vs_prev = _vs.get("prev_actual_scale", _vs_current)
+                _vs_ts = _vs.get("next_target_scale", _vs_ts)
+                _vs_next = _vs.get("next_scale", _vs_current)
+                _vs_changed = bool(_vs.get("pending_adjustment", abs(_vs_next - _vs_current) > 0.001))
                 if _vs_changed:
-                    msg.write(f"\n🔴 **杠杆调整! {_vs_prev:.2f}x → {_vs_scale:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                msg.write(f"\n**波动率缩放:** scale = **{_vs_scale:.2f}x**")
+                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
+                msg.write(f"\n**波动率缩放:** 当前已执行 = **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
                 msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}")
-                msg.write(f" | 理论scale: {_vs_ts:.2f}x")
-                if abs(_vs_ts - _vs_scale) > 0.001:
-                    msg.write(f" (Δ={abs(_vs_ts - _vs_scale):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
+                msg.write(f" | 最新理论: {_vs_ts:.2f}x")
+                if _vs_changed:
+                    msg.write(f" | 下一次执行 = **{_vs_next:.2f}x**")
+                elif abs(_vs_ts - _vs_current) > 0.001:
+                    msg.write(f" (Δ={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
                 msg.write("\n")
-                if _vs_scale > 1.0:
-                    _borrow_pct = _vs_scale - 1
-                    msg.write(f"📊 杠杆 {_vs_scale:.2f}x: 借入{_borrow_pct:.0%}资金 | "
+                if _vs_next > 1.0:
+                    _borrow_pct = _vs_next - 1
+                    msg.write(f"📊 杠杆 {_vs_next:.2f}x: 借入{_borrow_pct:.0%}资金 | "
                               f"融资成本≈{_borrow_pct * PROD_VS_SPREAD_BPS / 100:.1f}bp/年 over rf\n")
-                elif _vs_scale < 1.0:
-                    _cash_pct = 1 - _vs_scale
-                    msg.write(f"📊 减仓 {_vs_scale:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
+                elif _vs_next < 1.0:
+                    _cash_pct = 1 - _vs_next
+                    msg.write(f"📊 减仓 {_vs_next:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
                 if not _vs_changed:
-                    msg.write(f"📊 杠杆维持: **{_vs_scale:.2f}x**（无调整）\n")
+                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一次仍维持）\n")
             msg.write(f"\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n")
             # ── Sub-C 仓位调整表 ──
             _pos_config_c = _scan_position_config(poe.default_chat)
             _sub_c_pos = _pos_config_c.get("Sub-C") if _pos_config_c else None
             if _sub_c_pos and PROD_VS_ENABLED and _vs_changed:
                 # 杠杆变动: 按比例缩放当前持仓 (无需计算总市值)
-                _vs_ratio = _vs_scale / _vs_prev
-                msg.write(f"\n📊 **持仓调整** (杠杆 {_vs_prev:.2f}x → {_vs_scale:.2f}x, 比例 {_vs_ratio:.3f}):\n")
+                _vs_ratio = _vs_next / _vs_current if abs(_vs_current) > 1e-12 else 1.0
+                msg.write(f"\n📊 **持仓调整** (杠杆 {_vs_current:.2f}x → {_vs_next:.2f}x, 比例 {_vs_ratio:.3f}):\n")
                 msg.write("| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n")
                 for etf_c in sorted(_sub_c_pos.keys()):
                     _raw_pos_c = _sub_c_pos[etf_c]
@@ -3849,11 +3890,14 @@ class CombinedStrategyV61(CombinedStrategyBase):
                     msg.write(f"| {etf_c} | {cur_display_c} | {target_display_c} | {adj_str_c} |\n")
             _note = f"年度再平衡: 每年{PROD_REBAL_MONTH}月"
             if PROD_VS_ENABLED:
-                _note += f" | VS {_vs_scale:.2f}x"
-            if PROD_VS_ENABLED and _vs_scale < 0.999:
-                _subc_signal_text = f"风险资产{_vs_scale:.0%} / BIL {_bil_cash_w:.0%}"
-            elif PROD_VS_ENABLED and _vs_scale > 1.001:
-                _subc_signal_text = f"100%风险资产 x {_vs_scale:.2f}"
+                if _vs_changed:
+                    _note += f" | VS {_vs_current:.2f}x -> {_vs_next:.2f}x"
+                else:
+                    _note += f" | VS {_vs_next:.2f}x"
+            if PROD_VS_ENABLED and _vs_next < 0.999:
+                _subc_signal_text = f"风险资产{_vs_next:.0%} / BIL {_bil_cash_w:.0%}"
+            elif PROD_VS_ENABLED and _vs_next > 1.001:
+                _subc_signal_text = f"100%风险资产 x {_vs_next:.2f}"
             else:
                 _subc_signal_text = "全部持有(无择时)，100%风险资产"
             return {
@@ -3931,7 +3975,8 @@ class CombinedStrategyV61(CombinedStrategyBase):
     def _handle_signal(self):
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=False)
             w("⏳ 正在计算信号...\n")
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
@@ -4387,7 +4432,8 @@ class CombinedStrategyV61(CombinedStrategyBase):
     def _handle_live_signal(self):
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=True)
             w("⏳ 正在计算实时信号...\n")
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
@@ -4815,7 +4861,8 @@ class CombinedStrategyV61(CombinedStrategyBase):
     def _handle_live_params(self):
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=True)
             w("⏳ 正在计算实时参数...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
@@ -5142,37 +5189,36 @@ class CombinedStrategyV61(CombinedStrategyBase):
                     prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
                 _, _vs_actual_scale_p, _ = _apply_subc_vol_scaling(
                     _subc_daily_p, us_prod_daily)
-                _vs_rv_p = _subc_daily_p.rolling(PROD_VS_VOL_WINDOW).std() * np.sqrt(US_TRADING_DAYS)
-                _vs_target_scale_p = (PROD_VS_TARGET_VOL / _vs_rv_p).clip(
-                    PROD_VS_MIN_LEV, PROD_VS_MAX_LEV)
-                _c_scale_now = float(_vs_actual_scale_p.iloc[-1]) if len(_vs_actual_scale_p) > 0 else 1.0
-                _c_rv_now = float(_vs_rv_p.iloc[-1]) if len(_vs_rv_p) > 0 and not pd.isna(_vs_rv_p.iloc[-1]) else None
-                _c_ts_now = float(_vs_target_scale_p.iloc[-2]) if len(_vs_target_scale_p) >= 2 else 1.0
-                _c_scale_prev = float(_vs_actual_scale_p.iloc[-2]) if len(_vs_actual_scale_p) >= 2 else _c_scale_now
-                _c_scale_changed = abs(_c_scale_now - _c_scale_prev) > 0.001
+                _vs_info_p = _build_subc_vs_info(_subc_daily_p, _vs_actual_scale_p)
+                _c_scale_now = _vs_info_p.get("current_scale", 1.0)
+                _c_rv_now = _vs_info_p.get("realized_vol")
+                _c_ts_now = _vs_info_p.get("next_target_scale", _c_scale_now)
+                _c_scale_next = _vs_info_p.get("next_scale", _c_scale_now)
+                _c_scale_changed = bool(_vs_info_p.get("pending_adjustment", abs(_c_scale_next - _c_scale_now) > 0.001))
                 if _c_scale_changed:
-                    w(f"\n🔴 **杠杆调整! {_c_scale_prev:.2f}x → {_c_scale_now:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
                 w(f"\n**Vol-Scaling 实时状态:**\n\n")
                 w(f"| 指标 | 值 |\n|:-|------:|\n")
-                w(f"| 当前杠杆 | **{_c_scale_now:.2f}x** |\n")
+                w(f"| 当前已执行杠杆 | **{_c_scale_now:.2f}x** |\n")
                 if _c_rv_now is not None:
                     w(f"| 已实现波动率 | {_c_rv_now:.1%} |\n")
                 w(f"| 目标波动率 | {PROD_VS_TARGET_VOL:.0%} |\n")
-                w(f"| 理论杠杆 | {_c_ts_now:.2f}x |\n")
-                if abs(_c_ts_now - _c_scale_now) > 0.001:
+                w(f"| 最新理论杠杆 | {_c_ts_now:.2f}x |\n")
+                w(f"| 下一次执行杠杆 | **{_c_scale_next:.2f}x** |\n")
+                if not _c_scale_changed and abs(_c_ts_now - _c_scale_now) > 0.001:
                     w(f"| 阈值状态 | |Δ|={abs(_c_ts_now - _c_scale_now):.4f} < {PROD_VS_THRESHOLD}阈值，未调整 |\n")
                 w(f"| 杠杆范围 | [{PROD_VS_MIN_LEV:.1f}x, {PROD_VS_MAX_LEV:.1f}x] |\n")
                 w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
                 w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
                 if not _c_scale_changed:
-                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（无调整）\n")
-                if _c_scale_now > 1.0:
-                    _c_borrow = _c_scale_now - 1
-                    w(f"💰 杠杆 {_c_scale_now:.2f}x: 借入{_c_borrow:.0%}资金 | "
+                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一次仍维持）\n")
+                if _c_scale_next > 1.0:
+                    _c_borrow = _c_scale_next - 1
+                    w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
                       f"融资成本≈{_c_borrow * PROD_VS_SPREAD_BPS / 100:.1f}bp/年 over rf\n")
-                elif _c_scale_now < 1.0:
-                    _c_cash = 1 - _c_scale_now
-                    w(f"💰 减仓 {_c_scale_now:.2f}x: {_c_cash:.0%}转入BIL现金\n")
+                elif _c_scale_next < 1.0:
+                    _c_cash = 1 - _c_scale_next
+                    w(f"💰 减仓 {_c_scale_next:.2f}x: {_c_cash:.0%}转入BIL现金\n")
             w(f"\n下次再平衡: **{datetime.now().year}年12月**"
                       f"（若已过则{datetime.now().year + 1}年12月）\n")
             w("\n---\n\n### 组合权重\n\n| 策略 | 权重 |\n|:-|------:|\n")
