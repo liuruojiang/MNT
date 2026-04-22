@@ -1,6 +1,7 @@
 # poe: name=Strategy-Signal-V69
 # poe: privacy_shield=half
 """V6.9"""
+import asyncio
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -14,10 +15,152 @@ import json
 import os
 import xlsxwriter
 import time
+import queue
+import threading
+from types import SimpleNamespace
 import fastapi_poe as poe
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import SettingsResponse
+from fastapi_poe.types import ProtocolMessage, QueryRequest, SettingsRequest, SettingsResponse
+
+
+def _safe_poe_update_settings(settings: SettingsResponse) -> None:
+    updater = getattr(poe, "update_settings", None)
+    if callable(updater):
+        updater(settings)
+
+
+class _CompatChatMessage:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _CompatAttachment:
+    def __init__(self, attachment):
+        self.url = attachment.url
+        self.name = attachment.name
+        self.content_type = attachment.content_type
+        self.parsed_content = getattr(attachment, "parsed_content", None)
+
+    def get_contents(self) -> bytes:
+        if self.parsed_content is not None:
+            return self.parsed_content.encode("utf-8")
+        resp = _session.get(self.url, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+
+
+class _CompatQuery:
+    def __init__(self, text: str, attachments):
+        self.text = text
+        self.attachments = attachments
+
+
+class _CompatMessage:
+    def __init__(self, runtime):
+        self._runtime = runtime
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def write(self, text):
+        if text:
+            self._runtime.emit_text(str(text))
+
+    def attach_file(self, *, name, contents, content_type, is_inline=False):
+        self._runtime.emit_file(
+            name=name,
+            contents=contents,
+            content_type=content_type,
+            is_inline=is_inline,
+        )
+
+
+class _LegacyPoeRuntime:
+    _MISSING = object()
+
+    def __init__(self, request: QueryRequest):
+        self.request = request
+        self.event_queue = queue.Queue()
+        self.error = None
+        latest = request.query[-1] if request.query else None
+        latest_text = latest.content if latest is not None else ""
+        latest_atts = [_CompatAttachment(a) for a in (latest.attachments if latest is not None else [])]
+        self.query = _CompatQuery(latest_text, latest_atts)
+        self.default_chat = [_CompatChatMessage(m.content) for m in request.query]
+        self._patched = {}
+
+    def emit_text(self, text: str):
+        self.event_queue.put(("text", text))
+
+    def emit_file(self, *, name, contents, content_type, is_inline=False):
+        self.event_queue.put((
+            "file",
+            {
+                "name": name,
+                "contents": contents,
+                "content_type": content_type,
+                "is_inline": is_inline,
+            },
+        ))
+
+    def start_message(self):
+        return _CompatMessage(self)
+
+    def call(self, bot_name: str, prompt: str):
+        sub_request = self.request.model_copy(
+            update={
+                "query": [ProtocolMessage(role="user", content=str(prompt), content_type="text/plain")],
+                "tools": None,
+                "tool_calls": None,
+                "tool_results": None,
+            }
+        )
+        text = poe.sync_utils.run_sync(
+            poe.get_final_response(
+                sub_request,
+                bot_name,
+                access_key=self.request.access_key or "",
+                api_key=self.request.api_key or "",
+            )
+        )
+        return SimpleNamespace(text=text)
+
+    def patch(self):
+        self._patched = {}
+        for name, value in {
+            "query": self.query,
+            "default_chat": self.default_chat,
+            "start_message": self.start_message,
+            "call": self.call,
+        }.items():
+            self._patched[name] = getattr(poe, name, self._MISSING)
+            setattr(poe, name, value)
+        return self
+
+    def restore(self):
+        for name, old_value in self._patched.items():
+            if old_value is self._MISSING:
+                try:
+                    delattr(poe, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(poe, name, old_value)
+        self._patched = {}
+
+    def __enter__(self):
+        return self.patch()
+
+    def __exit__(self, exc_type, exc, tb):
+        self.restore()
+        return False
+
+
+_POE_RUNTIME_LOCK = threading.RLock()
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -155,7 +298,7 @@ US_ROT_FUTURES = {"QQQ", "GLD", "TLT"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 2.0x max leverage，
-# 杠杆放大范围仍仅限 US_ROT_FUTURES 中的三类资产。
+# scale>1: 仅对 US_ROT_FUTURES 中资产按其自身原始权重放大，不承接其他资产的杠杆缺口。
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 2.0
 US_ROT_VOL_WINDOW = 40
@@ -1983,25 +2126,16 @@ def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
 
 def _us_model_b(raw_w, scale):
     act = {}
-    if scale <= 1.0:
-        for a, w in raw_w.items():
-            if a == "BIL":
-                continue
+    for a, w in raw_w.items():
+        if a == "BIL":
+            continue
+        if scale <= 1.0:
             act[a] = w * scale
-    else:
-        fut_sum = sum(w for a, w in raw_w.items()
-                      if a != "BIL" and a in US_ROT_FUTURES)
-        nf_sum = sum(w for a, w in raw_w.items()
-                     if a != "BIL" and a not in US_ROT_FUTURES)
-        total = fut_sum + nf_sum
-        if total > 0:
-            target = total * scale
-            fut_target = target - nf_sum
-            fs = fut_target / fut_sum if (fut_sum > 0 and fut_target > 0) else 1.0
-            for a, w in raw_w.items():
-                if a == "BIL":
-                    continue
-                act[a] = w * fs if a in US_ROT_FUTURES else w
+        elif a in US_ROT_FUTURES:
+            # Scale only the asset's own raw weight; do not transfer other assets' leverage gap.
+            act[a] = w * scale
+        else:
+            act[a] = w
     risky = sum(act.values())
     act["BIL"] = max(1.0 - risky, 0.0)
     return act
@@ -3182,7 +3316,7 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name="Sub-A", names=None
             h_name = names.get(holding, holding)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": None,
@@ -3322,7 +3456,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             buy_p = _dk_holding_prices(holding, cn_dk_close, date)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": sell_text,
                 "卖出价格": sell_p,
@@ -3339,7 +3473,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             h_prices = _dk_holding_prices(holding, cn_dk_close, date)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": h_prices,
@@ -3507,7 +3641,7 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                 price_str = "; ".join(etf_prices) if etf_prices else None
                 records.append({
                     "日期": date.strftime("%Y-%m-%d"),
-                    "北京时间": us_exec_time_str(date, us_schedule),
+                    "北京时间": beijing_time_str(date, "US", "open"),
                     "策略": "Sub-C",
                     "卖出": f"杠杆 {prev_s:.2f}x",
                     "卖出价格": price_str,
@@ -4293,9 +4427,9 @@ class CombinedStrategyBase:
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:15(各50%)拆分, 美元金额按Sub-B:Sub-C=40:30拆分
-   例: "人民币300万, 美元100万" -> Sub-A: 1500000, Sub-A-DK: 1500000, Sub-B: 571429, Sub-C: 428571
-3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 150000, Sub-B: 400000, Sub-C: 300000
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:25拆分, 美元金额按Sub-B:Sub-C=40:20拆分
+   例: "人民币300万, 美元100万" -> Sub-A: 1125000, Sub-A-DK: 1875000, Sub-B: 666667, Sub-C: 333333
+3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 250000, Sub-B: 400000, Sub-C: 200000
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -4565,7 +4699,8 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
             if cap_updated:
                 w(_build_capital_marker(cap_config))
 
-poe.update_settings(SettingsResponse(
+_BOT_SETTINGS = SettingsResponse(
+    allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V6.9 — 策略信号查询**\n\n"
         "四策略组合: Sub-A 15% + Sub-A-DK 25% + Sub-B 40% + Sub-C 20%\n\n"
@@ -4579,7 +4714,8 @@ poe.update_settings(SettingsResponse(
         "**💰 资金管理:** \"设置资金 Sub-B 5万美元\" -> 信号自动显示目标数量\n\n"
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
-))
+)
+_safe_poe_update_settings(_BOT_SETTINGS)
 
 class CombinedStrategyV69(CombinedStrategyBase):
 
@@ -4742,14 +4878,14 @@ class CombinedStrategyV69(CombinedStrategyBase):
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
                 if _vs_changed:
-                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
-                msg.write(f"\n**波动率缩放:** 当前已执行 = **{_vs_current:.2f}x**")
+                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
+                msg.write(f"\n**波动率缩放:** 当前 = **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
                 msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}")
                 msg.write(f" | 最新理论: {_vs_ts:.2f}x")
                 if _vs_changed:
-                    msg.write(f" | 下一次执行 = **{_vs_next:.2f}x**")
+                    msg.write(f" | 下一美股开盘 = **{_vs_next:.2f}x**")
                 elif abs(_vs_ts - _vs_current) > 0.001:
                     msg.write(f" (Δ={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
                 msg.write("\n")
@@ -4761,7 +4897,7 @@ class CombinedStrategyV69(CombinedStrategyBase):
                     _cash_pct = 1 - _vs_next
                     msg.write(f"📊 减仓 {_vs_next:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
                 if not _vs_changed:
-                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一次仍维持）\n")
+                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一美股开盘仍维持）\n")
             msg.write(f"\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n")
             # ── Sub-C 仓位调整表 ──
             _pos_config_c = _scan_position_config(poe.default_chat)
@@ -5305,7 +5441,7 @@ class CombinedStrategyV69(CombinedStrategyBase):
                         w(f"| BIL(未达标{len(_failed)}只) | — | {_bil_share:.1%} |\n")
                     w(f"\n**波动率缩放:** {_us_sig_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
-                        w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)\n")
+                        w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n")
                     elif _us_sig_scale < 1.0:
                         w(" (<1: 所有资产等比缩减)\n")
                     else:
@@ -5682,6 +5818,11 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_MAX_LEV:.1f}x** | 低波动时杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** | 从现金入场时先买入的目标仓位比例 |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** | None=不设天数上限，只在下跌日补足剩余仓位 |\n")
+            w(f"| Cash Overlay开关 | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** | Sub-A持仓score从峰值衰减后切换到现金 |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** | 当前持仓score/本轮峰值score低于阈值后下一日切现金 |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** | score恢复到阈值以上后恢复持仓，并等待新峰值后再触发 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
             all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
@@ -5706,12 +5847,10 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_DK_MAX_LEV:.1f}x** | 高杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_DK_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| Score衰减开关 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** | 当前pair score从本轮峰值衰减后降低ADK敞口 |\n")
             w(f"| Score衰减触发 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}** | 当前pair score相对本轮trade peak衰减到阈值以下后次日降风险 |\n")
             w(f"| Score恢复阈值 | **{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** | 恢复到阈值以上后回满仓，并等待新peak后才能再次触发 |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
-            w(f"| DD风控触发 | **{CN_DK_RISK_GATE_ENTER:.0%}** | 原始ADK净值回撤达到阈值后次日进入防守 |\n")
-            w(f"| DD风控恢复 | **{CN_DK_RISK_GATE_EXIT:.0%}** | 原始ADK回撤修复到阈值以内后恢复正常仓位 |\n")
-            w(f"| 防守系数 | **{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}x** | 对VolScale后的敞口再乘防守系数 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费(翻转=4笔单边) |\n")
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
@@ -5720,16 +5859,15 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w(f"2. 选|乖离动量|最大的Top-1配对\n")
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
-            w(f"5. 策略级DD风控: 前一日原始ADK回撤≤-{CN_DK_RISK_GATE_ENTER:.0%}时, 次日敞口×{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}; 修复到-{CN_DK_RISK_GATE_EXIT:.0%}以内后恢复\n")
-            w("6. 无冷却期（T+1已天然保证最少1天间隔）\n")
-            w("7. 数据: csindex\n\n---\n\n### Sub-B: 美股7ETF\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
+            w("6. 数据: csindex\n\n---\n\n### Sub-B: 美股7ETF\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 动量窗口 | **{US_ROT_LB}日** | 过去{US_ROT_LB}个交易日收益率，用于排名 |\n")
             w(f"| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 用于反波动率加权 |\n")
             w(f"| Top N | **3** | 选动量最高的3只ETF |\n")
             w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
-            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅限期货类ETF(QQQM/GLDM/VGLT) |\n")
+            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM/VGLT) |\n")
             w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
             w(f"| 调仓阈值 | **{US_ROT_REBALANCE_THRESHOLD}x** | v6.1: 移除阈值(=1.0等于无阈值) |\n")
             w(f"| BTC参与起始 | **{US_ROT_BTC_START.strftime('%Y-%m-%d')}** | 之前BTC不参与排名 |\n")
@@ -5749,7 +5887,7 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w("2. 按动量排名选Top 3\n3. 动量>0留下,否则转BIL\n")
             w(f"4. 反波动率加权: 权重 ∝ 1/vol({US_ROT_VOL_LB}日)，波动越低权重越高\n")
             w(f"5. 波动率缩放(Model B): scale = {US_ROT_TARGET_VOL:.0%}/已实现波动率，"
-                      f"scale≤1时所有资产等比缩减；scale>1时仅放大期货类ETF，最高{US_ROT_MAX_LEV:.1f}x\n")
+                      f"scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n")
             w(f"6. BTC上限: 若BTC权重 > {US_ROT_BTC_MAX_W:.0%}，超出部分归入BIL\n")
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
@@ -5816,6 +5954,14 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w(f"A股收盘: {cn_close_bj} | "
                       f"美股收盘: {us_close_bj}\n\n")
             w("### Sub-A: A股乖离动量轮动 (v6.8)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** |\n")
+            w(f"| Cash Overlay | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** |\n")
+            w("\n")
             # v6.1: Compute bias momentum and R² for display
             cn_close_with_bond = cn_close.copy()
             if CN_BOND_CODE not in cn_close_with_bond.columns:
@@ -5907,6 +6053,12 @@ class CombinedStrategyV69(CombinedStrategyBase):
                 else:
                     w(f"\n📊 杠杆维持: **{_cn_sc_p:.2f}x**（无调整）\n")
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
+            w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
+            w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
+            w("\n")
             dk_holding = cn_dk_result["holding"].iloc[-1]
             dk_top_pair_lp = cn_dk_result["top_pair"].iloc[-1] if "top_pair" in cn_dk_result.columns else "none"
             dk_dir_lp = int(cn_dk_result["direction"].iloc[-1]) if "direction" in cn_dk_result.columns else 0
@@ -6067,7 +6219,7 @@ class CombinedStrategyV69(CombinedStrategyBase):
             w(f"\n**③ 波动率缩放 (Model B):** 近{US_ROT_VOL_WINDOW}日已实现波动率 = {us_rv:.1%}，"
                       f"scale = {US_ROT_TARGET_VOL:.0%}/{us_rv:.1%} = **{us_scale:.2f}x**")
             if us_scale > 1.0:
-                w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)")
+                w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)")
             elif us_scale < 1.0:
                 w(" (<1: 所有资产等比缩减)")
             w("\n")
@@ -6129,22 +6281,22 @@ class CombinedStrategyV69(CombinedStrategyBase):
                 _c_scale_next = _vs_info_p.get("next_scale", _c_scale_now)
                 _c_scale_changed = bool(_vs_info_p.get("pending_adjustment", abs(_c_scale_next - _c_scale_now) > 0.001))
                 if _c_scale_changed:
-                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
+                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
                 w(f"\n**Vol-Scaling 实时状态:**\n\n")
                 w(f"| 指标 | 值 |\n|:-|------:|\n")
-                w(f"| 当前已执行杠杆 | **{_c_scale_now:.2f}x** |\n")
+                w(f"| 当前杠杆 | **{_c_scale_now:.2f}x** |\n")
                 if _c_rv_now is not None:
                     w(f"| 已实现波动率 | {_c_rv_now:.1%} |\n")
                 w(f"| 目标波动率 | {PROD_VS_TARGET_VOL:.0%} |\n")
                 w(f"| 最新理论杠杆 | {_c_ts_now:.2f}x |\n")
-                w(f"| 下一次执行杠杆 | **{_c_scale_next:.2f}x** |\n")
+                w(f"| 下一美股开盘杠杆 | **{_c_scale_next:.2f}x** |\n")
                 if not _c_scale_changed and abs(_c_ts_now - _c_scale_now) > 0.001:
                     w(f"| 阈值状态 | |Δ|={abs(_c_ts_now - _c_scale_now):.4f} < {PROD_VS_THRESHOLD}阈值，未调整 |\n")
                 w(f"| 杠杆范围 | [{PROD_VS_MIN_LEV:.1f}x, {PROD_VS_MAX_LEV:.1f}x] |\n")
                 w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
                 w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
                 if not _c_scale_changed:
-                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一次仍维持）\n")
+                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
                 if _c_scale_next > 1.0:
                     _c_borrow = _c_scale_next - 1
                     w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
@@ -6829,6 +6981,52 @@ class CombinedStrategyV69(CombinedStrategyBase):
             )
             w(f"📎 绩效报告: **{filename}**")
 
+class CombinedStrategyV69PoeBot(poe.PoeBot):
+    async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
+        return _BOT_SETTINGS
+
+    async def get_response(self, request: QueryRequest):
+        runtime = _LegacyPoeRuntime(request)
+
+        def _runner():
+            try:
+                with _POE_RUNTIME_LOCK:
+                    with runtime:
+                        CombinedStrategyV69().run()
+            except Exception as e:
+                runtime.error = e
+
+        worker = threading.Thread(target=_runner, daemon=True)
+        worker.start()
+
+        while worker.is_alive() or not runtime.event_queue.empty():
+            drained = False
+            while True:
+                try:
+                    kind, payload = runtime.event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                drained = True
+                if kind == "text":
+                    yield poe.PartialResponse(text=payload)
+                elif kind == "file":
+                    await self.post_message_attachment(
+                        message_id=request.message_id,
+                        file_data=payload["contents"],
+                        filename=payload["name"],
+                        content_type=payload["content_type"],
+                        is_inline=payload["is_inline"],
+                    )
+            if not drained:
+                await asyncio.sleep(0.05)
+
+        if runtime.error is not None:
+            raise runtime.error
+
+
 if __name__ == "__main__":
-    bot = CombinedStrategyV69()
-    bot.run()
+    runner = getattr(poe, "run", None)
+    if callable(runner):
+        runner(CombinedStrategyV69PoeBot())
+    else:
+        CombinedStrategyV69().run()

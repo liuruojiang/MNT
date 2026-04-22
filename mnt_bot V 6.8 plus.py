@@ -1,6 +1,7 @@
 # poe: name=Strategy-Signal-V68
 # poe: privacy_shield=half
 """V6.8"""
+import asyncio
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -14,10 +15,152 @@ import json
 import os
 import xlsxwriter
 import time
+import queue
+import threading
+from types import SimpleNamespace
 import fastapi_poe as poe
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import SettingsResponse
+from fastapi_poe.types import ProtocolMessage, QueryRequest, SettingsRequest, SettingsResponse
+
+
+def _safe_poe_update_settings(settings: SettingsResponse) -> None:
+    updater = getattr(poe, "update_settings", None)
+    if callable(updater):
+        updater(settings)
+
+
+class _CompatChatMessage:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _CompatAttachment:
+    def __init__(self, attachment):
+        self.url = attachment.url
+        self.name = attachment.name
+        self.content_type = attachment.content_type
+        self.parsed_content = getattr(attachment, "parsed_content", None)
+
+    def get_contents(self) -> bytes:
+        if self.parsed_content is not None:
+            return self.parsed_content.encode("utf-8")
+        resp = _session.get(self.url, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+
+
+class _CompatQuery:
+    def __init__(self, text: str, attachments):
+        self.text = text
+        self.attachments = attachments
+
+
+class _CompatMessage:
+    def __init__(self, runtime):
+        self._runtime = runtime
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def write(self, text):
+        if text:
+            self._runtime.emit_text(str(text))
+
+    def attach_file(self, *, name, contents, content_type, is_inline=False):
+        self._runtime.emit_file(
+            name=name,
+            contents=contents,
+            content_type=content_type,
+            is_inline=is_inline,
+        )
+
+
+class _LegacyPoeRuntime:
+    _MISSING = object()
+
+    def __init__(self, request: QueryRequest):
+        self.request = request
+        self.event_queue = queue.Queue()
+        self.error = None
+        latest = request.query[-1] if request.query else None
+        latest_text = latest.content if latest is not None else ""
+        latest_atts = [_CompatAttachment(a) for a in (latest.attachments if latest is not None else [])]
+        self.query = _CompatQuery(latest_text, latest_atts)
+        self.default_chat = [_CompatChatMessage(m.content) for m in request.query]
+        self._patched = {}
+
+    def emit_text(self, text: str):
+        self.event_queue.put(("text", text))
+
+    def emit_file(self, *, name, contents, content_type, is_inline=False):
+        self.event_queue.put((
+            "file",
+            {
+                "name": name,
+                "contents": contents,
+                "content_type": content_type,
+                "is_inline": is_inline,
+            },
+        ))
+
+    def start_message(self):
+        return _CompatMessage(self)
+
+    def call(self, bot_name: str, prompt: str):
+        sub_request = self.request.model_copy(
+            update={
+                "query": [ProtocolMessage(role="user", content=str(prompt), content_type="text/plain")],
+                "tools": None,
+                "tool_calls": None,
+                "tool_results": None,
+            }
+        )
+        text = poe.sync_utils.run_sync(
+            poe.get_final_response(
+                sub_request,
+                bot_name,
+                access_key=self.request.access_key or "",
+                api_key=self.request.api_key or "",
+            )
+        )
+        return SimpleNamespace(text=text)
+
+    def patch(self):
+        self._patched = {}
+        for name, value in {
+            "query": self.query,
+            "default_chat": self.default_chat,
+            "start_message": self.start_message,
+            "call": self.call,
+        }.items():
+            self._patched[name] = getattr(poe, name, self._MISSING)
+            setattr(poe, name, value)
+        return self
+
+    def restore(self):
+        for name, old_value in self._patched.items():
+            if old_value is self._MISSING:
+                try:
+                    delattr(poe, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(poe, name, old_value)
+        self._patched = {}
+
+    def __enter__(self):
+        return self.patch()
+
+    def __exit__(self, exc_type, exc, tb):
+        self.restore()
+        return False
+
+
+_POE_RUNTIME_LOCK = threading.RLock()
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -155,7 +298,7 @@ US_ROT_FUTURES = {"QQQ", "GLD", "TLT"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 2.0x max leverage，
-# 杠杆放大范围仍仅限 US_ROT_FUTURES 中的三类资产。
+# scale>1: 仅对 US_ROT_FUTURES 中资产按其自身原始权重放大，不承接其他资产的杠杆缺口。
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 2.0
 US_ROT_VOL_WINDOW = 40
@@ -1978,25 +2121,16 @@ def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
 
 def _us_model_b(raw_w, scale):
     act = {}
-    if scale <= 1.0:
-        for a, w in raw_w.items():
-            if a == "BIL":
-                continue
+    for a, w in raw_w.items():
+        if a == "BIL":
+            continue
+        if scale <= 1.0:
             act[a] = w * scale
-    else:
-        fut_sum = sum(w for a, w in raw_w.items()
-                      if a != "BIL" and a in US_ROT_FUTURES)
-        nf_sum = sum(w for a, w in raw_w.items()
-                     if a != "BIL" and a not in US_ROT_FUTURES)
-        total = fut_sum + nf_sum
-        if total > 0:
-            target = total * scale
-            fut_target = target - nf_sum
-            fs = fut_target / fut_sum if (fut_sum > 0 and fut_target > 0) else 1.0
-            for a, w in raw_w.items():
-                if a == "BIL":
-                    continue
-                act[a] = w * fs if a in US_ROT_FUTURES else w
+        elif a in US_ROT_FUTURES:
+            # Scale only the asset's own raw weight; do not transfer other assets' leverage gap.
+            act[a] = w * scale
+        else:
+            act[a] = w
     risky = sum(act.values())
     act["BIL"] = max(1.0 - risky, 0.0)
     return act
@@ -2925,9 +3059,11 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name="Sub-A", names=None
             })
         elif has_weight and prev_weight is not None and weight is not None and abs(weight - prev_weight) > 0.001:
             h_name = names.get(holding, holding)
+            # weight 含 shift(1): date 是执行日, 信号在 date-1 收盘发出
+            # 执行时间应为 date 的开盘 (09:30)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": None,
@@ -3065,9 +3201,11 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
                 buy_text = f"开仓 {holding}"
             sell_p = _dk_holding_prices(prev_holding, cn_dk_close, date)
             buy_p = _dk_holding_prices(holding, cn_dk_close, date)
+            # DK 全部信号含 shift(1): date 是执行日, 信号在 date-1 收盘发出
+            # 执行时间应为 date 的开盘 (09:30)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": sell_text,
                 "卖出价格": sell_p,
@@ -3084,7 +3222,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             h_prices = _dk_holding_prices(holding, cn_dk_close, date)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": h_prices,
@@ -3250,9 +3388,12 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                     if _p is not None and not pd.isna(_p):
                         etf_prices.append(f"{etf_name} ${_p:.2f}{_label}")
                 price_str = "; ".join(etf_prices) if etf_prices else None
+                # actual_scale 已含 shift(1): date 本身就是执行日
+                # 用 beijing_time_str(date, open) 而非 us_exec_time_str(date)
+                # 后者会多跳一天 (_next_session_day)
                 records.append({
                     "日期": date.strftime("%Y-%m-%d"),
-                    "北京时间": us_exec_time_str(date, us_schedule),
+                    "北京时间": beijing_time_str(date, "US", "open"),
                     "策略": "Sub-C",
                     "卖出": f"杠杆 {prev_s:.2f}x",
                     "卖出价格": price_str,
@@ -3458,6 +3599,61 @@ def _build_subc_vs_info(subc_daily, actual_scale,
         "next_scale": next_scale,
         "pending_adjustment": pending_adjustment,
     }
+
+
+def _compute_next_vol_scale(rv_latest, cur_post_thr, tgt_vol, min_l, max_l, thr):
+    """前瞻计算下一交易日的波动率缩放杠杆。
+
+    与 _build_subc_vs_info 同理: 用最新 realized_vol 推算下一日 vol-scale，
+    并对比当前已生效 scale 应用阈值过滤。
+
+    Args:
+        rv_latest: 最新行的 realized_vol (未shift, 含最新数据)
+        cur_post_thr: 当前已生效的 vol-scale (阈值过滤后的值, 用于阈值对比)
+        tgt_vol, min_l, max_l: 策略参数
+        thr: 变动阈值 (0 表示不使用)
+    Returns: (next_raw, next_final, is_pending)
+        next_raw: 理论目标 scale (未经阈值过滤)
+        next_final: 阈值过滤后实际会执行的 scale
+        is_pending: 是否存在待执行的调整
+    """
+    cur_post_thr = float(cur_post_thr) if not np.isnan(cur_post_thr) else 1.0
+    if rv_latest is None or np.isnan(rv_latest) or rv_latest <= 1e-10:
+        return cur_post_thr, cur_post_thr, False
+    raw = float(np.clip(tgt_vol / rv_latest, min_l, max_l))
+    if thr > 0 and abs(raw - cur_post_thr) < thr - 1e-9:
+        final = cur_post_thr
+    else:
+        final = raw
+    return raw, final, abs(final - cur_post_thr) > 0.001
+
+
+def _dk_get_vol_scale(dk_result, idx):
+    """从 DK 结果中提取纯 vol-scale (不含 pair_decay / risk_gate overlay).
+
+    优先从 pair_data attrs 获取精确值; 否则根据 overlay 列推算。
+    """
+    # 方法 1: 直接从 pair_data 取 pair-level post-threshold scale
+    if "top_pair" in dk_result.columns:
+        tp = dk_result["top_pair"].iloc[idx]
+        pd_map = dk_result.attrs.get('pair_data', {})
+        if tp != "none" and tp in pd_map:
+            pdf = pd_map[tp]
+            dt = dk_result.index[idx]
+            if 'scale' in pdf.columns and dt in pdf.index:
+                v = pdf.loc[dt, 'scale']
+                if not np.isnan(v):
+                    return float(v)
+    # 方法 2: 根据 overlay 层推算
+    bw = float(dk_result["base_weight"].iloc[idx]) if "base_weight" in dk_result.columns else float(dk_result["weight"].iloc[idx])
+    has_gate = "risk_gate_scale" in dk_result.columns
+    has_decay = "overlay_scale" in dk_result.columns
+    if has_gate and has_decay:
+        # risk_gate 覆盖了 base_weight → base_weight = vol_scale × overlay_scale
+        ov = float(dk_result["overlay_scale"].iloc[idx])
+        return bw / ov if abs(ov) > 1e-10 else bw
+    # 仅 pair_decay 或仅 risk_gate: base_weight = vol_scale
+    return bw
 
 
 def _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=None):
@@ -4029,9 +4225,9 @@ class CombinedStrategyBase:
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:15(各50%)拆分, 美元金额按Sub-B:Sub-C=40:30拆分
-   例: "人民币300万, 美元100万" -> Sub-A: 1500000, Sub-A-DK: 1500000, Sub-B: 571429, Sub-C: 428571
-3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 150000, Sub-B: 400000, Sub-C: 300000
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:25拆分, 美元金额按Sub-B:Sub-C=40:20拆分
+   例: "人民币300万, 美元100万" -> Sub-A: 1125000, Sub-A-DK: 1875000, Sub-B: 666667, Sub-C: 333333
+3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 250000, Sub-B: 400000, Sub-C: 200000
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -4301,7 +4497,8 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
             if cap_updated:
                 w(_build_capital_marker(cap_config))
 
-poe.update_settings(SettingsResponse(
+_BOT_SETTINGS = SettingsResponse(
+    allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V6.8 — 策略信号查询**\n\n"
         "四策略组合: Sub-A 15% + Sub-A-DK 25% + Sub-B 40% + Sub-C 20%\n\n"
@@ -4315,7 +4512,8 @@ poe.update_settings(SettingsResponse(
         "**💰 资金管理:** \"设置资金 Sub-B 5万美元\" -> 信号自动显示目标数量\n\n"
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
-))
+)
+_safe_poe_update_settings(_BOT_SETTINGS)
 
 class CombinedStrategyV68(CombinedStrategyBase):
 
@@ -4478,17 +4676,16 @@ class CombinedStrategyV68(CombinedStrategyBase):
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
                 if _vs_changed:
-                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
-                msg.write(f"\n**波动率缩放:** 当前已执行 = **{_vs_current:.2f}x**")
+                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
+                msg.write(f"\n**波动率缩放:** 当前 **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
-                msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}")
-                msg.write(f" | 最新理论: {_vs_ts:.2f}x")
-                if _vs_changed:
-                    msg.write(f" | 下一次执行 = **{_vs_next:.2f}x**")
-                elif abs(_vs_ts - _vs_current) > 0.001:
-                    msg.write(f" (Δ={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
-                msg.write("\n")
+                msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}\n")
+                if not _vs_changed:
+                    msg.write(f"✅ 杠杆: **{_vs_current:.2f}x** (下一美股开盘维持)")
+                    if abs(_vs_ts - _vs_current) > 0.001:
+                        msg.write(f" | 理论: {_vs_ts:.2f}x (|Δ|={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值)")
+                    msg.write("\n")
                 if _vs_next > 1.0:
                     _borrow_pct = _vs_next - 1
                     msg.write(f"📊 杠杆 {_vs_next:.2f}x: 借入{_borrow_pct:.0%}资金 | "
@@ -4496,8 +4693,6 @@ class CombinedStrategyV68(CombinedStrategyBase):
                 elif _vs_next < 1.0:
                     _cash_pct = 1 - _vs_next
                     msg.write(f"📊 减仓 {_vs_next:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
-                if not _vs_changed:
-                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一次仍维持）\n")
             msg.write(f"\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n")
             # ── Sub-C 仓位调整表 ──
             _pos_config_c = _scan_position_config(poe.default_chat)
@@ -4684,28 +4879,23 @@ class CombinedStrategyV68(CombinedStrategyBase):
                 w("今日收盘信号: 无变化（已确认）\n\n")
             # ── Sub-A vol-scaling 杠杆显示 ──
             if "weight" in cn_result.columns:
-                _cn_display_loc = len(cn_result) + _cn_display_idx if _cn_display_idx < 0 else _cn_display_idx
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 _cn_sc_raw_rt = cn_result["scale_raw"].iloc[_cn_display_idx] if "scale_raw" in cn_result.columns else _cn_sc_rt
                 _cn_rv_rt = cn_result["realized_vol"].iloc[_cn_display_idx] if "realized_vol" in cn_result.columns else None
-                if _cn_display_loc > 0:
-                    _cn_sc_prev_rt = cn_result["weight"].iloc[_cn_display_loc - 1]
-                    _cn_prev_holding = cn_result["holding"].iloc[_cn_display_loc - 1]
-                    _cn_holding_same = _cn_display_holding == _cn_prev_holding
-                else:
-                    _cn_sc_prev_rt = _cn_sc_rt
-                    _cn_holding_same = False
-                _cn_scale_changed = (_cn_display_loc > 0 and abs(_cn_sc_rt - _cn_sc_prev_rt) > 0.001 and _cn_holding_same)
-                if _cn_scale_changed and not _cn_intraday:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_rt:.2f}x → {_cn_sc_rt:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_cn_sc_rt:.2f}x**")
+                # 前瞻: 用最新 realized_vol 计算下一交易日杠杆
+                _cn_next_raw, _cn_next_scale, _cn_pending = _compute_next_vol_scale(
+                    _cn_rv_rt, _cn_sc_raw_rt,
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
+                if _cn_pending and not _cn_intraday:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt:.2f}x → {_cn_next_scale:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 **{_cn_sc_rt:.2f}x**")
                 if _cn_rv_rt is not None and not np.isnan(_cn_rv_rt):
                     w(f" | 已实现波动率: {_cn_rv_rt:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
-                if not _cn_scale_changed:
-                    w(f"📊 杠杆维持: **{_cn_sc_rt:.2f}x**")
-                    if CN_SCALE_THRESHOLD > 0 and not np.isnan(_cn_sc_raw_rt) and abs(_cn_sc_raw_rt - _cn_sc_rt) > 0.001:
-                        w(f" | 理论: {_cn_sc_raw_rt:.2f}x (|Δ|={abs(_cn_sc_raw_rt - _cn_sc_rt):.4f} < {CN_SCALE_THRESHOLD}阈值，未调整)")
+                if not _cn_pending:
+                    w(f"✅ 杠杆: **{_cn_sc_rt:.2f}x** (下一交易日维持)")
+                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw - float(_cn_sc_raw_rt)) > 0.001:
+                        w(f" | 理论: {_cn_next_raw:.2f}x (|Δ|={abs(_cn_next_raw - float(_cn_sc_raw_rt)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
             # v6.1: 乖离动量 + R² 排名表
             _bm_latest_live = {c: float(bias_mom_cn[c].iloc[_cn_display_idx]) for c in all_display_codes if c in bias_mom_cn and not np.isnan(bias_mom_cn[c].iloc[_cn_display_idx])}
@@ -4792,26 +4982,23 @@ class CombinedStrategyV68(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
                 _dk_display_idx = -2 if _dk_intraday else -1
-                _dk_display_loc = len(cn_dk_result) + _dk_display_idx if _dk_display_idx < 0 else _dk_display_idx
                 _dk_sc_rt = cn_dk_result["weight"].iloc[_dk_display_idx]
                 _dk_base_w_rt = cn_dk_result["base_weight"].iloc[_dk_display_idx] if "base_weight" in cn_dk_result.columns else _dk_sc_rt
                 _dk_gate_scale_rt = cn_dk_result["risk_gate_scale"].iloc[_dk_display_idx] if "risk_gate_scale" in cn_dk_result.columns else 1.0
                 _dk_gate_on_rt = bool(cn_dk_result["risk_gate_on"].iloc[_dk_display_idx]) if "risk_gate_on" in cn_dk_result.columns else False
                 _dk_gate_dd_rt = cn_dk_result["risk_gate_base_dd"].iloc[_dk_display_idx] if "risk_gate_base_dd" in cn_dk_result.columns else np.nan
-                _dk_sc_raw_rt = cn_dk_result["scale_raw"].iloc[_dk_display_idx] if "scale_raw" in cn_dk_result.columns else _dk_base_w_rt
                 _dk_rv_rt = cn_dk_result["realized_vol"].iloc[_dk_display_idx] if "realized_vol" in cn_dk_result.columns else None
-                if _dk_display_loc > 0:
-                    _dk_sc_prev_rt = cn_dk_result["weight"].iloc[_dk_display_loc - 1]
-                    _dk_prev_holding = cn_dk_result["holding"].iloc[_dk_display_loc - 1]
-                    _dk_holding_same = _dk_effective_holding == _dk_prev_holding
-                else:
-                    _dk_sc_prev_rt = _dk_sc_rt
-                    _dk_holding_same = False
-                _dk_scale_changed = (_dk_display_loc > 0 and abs(_dk_sc_rt - _dk_sc_prev_rt) > 0.001 and _dk_holding_same)
-                if _dk_scale_changed and not _dk_intraday:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_rt:.2f}x → {_dk_sc_rt:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                # 前瞻: 用最新 realized_vol 计算下一交易日 VolScale
+                _dk_cur_vs = _dk_get_vol_scale(cn_dk_result, _dk_display_idx if _dk_display_idx >= 0 else len(cn_dk_result) + _dk_display_idx)
+                _dk_next_raw, _dk_next_vs, _dk_pending = _compute_next_vol_scale(
+                    _dk_rv_rt, _dk_cur_vs,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                if _dk_pending and not _dk_intraday:
+                    # 计算下一交易日总敞口 (VolScale变化, overlay不变)
+                    _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 下一交易日开盘前执行**\n")
                 w(f"**ADK实际敞口:** **{_dk_sc_rt:.2f}x**")
-                w(f" | VolScale: {_dk_base_w_rt:.2f}x")
+                w(f" | VolScale: {_dk_cur_vs:.2f}x")
                 if "risk_gate_scale" in cn_dk_result.columns:
                     w(f" | RiskGate: {_dk_gate_scale_rt:.2f}x")
                 if _dk_rv_rt is not None and not np.isnan(_dk_rv_rt):
@@ -4824,10 +5011,10 @@ class CombinedStrategyV68(CombinedStrategyBase):
                     else:
                         _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
                         w(f"🟢 **风险闸门关闭:** 触发阈值 {CN_DK_RISK_GATE_ENTER:.0%} / 恢复阈值 {CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
-                if not _dk_scale_changed:
-                    w(f"📊 杠杆维持: **{_dk_sc_rt:.2f}x**")
-                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_sc_raw_rt - _dk_base_w_rt) > 0.001:
-                        w(f" | VolScale理论: {_dk_sc_raw_rt:.2f}x (|Δ|={abs(_dk_sc_raw_rt - _dk_base_w_rt):.4f} < {CN_DK_SCALE_THRESHOLD}阈值，未调整)")
+                if not _dk_pending:
+                    w(f"✅ 杠杆: **{_dk_sc_rt:.2f}x** (下一交易日维持)")
+                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw - _dk_cur_vs) > 0.001:
+                        w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
             us_close_bj = beijing_time_str(us_date, "US", "close")
@@ -5041,7 +5228,7 @@ class CombinedStrategyV68(CombinedStrategyBase):
                         w(f"| BIL(未达标{len(_failed)}只) | — | {_bil_share:.1%} |\n")
                     w(f"\n**波动率缩放:** {_us_sig_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
-                        w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)\n")
+                        w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n")
                     elif _us_sig_scale < 1.0:
                         w(" (<1: 所有资产等比缩减)\n")
                     else:
@@ -5173,21 +5360,21 @@ class CombinedStrategyV68(CombinedStrategyBase):
             # ── Sub-A vol-scaling 杠杆显示 (详细) ──
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
-                _cn_sc_prev_rt3 = cn_result["weight"].iloc[-2]
                 _cn_sc_raw_rt3 = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_rt3
                 _cn_rv_rt3 = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
-                _cn_holding_same3 = cn_result["holding"].iloc[-1] == cn_result["holding"].iloc[-2]
-                _cn_scale_changed3 = abs(_cn_sc_rt3 - _cn_sc_prev_rt3) > 0.001 and _cn_holding_same3
-                if _cn_scale_changed3:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_rt3:.2f}x → {_cn_sc_rt3:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_cn_sc_rt3:.2f}x**")
+                _cn_next_raw3, _cn_next_scale3, _cn_pending3 = _compute_next_vol_scale(
+                    _cn_rv_rt3, float(_cn_sc_raw_rt3),
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
+                if _cn_pending3:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt3:.2f}x → {_cn_next_scale3:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 **{_cn_sc_rt3:.2f}x**")
                 if _cn_rv_rt3 is not None and not np.isnan(_cn_rv_rt3):
                     w(f" | 已实现波动率: {_cn_rv_rt3:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
-                if not _cn_scale_changed3:
-                    w(f"📊 杠杆维持: **{_cn_sc_rt3:.2f}x**")
-                    if CN_SCALE_THRESHOLD > 0 and not np.isnan(_cn_sc_raw_rt3) and abs(_cn_sc_raw_rt3 - _cn_sc_rt3) > 0.001:
-                        w(f" | 理论: {_cn_sc_raw_rt3:.2f}x (|Δ|={abs(_cn_sc_raw_rt3 - _cn_sc_rt3):.4f} < {CN_SCALE_THRESHOLD}阈值，未调整)")
+                if not _cn_pending3:
+                    w(f"✅ 杠杆: **{_cn_sc_rt3:.2f}x** (下一交易日维持)")
+                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)) > 0.001:
+                        w(f" | 理论: {_cn_next_raw3:.2f}x (|Δ|={abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
             # v6.1: Bias momentum + R² ranking (detailed view)
             all_display_codes_live2 = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else [])
@@ -5267,21 +5454,22 @@ class CombinedStrategyV68(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 (实时) ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
-                _dk_sc_prev_rt3 = cn_dk_result["weight"].iloc[-2]
-                _dk_sc_raw_rt3 = cn_dk_result["scale_raw"].iloc[-1] if "scale_raw" in cn_dk_result.columns else _dk_sc_rt3
                 _dk_rv_rt3 = cn_dk_result["realized_vol"].iloc[-1] if "realized_vol" in cn_dk_result.columns else None
-                _dk_holding_same3 = cn_dk_result["holding"].iloc[-1] == cn_dk_result["holding"].iloc[-2]
-                _dk_scale_changed3 = abs(_dk_sc_rt3 - _dk_sc_prev_rt3) > 0.001 and _dk_holding_same3
-                if _dk_scale_changed3:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_rt3:.2f}x → {_dk_sc_rt3:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_dk_sc_rt3:.2f}x**")
+                _dk_cur_vs3 = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+                _dk_next_raw3, _dk_next_vs3, _dk_pending3 = _compute_next_vol_scale(
+                    _dk_rv_rt3, _dk_cur_vs3,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                if _dk_pending3:
+                    _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 VolScale **{_dk_cur_vs3:.2f}x** | 实际敞口 **{_dk_sc_rt3:.2f}x**")
                 if _dk_rv_rt3 is not None and not np.isnan(_dk_rv_rt3):
                     w(f" | 已实现波动率: {_dk_rv_rt3:.1%}")
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
-                if not _dk_scale_changed3:
-                    w(f"📊 杠杆维持: **{_dk_sc_rt3:.2f}x**")
-                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_sc_raw_rt3 - _dk_sc_rt3) > 0.001:
-                        w(f" | 理论: {_dk_sc_raw_rt3:.2f}x (|Δ|={abs(_dk_sc_raw_rt3 - _dk_sc_rt3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值，未调整)")
+                if not _dk_pending3:
+                    w(f"✅ 杠杆: **{_dk_sc_rt3:.2f}x** (下一交易日维持)")
+                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw3 - _dk_cur_vs3) > 0.001:
+                        w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
             us_close_bj = beijing_time_str(us_date, "US", "close")
@@ -5418,6 +5606,11 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_MAX_LEV:.1f}x** | 低波动时杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** | 从现金入场时先买入的目标仓位比例 |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** | None=不设天数上限，只在下跌日补足剩余仓位 |\n")
+            w(f"| Cash Overlay开关 | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** | Sub-A持仓score从峰值衰减后切换到现金 |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** | 当前持仓score/本轮峰值score低于阈值后下一日切现金 |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** | score恢复到阈值以上后恢复持仓，并等待新峰值后再触发 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
             all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
@@ -5442,12 +5635,10 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_DK_MAX_LEV:.1f}x** | 高杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_DK_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| Score衰减开关 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** | 当前pair score从本轮峰值衰减后降低ADK敞口 |\n")
             w(f"| Score衰减触发 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}** | 当前pair score相对本轮trade peak衰减到阈值以下后次日降风险 |\n")
             w(f"| Score恢复阈值 | **{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** | 恢复到阈值以上后回满仓，并等待新peak后才能再次触发 |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
-            w(f"| DD风控触发 | **{CN_DK_RISK_GATE_ENTER:.0%}** | 原始ADK净值回撤达到阈值后次日进入防守 |\n")
-            w(f"| DD风控恢复 | **{CN_DK_RISK_GATE_EXIT:.0%}** | 原始ADK回撤修复到阈值以内后恢复正常仓位 |\n")
-            w(f"| 防守系数 | **{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}x** | 对VolScale后的敞口再乘防守系数 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费(翻转=4笔单边) |\n")
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
@@ -5456,16 +5647,15 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w(f"2. 选|乖离动量|最大的Top-1配对\n")
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
-            w(f"5. 策略级DD风控: 前一日原始ADK回撤≤-{CN_DK_RISK_GATE_ENTER:.0%}时, 次日敞口×{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}; 修复到-{CN_DK_RISK_GATE_EXIT:.0%}以内后恢复\n")
-            w("6. 无冷却期（T+1已天然保证最少1天间隔）\n")
-            w("7. 数据: csindex\n\n---\n\n### Sub-B: 美股7ETF\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
+            w("6. 数据: csindex\n\n---\n\n### Sub-B: 美股7ETF\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 动量窗口 | **{US_ROT_LB}日** | 过去{US_ROT_LB}个交易日收益率，用于排名 |\n")
             w(f"| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 用于反波动率加权 |\n")
             w(f"| Top N | **3** | 选动量最高的3只ETF |\n")
             w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
-            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅限期货类ETF(QQQM/GLDM/VGLT) |\n")
+            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM/VGLT) |\n")
             w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
             w(f"| 调仓阈值 | **{US_ROT_REBALANCE_THRESHOLD}x** | v6.1: 移除阈值(=1.0等于无阈值) |\n")
             w(f"| BTC参与起始 | **{US_ROT_BTC_START.strftime('%Y-%m-%d')}** | 之前BTC不参与排名 |\n")
@@ -5485,7 +5675,7 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w("2. 按动量排名选Top 3\n3. 动量>0留下,否则转BIL\n")
             w(f"4. 反波动率加权: 权重 ∝ 1/vol({US_ROT_VOL_LB}日)，波动越低权重越高\n")
             w(f"5. 波动率缩放(Model B): scale = {US_ROT_TARGET_VOL:.0%}/已实现波动率，"
-                      f"scale≤1时所有资产等比缩减；scale>1时仅放大期货类ETF，最高{US_ROT_MAX_LEV:.1f}x\n")
+                      f"scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n")
             w(f"6. BTC上限: 若BTC权重 > {US_ROT_BTC_MAX_W:.0%}，超出部分归入BIL\n")
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
@@ -5552,6 +5742,14 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w(f"A股收盘: {cn_close_bj} | "
                       f"美股收盘: {us_close_bj}\n\n")
             w("### Sub-A: A股乖离动量轮动 (v6.8)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** |\n")
+            w(f"| Cash Overlay | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** |\n")
+            w("\n")
             # v6.1: Compute bias momentum and R² for display
             cn_close_with_bond = cn_close.copy()
             if CN_BOND_CODE not in cn_close_with_bond.columns:
@@ -5621,28 +5819,35 @@ class CombinedStrategyV68(CombinedStrategyBase):
             # ── Sub-A vol-scaling 杠杆显示 (长报告) ──
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_p = cn_result["weight"].iloc[-1]
-                _cn_sc_prev_p = cn_result["weight"].iloc[-2]
                 _cn_sc_raw_p = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_p
                 _cn_rv_p = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
+                _cn_next_raw_p, _cn_next_scale_p, _cn_pending_p = _compute_next_vol_scale(
+                    _cn_rv_p, float(_cn_sc_raw_p),
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 w(f"\n**⑥ 波动率缩放:**\n\n")
                 w(f"| 指标 | 值 |\n")
                 w(f"|:-|------:|\n")
-                w(f"| 当前杠杆 | **{_cn_sc_p:.2f}x** |\n")
+                w(f"| 当前已生效杠杆 | **{_cn_sc_p:.2f}x** |\n")
+                w(f"| 下一交易日杠杆 | **{_cn_next_scale_p:.2f}x** {'🔴 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
                 if _cn_rv_p is not None and not np.isnan(_cn_rv_p):
                     w(f"| 已实现波动率 | {_cn_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_TARGET_VOL:.0%} |\n")
                 if CN_SCALE_THRESHOLD > 0:
-                    if not np.isnan(_cn_sc_raw_p) and abs(_cn_sc_raw_p - _cn_sc_p) > 0.001:
-                        w(f"| 理论杠杆 | {_cn_sc_raw_p:.2f}x (|Δ|={abs(_cn_sc_raw_p - _cn_sc_p):.4f} < {CN_SCALE_THRESHOLD}阈值) |\n")
+                    if abs(_cn_next_raw_p - float(_cn_sc_raw_p)) > 0.001:
+                        w(f"| 下一日理论杠杆 | {_cn_next_raw_p:.2f}x (|Δ|={abs(_cn_next_raw_p - float(_cn_sc_raw_p)):.4f} {'≥' if _cn_pending_p else '<'} {CN_SCALE_THRESHOLD}阈值) |\n")
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_SCALE_THRESHOLD:.2f} |\n")
-                _cn_holding_same_p = cn_result["holding"].iloc[-1] == cn_result["holding"].iloc[-2]
-                _cn_scale_changed_p = abs(_cn_sc_p - _cn_sc_prev_p) > 0.001 and _cn_holding_same_p
-                if _cn_scale_changed_p:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_p:.2f}x → {_cn_sc_p:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                if _cn_pending_p:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_p:.2f}x → {_cn_next_scale_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
-                    w(f"\n📊 杠杆维持: **{_cn_sc_p:.2f}x**（无调整）\n")
+                    w(f"\n✅ 杠杆: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
+            w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
+            w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
+            w("\n")
             dk_holding = cn_dk_result["holding"].iloc[-1]
             dk_top_pair_lp = cn_dk_result["top_pair"].iloc[-1] if "top_pair" in cn_dk_result.columns else "none"
             dk_dir_lp = int(cn_dk_result["direction"].iloc[-1]) if "direction" in cn_dk_result.columns else 0
@@ -5690,25 +5895,29 @@ class CombinedStrategyV68(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[-1]
-                _dk_sc_prev_p = cn_dk_result["weight"].iloc[-2]
-                _dk_sc_raw_p = cn_dk_result["scale_raw"].iloc[-1] if "scale_raw" in cn_dk_result.columns else _dk_sc_p
                 _dk_rv_p = cn_dk_result["realized_vol"].iloc[-1] if "realized_vol" in cn_dk_result.columns else None
+                _dk_cur_vs_p = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+                _dk_next_raw_p, _dk_next_vs_p, _dk_pending_p = _compute_next_vol_scale(
+                    _dk_rv_p, _dk_cur_vs_p,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                _dk_next_total_p = _dk_sc_p / _dk_cur_vs_p * _dk_next_vs_p if _dk_cur_vs_p > 1e-10 else _dk_next_vs_p
                 w(f"\n**③ 波动率缩放:**\n\n")
-                w(f"| 当前杠杆 | **{_dk_sc_p:.2f}x** |\n")
+                w(f"| 指标 | 值 |\n")
+                w(f"|:-|------:|\n")
+                w(f"| 当前已生效敞口 | **{_dk_sc_p:.2f}x** (VolScale {_dk_cur_vs_p:.2f}x) |\n")
+                w(f"| 下一交易日敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🔴 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
                 if _dk_rv_p is not None and not np.isnan(_dk_rv_p):
                     w(f"| 已实现波动率 | {_dk_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_DK_TARGET_VOL:.0%} |\n")
                 if CN_DK_SCALE_THRESHOLD > 0:
-                    if abs(_dk_sc_raw_p - _dk_sc_p) > 0.001:
-                        w(f"| 理论杠杆 | {_dk_sc_raw_p:.2f}x (|Δ|={abs(_dk_sc_raw_p - _dk_sc_p):.4f} < {CN_DK_SCALE_THRESHOLD}阈值) |\n")
+                    if abs(_dk_next_raw_p - _dk_cur_vs_p) > 0.001:
+                        w(f"| 下一日理论VolScale | {_dk_next_raw_p:.2f}x (|Δ|={abs(_dk_next_raw_p - _dk_cur_vs_p):.4f} {'≥' if _dk_pending_p else '<'} {CN_DK_SCALE_THRESHOLD}阈值) |\n")
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_DK_SCALE_THRESHOLD:.2f} |\n")
-                _dk_holding_same_p = cn_dk_result["holding"].iloc[-1] == cn_dk_result["holding"].iloc[-2]
-                _dk_scale_changed_p = abs(_dk_sc_p - _dk_sc_prev_p) > 0.001 and _dk_holding_same_p
-                if _dk_scale_changed_p:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_p:.2f}x → {_dk_sc_p:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                if _dk_pending_p:
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
-                    w(f"\n📊 杠杆维持: **{_dk_sc_p:.2f}x**（无调整）\n")
+                    w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-B: 美股7ETF\n\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
@@ -5803,7 +6012,7 @@ class CombinedStrategyV68(CombinedStrategyBase):
             w(f"\n**③ 波动率缩放 (Model B):** 近{US_ROT_VOL_WINDOW}日已实现波动率 = {us_rv:.1%}，"
                       f"scale = {US_ROT_TARGET_VOL:.0%}/{us_rv:.1%} = **{us_scale:.2f}x**")
             if us_scale > 1.0:
-                w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)")
+                w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)")
             elif us_scale < 1.0:
                 w(" (<1: 所有资产等比缩减)")
             w("\n")
@@ -5865,22 +6074,22 @@ class CombinedStrategyV68(CombinedStrategyBase):
                 _c_scale_next = _vs_info_p.get("next_scale", _c_scale_now)
                 _c_scale_changed = bool(_vs_info_p.get("pending_adjustment", abs(_c_scale_next - _c_scale_now) > 0.001))
                 if _c_scale_changed:
-                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
+                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
                 w(f"\n**Vol-Scaling 实时状态:**\n\n")
                 w(f"| 指标 | 值 |\n|:-|------:|\n")
-                w(f"| 当前已执行杠杆 | **{_c_scale_now:.2f}x** |\n")
+                w(f"| 当前杠杆 | **{_c_scale_now:.2f}x** |\n")
                 if _c_rv_now is not None:
                     w(f"| 已实现波动率 | {_c_rv_now:.1%} |\n")
                 w(f"| 目标波动率 | {PROD_VS_TARGET_VOL:.0%} |\n")
                 w(f"| 最新理论杠杆 | {_c_ts_now:.2f}x |\n")
-                w(f"| 下一次执行杠杆 | **{_c_scale_next:.2f}x** |\n")
+                w(f"| 下一美股开盘杠杆 | **{_c_scale_next:.2f}x** |\n")
                 if not _c_scale_changed and abs(_c_ts_now - _c_scale_now) > 0.001:
                     w(f"| 阈值状态 | |Δ|={abs(_c_ts_now - _c_scale_now):.4f} < {PROD_VS_THRESHOLD}阈值，未调整 |\n")
                 w(f"| 杠杆范围 | [{PROD_VS_MIN_LEV:.1f}x, {PROD_VS_MAX_LEV:.1f}x] |\n")
                 w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
                 w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
                 if not _c_scale_changed:
-                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一次仍维持）\n")
+                    w(f"\n✅ 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
                 if _c_scale_next > 1.0:
                     _c_borrow = _c_scale_next - 1
                     w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
@@ -6565,6 +6774,63 @@ class CombinedStrategyV68(CombinedStrategyBase):
             )
             w(f"📎 绩效报告: **{filename}**")
 
+class CombinedStrategyV68PoeBot(poe.PoeBot):
+    async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
+        return _BOT_SETTINGS
+
+    async def get_response(self, request: QueryRequest):
+        runtime = _LegacyPoeRuntime(request)
+
+        def _runner():
+            try:
+                with _POE_RUNTIME_LOCK:
+                    with runtime:
+                        CombinedStrategyV68().run()
+            except Exception as e:
+                runtime.error = e
+
+        worker = threading.Thread(target=_runner, daemon=True)
+        worker.start()
+
+        while worker.is_alive() or not runtime.event_queue.empty():
+            drained = False
+            while True:
+                try:
+                    kind, payload = runtime.event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                drained = True
+                if kind == "text":
+                    yield poe.PartialResponse(text=payload)
+                elif kind == "file":
+                    await self.post_message_attachment(
+                        message_id=request.message_id,
+                        file_data=payload["contents"],
+                        filename=payload["name"],
+                        content_type=payload["content_type"],
+                        is_inline=payload["is_inline"],
+                    )
+            if not drained:
+                await asyncio.sleep(0.05)
+
+        if runtime.error is not None:
+            raise runtime.error
+
+
 if __name__ == "__main__":
-    bot = CombinedStrategyV68()
-    bot.run()
+    # Detect Poe Python runtime: the native poe module is registered in
+    # sys.modules['poe'] but has been shadowed by "import fastapi_poe as poe".
+    # When running inside Poe Python, we must restore the native module so that
+    # poe.query / poe.start_message / poe.call etc. work correctly.
+    import sys as _sys
+    _native_poe = _sys.modules.get('poe')
+    if _native_poe is not None and _native_poe is not poe and hasattr(_native_poe, 'start_message'):
+        globals()['poe'] = _native_poe
+        _safe_poe_update_settings(_BOT_SETTINGS)
+        CombinedStrategyV68().run()
+    else:
+        runner = getattr(poe, "run", None)
+        if callable(runner):
+            runner(CombinedStrategyV68PoeBot())
+        else:
+            CombinedStrategyV68().run()

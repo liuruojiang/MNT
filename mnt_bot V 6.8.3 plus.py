@@ -1,6 +1,7 @@
-# poe: name=Strategy-Signal-V62
+# poe: name=Strategy-Signal-V683
 # poe: privacy_shield=half
-"""V6.2"""
+"""V6.8.3"""
+import asyncio
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -14,9 +15,152 @@ import json
 import os
 import xlsxwriter
 import time
+import queue
+import threading
+from types import SimpleNamespace
+import fastapi_poe as poe
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import SettingsResponse
+from fastapi_poe.types import ProtocolMessage, QueryRequest, SettingsRequest, SettingsResponse
+
+
+def _safe_poe_update_settings(settings: SettingsResponse) -> None:
+    updater = getattr(poe, "update_settings", None)
+    if callable(updater):
+        updater(settings)
+
+
+class _CompatChatMessage:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _CompatAttachment:
+    def __init__(self, attachment):
+        self.url = attachment.url
+        self.name = attachment.name
+        self.content_type = attachment.content_type
+        self.parsed_content = getattr(attachment, "parsed_content", None)
+
+    def get_contents(self) -> bytes:
+        if self.parsed_content is not None:
+            return self.parsed_content.encode("utf-8")
+        resp = _session.get(self.url, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+
+
+class _CompatQuery:
+    def __init__(self, text: str, attachments):
+        self.text = text
+        self.attachments = attachments
+
+
+class _CompatMessage:
+    def __init__(self, runtime):
+        self._runtime = runtime
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def write(self, text):
+        if text:
+            self._runtime.emit_text(str(text))
+
+    def attach_file(self, *, name, contents, content_type, is_inline=False):
+        self._runtime.emit_file(
+            name=name,
+            contents=contents,
+            content_type=content_type,
+            is_inline=is_inline,
+        )
+
+
+class _LegacyPoeRuntime:
+    _MISSING = object()
+
+    def __init__(self, request: QueryRequest):
+        self.request = request
+        self.event_queue = queue.Queue()
+        self.error = None
+        latest = request.query[-1] if request.query else None
+        latest_text = latest.content if latest is not None else ""
+        latest_atts = [_CompatAttachment(a) for a in (latest.attachments if latest is not None else [])]
+        self.query = _CompatQuery(latest_text, latest_atts)
+        self.default_chat = [_CompatChatMessage(m.content) for m in request.query]
+        self._patched = {}
+
+    def emit_text(self, text: str):
+        self.event_queue.put(("text", text))
+
+    def emit_file(self, *, name, contents, content_type, is_inline=False):
+        self.event_queue.put((
+            "file",
+            {
+                "name": name,
+                "contents": contents,
+                "content_type": content_type,
+                "is_inline": is_inline,
+            },
+        ))
+
+    def start_message(self):
+        return _CompatMessage(self)
+
+    def call(self, bot_name: str, prompt: str):
+        sub_request = self.request.model_copy(
+            update={
+                "query": [ProtocolMessage(role="user", content=str(prompt), content_type="text/plain")],
+                "tools": None,
+                "tool_calls": None,
+                "tool_results": None,
+            }
+        )
+        text = poe.sync_utils.run_sync(
+            poe.get_final_response(
+                sub_request,
+                bot_name,
+                access_key=self.request.access_key or "",
+                api_key=self.request.api_key or "",
+            )
+        )
+        return SimpleNamespace(text=text)
+
+    def patch(self):
+        self._patched = {}
+        for name, value in {
+            "query": self.query,
+            "default_chat": self.default_chat,
+            "start_message": self.start_message,
+            "call": self.call,
+        }.items():
+            self._patched[name] = getattr(poe, name, self._MISSING)
+            setattr(poe, name, value)
+        return self
+
+    def restore(self):
+        for name, old_value in self._patched.items():
+            if old_value is self._MISSING:
+                try:
+                    delattr(poe, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(poe, name, old_value)
+        self._patched = {}
+
+    def __enter__(self):
+        return self.patch()
+
+    def __exit__(self, exc_type, exc, tb):
+        self.restore()
+        return False
+
+
+_POE_RUNTIME_LOCK = threading.RLock()
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -31,6 +175,7 @@ CN_BIAS_N = 60           # 均线周期 (price / MA60)
 CN_MOM_DAY = 20          # 斜率拟合窗口
 CN_R2_WINDOW = 20        # R²滚动窗口
 CN_R2_THRESHOLD = 0.3    # R²最低门槛
+CN_ENTRY_WAIT_DAYS = None   # 策略A剩余仓位只等首个日线阴线补齐，不做超时强制补仓
 CN_BOND_CODE = "1.H11077"  # 上证10年期国债指数（全收益，避险资产）
 CN_BOND_NAME = "10Y国债"
 # v6.1: 波动率缩放参数
@@ -39,6 +184,7 @@ CN_VOL_WINDOW = 60            # 波动率计算窗口（与MA60一致）
 CN_MAX_LEV = 1.5              # 最大杠杆
 CN_MIN_LEV = 0.1              # 最小杠杆
 CN_SCALE_THRESHOLD = 0.10     # scale变动阈值
+CN_ENTRY_INITIAL_FRACTION = 0.5
 
 # 成交量情绪监控（仅展示，不参与交易决策）
 CN_VOL_EMOTION_MA   = 10       # 均量周期
@@ -73,6 +219,15 @@ CN_CSINDEX_CANDIDATES = {
 }
 # (国债已改用H11077全收益指数，无需ETF拼接)
 
+# 代理全收益指数，使用价格指数用于从第三方(EastMoney/Sina)获取数据，规避中证官网实时失效问题
+CN_H_PROXY_SECIDS = {
+    "1.H20955": "1.000827", # 中证红利低波100 -> 中证红利低波动100指数(价格)
+    "1.H00016": "1.000016", # 上证50全收益 -> 上证50(价格)
+    "1.H00852": "1.000852", # 中证1000全收益 -> 中证1000(价格)
+    "1.H00905": "1.000905", # 中证500全收益 -> 中证500(价格)
+    "1.H11077": "1.000012", # 上证10年期国债全收益 -> 上证国债指数
+}
+
 # ─────────────────────────────────────────────
 # A股 Sub-A-DK 多空策略
 # ─────────────────────────────────────────────
@@ -102,6 +257,19 @@ CN_DK_MIN_LEV = 0.1
 CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
+CN_DK_RISK_GATE_ENABLED = False
+CN_DK_RISK_GATE_ENTER = 0.15
+CN_DK_RISK_GATE_EXIT = 0.08
+CN_DK_RISK_GATE_DEFENSE_SCALE = 0.5
+CN_DK_RISK_GATE_COOLDOWN_DAYS = 0
+CN_DK_PAIR_SCORE_DECAY_ENABLED = True
+CN_DK_PAIR_SCORE_DECAY_RATIO = 0.40
+CN_DK_PAIR_SCORE_RECOVERY_RATIO = 0.70
+CN_DK_PAIR_SCORE_DERISK_SCALE = 0.0
+CN_DK_SAME_SIDE_OVERHEAT_ENABLED = True
+CN_DK_SAME_SIDE_OVERHEAT_ENTER = 0.22
+CN_DK_SAME_SIDE_OVERHEAT_EXIT = 0.18
+CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
 # v6.1 多配对索引: 5指数 → C(5,2)=10配对, 全部从cn_dk_close读取(价格指数)
 CN_DK_INDICES = {
     'SZ50':   {'col': 'DK_SZ50',   'src': 'dk'},
@@ -130,11 +298,12 @@ US_ROT_ASSETS = {
     "IBIT": {"proxy": "BTC-USD", "label": "比特币"},
 }
 US_ROT_POOL = [cfg["proxy"] for cfg in US_ROT_ASSETS.values()]
-US_ROT_FUTURES = {"QQQ", "GLD", "TLT"}
+US_ROT_FUTURES = {"QQQ", "GLD"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 2.0x max leverage，
 # scale>1: 仅对 US_ROT_FUTURES 中资产按其自身原始权重放大，不承接其他资产的杠杆缺口。
+# V6.8.1: 可加杠杆资产仅保留 QQQ / GLD，移除 TLT。
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 2.0
 US_ROT_VOL_WINDOW = 40
@@ -457,10 +626,74 @@ def _fetch_cn_h_proxy(secid):
             time.sleep(1)
     raise last_err or ValueError(f"H proxy returned no usable data for {secid} -> {proxy_secid}")
 
+
+def _stitch_cn_proxy_returns(base_df, proxy_df):
+    """Extend a total-return series with proxy price-index returns after the overlap date."""
+    if base_df is None or len(base_df) == 0:
+        return proxy_df
+    if proxy_df is None or len(proxy_df) == 0:
+        return base_df
+    if "close" not in base_df.columns or "close" not in proxy_df.columns:
+        return base_df
+
+    base = base_df[["close"]].copy().sort_index()
+    proxy = proxy_df[["close"]].copy().sort_index()
+    overlap = base.index.intersection(proxy.index)
+    if len(overlap) == 0:
+        return base
+
+    anchor = overlap[-1]
+    stitched = base.loc[:anchor].copy()
+    proxy_tail = proxy.loc[anchor:, "close"].dropna()
+    if len(proxy_tail) <= 1:
+        return stitched
+
+    last_close = float(stitched.iloc[-1]["close"])
+    rows = []
+    prev_proxy = float(proxy_tail.iloc[0])
+    for dt, px in proxy_tail.iloc[1:].items():
+        px = float(px)
+        if prev_proxy <= 0:
+            prev_proxy = px
+            continue
+        last_close *= px / prev_proxy
+        rows.append((dt, last_close))
+        prev_proxy = px
+    if rows:
+        ext = pd.DataFrame(rows, columns=["date", "close"]).set_index("date")
+        stitched = pd.concat([stitched, ext], axis=0)
+    return stitched[~stitched.index.duplicated(keep="last")].sort_index()
+
+
+def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
+    """Map a live proxy level to the strategy series by applying the latest proxy return."""
+    if df is None or len(df) == 0 or proxy_df is None or len(proxy_df) == 0:
+        return realtime_proxy_close
+    if "close" not in df.columns or "close" not in proxy_df.columns:
+        return realtime_proxy_close
+
+    last_date = df.index[-1]
+    proxy_hist = proxy_df.loc[:last_date, "close"].dropna()
+    if len(proxy_hist) == 0:
+        return realtime_proxy_close
+
+    prev_proxy_close = float(proxy_hist.iloc[-1])
+    last_close = float(df.iloc[-1]["close"])
+    if prev_proxy_close <= 0 or last_close <= 0:
+        return realtime_proxy_close
+    return last_close * (float(realtime_proxy_close) / prev_proxy_close)
+
+
 def _fetch_cn_realtime_close(secid):
     """从东方财富实时行情API获取指数/ETF最新收盘价(收盘后)或现价(盘中)。
     返回 float(收盘价) 或 None(失败/非交易日)。
     仅在日K线API缺失当天数据时用于补充。"""
+
+    # 如果有对应的价格指数代理，则使用代理代码获取实时数据
+    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
+    if proxy_secid:
+        secid = proxy_secid
+
     try:
         url = (f"https://push2.eastmoney.com/api/qt/stock/get"
                f"?secid={secid}"
@@ -502,6 +735,12 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
+    if secid in CN_H_PROXY_SECIDS:
+        try:
+            proxy_df, _ = _fetch_cn_h_proxy(secid)
+            realtime_close = _project_proxy_realtime_close(df, proxy_df, realtime_close)
+        except _DATA_FETCH_ERRORS:
+            pass
     # 与最后一行收盘价对比，完全相同说明可能是非交易日(节假日)
     last_close = float(df.iloc[-1]["close"]) if "close" in df.columns else None
     if last_close is not None and abs(realtime_close - last_close) < 0.001:
@@ -522,94 +761,6 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if msg:
         msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
     return df
-
-def fetch_cn_kline(secid):
-    code = secid.split('.')[1]
-    last_err = None
-    attempts = []
-    if code.startswith('H'):
-        # H-prefix全收益指数: 优先走中证官网, 官网候选代码都失败后才回退到第三方源
-        try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                return df, source
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"csindex:{e}")
-            time.sleep(1)
-        if secid in CN_H_PROXY_SECIDS:
-            try:
-                df, source = _fetch_cn_h_proxy(secid)
-                if df is not None and len(df) > 50:
-                    return df, source
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"proxy:{e}")
-                time.sleep(1)
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    else:
-        # ETF/普通指数: EastMoney优先, Sina备用
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    for name, fetcher in sources:
-        try:
-            df = fetcher()
-            if df is not None and len(df) > 50:
-                return df, name
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            time.sleep(1)
-    raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}")
-
-def fetch_cn_kline(secid):
-    code = secid.split('.')[1]
-    last_err = None
-    attempts = []
-    if code.startswith('H'):
-        # H-prefix 全收益指数: 中证官网优先, 再走价格指数代理, 最后才回退第三方 H 代码.
-        try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                return df, source
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"csindex:{e}")
-            time.sleep(1)
-        if secid in CN_H_PROXY_SECIDS:
-            try:
-                df, source = _fetch_cn_h_proxy(secid)
-                if df is not None and len(df) > 50:
-                    return df, source
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"proxy:{e}")
-                time.sleep(1)
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    else:
-        # ETF/普通指数: EastMoney 优先, Sina 备用.
-        sources = [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]
-    for name, fetcher in sources:
-        try:
-            df = fetcher()
-            if df is not None and len(df) > 50:
-                return df, name
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f"{name}:{e}")
-            time.sleep(1)
-    attempts_text = " | ".join(attempts[-4:]) if attempts else str(last_err)
-    raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}")
 
 def _cn_cache_path(secid):
     base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
@@ -635,40 +786,49 @@ def _load_cn_official_cache(secid):
     return df.set_index("date").sort_index()
 
 def fetch_cn_kline(secid):
-    code = secid.split(".")[1]
+    """
+    修改为由代理价格指数读取来切换数据源（放弃从csindex读取以规避其实时失效和反爬问题）。
+    全收益指数H打头的代码会被映射到实时支持良好的价格指数代码。
+    """
+    code = secid.split('.')[1] if '.' in secid else secid
     last_err = None
     attempts = []
-    if code.startswith("H"):
+
+    if code.startswith('H'):
+        base_df = None
+        base_source = None
         try:
-            df, source = _fetch_cn_csindex_with_candidates(code)
-            if df is not None and len(df) > 50:
-                _save_cn_official_cache(secid, df)
-                return df, source
+            base_df, base_source = _fetch_cn_csindex_with_candidates(code)
+            if base_df is not None and len(base_df) > 50:
+                _save_cn_official_cache(secid, base_df)
         except _DATA_FETCH_ERRORS as e:
             last_err = e
             attempts.append(f"csindex:{e}")
             time.sleep(1)
-        for name, fetcher in [
-            ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
-            ("Sina", lambda: _fetch_cn_sina(secid)),
-        ]:
             try:
-                df = fetcher()
-                if df is not None and len(df) > 50:
-                    return df, name
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f"{name}:{e}")
-                time.sleep(1)
+                base_df = _load_cn_official_cache(secid)
+                if base_df is not None and len(base_df) > 50:
+                    cache_date = base_df.index[-1].strftime("%Y-%m-%d")
+                    base_source = f"csindex-cache:{cache_date}"
+            except (OSError, ValueError, KeyError) as cache_err:
+                attempts.append(f"cache:{cache_err}")
+
+        proxy_df = None
+        proxy_source = None
         try:
-            df = _load_cn_official_cache(secid)
-            if df is not None and len(df) > 50:
-                cache_date = df.index[-1].strftime("%Y-%m-%d")
-                return df, f"csindex-cache:{cache_date}"
-        except (OSError, ValueError, KeyError) as e:
-            if last_err is None:
-                last_err = e
-            attempts.append(f"cache:{e}")
+            proxy_df, proxy_source = _fetch_cn_h_proxy(secid)
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f"proxy:{e}")
+            time.sleep(1)
+
+        if base_df is not None and len(base_df) > 50:
+            if proxy_df is not None and len(proxy_df) > 50:
+                stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
+                return stitched, f"{base_source}+{proxy_source}"
+            return base_df, base_source
+        if proxy_df is not None and len(proxy_df) > 50:
+            return proxy_df, proxy_source
     else:
         for name, fetcher in [
             ("EastMoney", lambda: _fetch_cn_eastmoney(secid)),
@@ -682,6 +842,7 @@ def fetch_cn_kline(secid):
                 last_err = e
                 attempts.append(f"{name}:{e}")
                 time.sleep(1)
+
     attempts_text = " | ".join(attempts[-5:]) if attempts else str(last_err)
     raise poe.BotError(f"获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}")
 
@@ -915,6 +1076,35 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
                   f"{'...' if len(supplemented) > 5 else ''}"
                   f" 共{len(supplemented)}个 [snapshot]\n")
 
+def build_ibit_spliced(frame, proxy_ticker="BTC-USD", live_ticker="IBIT"):
+    """Use BTC history before IBIT listed, then switch to scaled IBIT returns."""
+    if proxy_ticker not in frame.columns:
+        raise ValueError(f"{proxy_ticker} column is required to build IBIT splice")
+
+    proxy = pd.to_numeric(frame[proxy_ticker], errors="coerce").astype(float).copy().rename(proxy_ticker)
+    if live_ticker not in frame.columns:
+        return proxy
+
+    live = pd.to_numeric(frame[live_ticker], errors="coerce").astype(float).reindex(proxy.index)
+    overlap = pd.concat(
+        [proxy.rename("proxy"), live.rename("live")],
+        axis=1,
+    ).dropna()
+    if overlap.empty:
+        return proxy
+
+    switch_date = overlap.index[0]
+    live_base = float(overlap.loc[switch_date, "live"])
+    if abs(live_base) < 1e-12:
+        return proxy
+
+    scale_factor = float(overlap.loc[switch_date, "proxy"]) / live_base
+    switch_mask = proxy.index >= switch_date
+    post_listing = live.loc[switch_mask].ffill()
+    proxy.loc[switch_mask] = post_listing * scale_factor
+    return proxy
+
+
 def _cn_signal_days(close_df, start_idx):
     week_best = {}
     for i in range(start_idx, len(close_df)):
@@ -993,6 +1183,11 @@ def run_cn_strategy(close_df, equity_codes):
         r2_dict[code] = calc_rolling_r2(close_df[code])
     start_idx = CN_BIAS_N + CN_MOM_DAY
     holding = "cash"
+    holding_fraction = 0.0
+    pending_entry_target = None
+    pending_entry_since = None
+    pending_entry_days = 0
+    await_fresh_entry_signal = False
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -1012,28 +1207,118 @@ def run_cn_strategy(close_df, equity_codes):
                     if best in r2_dict and i < len(r2_dict[best]) else np.nan
                 if not np.isnan(r2_val) and r2_val >= CN_R2_THRESHOLD:
                     ideal = best
-        target = ideal if ideal != holding else None
-        if target is not None:
-            old_h = holding
-            cost = (1 - CN_COMMISSION) if (old_h == "cash" or target == "cash") \
-                else (1 - CN_COMMISSION) ** 2
-            if old_h == "cash":
-                day_ret = (1 + CN_RF_DAILY) * cost - 1
-            else:
-                asset_ret = close_df.iloc[i][old_h] / close_df.iloc[i-1][old_h] - 1
-                day_ret = (1 + asset_ret) * cost - 1
-            holding = target
+        signal_target = ideal if ideal != holding else None
+        trade_target = None
+        trade_fraction = holding_fraction
+        is_signal = False
+
+        if holding == "cash":
+            if await_fresh_entry_signal:
+                if ideal == "cash":
+                    await_fresh_entry_signal = False
+            elif ideal != "cash":
+                initial_fraction = float(np.clip(CN_ENTRY_INITIAL_FRACTION, 0.0, 1.0))
+                trade_target = ideal
+                trade_fraction = initial_fraction
+                is_signal = initial_fraction > 0.0
+                if initial_fraction >= 1.0 - 1e-12:
+                    pending_entry_target = None
+                    pending_entry_since = None
+                    pending_entry_days = 0
+                else:
+                    pending_entry_target = ideal
+                    pending_entry_since = date
+                    pending_entry_days = 0
         else:
-            if holding == "cash":
-                day_ret = CN_RF_DAILY
+            is_partial_pending = (
+                pending_entry_target is not None
+                and holding == pending_entry_target
+                and holding_fraction < 1.0 - 1e-12
+            )
+            if is_partial_pending:
+                if signal_target is not None:
+                    trade_target = signal_target
+                    trade_fraction = 0.0 if signal_target == "cash" else 1.0
+                    is_signal = True
+                    pending_entry_target = None
+                    pending_entry_since = None
+                    pending_entry_days = 0
+                    await_fresh_entry_signal = False
+                else:
+                    prev_close = close_df.iloc[i - 1][pending_entry_target] if i > 0 else np.nan
+                    curr_close = close_df.iloc[i][pending_entry_target]
+                    is_down_day = (
+                        pd.notna(prev_close)
+                        and pd.notna(curr_close)
+                        and float(curr_close) < float(prev_close)
+                    )
+                    if is_down_day:
+                        trade_target = pending_entry_target
+                        trade_fraction = 1.0
+                        pending_entry_target = None
+                        pending_entry_since = None
+                        pending_entry_days = 0
+                        is_signal = True
+                    else:
+                        pending_entry_days += 1
+                        if (
+                            CN_ENTRY_WAIT_DAYS is not None
+                            and pending_entry_days >= int(CN_ENTRY_WAIT_DAYS)
+                        ):
+                            trade_target = pending_entry_target
+                            trade_fraction = 1.0
+                            pending_entry_target = None
+                            pending_entry_since = None
+                            pending_entry_days = 0
+                            is_signal = True
+            elif signal_target is not None:
+                trade_target = signal_target
+                trade_fraction = 0.0 if signal_target == "cash" else 1.0
+                is_signal = True
+                pending_entry_target = None
+                pending_entry_since = None
+                pending_entry_days = 0
+                await_fresh_entry_signal = False
+
+        old_h = holding
+        old_fraction = holding_fraction
+        if old_h == "cash" or old_fraction <= 1e-12 or i == 0:
+            asset_ret = 0.0
+        else:
+            asset_ret = close_df.iloc[i][old_h] / close_df.iloc[i-1][old_h] - 1
+        asset_component = old_fraction * asset_ret
+        cash_component = (1.0 - old_fraction) * CN_RF_DAILY
+        trade_cost = 0.0
+
+        if trade_target is not None:
+            if trade_target == old_h:
+                turnover = abs(float(trade_fraction) - float(old_fraction))
             else:
-                day_ret = close_df.iloc[i][holding] / close_df.iloc[i-1][holding] - 1
-        rows.append({"date": date, "return": day_ret, "holding": holding,
-                      "is_signal": target is not None, "target": target, "weight": 1.0})
+                turnover = float(old_fraction) + float(trade_fraction)
+            trade_cost = CN_COMMISSION * turnover
+            holding = trade_target if float(trade_fraction) > 1e-12 else "cash"
+            holding_fraction = float(trade_fraction) if holding != "cash" else 0.0
+        else:
+            holding_fraction = old_fraction
+        rows.append({
+            "date": date,
+            "holding": holding,
+            "holding_fraction": holding_fraction,
+            "is_signal": is_signal,
+            "target": trade_target,
+            "asset_component": asset_component,
+            "cash_component": cash_component,
+            "trade_cost": trade_cost,
+            "pending_entry_target": pending_entry_target,
+            "pending_entry_since": pending_entry_since,
+            "pending_entry_days": pending_entry_days,
+            "await_fresh_entry_signal": await_fresh_entry_signal,
+        })
     df = pd.DataFrame(rows).set_index("date")
     # 波动率缩放 (v6.1): cash日scale=1.0, 权益日scale=target_vol/realized_vol
-    raw_ret = df["return"].values.copy()
-    is_cash = (df["holding"] == "cash").values
+    raw_ret = (df["asset_component"] + df["cash_component"]).values.copy()
+    base_weight = df["holding_fraction"].fillna(0.0).values
+    is_cash = base_weight <= 1e-12
     realized_vol = pd.Series(raw_ret, index=df.index).rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
     raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV)
     raw_scale = raw_scale.shift(1)
@@ -1049,18 +1334,469 @@ def run_cn_strategy(close_df, equity_codes):
     scale_arr = raw_scale.fillna(1.0).values
     df["scale_raw"] = raw_scale
     scale_arr[is_cash] = 1.0
-    df["weight"] = scale_arr
+    effective_weight = scale_arr * base_weight
+    df["base_weight"] = base_weight
+    df["weight"] = effective_weight
     df["realized_vol"] = realized_vol
     # 纯杠杆调整交易成本: 持仓不变且非现金时, 扣除 |Δscale| × 单边佣金
-    _prev_scale = np.concatenate([[scale_arr[0]], scale_arr[:-1]])
-    _delta_scale = np.abs(scale_arr - _prev_scale)
+    _prev_scale = np.concatenate([[effective_weight[0]], effective_weight[:-1]])
+    _delta_scale = np.abs(effective_weight - _prev_scale)
     _no_holding_change = ~df["is_signal"].values
     _scale_tc = np.where(_no_holding_change & ~is_cash,
                          CN_COMMISSION * _delta_scale, 0.0)
     df["scale_tc"] = _scale_tc
-    df["return"] = (1 + raw_ret * scale_arr) * (1 - _scale_tc) - 1
+    scaled_gross = 1.0 + df["asset_component"].values * scale_arr + df["cash_component"].values
+    df["return"] = scaled_gross * (1.0 - df["trade_cost"].values) * (1.0 - _scale_tc) - 1.0
     df["nav"] = (1 + df["return"]).cumprod()
     return df
+
+CN_SA_CASH_OVERLAY_ENABLED = True
+CN_SA_CASH_OVERLAY_DECAY_RATIO = 0.55
+CN_SA_CASH_OVERLAY_RECOVERY_RATIO = 0.90
+CN_SA_SAME_SIDE_OVERHEAT_ENABLED = True
+CN_SA_SAME_SIDE_OVERHEAT_ENTER = 0.36
+CN_SA_SAME_SIDE_OVERHEAT_EXIT = 0.34
+CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
+
+def _extract_active_cn_score(cn_result, close_df):
+    if cn_result is None or len(cn_result) == 0:
+        return pd.Series(dtype=float)
+
+    all_codes = [c for c in CN_ALL_CODES if c in close_df.columns]
+    bias_dict = {}
+    for code in all_codes:
+        bias_dict[code] = calc_bias_momentum(close_df[code])
+
+    scores = []
+    for i, dt in enumerate(cn_result.index):
+        holding = str(cn_result["holding"].iloc[i]) if "holding" in cn_result.columns else "cash"
+        holding_fraction = float(cn_result["holding_fraction"].iloc[i]) if "holding_fraction" in cn_result.columns else 0.0
+        score = np.nan
+        if holding in CN_STOCK_CODES and holding_fraction > 1e-12 and holding in bias_dict and dt in bias_dict[holding].index:
+            raw = bias_dict[holding].loc[dt]
+            if pd.notna(raw):
+                score = float(raw)
+        scores.append(score)
+    return pd.Series(scores, index=cn_result.index, dtype=float)
+
+
+def apply_suba_cash_peak_decay_overlay(
+    cn_result,
+    close_df,
+    decay_ratio_threshold,
+    recovery_ratio_threshold,
+    commission=0.0,
+):
+    if not 0 < decay_ratio_threshold < 1:
+        raise ValueError("decay_ratio_threshold must be in (0, 1).")
+    if not decay_ratio_threshold < recovery_ratio_threshold <= 1:
+        raise ValueError("recovery_ratio_threshold must be in (decay_ratio_threshold, 1].")
+    if cn_result is None or len(cn_result) == 0:
+        return cn_result
+
+    required = {"holding", "holding_fraction", "return"}
+    missing = required.difference(cn_result.columns)
+    if missing:
+        raise KeyError(f"Missing required Sub-A columns: {sorted(missing)}")
+
+    out = cn_result.copy()
+    base_holding = out["holding"].fillna("cash").astype(str)
+    base_fraction = out["holding_fraction"].fillna(0.0).astype(float).clip(lower=0.0, upper=1.0)
+    active_score = _extract_active_cn_score(out, close_df).reindex(out.index).astype(float)
+
+    effective_holdings = []
+    effective_fractions = []
+    overlay_on = []
+    overlay_triggered = []
+    overlay_recovered = []
+    trade_ids = []
+    score_peaks = []
+    score_decay_ratios = []
+    waiting_flags = []
+
+    trade_id = 0
+    score_peak = None
+    derisked_for_today = False
+    waiting_for_new_peak = False
+    rearm_peak = None
+    prev_overlay_on = False
+
+    for i, dt in enumerate(out.index):
+        cur_base_holding = base_holding.iloc[i]
+        cur_base_fraction = float(base_fraction.iloc[i])
+        prev_base_holding = base_holding.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or cur_base_holding != prev_base_holding
+
+        if new_trade:
+            trade_id += 1
+            score_peak = None
+            derisked_for_today = False
+            waiting_for_new_peak = False
+            rearm_peak = None
+
+        eligible_stock = cur_base_holding in CN_STOCK_CODES and cur_base_fraction > 1e-12
+        cur_effective_holding = "cash" if (derisked_for_today and eligible_stock) else (cur_base_holding if cur_base_fraction > 1e-12 else "cash")
+        cur_effective_fraction = 0.0 if (derisked_for_today and eligible_stock) else (cur_base_fraction if cur_base_holding != "cash" else 0.0)
+        cur_overlay_on = bool(derisked_for_today and eligible_stock)
+        triggered_today = cur_overlay_on and not prev_overlay_on
+        recovered_today = (not cur_overlay_on) and prev_overlay_on
+
+        cur_score = active_score.iloc[i] if eligible_stock else np.nan
+        if pd.notna(cur_score):
+            cur_score = float(cur_score)
+            score_peak = cur_score if score_peak is None else max(float(score_peak), cur_score)
+
+        decay_ratio = None
+        if score_peak is not None and score_peak > 1e-12 and pd.notna(cur_score):
+            decay_ratio = float(cur_score) / float(score_peak)
+
+        next_derisked = derisked_for_today
+        next_waiting = waiting_for_new_peak
+        next_rearm_peak = rearm_peak
+
+        if next_waiting and next_rearm_peak is not None and score_peak is not None and score_peak > float(next_rearm_peak) + 1e-12:
+            next_waiting = False
+            next_rearm_peak = None
+
+        if eligible_stock:
+            if next_derisked:
+                if decay_ratio is not None and decay_ratio >= recovery_ratio_threshold:
+                    next_derisked = False
+                    next_waiting = True
+                    next_rearm_peak = score_peak
+            elif not next_waiting and decay_ratio is not None and decay_ratio <= decay_ratio_threshold:
+                next_derisked = True
+        else:
+            next_derisked = False
+            next_waiting = False
+            next_rearm_peak = None
+
+        effective_holdings.append(cur_effective_holding)
+        effective_fractions.append(float(cur_effective_fraction))
+        overlay_on.append(cur_overlay_on)
+        overlay_triggered.append(triggered_today)
+        overlay_recovered.append(recovered_today)
+        trade_ids.append(int(trade_id))
+        score_peaks.append(None if score_peak is None else float(score_peak))
+        score_decay_ratios.append(None if decay_ratio is None else float(decay_ratio))
+        waiting_flags.append(bool(next_waiting))
+
+        derisked_for_today = next_derisked
+        waiting_for_new_peak = next_waiting
+        rearm_peak = next_rearm_peak
+        prev_overlay_on = cur_overlay_on
+
+    eff_h = pd.Series(effective_holdings, index=out.index, dtype=str)
+    eff_f = pd.Series(effective_fractions, index=out.index, dtype=float)
+    asset_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    cash_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    trade_cost_s = pd.Series(0.0, index=out.index, dtype=float)
+    effective_signals = []
+
+    for i, dt in enumerate(out.index):
+        if i == 0:
+            asset_component_s.iloc[i] = float(out["asset_component"].iloc[i]) if "asset_component" in out.columns else 0.0
+            cash_component_s.iloc[i] = float(out["cash_component"].iloc[i]) if "cash_component" in out.columns else float(out["return"].iloc[i])
+            trade_cost_s.iloc[i] = float(out["trade_cost"].iloc[i]) if "trade_cost" in out.columns else 0.0
+            effective_signals.append(bool(eff_f.iloc[i] > 1e-12))
+            continue
+
+        prev_dt = out.index[i - 1]
+        old_h = eff_h.iloc[i - 1]
+        old_f = float(eff_f.iloc[i - 1])
+        new_h = eff_h.iloc[i]
+        new_f = float(eff_f.iloc[i])
+
+        if old_h == "cash" or old_f <= 1e-12:
+            asset_component = 0.0
+        else:
+            asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1
+            asset_component = old_f * float(asset_ret)
+        cash_component = (1.0 - old_f) * CN_RF_DAILY
+
+        if new_h == old_h:
+            turnover = abs(new_f - old_f)
+        else:
+            turnover = old_f + new_f
+        trade_cost = commission * float(turnover)
+
+        asset_component_s.iloc[i] = float(asset_component)
+        cash_component_s.iloc[i] = float(cash_component)
+        trade_cost_s.iloc[i] = float(trade_cost)
+        effective_signals.append(bool(turnover > 1e-12))
+
+    raw_ret = asset_component_s + cash_component_s
+    realized_vol = raw_ret.rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV)
+    raw_scale = raw_scale.shift(1)
+    if CN_SCALE_THRESHOLD > 0:
+        _sa = raw_scale.values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-9:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        raw_scale = pd.Series(_sa, index=out.index)
+
+    scale_arr = raw_scale.fillna(1.0).values
+    is_cash = eff_f.values <= 1e-12
+    scale_arr[is_cash] = 1.0
+    effective_weight = scale_arr * eff_f.values
+    prev_weight = pd.Series(effective_weight, index=out.index).shift(1).fillna(effective_weight[0])
+    delta_weight = (pd.Series(effective_weight, index=out.index) - prev_weight).abs()
+    no_holding_change = ~pd.Series(effective_signals, index=out.index, dtype=bool)
+    scale_tc = pd.Series(0.0, index=out.index, dtype=float)
+    scale_tc.loc[no_holding_change & (~pd.Series(is_cash, index=out.index))] = commission * delta_weight.loc[
+        no_holding_change & (~pd.Series(is_cash, index=out.index))
+    ]
+
+    scaled_gross = 1.0 + asset_component_s.values * scale_arr + cash_component_s.values
+    out["base_holding"] = base_holding
+    out["base_fraction"] = base_fraction
+    out["effective_holding"] = eff_h
+    out["effective_fraction"] = eff_f
+    out["active_score_overlay"] = active_score
+    out["overlay_on"] = pd.Series(overlay_on, index=out.index, dtype=bool)
+    out["overlay_triggered"] = pd.Series(overlay_triggered, index=out.index, dtype=bool)
+    out["overlay_recovered"] = pd.Series(overlay_recovered, index=out.index, dtype=bool)
+    out["trade_id"] = pd.Series(trade_ids, index=out.index, dtype="Int64")
+    out["score_peak_overlay"] = pd.Series(score_peaks, index=out.index, dtype=float)
+    out["score_decay_ratio_overlay"] = pd.Series(score_decay_ratios, index=out.index, dtype=float)
+    out["waiting_for_new_peak"] = pd.Series(waiting_flags, index=out.index, dtype=bool)
+    out["asset_component"] = asset_component_s
+    out["cash_component"] = cash_component_s
+    out["trade_cost"] = trade_cost_s
+    out["scale_raw"] = raw_scale
+    out["base_weight"] = eff_f.values
+    out["weight"] = effective_weight
+    out["realized_vol"] = realized_vol
+    out["scale_tc"] = scale_tc
+    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) * (1.0 - scale_tc.values) - 1.0
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    out["is_signal"] = pd.Series(effective_signals, index=out.index, dtype=bool)
+    out["target"] = out["effective_holding"].where(out["is_signal"], None)
+    return out
+
+
+def _suba_same_side_overheat_features(close_df):
+    features = {}
+    for code in CN_STOCK_CODES:
+        if code not in close_df.columns:
+            continue
+        price = close_df[code].astype(float)
+        ma = price.rolling(CN_BIAS_N).mean()
+        bias = price / ma - 1.0
+        bias_mom = calc_bias_momentum(price)
+        same_side = (bias > 0) & (bias_mom > 0) & bias.notna() & bias_mom.notna()
+        features[code] = pd.DataFrame(
+            {
+                "bias": bias,
+                "bias_mom": bias_mom,
+                "same_side": same_side,
+            },
+            index=close_df.index,
+        )
+    return features
+
+
+def _rebuild_suba_from_effective(base_result, close_df, eff_h, eff_f, signal_flags, extra_cols):
+    out = base_result.copy()
+    eff_h = pd.Series(eff_h, index=out.index, dtype=str)
+    eff_f = pd.Series(eff_f, index=out.index, dtype=float)
+    signal_flags = pd.Series(signal_flags, index=out.index, dtype=bool)
+
+    asset_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    cash_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    trade_cost_s = pd.Series(0.0, index=out.index, dtype=float)
+
+    for i, dt in enumerate(out.index):
+        if i == 0:
+            asset_component_s.iloc[i] = 0.0
+            cash_component_s.iloc[i] = CN_RF_DAILY
+            trade_cost_s.iloc[i] = CN_COMMISSION * float(eff_f.iloc[i])
+            continue
+
+        prev_dt = out.index[i - 1]
+        old_h = eff_h.iloc[i - 1]
+        old_f = float(eff_f.iloc[i - 1])
+        new_h = eff_h.iloc[i]
+        new_f = float(eff_f.iloc[i])
+
+        if old_h == "cash" or old_f <= 1e-12:
+            asset_component = 0.0
+        else:
+            asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1.0
+            asset_component = old_f * float(asset_ret)
+        cash_component = (1.0 - old_f) * CN_RF_DAILY
+        turnover = abs(new_f - old_f) if new_h == old_h else old_f + new_f
+        trade_cost = CN_COMMISSION * float(turnover)
+
+        asset_component_s.iloc[i] = float(asset_component)
+        cash_component_s.iloc[i] = float(cash_component)
+        trade_cost_s.iloc[i] = float(trade_cost)
+
+    raw_ret = asset_component_s + cash_component_s
+    realized_vol = raw_ret.rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV).shift(1)
+    if CN_SCALE_THRESHOLD > 0:
+        _sa = raw_scale.values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-9:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        raw_scale = pd.Series(_sa, index=out.index)
+
+    scale_arr = raw_scale.fillna(1.0).values
+    is_cash = eff_f.values <= 1e-12
+    scale_arr[is_cash] = 1.0
+    effective_weight = scale_arr * eff_f.values
+    prev_weight = pd.Series(effective_weight, index=out.index).shift(1).fillna(effective_weight[0])
+    delta_weight = (pd.Series(effective_weight, index=out.index) - prev_weight).abs()
+    scale_tc = pd.Series(0.0, index=out.index, dtype=float)
+    no_holding_change = ~signal_flags
+    scale_tc.loc[no_holding_change & (~pd.Series(is_cash, index=out.index))] = CN_COMMISSION * delta_weight.loc[
+        no_holding_change & (~pd.Series(is_cash, index=out.index))
+    ]
+
+    scaled_gross = 1.0 + asset_component_s.values * scale_arr + cash_component_s.values
+    out["effective_holding"] = eff_h
+    out["effective_fraction"] = eff_f
+    out["holding"] = eff_h
+    out["holding_fraction"] = eff_f
+    out["asset_component"] = asset_component_s
+    out["cash_component"] = cash_component_s
+    out["trade_cost"] = trade_cost_s
+    out["scale_raw"] = raw_scale
+    out["base_weight"] = eff_f.values
+    out["weight"] = effective_weight
+    out["realized_vol"] = realized_vol
+    out["scale_tc"] = scale_tc
+    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) * (1.0 - scale_tc.values) - 1.0
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    out["is_signal"] = signal_flags
+    out["target"] = out["holding"].where(out["is_signal"], None)
+    for key, value in extra_cols.items():
+        out[key] = value
+    return out
+
+
+def apply_suba_same_side_overheat_overlay(
+    cn_result,
+    close_df,
+    enter_threshold,
+    exit_threshold,
+    derisk_scale=0.0,
+):
+    """Cut Sub-A equity exposure only during extreme same-side upside bias.
+
+    The signal is evaluated after the daily close and affects the next row's
+    effective holding, matching the existing close-to-close Sub-A backtest path.
+    """
+    if not 0 < exit_threshold < enter_threshold:
+        raise ValueError("exit_threshold must be in (0, enter_threshold).")
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError("derisk_scale must be in [0, 1].")
+    if cn_result is None or len(cn_result) == 0:
+        return cn_result
+
+    required = {"holding", "holding_fraction", "return"}
+    missing = required.difference(cn_result.columns)
+    if missing:
+        raise KeyError(f"Missing required Sub-A columns: {sorted(missing)}")
+
+    out = cn_result.copy()
+    features = _suba_same_side_overheat_features(close_df)
+    pre_h = out["effective_holding"].fillna("cash").astype(str) if "effective_holding" in out.columns else out["holding"].fillna("cash").astype(str)
+    pre_f = out["effective_fraction"].fillna(0.0).astype(float) if "effective_fraction" in out.columns else out["holding_fraction"].fillna(0.0).astype(float)
+
+    overheat_state = False
+    prev_effective_h = "cash"
+    prev_effective_f = 0.0
+    eff_h, eff_f, signals = [], [], []
+    bias_vals, mom_vals, same_side_vals = [], [], []
+    state_vals, trigger_vals, recover_vals = [], [], []
+
+    for i, dt in enumerate(out.index):
+        holding = str(pre_h.iloc[i])
+        fraction = float(pre_f.iloc[i])
+        eligible = holding in CN_STOCK_CODES and fraction > 1e-12
+
+        bias = np.nan
+        mom = np.nan
+        same_side = False
+        if eligible and holding in features and dt in features[holding].index:
+            row = features[holding].loc[dt]
+            bias = float(row["bias"]) if pd.notna(row["bias"]) else np.nan
+            mom = float(row["bias_mom"]) if pd.notna(row["bias_mom"]) else np.nan
+            same_side = bool(row["same_side"]) if pd.notna(row["same_side"]) else False
+
+        current_state = overheat_state and eligible
+        out_f = fraction * float(derisk_scale) if current_state else fraction
+        out_h = holding if out_f > 1e-12 else "cash"
+        triggered_today = False
+        recovered_today = False
+
+        next_state = overheat_state
+        if eligible and pd.notna(bias) and same_side:
+            if next_state:
+                if bias <= exit_threshold:
+                    next_state = False
+                    recovered_today = True
+            elif bias >= enter_threshold:
+                next_state = True
+                triggered_today = True
+        elif next_state:
+            next_state = False
+            recovered_today = True
+
+        signal = (out_h != prev_effective_h) or (abs(out_f - prev_effective_f) > 1e-12)
+        eff_h.append(out_h)
+        eff_f.append(out_f)
+        signals.append(signal)
+        bias_vals.append(bias)
+        mom_vals.append(mom)
+        same_side_vals.append(same_side)
+        state_vals.append(current_state)
+        trigger_vals.append(triggered_today)
+        recover_vals.append(recovered_today)
+
+        overheat_state = next_state
+        prev_effective_h = out_h
+        prev_effective_f = out_f
+
+    extra = {
+        "pre_suba_overheat_holding": pre_h,
+        "pre_suba_overheat_fraction": pre_f,
+        "suba_same_side_overheat_bias": pd.Series(bias_vals, index=out.index, dtype=float),
+        "suba_same_side_overheat_bias_mom": pd.Series(mom_vals, index=out.index, dtype=float),
+        "suba_same_side_overheat_signal": pd.Series(same_side_vals, index=out.index, dtype=bool),
+        "suba_same_side_overheat_on": pd.Series(state_vals, index=out.index, dtype=bool),
+        "suba_same_side_overheat_triggered": pd.Series(trigger_vals, index=out.index, dtype=bool),
+        "suba_same_side_overheat_recovered": pd.Series(recover_vals, index=out.index, dtype=bool),
+    }
+    out = _rebuild_suba_from_effective(out, close_df, eff_h, eff_f, signals, extra)
+    out.attrs["suba_same_side_overheat_overlay"] = {
+        "enter_threshold": float(enter_threshold),
+        "exit_threshold": float(exit_threshold),
+        "derisk_scale": float(derisk_scale),
+        "overlay_days": int(out["suba_same_side_overheat_on"].sum()),
+        "overlay_ratio": float(out["suba_same_side_overheat_on"].mean()),
+        "trigger_count": int(out["suba_same_side_overheat_triggered"].sum()),
+        "recovery_count": int(out["suba_same_side_overheat_recovered"].sum()),
+    }
+    return out
+
 
 def _dk_signal_days(close_df, start_idx):
     week_best = {}
@@ -1191,8 +1927,8 @@ def _build_top_n_dk(rets_df, signals_df, n=1):
     return combined
 
 def run_dk_strategy(cn_close, cn_dk_close):
-    """Sub-A-DK V6.1: 多配对Top-1 + 乖离动量 + VolScaling.
-    v6.1变更: 多配对Top-1替代单配对, 乖离动量替代绝对动量, 移除冷却期, 移除NAV MA过滤, 移除R²过滤.
+    """Sub-A-DK V6.5: 多配对Top-1 + 乖离动量 + VolScaling.
+    v6.5在v6.2基础上增加策略级DD risk gate, 其余信号逻辑不变.
     Returns: DataFrame with [return, nav, holding, is_signal, target, weight, ...]
     """
     from itertools import combinations
@@ -1304,6 +2040,373 @@ def run_dk_strategy(cn_close, cn_dk_close):
     result.attrs['rets_df'] = rets_df
     result.attrs['signals_df'] = signals_df
     return result
+
+
+def _extract_active_pair_score(dk_result):
+    signals_df = dk_result.attrs.get("signals_df")
+    if signals_df is None or len(dk_result) == 0:
+        raise KeyError("signals_df is missing from dk_result attrs.")
+    if "top_pair" not in dk_result.columns:
+        raise KeyError("top_pair column is required for score-decay overlay.")
+
+    scores = []
+    for dt, pair in dk_result["top_pair"].fillna("none").items():
+        score = None
+        if pair != "none" and pair in signals_df.columns and dt in signals_df.index:
+            raw = signals_df.loc[dt, pair]
+            if pd.notna(raw):
+                score = float(raw)
+        scores.append(score)
+    return pd.Series(scores, index=dk_result.index, dtype=float)
+
+
+def apply_dk_pair_score_peak_decay_overlay(
+    dk_result,
+    decay_ratio_threshold,
+    recovery_ratio_threshold,
+    derisk_scale,
+    commission=0.0,
+):
+    if not 0 < decay_ratio_threshold < 1:
+        raise ValueError("decay_ratio_threshold must be in (0, 1).")
+    if not decay_ratio_threshold < recovery_ratio_threshold <= 1:
+        raise ValueError("recovery_ratio_threshold must be in (decay_ratio_threshold, 1].")
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError("derisk_scale must be in [0, 1].")
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+
+    required = {"return", "holding", "top_pair"}
+    missing = required.difference(dk_result.columns)
+    if missing:
+        raise KeyError(f"Missing required DK columns: {sorted(missing)}")
+
+    out = dk_result.copy()
+    base_ret = out["return"].fillna(0.0)
+    base_weight = out["weight"].fillna(1.0) if "weight" in out.columns else pd.Series(1.0, index=out.index)
+    holdings = out["holding"].fillna("none_0").astype(str)
+    active_score = _extract_active_pair_score(out)
+
+    final_ret = []
+    overlay_scale = []
+    overlay_on = []
+    overlay_triggered = []
+    overlay_recovered = []
+    trade_ids = []
+    score_peaks = []
+    score_decay_ratios = []
+    waiting_flags = []
+
+    trade_id = 0
+    score_peak = None
+    derisked_for_today = False
+    waiting_for_new_peak = False
+    rearm_peak = None
+    prev_scale = 1.0
+
+    for i, dt in enumerate(base_ret.index):
+        holding = holdings.iloc[i]
+        prev_holding = holdings.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or holding != prev_holding
+
+        if new_trade:
+            trade_id += 1
+            score_peak = None
+            derisked_for_today = False
+            waiting_for_new_peak = False
+            rearm_peak = None
+
+        cur_scale = derisk_scale if derisked_for_today else 1.0
+        triggered_today = cur_scale < 0.999999 and prev_scale >= 0.999999
+        recovered_today = cur_scale >= 0.999999 and prev_scale < 0.999999
+
+        realized_ret = float(base_ret.iloc[i]) * cur_scale
+        delta_scale = abs(cur_scale - prev_scale)
+        overlay_tc = 0.0
+        if delta_scale > 1e-12:
+            overlay_tc = 2.0 * commission * float(base_weight.iloc[i]) * delta_scale
+        realized_ret = (1.0 + realized_ret) * (1.0 - overlay_tc) - 1.0
+
+        cur_score = active_score.iloc[i]
+        if pd.notna(cur_score):
+            cur_score = float(cur_score)
+            score_peak = cur_score if score_peak is None else max(float(score_peak), cur_score)
+
+        decay_ratio = None
+        if score_peak is not None and score_peak > 1e-12 and pd.notna(cur_score):
+            decay_ratio = float(cur_score) / float(score_peak)
+
+        next_derisked = derisked_for_today
+        next_waiting = waiting_for_new_peak
+        next_rearm_peak = rearm_peak
+
+        if next_waiting and next_rearm_peak is not None and score_peak is not None and score_peak > float(next_rearm_peak) + 1e-12:
+            next_waiting = False
+            next_rearm_peak = None
+
+        if next_derisked:
+            if decay_ratio is not None and decay_ratio >= recovery_ratio_threshold:
+                next_derisked = False
+                next_waiting = True
+                next_rearm_peak = score_peak
+        elif not next_waiting and decay_ratio is not None and decay_ratio <= decay_ratio_threshold:
+            next_derisked = True
+
+        final_ret.append(float(realized_ret))
+        overlay_scale.append(float(cur_scale))
+        overlay_on.append(bool(cur_scale < 0.999999))
+        overlay_triggered.append(bool(triggered_today))
+        overlay_recovered.append(bool(recovered_today))
+        trade_ids.append(int(trade_id))
+        score_peaks.append(None if score_peak is None else float(score_peak))
+        score_decay_ratios.append(None if decay_ratio is None else float(decay_ratio))
+        waiting_flags.append(bool(next_waiting))
+
+        derisked_for_today = next_derisked
+        waiting_for_new_peak = next_waiting
+        rearm_peak = next_rearm_peak
+        prev_scale = cur_scale
+
+    out["raw_return"] = base_ret
+    out["base_weight"] = base_weight
+    out["return"] = pd.Series(final_ret, index=out.index, dtype=float)
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    out["active_score_overlay"] = active_score
+    out["overlay_scale"] = pd.Series(overlay_scale, index=out.index, dtype=float)
+    out["overlay_on"] = pd.Series(overlay_on, index=out.index, dtype=bool)
+    out["overlay_triggered"] = pd.Series(overlay_triggered, index=out.index, dtype=bool)
+    out["overlay_recovered"] = pd.Series(overlay_recovered, index=out.index, dtype=bool)
+    out["trade_id"] = pd.Series(trade_ids, index=out.index, dtype="Int64")
+    out["score_peak_overlay"] = pd.Series(score_peaks, index=out.index, dtype=float)
+    out["score_decay_ratio_overlay"] = pd.Series(score_decay_ratios, index=out.index, dtype=float)
+    out["waiting_for_new_peak"] = pd.Series(waiting_flags, index=out.index, dtype=bool)
+    out["weight"] = out["base_weight"] * out["overlay_scale"]
+    out.attrs["pair_score_peak_decay_overlay"] = {
+        "decay_ratio_threshold": decay_ratio_threshold,
+        "recovery_ratio_threshold": recovery_ratio_threshold,
+        "derisk_scale": derisk_scale,
+        "commission": commission,
+        "overlay_days": int(out["overlay_on"].sum()),
+        "overlay_ratio": float(out["overlay_on"].mean()),
+        "trigger_count": int(out["overlay_triggered"].sum()),
+        "recovery_count": int(out["overlay_recovered"].sum()),
+    }
+    return out
+
+
+def _extract_active_pair_same_side_overheat(dk_result):
+    pair_data = dk_result.attrs.get("pair_data")
+    if pair_data is None:
+        raise KeyError("pair_data is missing from dk_result attrs.")
+    if "top_pair" not in dk_result.columns:
+        raise KeyError("top_pair column is required for same-side overheat overlay.")
+
+    feature_cache = {}
+    for pair, pdata in pair_data.items():
+        if pdata is None or "ratio" not in pdata.columns or "bias_mom" not in pdata.columns:
+            continue
+        ratio = pdata["ratio"].astype(float)
+        ma = ratio.rolling(CN_DK_BIAS_N).mean()
+        bias = ratio / ma - 1.0
+        bias_mom = pdata["bias_mom"].astype(float)
+        same_side = (np.sign(bias) == np.sign(bias_mom)) & bias.notna() & bias_mom.notna()
+        feature_cache[pair] = pd.DataFrame(
+            {
+                "abs_bias": bias.abs(),
+                "same_side": same_side,
+            },
+            index=pdata.index,
+        ).shift(1)
+
+    abs_bias_vals = []
+    same_side_vals = []
+    for dt, pair in dk_result["top_pair"].fillna("none").items():
+        abs_bias = np.nan
+        same_side = False
+        f = feature_cache.get(pair)
+        if f is not None and dt in f.index:
+            ab = f.loc[dt, "abs_bias"]
+            ss = f.loc[dt, "same_side"]
+            if pd.notna(ab):
+                abs_bias = float(ab)
+            same_side = bool(ss) if pd.notna(ss) else False
+        abs_bias_vals.append(abs_bias)
+        same_side_vals.append(same_side)
+    return (
+        pd.Series(abs_bias_vals, index=dk_result.index, dtype=float),
+        pd.Series(same_side_vals, index=dk_result.index, dtype=bool),
+    )
+
+
+def apply_dk_same_side_overheat_overlay(
+    dk_result,
+    enter_threshold,
+    exit_threshold,
+    derisk_scale,
+    commission=0.0,
+):
+    """Reduce ADK exposure only when the active pair is chasing an extreme same-side bias.
+
+    Uses T-1 pair ratio bias because DK Top-1 execution is based on prior close signals.
+    """
+    if not 0 < exit_threshold < enter_threshold:
+        raise ValueError("exit_threshold must be in (0, enter_threshold).")
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError("derisk_scale must be in [0, 1].")
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+
+    required = {"return", "holding", "top_pair"}
+    missing = required.difference(dk_result.columns)
+    if missing:
+        raise KeyError(f"Missing required DK columns: {sorted(missing)}")
+
+    out = dk_result.copy()
+    base_ret = out["return"].fillna(0.0)
+    pre_weight = out["weight"].fillna(1.0) if "weight" in out.columns else pd.Series(1.0, index=out.index)
+    holdings = out["holding"].fillna("none_0").astype(str)
+    active_abs_bias, active_same_side = _extract_active_pair_same_side_overheat(out)
+
+    final_ret = []
+    overheat_scale = []
+    overheat_on = []
+    overheat_triggered = []
+    overheat_recovered = []
+    overheat_tc = []
+    prev_scale = 1.0
+    defense_on = False
+
+    for i, dt in enumerate(base_ret.index):
+        holding = holdings.iloc[i]
+        abs_bias = active_abs_bias.iloc[i]
+        same_side = bool(active_same_side.iloc[i])
+
+        if holding == "none_0" or pd.isna(abs_bias) or not same_side:
+            defense_on = False
+        elif defense_on:
+            if float(abs_bias) <= exit_threshold:
+                defense_on = False
+        elif float(abs_bias) > enter_threshold:
+            defense_on = True
+
+        cur_scale = derisk_scale if defense_on else 1.0
+        if holding == "none_0":
+            cur_scale = 0.0
+
+        triggered_today = cur_scale < 0.999999 and prev_scale >= 0.999999
+        recovered_today = cur_scale >= 0.999999 and prev_scale < 0.999999
+        delta_scale = abs(cur_scale - prev_scale)
+        tc = 0.0
+        if delta_scale > 1e-12:
+            tc = 2.0 * commission * float(pre_weight.iloc[i]) * delta_scale
+
+        realized_ret = float(base_ret.iloc[i]) * cur_scale
+        realized_ret = (1.0 + realized_ret) * (1.0 - tc) - 1.0
+        final_ret.append(float(realized_ret))
+        overheat_scale.append(float(cur_scale))
+        overheat_on.append(bool(cur_scale < 0.999999))
+        overheat_triggered.append(bool(triggered_today))
+        overheat_recovered.append(bool(recovered_today))
+        overheat_tc.append(float(tc))
+        prev_scale = cur_scale
+
+    out["pre_overheat_return"] = base_ret
+    out["pre_overheat_weight"] = pre_weight
+    out["same_side_overheat_abs_bias"] = active_abs_bias
+    out["same_side_overheat_signal"] = active_same_side
+    out["same_side_overheat_scale"] = pd.Series(overheat_scale, index=out.index, dtype=float)
+    out["same_side_overheat_on"] = pd.Series(overheat_on, index=out.index, dtype=bool)
+    out["same_side_overheat_triggered"] = pd.Series(overheat_triggered, index=out.index, dtype=bool)
+    out["same_side_overheat_recovered"] = pd.Series(overheat_recovered, index=out.index, dtype=bool)
+    out["same_side_overheat_tc"] = pd.Series(overheat_tc, index=out.index, dtype=float)
+    out["return"] = pd.Series(final_ret, index=out.index, dtype=float)
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    out["weight"] = out["pre_overheat_weight"] * out["same_side_overheat_scale"]
+    out.attrs["same_side_overheat_overlay"] = {
+        "enter_threshold": enter_threshold,
+        "exit_threshold": exit_threshold,
+        "derisk_scale": derisk_scale,
+        "commission": commission,
+        "overlay_days": int(out["same_side_overheat_on"].sum()),
+        "overlay_ratio": float(out["same_side_overheat_on"].mean()),
+        "trigger_count": int(out["same_side_overheat_triggered"].sum()),
+        "recovery_count": int(out["same_side_overheat_recovered"].sum()),
+    }
+    return out
+
+
+def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_value=0.08, cooldown_days=0):
+    """Apply a strategy-level drawdown gate to Sub-A-DK.
+
+    Rule:
+    - If prior-day raw DD <= -enter, next day exposure is scaled to `scale_defense`
+    - Once in defense, recover only after prior-day raw DD >= -exit_value
+    - Transaction cost for exposure changes follows the same logic used in the test scans
+    """
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+
+    base_ret = dk_result["return"].fillna(0.0)
+    base_weight = dk_result["weight"].fillna(1.0)
+    base_nav = (1.0 + base_ret).cumprod()
+    base_dd = base_nav / base_nav.cummax() - 1.0
+
+    gated_ret = []
+    gate_scale = []
+    gate_on = []
+    prev_scale = 1.0
+    cooldown_left = 0
+
+    for i, dt in enumerate(base_ret.index):
+        if i == 0:
+            cur_scale = 1.0
+        else:
+            prev_dt = base_ret.index[i - 1]
+            prev_dd = float(base_dd.loc[prev_dt])
+            trigger = prev_dd <= -enter
+            release_ready = prev_dd >= -exit_value if exit_value is not None else prev_dd > -enter
+            if trigger:
+                cooldown_left = max(cooldown_left, cooldown_days)
+                cur_scale = scale_defense
+            elif prev_scale < 0.999999:
+                if cooldown_left > 0:
+                    cooldown_left -= 1
+                    cur_scale = scale_defense
+                else:
+                    cur_scale = 1.0 if release_ready else scale_defense
+            else:
+                cur_scale = 1.0
+
+        scaled_ret = base_ret.iloc[i] * cur_scale
+        delta_scale = abs(cur_scale - prev_scale)
+        overlay_tc = 0.0
+        if delta_scale > 1e-12:
+            overlay_tc = 2.0 * CN_COMMISSION * delta_scale * float(base_weight.iloc[i])
+        final_ret = (1.0 + scaled_ret) * (1.0 - overlay_tc) - 1.0
+
+        gated_ret.append(final_ret)
+        gate_scale.append(cur_scale)
+        gate_on.append(cur_scale < 0.999999)
+        prev_scale = cur_scale
+
+    out = dk_result.copy()
+    out["raw_return"] = base_ret
+    out["raw_nav"] = base_nav
+    out["base_weight"] = base_weight
+    out["risk_gate_scale"] = pd.Series(gate_scale, index=base_ret.index)
+    out["risk_gate_on"] = pd.Series(gate_on, index=base_ret.index)
+    out["risk_gate_base_dd"] = base_dd
+    out["return"] = pd.Series(gated_ret, index=base_ret.index)
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    out["weight"] = out["base_weight"] * out["risk_gate_scale"]
+    out.attrs["risk_gate"] = {
+        "kind": "dd",
+        "enter": enter,
+        "exit": exit_value,
+        "scale_defense": scale_defense,
+        "cooldown_days": cooldown_days,
+    }
+    return out
 
 def _us_signal_days(close_df, start_idx):
     week_best = {}
@@ -2321,6 +3424,8 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name="Sub-A", names=None
             })
         elif has_weight and prev_weight is not None and weight is not None and abs(weight - prev_weight) > 0.001:
             h_name = names.get(holding, holding)
+            # weight 含 shift(1): date 是执行日, 信号在 date-1 收盘发出
+            # 执行时间应为 date 的开盘 (09:30)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
                 "北京时间": beijing_time_str(date, "CN", "open"),
@@ -2461,6 +3566,8 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
                 buy_text = f"开仓 {holding}"
             sell_p = _dk_holding_prices(prev_holding, cn_dk_close, date)
             buy_p = _dk_holding_prices(holding, cn_dk_close, date)
+            # DK 全部信号含 shift(1): date 是执行日, 信号在 date-1 收盘发出
+            # 执行时间应为 date 的开盘 (09:30)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
                 "北京时间": beijing_time_str(date, "CN", "open"),
@@ -2646,6 +3753,9 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                     if _p is not None and not pd.isna(_p):
                         etf_prices.append(f"{etf_name} ${_p:.2f}{_label}")
                 price_str = "; ".join(etf_prices) if etf_prices else None
+                # actual_scale 已含 shift(1): date 本身就是执行日
+                # 用 beijing_time_str(date, open) 而非 us_exec_time_str(date)
+                # 后者会多跳一天 (_next_session_day)
                 records.append({
                     "日期": date.strftime("%Y-%m-%d"),
                     "北京时间": beijing_time_str(date, "US", "open"),
@@ -2807,19 +3917,15 @@ def _apply_subc_vol_scaling(subc_ret, us_prod_daily,
     return out, actual_scale, costs
 
 
-def _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=None):
-    """Convenience: compute Sub-C daily returns with vol-scaling if enabled."""
-    raw = _compute_daily_subc_phased(us_prod_daily, prod_sig_a, PROD_CASH,
-                                     prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
-    if PROD_VS_ENABLED:
-        scaled, _, _ = _apply_subc_vol_scaling(raw, us_prod_daily)
-        return scaled
-    return raw
-
 def _build_subc_vs_info(subc_daily, actual_scale,
                         target_vol=None, vol_window=None,
                         min_lev=None, max_lev=None, threshold=None):
-    """Build Sub-C display info from the latest close."""
+    """Build Sub-C display info from the latest close.
+
+    `current_scale` is the last executed scale already reflected in the latest bar.
+    `next_target_scale` / `next_scale` are what the next rebalance would use if the
+    latest close were treated as the new signal anchor.
+    """
     if target_vol is None:
         target_vol = PROD_VS_TARGET_VOL
     if vol_window is None:
@@ -2858,6 +3964,71 @@ def _build_subc_vs_info(subc_daily, actual_scale,
         "next_scale": next_scale,
         "pending_adjustment": pending_adjustment,
     }
+
+
+def _compute_next_vol_scale(rv_latest, cur_post_thr, tgt_vol, min_l, max_l, thr):
+    """前瞻计算下一交易日的波动率缩放杠杆。
+
+    与 _build_subc_vs_info 同理: 用最新 realized_vol 推算下一日 vol-scale，
+    并对比当前已生效 scale 应用阈值过滤。
+
+    Args:
+        rv_latest: 最新行的 realized_vol (未shift, 含最新数据)
+        cur_post_thr: 当前已生效的 vol-scale (阈值过滤后的值, 用于阈值对比)
+        tgt_vol, min_l, max_l: 策略参数
+        thr: 变动阈值 (0 表示不使用)
+    Returns: (next_raw, next_final, is_pending)
+        next_raw: 理论目标 scale (未经阈值过滤)
+        next_final: 阈值过滤后实际会执行的 scale
+        is_pending: 是否存在待执行的调整
+    """
+    cur_post_thr = float(cur_post_thr) if not np.isnan(cur_post_thr) else 1.0
+    if rv_latest is None or np.isnan(rv_latest) or rv_latest <= 1e-10:
+        return cur_post_thr, cur_post_thr, False
+    raw = float(np.clip(tgt_vol / rv_latest, min_l, max_l))
+    if thr > 0 and abs(raw - cur_post_thr) < thr - 1e-9:
+        final = cur_post_thr
+    else:
+        final = raw
+    return raw, final, abs(final - cur_post_thr) > 0.001
+
+
+def _dk_get_vol_scale(dk_result, idx):
+    """从 DK 结果中提取纯 vol-scale (不含 pair_decay / risk_gate overlay).
+
+    优先从 pair_data attrs 获取精确值; 否则根据 overlay 列推算。
+    """
+    # 方法 1: 直接从 pair_data 取 pair-level post-threshold scale
+    if "top_pair" in dk_result.columns:
+        tp = dk_result["top_pair"].iloc[idx]
+        pd_map = dk_result.attrs.get('pair_data', {})
+        if tp != "none" and tp in pd_map:
+            pdf = pd_map[tp]
+            dt = dk_result.index[idx]
+            if 'scale' in pdf.columns and dt in pdf.index:
+                v = pdf.loc[dt, 'scale']
+                if not np.isnan(v):
+                    return float(v)
+    # 方法 2: 根据 overlay 层推算
+    bw = float(dk_result["base_weight"].iloc[idx]) if "base_weight" in dk_result.columns else float(dk_result["weight"].iloc[idx])
+    has_gate = "risk_gate_scale" in dk_result.columns
+    has_decay = "overlay_scale" in dk_result.columns
+    if has_gate and has_decay:
+        # risk_gate 覆盖了 base_weight → base_weight = vol_scale × overlay_scale
+        ov = float(dk_result["overlay_scale"].iloc[idx])
+        return bw / ov if abs(ov) > 1e-10 else bw
+    # 仅 pair_decay 或仅 risk_gate: base_weight = vol_scale
+    return bw
+
+
+def _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=None):
+    """Convenience: compute Sub-C daily returns with vol-scaling if enabled."""
+    raw = _compute_daily_subc_phased(us_prod_daily, prod_sig_a, PROD_CASH,
+                                     prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
+    if PROD_VS_ENABLED:
+        scaled, _, _ = _apply_subc_vol_scaling(raw, us_prod_daily)
+        return scaled
+    return raw
 
 def generate_signal_excel(date_str, signal_info, rebalance_records):
     output = io.BytesIO()
@@ -3026,6 +4197,17 @@ class CombinedStrategyBase:
         for secid in CN_STOCK_CODES:
             name = CN_NAMES.get(secid, secid)
             msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{cn_sources[secid]}]\n")
+        # 数据新鲜度检查: 收盘后如果部分指数缺少当天数据，发出警告
+        _cn_open_now, _bj_now_check = is_cn_market_open()
+        _is_cn_trading_day = _bj_today_cn.weekday() < 5  # 简单判断工作日
+        _cn_after_close = _is_cn_trading_day and not _cn_open_now and _bj_now_check.hour >= 15
+        if _cn_after_close:
+            _stale_codes = [secid for secid in CN_STOCK_CODES
+                            if cn_raw[secid].index[-1].date() < _bj_today_cn]
+            if _stale_codes:
+                _stale_names = "、".join(CN_NAMES.get(s, s) for s in _stale_codes)
+                msg.write(f"  ⚠️ **数据延迟:** {_stale_names} 尚未更新到今天({_bj_today_cn})，"
+                          f"信号可能不准确，请稍后重新查询\n")
         msg.write(f"  合并截至: {cn_close.index[-1].strftime('%Y-%m-%d')}\n")
         msg.write("⏳ 正在获取美股数据...\n")
         us_raw, us_sources = {}, {}
@@ -3069,6 +4251,11 @@ class CombinedStrategyBase:
             if t in us_raw:
                 us_rot_close = us_rot_close.join(
                     us_raw[t][["close"]].rename(columns={"close": t}), how="left")
+        if "BTC-USD" in us_rot_close.columns and "IBIT" in us_raw and "close" in us_raw["IBIT"].columns:
+            us_rot_close["BTC-USD"] = build_ibit_spliced(pd.DataFrame({
+                "BTC-USD": us_rot_close["BTC-USD"],
+                "IBIT": us_raw["IBIT"]["close"].reindex(us_rot_close.index),
+            }))
         prod_proxies = list(set(
             [c["proxy"] for c in PROD_PORTFOLIO.values()] + [PROD_CASH]))
         _late_prod = {"BTC-USD", "DBMF"}
@@ -3165,8 +4352,48 @@ class CombinedStrategyBase:
             except Exception:
                 pass  # If bond data fails, strategy will just not include bond
         cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
+        if CN_SA_CASH_OVERLAY_ENABLED:
+            cn_result = apply_suba_cash_peak_decay_overlay(
+                cn_result,
+                cn_close_with_bond,
+                decay_ratio_threshold=CN_SA_CASH_OVERLAY_DECAY_RATIO,
+                recovery_ratio_threshold=CN_SA_CASH_OVERLAY_RECOVERY_RATIO,
+                commission=CN_COMMISSION,
+            )
+        if CN_SA_SAME_SIDE_OVERHEAT_ENABLED:
+            cn_result = apply_suba_same_side_overheat_overlay(
+                cn_result,
+                cn_close_with_bond,
+                enter_threshold=CN_SA_SAME_SIDE_OVERHEAT_ENTER,
+                exit_threshold=CN_SA_SAME_SIDE_OVERHEAT_EXIT,
+                derisk_scale=CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE,
+            )
         # v6.1: Sub-A-DK uses multi-pair Top-1
         cn_dk_result = run_dk_strategy(cn_close, cn_dk_close)
+        if CN_DK_PAIR_SCORE_DECAY_ENABLED:
+            cn_dk_result = apply_dk_pair_score_peak_decay_overlay(
+                cn_dk_result,
+                decay_ratio_threshold=CN_DK_PAIR_SCORE_DECAY_RATIO,
+                recovery_ratio_threshold=CN_DK_PAIR_SCORE_RECOVERY_RATIO,
+                derisk_scale=CN_DK_PAIR_SCORE_DERISK_SCALE,
+                commission=CN_COMMISSION,
+            )
+        if CN_DK_SAME_SIDE_OVERHEAT_ENABLED:
+            cn_dk_result = apply_dk_same_side_overheat_overlay(
+                cn_dk_result,
+                enter_threshold=CN_DK_SAME_SIDE_OVERHEAT_ENTER,
+                exit_threshold=CN_DK_SAME_SIDE_OVERHEAT_EXIT,
+                derisk_scale=CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE,
+                commission=CN_COMMISSION,
+            )
+        if CN_DK_RISK_GATE_ENABLED:
+            cn_dk_result = apply_dk_drawdown_risk_gate(
+                cn_dk_result,
+                enter=CN_DK_RISK_GATE_ENTER,
+                scale_defense=CN_DK_RISK_GATE_DEFENSE_SCALE,
+                exit_value=CN_DK_RISK_GATE_EXIT,
+                cooldown_days=CN_DK_RISK_GATE_COOLDOWN_DAYS,
+            )
         us_rot_result = run_us_rotation(
             us_rot_close, US_ROT_POOL,
             btc_ticker=US_ROT_BTC_TICKER, btc_start=US_ROT_BTC_START, btc_max_w=US_ROT_BTC_MAX_W,
@@ -3651,9 +4878,10 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
             if cap_updated:
                 w(_build_capital_marker(cap_config))
 
-poe.update_settings(SettingsResponse(
+_BOT_SETTINGS = SettingsResponse(
+    allow_attachments=True,
     introduction_message=(
-        "📊 **Strategy Signal V6.2 — 策略信号查询**\n\n"
+        "📊 **Strategy Signal V6.8.3 — 策略信号查询**\n\n"
         "四策略组合: Sub-A 15% + Sub-A-DK 25% + Sub-B 40% + Sub-C 20%\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
@@ -3665,9 +4893,10 @@ poe.update_settings(SettingsResponse(
         "**💰 资金管理:** \"设置资金 Sub-B 5万美元\" -> 信号自动显示目标数量\n\n"
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
-))
+)
+_safe_poe_update_settings(_BOT_SETTINGS)
 
-class CombinedStrategyV62(CombinedStrategyBase):
+class CombinedStrategyV681(CombinedStrategyBase):
 
     def _parse_date_with_llm_fallback(self, query):
         """先用正则解析日期范围，失败则用LLM解析自然语言。"""
@@ -3786,16 +5015,18 @@ class CombinedStrategyV62(CombinedStrategyBase):
                     _c_prices[PROD_CASH] = _bil_val.iloc[-1]
             # Vol-scaling 信息
             _vs = d.get("subc_vs_info", {})
-            _vs_scale = _vs.get("actual_scale", 1.0) if PROD_VS_ENABLED else 1.0
+            _vs_current = _vs.get("current_scale", _vs.get("actual_scale", 1.0)) if PROD_VS_ENABLED else 1.0
+            _vs_next = _vs.get("next_scale", _vs_current) if PROD_VS_ENABLED else 1.0
             _vs_rv = _vs.get("realized_vol")
-            _vs_ts = _vs.get("target_scale", 1.0)
-            _bil_cash_w = max(1.0 - _vs_scale, 0.0) if PROD_VS_ENABLED else 0.0
+            _vs_ts = _vs.get("next_target_scale", _vs.get("target_scale", _vs_next))
+            _vs_changed = bool(_vs.get("pending_adjustment", abs(_vs_next - _vs_current) > 0.001))
+            _bil_cash_w = max(1.0 - _vs_next, 0.0) if PROD_VS_ENABLED else 0.0
             if _sub_c_capital:
-                _effective_capital = _sub_c_capital * _vs_scale
+                _effective_capital = _sub_c_capital * _vs_next
                 msg.write("| 资产 | 标签 | 基础权重 | 缩放后权重 | 目标数量 | 金额($) |\n|:-|:-|--------:|--------:|--------:|--------:|\n")
                 for name, cfg in PROD_PORTFOLIO.items():
                     w_base = cfg['w']
-                    w_scaled = w_base * _vs_scale
+                    w_scaled = w_base * _vs_next
                     amt = _sub_c_capital * w_scaled
                     price = _c_prices.get(name)
                     if price and price > 0:
@@ -3811,12 +5042,12 @@ class CombinedStrategyV62(CombinedStrategyBase):
                         msg.write(f"| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} | {qty:,} | {amt:,.0f} |\n")
                     else:
                         msg.write(f"| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} | — | — |\n")
-                msg.write(f"\n💰 Sub-C资金: ${_sub_c_capital:,.0f} | 有效敞口: ${_effective_capital:,.0f} ({_vs_scale:.2f}x) | 价格基于最新收盘\n")
+                msg.write(f"\n💰 Sub-C资金: ${_sub_c_capital:,.0f} | 有效敞口: ${_effective_capital:,.0f} ({_vs_next:.2f}x) | 价格基于最新收盘\n")
             else:
                 if PROD_VS_ENABLED:
                     msg.write("| 资产 | 标签 | 基础权重 | 缩放后权重 |\n|:-|:-|--------:|--------:|\n")
                     for name, cfg in PROD_PORTFOLIO.items():
-                        w_scaled = cfg['w'] * _vs_scale
+                        w_scaled = cfg['w'] * _vs_next
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | {w_scaled:.1%} |\n")
                     if _bil_cash_w > 0.001:
                         msg.write(f"| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} |\n")
@@ -3825,23 +5056,17 @@ class CombinedStrategyV62(CombinedStrategyBase):
                     for name, cfg in PROD_PORTFOLIO.items():
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
-                _vs_current = _vs.get("current_scale", _vs_scale)
-                _vs_prev = _vs.get("prev_actual_scale", _vs_current)
-                _vs_ts = _vs.get("next_target_scale", _vs_ts)
-                _vs_next = _vs.get("next_scale", _vs_current)
-                _vs_changed = bool(_vs.get("pending_adjustment", abs(_vs_next - _vs_current) > 0.001))
                 if _vs_changed:
                     msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
-                msg.write(f"\n**波动率缩放:** 当前 = **{_vs_current:.2f}x**")
+                msg.write(f"\n**波动率缩放:** 当前 **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
-                msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}")
-                msg.write(f" | 最新理论: {_vs_ts:.2f}x")
-                if _vs_changed:
-                    msg.write(f" | 下一美股开盘 = **{_vs_next:.2f}x**")
-                elif abs(_vs_ts - _vs_current) > 0.001:
-                    msg.write(f" (Δ={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
-                msg.write("\n")
+                msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}\n")
+                if not _vs_changed:
+                    msg.write(f"✅ 杠杆: **{_vs_current:.2f}x** (下一美股开盘维持)")
+                    if abs(_vs_ts - _vs_current) > 0.001:
+                        msg.write(f" | 理论: {_vs_ts:.2f}x (|Δ|={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值)")
+                    msg.write("\n")
                 if _vs_next > 1.0:
                     _borrow_pct = _vs_next - 1
                     msg.write(f"📊 杠杆 {_vs_next:.2f}x: 借入{_borrow_pct:.0%}资金 | "
@@ -3849,8 +5074,6 @@ class CombinedStrategyV62(CombinedStrategyBase):
                 elif _vs_next < 1.0:
                     _cash_pct = 1 - _vs_next
                     msg.write(f"📊 减仓 {_vs_next:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
-                if not _vs_changed:
-                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一美股开盘仍维持）\n")
             msg.write(f"\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n")
             # ── Sub-C 仓位调整表 ──
             _pos_config_c = _scan_position_config(poe.default_chat)
@@ -4037,28 +5260,31 @@ class CombinedStrategyV62(CombinedStrategyBase):
                 w("今日收盘信号: 无变化（已确认）\n\n")
             # ── Sub-A vol-scaling 杠杆显示 ──
             if "weight" in cn_result.columns:
-                _cn_display_loc = len(cn_result) + _cn_display_idx if _cn_display_idx < 0 else _cn_display_idx
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 _cn_sc_raw_rt = cn_result["scale_raw"].iloc[_cn_display_idx] if "scale_raw" in cn_result.columns else _cn_sc_rt
                 _cn_rv_rt = cn_result["realized_vol"].iloc[_cn_display_idx] if "realized_vol" in cn_result.columns else None
-                if _cn_display_loc > 0:
-                    _cn_sc_prev_rt = cn_result["weight"].iloc[_cn_display_loc - 1]
-                    _cn_prev_holding = cn_result["holding"].iloc[_cn_display_loc - 1]
-                    _cn_holding_same = _cn_display_holding == _cn_prev_holding
-                else:
-                    _cn_sc_prev_rt = _cn_sc_rt
-                    _cn_holding_same = False
-                _cn_scale_changed = (_cn_display_loc > 0 and abs(_cn_sc_rt - _cn_sc_prev_rt) > 0.001 and _cn_holding_same)
-                if _cn_scale_changed and not _cn_intraday:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_rt:.2f}x → {_cn_sc_rt:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_cn_sc_rt:.2f}x**")
+                # 前瞻: 用最新 realized_vol 计算下一交易日杠杆
+                _cn_next_raw, _cn_next_scale, _cn_pending = _compute_next_vol_scale(
+                    _cn_rv_rt, _cn_sc_raw_rt,
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
+                if _cn_pending and not _cn_intraday:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt:.2f}x → {_cn_next_scale:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 **{_cn_sc_rt:.2f}x**")
                 if _cn_rv_rt is not None and not np.isnan(_cn_rv_rt):
                     w(f" | 已实现波动率: {_cn_rv_rt:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
-                if not _cn_scale_changed:
-                    w(f"📊 杠杆维持: **{_cn_sc_rt:.2f}x**")
-                    if CN_SCALE_THRESHOLD > 0 and not np.isnan(_cn_sc_raw_rt) and abs(_cn_sc_raw_rt - _cn_sc_rt) > 0.001:
-                        w(f" | 理论: {_cn_sc_raw_rt:.2f}x (|Δ|={abs(_cn_sc_raw_rt - _cn_sc_rt):.4f} < {CN_SCALE_THRESHOLD}阈值，未调整)")
+                if "suba_same_side_overheat_on" in cn_result.columns:
+                    _cn_oh_on = bool(cn_result["suba_same_side_overheat_on"].iloc[_cn_display_idx])
+                    _cn_oh_bias = cn_result["suba_same_side_overheat_bias"].iloc[_cn_display_idx] if "suba_same_side_overheat_bias" in cn_result.columns else np.nan
+                    _cn_oh_text = f" | 当前权益乖离: {_cn_oh_bias:.1%}" if pd.notna(_cn_oh_bias) else ""
+                    if _cn_oh_on:
+                        w(f"🛡️ **Sub-A同向过热防守生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
+                    else:
+                        w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
+                if not _cn_pending:
+                    w(f"✅ 杠杆: **{_cn_sc_rt:.2f}x** (下一交易日维持)")
+                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw - float(_cn_sc_raw_rt)) > 0.001:
+                        w(f" | 理论: {_cn_next_raw:.2f}x (|Δ|={abs(_cn_next_raw - float(_cn_sc_raw_rt)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
             # v6.1: 乖离动量 + R² 排名表
             _bm_latest_live = {c: float(bias_mom_cn[c].iloc[_cn_display_idx]) for c in all_display_codes if c in bias_mom_cn and not np.isnan(bias_mom_cn[c].iloc[_cn_display_idx])}
@@ -4145,28 +5371,50 @@ class CombinedStrategyV62(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
                 _dk_display_idx = -2 if _dk_intraday else -1
-                _dk_display_loc = len(cn_dk_result) + _dk_display_idx if _dk_display_idx < 0 else _dk_display_idx
                 _dk_sc_rt = cn_dk_result["weight"].iloc[_dk_display_idx]
-                _dk_sc_raw_rt = cn_dk_result["scale_raw"].iloc[_dk_display_idx] if "scale_raw" in cn_dk_result.columns else _dk_sc_rt
+                _dk_base_w_rt = cn_dk_result["base_weight"].iloc[_dk_display_idx] if "base_weight" in cn_dk_result.columns else _dk_sc_rt
+                _dk_gate_scale_rt = cn_dk_result["risk_gate_scale"].iloc[_dk_display_idx] if "risk_gate_scale" in cn_dk_result.columns else 1.0
+                _dk_gate_on_rt = bool(cn_dk_result["risk_gate_on"].iloc[_dk_display_idx]) if "risk_gate_on" in cn_dk_result.columns else False
+                _dk_gate_dd_rt = cn_dk_result["risk_gate_base_dd"].iloc[_dk_display_idx] if "risk_gate_base_dd" in cn_dk_result.columns else np.nan
+                _dk_oh_scale_rt = cn_dk_result["same_side_overheat_scale"].iloc[_dk_display_idx] if "same_side_overheat_scale" in cn_dk_result.columns else 1.0
+                _dk_oh_on_rt = bool(cn_dk_result["same_side_overheat_on"].iloc[_dk_display_idx]) if "same_side_overheat_on" in cn_dk_result.columns else False
+                _dk_oh_abs_rt = cn_dk_result["same_side_overheat_abs_bias"].iloc[_dk_display_idx] if "same_side_overheat_abs_bias" in cn_dk_result.columns else np.nan
                 _dk_rv_rt = cn_dk_result["realized_vol"].iloc[_dk_display_idx] if "realized_vol" in cn_dk_result.columns else None
-                if _dk_display_loc > 0:
-                    _dk_sc_prev_rt = cn_dk_result["weight"].iloc[_dk_display_loc - 1]
-                    _dk_prev_holding = cn_dk_result["holding"].iloc[_dk_display_loc - 1]
-                    _dk_holding_same = _dk_effective_holding == _dk_prev_holding
-                else:
-                    _dk_sc_prev_rt = _dk_sc_rt
-                    _dk_holding_same = False
-                _dk_scale_changed = (_dk_display_loc > 0 and abs(_dk_sc_rt - _dk_sc_prev_rt) > 0.001 and _dk_holding_same)
-                if _dk_scale_changed and not _dk_intraday:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_rt:.2f}x → {_dk_sc_rt:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_dk_sc_rt:.2f}x**")
+                # 前瞻: 用最新 realized_vol 计算下一交易日 VolScale
+                _dk_cur_vs = _dk_get_vol_scale(cn_dk_result, _dk_display_idx if _dk_display_idx >= 0 else len(cn_dk_result) + _dk_display_idx)
+                _dk_next_raw, _dk_next_vs, _dk_pending = _compute_next_vol_scale(
+                    _dk_rv_rt, _dk_cur_vs,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                if _dk_pending and not _dk_intraday:
+                    # 计算下一交易日总敞口 (VolScale变化, overlay不变)
+                    _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**ADK实际敞口:** **{_dk_sc_rt:.2f}x**")
+                w(f" | VolScale: {_dk_cur_vs:.2f}x")
+                if "same_side_overheat_scale" in cn_dk_result.columns:
+                    w(f" | 同向过热: {_dk_oh_scale_rt:.2f}x")
+                if "risk_gate_scale" in cn_dk_result.columns:
+                    w(f" | RiskGate: {_dk_gate_scale_rt:.2f}x")
                 if _dk_rv_rt is not None and not np.isnan(_dk_rv_rt):
                     w(f" | 已实现波动率: {_dk_rv_rt:.1%}")
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
-                if not _dk_scale_changed:
-                    w(f"📊 杠杆维持: **{_dk_sc_rt:.2f}x**")
-                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_sc_raw_rt - _dk_sc_rt) > 0.001:
-                        w(f" | 理论: {_dk_sc_raw_rt:.2f}x (|Δ|={abs(_dk_sc_raw_rt - _dk_sc_rt):.4f} < {CN_DK_SCALE_THRESHOLD}阈值，未调整)")
+                if "risk_gate_scale" in cn_dk_result.columns:
+                    if _dk_gate_on_rt:
+                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        w(f"🛡️ **风险闸门生效中:** 回撤触发后按 **{_dk_gate_scale_rt:.2f}x** 防守{_dd_text}\n")
+                    else:
+                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        w(f"🟢 **风险闸门关闭:** 触发阈值 {CN_DK_RISK_GATE_ENTER:.0%} / 恢复阈值 {CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
+                if "same_side_overheat_scale" in cn_dk_result.columns:
+                    _oh_text = f" | 当前同向乖离: {_dk_oh_abs_rt:.1%}" if not np.isnan(_dk_oh_abs_rt) else ""
+                    if _dk_oh_on_rt:
+                        w(f"🛡️ **同向过热防守生效:** 乖离>{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}后按 **{_dk_oh_scale_rt:.2f}x** 防守{_oh_text}\n")
+                    else:
+                        w(f"🟢 **同向过热防守关闭:** 触发阈值 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复阈值 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}{_oh_text}\n")
+                if not _dk_pending:
+                    w(f"✅ 杠杆: **{_dk_sc_rt:.2f}x** (下一交易日维持)")
+                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw - _dk_cur_vs) > 0.001:
+                        w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
             us_close_bj = beijing_time_str(us_date, "US", "close")
@@ -4512,21 +5760,29 @@ class CombinedStrategyV62(CombinedStrategyBase):
             # ── Sub-A vol-scaling 杠杆显示 (详细) ──
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
-                _cn_sc_prev_rt3 = cn_result["weight"].iloc[-2]
                 _cn_sc_raw_rt3 = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_rt3
                 _cn_rv_rt3 = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
-                _cn_holding_same3 = cn_result["holding"].iloc[-1] == cn_result["holding"].iloc[-2]
-                _cn_scale_changed3 = abs(_cn_sc_rt3 - _cn_sc_prev_rt3) > 0.001 and _cn_holding_same3
-                if _cn_scale_changed3:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_rt3:.2f}x → {_cn_sc_rt3:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_cn_sc_rt3:.2f}x**")
+                _cn_next_raw3, _cn_next_scale3, _cn_pending3 = _compute_next_vol_scale(
+                    _cn_rv_rt3, float(_cn_sc_raw_rt3),
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
+                if _cn_pending3:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt3:.2f}x → {_cn_next_scale3:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 **{_cn_sc_rt3:.2f}x**")
                 if _cn_rv_rt3 is not None and not np.isnan(_cn_rv_rt3):
                     w(f" | 已实现波动率: {_cn_rv_rt3:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
-                if not _cn_scale_changed3:
-                    w(f"📊 杠杆维持: **{_cn_sc_rt3:.2f}x**")
-                    if CN_SCALE_THRESHOLD > 0 and not np.isnan(_cn_sc_raw_rt3) and abs(_cn_sc_raw_rt3 - _cn_sc_rt3) > 0.001:
-                        w(f" | 理论: {_cn_sc_raw_rt3:.2f}x (|Δ|={abs(_cn_sc_raw_rt3 - _cn_sc_rt3):.4f} < {CN_SCALE_THRESHOLD}阈值，未调整)")
+                if "suba_same_side_overheat_on" in cn_result.columns:
+                    _cn_oh_on3 = bool(cn_result["suba_same_side_overheat_on"].iloc[-1])
+                    _cn_oh_bias3 = cn_result["suba_same_side_overheat_bias"].iloc[-1] if "suba_same_side_overheat_bias" in cn_result.columns else np.nan
+                    _cn_oh_text3 = f" | 当前权益乖离: {_cn_oh_bias3:.1%}" if pd.notna(_cn_oh_bias3) else ""
+                    if _cn_oh_on3:
+                        w(f"🛡️ **Sub-A同向过热防守生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
+                    else:
+                        w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
+                if not _cn_pending3:
+                    w(f"✅ 杠杆: **{_cn_sc_rt3:.2f}x** (下一交易日维持)")
+                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)) > 0.001:
+                        w(f" | 理论: {_cn_next_raw3:.2f}x (|Δ|={abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
             # v6.1: Bias momentum + R² ranking (detailed view)
             all_display_codes_live2 = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else [])
@@ -4606,21 +5862,22 @@ class CombinedStrategyV62(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 (实时) ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
-                _dk_sc_prev_rt3 = cn_dk_result["weight"].iloc[-2]
-                _dk_sc_raw_rt3 = cn_dk_result["scale_raw"].iloc[-1] if "scale_raw" in cn_dk_result.columns else _dk_sc_rt3
                 _dk_rv_rt3 = cn_dk_result["realized_vol"].iloc[-1] if "realized_vol" in cn_dk_result.columns else None
-                _dk_holding_same3 = cn_dk_result["holding"].iloc[-1] == cn_dk_result["holding"].iloc[-2]
-                _dk_scale_changed3 = abs(_dk_sc_rt3 - _dk_sc_prev_rt3) > 0.001 and _dk_holding_same3
-                if _dk_scale_changed3:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_rt3:.2f}x → {_dk_sc_rt3:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
-                w(f"**波动率缩放:** scale = **{_dk_sc_rt3:.2f}x**")
+                _dk_cur_vs3 = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+                _dk_next_raw3, _dk_next_vs3, _dk_pending3 = _compute_next_vol_scale(
+                    _dk_rv_rt3, _dk_cur_vs3,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                if _dk_pending3:
+                    _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
+                w(f"**波动率缩放:** 当前 VolScale **{_dk_cur_vs3:.2f}x** | 实际敞口 **{_dk_sc_rt3:.2f}x**")
                 if _dk_rv_rt3 is not None and not np.isnan(_dk_rv_rt3):
                     w(f" | 已实现波动率: {_dk_rv_rt3:.1%}")
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
-                if not _dk_scale_changed3:
-                    w(f"📊 杠杆维持: **{_dk_sc_rt3:.2f}x**")
-                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_sc_raw_rt3 - _dk_sc_rt3) > 0.001:
-                        w(f" | 理论: {_dk_sc_raw_rt3:.2f}x (|Δ|={abs(_dk_sc_raw_rt3 - _dk_sc_rt3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值，未调整)")
+                if not _dk_pending3:
+                    w(f"✅ 杠杆: **{_dk_sc_rt3:.2f}x** (下一交易日维持)")
+                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw3 - _dk_cur_vs3) > 0.001:
+                        w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
             us_close_bj = beijing_time_str(us_date, "US", "close")
@@ -4746,7 +6003,7 @@ class CombinedStrategyV62(CombinedStrategyBase):
     def _handle_params(self):
         with _sm() as msg:
             w = msg.write
-            w("## ⚙️ 策略参数总览\n\n### Sub-A: A股乖离动量轮动 (v6.4)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("## ⚙️ 策略参数总览\n\n### Sub-A: A股乖离动量轮动 (v6.8.3)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 均线周期 | **{CN_BIAS_N}日** | price/MA{CN_BIAS_N}计算乖离率 |\n")
             w(f"| 斜率拟合窗口 | **{CN_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| R²滚动窗口 | **{CN_R2_WINDOW}日** | 趋势强度评估 |\n")
@@ -4757,6 +6014,14 @@ class CombinedStrategyV62(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_MAX_LEV:.1f}x** | 低波动时杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** | 从现金入场时先买入的目标仓位比例 |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** | None=不设天数上限，只在下跌日补足剩余仓位 |\n")
+            w(f"| Cash Overlay开关 | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** | Sub-A持仓score从峰值衰减后切换到现金 |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** | 当前持仓score/本轮峰值score低于阈值后下一日切现金 |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** | score恢复到阈值以上后恢复持仓，并等待新峰值后再触发 |\n")
+            w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
+            w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
+            w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
             all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
@@ -4771,7 +6036,7 @@ class CombinedStrategyV62(CombinedStrategyBase):
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
             w("6. 无冷却期限制（T+1已天然保证最少1天间隔）\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.4)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
@@ -4781,6 +6046,13 @@ class CombinedStrategyV62(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_DK_MAX_LEV:.1f}x** | 高杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_DK_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| Score衰减开关 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** | 当前pair score从本轮峰值衰减后降低ADK敞口 |\n")
+            w(f"| Score衰减触发 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}** | 当前pair score相对本轮trade peak衰减到阈值以下后次日降风险 |\n")
+            w(f"| Score恢复阈值 | **{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** | 恢复到阈值以上后回满仓，并等待新peak后才能再次触发 |\n")
+            w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
+            w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | ratio/MA{CN_DK_BIAS_N}乖离与动量同向且过热时降低ADK敞口 |\n")
+            w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** | T日收盘判断，T+1按防守敞口执行 |\n")
+            w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 对Score衰减后的ADK敞口再乘该系数 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费(翻转=4笔单边) |\n")
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
@@ -4797,7 +6069,7 @@ class CombinedStrategyV62(CombinedStrategyBase):
             w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
-            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM/VGLT) |\n")
+            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM) |\n")
             w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
             w(f"| 调仓阈值 | **{US_ROT_REBALANCE_THRESHOLD}x** | v6.1: 移除阈值(=1.0等于无阈值) |\n")
             w(f"| BTC参与起始 | **{US_ROT_BTC_START.strftime('%Y-%m-%d')}** | 之前BTC不参与排名 |\n")
@@ -4883,7 +6155,18 @@ class CombinedStrategyV62(CombinedStrategyBase):
                 w(f"⏱ **北京时间 {bj_ts}** 基于收盘数据\n\n")
             w(f"A股收盘: {cn_close_bj} | "
                       f"美股收盘: {us_close_bj}\n\n")
-            w("### Sub-A: A股乖离动量轮动 (v6.4)\n\n")
+            w("### Sub-A: A股乖离动量轮动 (v6.8.3)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** |\n")
+            w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** |\n")
+            w(f"| Cash Overlay | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** |\n")
+            w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** |\n")
+            w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** |\n")
+            w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
+            w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
+            w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
+            w("\n")
             # v6.1: Compute bias momentum and R² for display
             cn_close_with_bond = cn_close.copy()
             if CN_BOND_CODE not in cn_close_with_bond.columns:
@@ -4953,28 +6236,38 @@ class CombinedStrategyV62(CombinedStrategyBase):
             # ── Sub-A vol-scaling 杠杆显示 (长报告) ──
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_p = cn_result["weight"].iloc[-1]
-                _cn_sc_prev_p = cn_result["weight"].iloc[-2]
                 _cn_sc_raw_p = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_p
                 _cn_rv_p = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
+                _cn_next_raw_p, _cn_next_scale_p, _cn_pending_p = _compute_next_vol_scale(
+                    _cn_rv_p, float(_cn_sc_raw_p),
+                    CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 w(f"\n**⑥ 波动率缩放:**\n\n")
                 w(f"| 指标 | 值 |\n")
                 w(f"|:-|------:|\n")
-                w(f"| 当前杠杆 | **{_cn_sc_p:.2f}x** |\n")
+                w(f"| 当前已生效杠杆 | **{_cn_sc_p:.2f}x** |\n")
+                w(f"| 下一交易日杠杆 | **{_cn_next_scale_p:.2f}x** {'🔴 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
                 if _cn_rv_p is not None and not np.isnan(_cn_rv_p):
                     w(f"| 已实现波动率 | {_cn_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_TARGET_VOL:.0%} |\n")
                 if CN_SCALE_THRESHOLD > 0:
-                    if not np.isnan(_cn_sc_raw_p) and abs(_cn_sc_raw_p - _cn_sc_p) > 0.001:
-                        w(f"| 理论杠杆 | {_cn_sc_raw_p:.2f}x (|Δ|={abs(_cn_sc_raw_p - _cn_sc_p):.4f} < {CN_SCALE_THRESHOLD}阈值) |\n")
+                    if abs(_cn_next_raw_p - float(_cn_sc_raw_p)) > 0.001:
+                        w(f"| 下一日理论杠杆 | {_cn_next_raw_p:.2f}x (|Δ|={abs(_cn_next_raw_p - float(_cn_sc_raw_p)):.4f} {'≥' if _cn_pending_p else '<'} {CN_SCALE_THRESHOLD}阈值) |\n")
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_SCALE_THRESHOLD:.2f} |\n")
-                _cn_holding_same_p = cn_result["holding"].iloc[-1] == cn_result["holding"].iloc[-2]
-                _cn_scale_changed_p = abs(_cn_sc_p - _cn_sc_prev_p) > 0.001 and _cn_holding_same_p
-                if _cn_scale_changed_p:
-                    w(f"\n🔴 **杠杆调整! {_cn_sc_prev_p:.2f}x → {_cn_sc_p:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                if _cn_pending_p:
+                    w(f"\n🔴 **杠杆调仓! {_cn_sc_p:.2f}x → {_cn_next_scale_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
-                    w(f"\n📊 杠杆维持: **{_cn_sc_p:.2f}x**（无调整）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.4)\n\n")
+                    w(f"\n✅ 杠杆: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
+            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
+            w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
+            w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
+            w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
+            w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
+            w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
+            w("\n")
             dk_holding = cn_dk_result["holding"].iloc[-1]
             dk_top_pair_lp = cn_dk_result["top_pair"].iloc[-1] if "top_pair" in cn_dk_result.columns else "none"
             dk_dir_lp = int(cn_dk_result["direction"].iloc[-1]) if "direction" in cn_dk_result.columns else 0
@@ -4991,6 +6284,23 @@ class CombinedStrategyV62(CombinedStrategyBase):
             w(f"| Top-1配对 | **{dk_top_pair_lp}** |\n")
             w(f"| 方向 | **{dk_dir_lp:+d}** |\n")
             w(f"| 当前持仓 | **{_dk_pos_str(dk_holding)}** |\n")
+            if "same_side_overheat_scale" in cn_dk_result.columns:
+                _dk_oh_scale_lp = cn_dk_result["same_side_overheat_scale"].iloc[-1]
+                _dk_oh_on_lp = bool(cn_dk_result["same_side_overheat_on"].iloc[-1])
+                _dk_oh_abs_lp = cn_dk_result["same_side_overheat_abs_bias"].iloc[-1]
+                w(f"| 同向过热防守 | **{'开启' if _dk_oh_on_lp else '关闭'}** ({_dk_oh_scale_lp:.2f}x) |\n")
+                if not np.isnan(_dk_oh_abs_lp):
+                    w(f"| 当前同向乖离 | **{_dk_oh_abs_lp:.1%}** |\n")
+            if "risk_gate_scale" in cn_dk_result.columns:
+                _dk_gate_scale_lp = cn_dk_result["risk_gate_scale"].iloc[-1]
+                _dk_gate_on_lp = bool(cn_dk_result["risk_gate_on"].iloc[-1])
+                _dk_gate_dd_lp = cn_dk_result["risk_gate_base_dd"].iloc[-1]
+                _dk_base_w_lp = cn_dk_result["base_weight"].iloc[-1] if "base_weight" in cn_dk_result.columns else cn_dk_result["weight"].iloc[-1]
+                w(f"| VolScale杠杆 | **{_dk_base_w_lp:.2f}x** |\n")
+                w(f"| RiskGate | **{'开启' if _dk_gate_on_lp else '关闭'}** ({_dk_gate_scale_lp:.2f}x) |\n")
+                if not np.isnan(_dk_gate_dd_lp):
+                    w(f"| 原始策略DD | **{_dk_gate_dd_lp:.1%}** |\n")
+            w(f"| 实际杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
             w(f"| 配对切换 | {'是' if dk_pair_changed_lp else '否'} |\n")
             w(f"| 方向切换 | {'是' if dk_direction_changed_lp else '否'} |\n")
             if dk_rank_current_lp:
@@ -5012,25 +6322,29 @@ class CombinedStrategyV62(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[-1]
-                _dk_sc_prev_p = cn_dk_result["weight"].iloc[-2]
-                _dk_sc_raw_p = cn_dk_result["scale_raw"].iloc[-1] if "scale_raw" in cn_dk_result.columns else _dk_sc_p
                 _dk_rv_p = cn_dk_result["realized_vol"].iloc[-1] if "realized_vol" in cn_dk_result.columns else None
+                _dk_cur_vs_p = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+                _dk_next_raw_p, _dk_next_vs_p, _dk_pending_p = _compute_next_vol_scale(
+                    _dk_rv_p, _dk_cur_vs_p,
+                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                _dk_next_total_p = _dk_sc_p / _dk_cur_vs_p * _dk_next_vs_p if _dk_cur_vs_p > 1e-10 else _dk_next_vs_p
                 w(f"\n**③ 波动率缩放:**\n\n")
-                w(f"| 当前杠杆 | **{_dk_sc_p:.2f}x** |\n")
+                w(f"| 指标 | 值 |\n")
+                w(f"|:-|------:|\n")
+                w(f"| 当前已生效敞口 | **{_dk_sc_p:.2f}x** (VolScale {_dk_cur_vs_p:.2f}x) |\n")
+                w(f"| 下一交易日敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🔴 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
                 if _dk_rv_p is not None and not np.isnan(_dk_rv_p):
                     w(f"| 已实现波动率 | {_dk_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_DK_TARGET_VOL:.0%} |\n")
                 if CN_DK_SCALE_THRESHOLD > 0:
-                    if abs(_dk_sc_raw_p - _dk_sc_p) > 0.001:
-                        w(f"| 理论杠杆 | {_dk_sc_raw_p:.2f}x (|Δ|={abs(_dk_sc_raw_p - _dk_sc_p):.4f} < {CN_DK_SCALE_THRESHOLD}阈值) |\n")
+                    if abs(_dk_next_raw_p - _dk_cur_vs_p) > 0.001:
+                        w(f"| 下一日理论VolScale | {_dk_next_raw_p:.2f}x (|Δ|={abs(_dk_next_raw_p - _dk_cur_vs_p):.4f} {'≥' if _dk_pending_p else '<'} {CN_DK_SCALE_THRESHOLD}阈值) |\n")
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_DK_SCALE_THRESHOLD:.2f} |\n")
-                _dk_holding_same_p = cn_dk_result["holding"].iloc[-1] == cn_dk_result["holding"].iloc[-2]
-                _dk_scale_changed_p = abs(_dk_sc_p - _dk_sc_prev_p) > 0.001 and _dk_holding_same_p
-                if _dk_scale_changed_p:
-                    w(f"\n🔴 **杠杆调整! {_dk_sc_prev_p:.2f}x → {_dk_sc_p:.2f}x | 需在今日收盘前/明日开盘前执行**\n")
+                if _dk_pending_p:
+                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
-                    w(f"\n📊 杠杆维持: **{_dk_sc_p:.2f}x**（无调整）\n")
+                    w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-B: 美股7ETF\n\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
@@ -5202,7 +6516,7 @@ class CombinedStrategyV62(CombinedStrategyBase):
                 w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
                 w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
                 if not _c_scale_changed:
-                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
+                    w(f"\n✅ 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
                 if _c_scale_next > 1.0:
                     _c_borrow = _c_scale_next - 1
                     w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
@@ -5227,7 +6541,8 @@ class CombinedStrategyV62(CombinedStrategyBase):
             )
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
@@ -5397,7 +6712,8 @@ class CombinedStrategyV62(CombinedStrategyBase):
             )
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略净值...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
@@ -5529,7 +6845,8 @@ class CombinedStrategyV62(CombinedStrategyBase):
             )
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(msg)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
@@ -5884,6 +7201,63 @@ class CombinedStrategyV62(CombinedStrategyBase):
             )
             w(f"📎 绩效报告: **{filename}**")
 
+class CombinedStrategyV681PoeBot(poe.PoeBot):
+    async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
+        return _BOT_SETTINGS
+
+    async def get_response(self, request: QueryRequest):
+        runtime = _LegacyPoeRuntime(request)
+
+        def _runner():
+            try:
+                with _POE_RUNTIME_LOCK:
+                    with runtime:
+                        CombinedStrategyV681().run()
+            except Exception as e:
+                runtime.error = e
+
+        worker = threading.Thread(target=_runner, daemon=True)
+        worker.start()
+
+        while worker.is_alive() or not runtime.event_queue.empty():
+            drained = False
+            while True:
+                try:
+                    kind, payload = runtime.event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                drained = True
+                if kind == "text":
+                    yield poe.PartialResponse(text=payload)
+                elif kind == "file":
+                    await self.post_message_attachment(
+                        message_id=request.message_id,
+                        file_data=payload["contents"],
+                        filename=payload["name"],
+                        content_type=payload["content_type"],
+                        is_inline=payload["is_inline"],
+                    )
+            if not drained:
+                await asyncio.sleep(0.05)
+
+        if runtime.error is not None:
+            raise runtime.error
+
+
 if __name__ == "__main__":
-    bot = CombinedStrategyV62()
-    bot.run()
+    # Detect Poe Python runtime: the native poe module is registered in
+    # sys.modules['poe'] but has been shadowed by "import fastapi_poe as poe".
+    # When running inside Poe Python, we must restore the native module so that
+    # poe.query / poe.start_message / poe.call etc. work correctly.
+    import sys as _sys
+    _native_poe = _sys.modules.get('poe')
+    if _native_poe is not None and _native_poe is not poe and hasattr(_native_poe, 'start_message'):
+        globals()['poe'] = _native_poe
+        _safe_poe_update_settings(_BOT_SETTINGS)
+        CombinedStrategyV681().run()
+    else:
+        runner = getattr(poe, "run", None)
+        if callable(runner):
+            runner(CombinedStrategyV681PoeBot())
+        else:
+            CombinedStrategyV681().run()

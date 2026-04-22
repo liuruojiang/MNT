@@ -148,7 +148,7 @@ US_ROT_FUTURES = {"QQQ", "GLD", "TLT"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 2.0x max leverage，
-# 杠杆放大范围仍仅限 US_ROT_FUTURES 中的三类资产。
+# scale>1: 仅对 US_ROT_FUTURES 中资产按其自身原始权重放大，不承接其他资产的杠杆缺口。
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 2.0
 US_ROT_VOL_WINDOW = 40
@@ -1492,25 +1492,16 @@ def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
 
 def _us_model_b(raw_w, scale):
     act = {}
-    if scale <= 1.0:
-        for a, w in raw_w.items():
-            if a == "BIL":
-                continue
+    for a, w in raw_w.items():
+        if a == "BIL":
+            continue
+        if scale <= 1.0:
             act[a] = w * scale
-    else:
-        fut_sum = sum(w for a, w in raw_w.items()
-                      if a != "BIL" and a in US_ROT_FUTURES)
-        nf_sum = sum(w for a, w in raw_w.items()
-                     if a != "BIL" and a not in US_ROT_FUTURES)
-        total = fut_sum + nf_sum
-        if total > 0:
-            target = total * scale
-            fut_target = target - nf_sum
-            fs = fut_target / fut_sum if (fut_sum > 0 and fut_target > 0) else 1.0
-            for a, w in raw_w.items():
-                if a == "BIL":
-                    continue
-                act[a] = w * fs if a in US_ROT_FUTURES else w
+        elif a in US_ROT_FUTURES:
+            # Scale only the asset's own raw weight; do not transfer other assets' leverage gap.
+            act[a] = w * scale
+        else:
+            act[a] = w
     risky = sum(act.values())
     act["BIL"] = max(1.0 - risky, 0.0)
     return act
@@ -2441,7 +2432,7 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name="Sub-A", names=None
             h_name = names.get(holding, holding)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": None,
@@ -2581,7 +2572,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             buy_p = _dk_holding_prices(holding, cn_dk_close, date)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": sell_text,
                 "卖出价格": sell_p,
@@ -2598,7 +2589,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             h_prices = _dk_holding_prices(holding, cn_dk_close, date)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN"),
+                "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": h_prices,
@@ -2766,7 +2757,7 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                 price_str = "; ".join(etf_prices) if etf_prices else None
                 records.append({
                     "日期": date.strftime("%Y-%m-%d"),
-                    "北京时间": us_exec_time_str(date, us_schedule),
+                    "北京时间": beijing_time_str(date, "US", "open"),
                     "策略": "Sub-C",
                     "卖出": f"杠杆 {prev_s:.2f}x",
                     "卖出价格": price_str,
@@ -3527,9 +3518,9 @@ class CombinedStrategyBase:
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:15(各50%)拆分, 美元金额按Sub-B:Sub-C=40:30拆分
-   例: "人民币300万, 美元100万" -> Sub-A: 1500000, Sub-A-DK: 1500000, Sub-B: 571429, Sub-C: 428571
-3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 150000, Sub-B: 400000, Sub-C: 300000
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:25拆分, 美元金额按Sub-B:Sub-C=40:20拆分
+   例: "人民币300万, 美元100万" -> Sub-A: 1125000, Sub-A-DK: 1875000, Sub-B: 666667, Sub-C: 333333
+3. 用户说"总共100万, 按默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 250000, Sub-B: 400000, Sub-C: 200000
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -3976,14 +3967,14 @@ class CombinedStrategyV65(CombinedStrategyBase):
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
                 if _vs_changed:
-                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
-                msg.write(f"\n**波动率缩放:** 当前已执行 = **{_vs_current:.2f}x**")
+                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
+                msg.write(f"\n**波动率缩放:** 当前 = **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
                 msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}")
                 msg.write(f" | 最新理论: {_vs_ts:.2f}x")
                 if _vs_changed:
-                    msg.write(f" | 下一次执行 = **{_vs_next:.2f}x**")
+                    msg.write(f" | 下一美股开盘 = **{_vs_next:.2f}x**")
                 elif abs(_vs_ts - _vs_current) > 0.001:
                     msg.write(f" (Δ={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值，未调整)")
                 msg.write("\n")
@@ -3995,7 +3986,7 @@ class CombinedStrategyV65(CombinedStrategyBase):
                     _cash_pct = 1 - _vs_next
                     msg.write(f"📊 减仓 {_vs_next:.2f}x: {_cash_pct:.0%}转入BIL现金\n")
                 if not _vs_changed:
-                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一次仍维持）\n")
+                    msg.write(f"📊 杠杆维持: **{_vs_current:.2f}x**（下一美股开盘仍维持）\n")
             msg.write(f"\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n")
             # ── Sub-C 仓位调整表 ──
             _pos_config_c = _scan_position_config(poe.default_chat)
@@ -4539,7 +4530,7 @@ class CombinedStrategyV65(CombinedStrategyBase):
                         w(f"| BIL(未达标{len(_failed)}只) | — | {_bil_share:.1%} |\n")
                     w(f"\n**波动率缩放:** {_us_sig_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
-                        w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)\n")
+                        w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n")
                     elif _us_sig_scale < 1.0:
                         w(" (<1: 所有资产等比缩减)\n")
                     else:
@@ -4940,9 +4931,11 @@ class CombinedStrategyV65(CombinedStrategyBase):
             w(f"| 最大杠杆 | **{CN_DK_MAX_LEV:.1f}x** | 高杠杆上限 |\n")
             w(f"| 最小杠杆 | **{CN_DK_MIN_LEV:.1f}x** | 高波动时最低仓位 |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n")
+            w(f"| DD风控开关 | **{'启用' if CN_DK_RISK_GATE_ENABLED else '关闭'}** | 策略级回撤风控，触发后降低ADK敞口 |\n")
             w(f"| DD风控触发 | **{CN_DK_RISK_GATE_ENTER:.0%}** | 原始ADK净值回撤达到阈值后次日进入防守 |\n")
             w(f"| DD风控恢复 | **{CN_DK_RISK_GATE_EXIT:.0%}** | 原始ADK回撤修复到阈值以内后恢复正常仓位 |\n")
             w(f"| 防守系数 | **{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}x** | 对VolScale后的敞口再乘防守系数 |\n")
+            w(f"| DD冷却期 | **{CN_DK_RISK_GATE_COOLDOWN_DAYS}日** | 触发后至少维持防守的天数，0=无额外冷却 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费(翻转=4笔单边) |\n")
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
@@ -4960,7 +4953,7 @@ class CombinedStrategyV65(CombinedStrategyBase):
             w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
-            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅限期货类ETF(QQQM/GLDM/VGLT) |\n")
+            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM/VGLT) |\n")
             w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
             w(f"| 调仓阈值 | **{US_ROT_REBALANCE_THRESHOLD}x** | v6.1: 移除阈值(=1.0等于无阈值) |\n")
             w(f"| BTC参与起始 | **{US_ROT_BTC_START.strftime('%Y-%m-%d')}** | 之前BTC不参与排名 |\n")
@@ -4980,7 +4973,7 @@ class CombinedStrategyV65(CombinedStrategyBase):
             w("2. 按动量排名选Top 3\n3. 动量>0留下,否则转BIL\n")
             w(f"4. 反波动率加权: 权重 ∝ 1/vol({US_ROT_VOL_LB}日)，波动越低权重越高\n")
             w(f"5. 波动率缩放(Model B): scale = {US_ROT_TARGET_VOL:.0%}/已实现波动率，"
-                      f"scale≤1时所有资产等比缩减；scale>1时仅放大期货类ETF，最高{US_ROT_MAX_LEV:.1f}x\n")
+                      f"scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n")
             w(f"6. BTC上限: 若BTC权重 > {US_ROT_BTC_MAX_W:.0%}，超出部分归入BIL\n")
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
@@ -5138,6 +5131,13 @@ class CombinedStrategyV65(CombinedStrategyBase):
                 else:
                     w(f"\n📊 杠杆维持: **{_cn_sc_p:.2f}x**（无调整）\n")
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.5)\n\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| DD风控 | **{'启用' if CN_DK_RISK_GATE_ENABLED else '关闭'}** |\n")
+            w(f"| DD触发/恢复 | **{CN_DK_RISK_GATE_ENTER:.0%} / {CN_DK_RISK_GATE_EXIT:.0%}** |\n")
+            w(f"| 防守系数 | **{CN_DK_RISK_GATE_DEFENSE_SCALE:.2f}x** |\n")
+            w(f"| DD冷却期 | **{CN_DK_RISK_GATE_COOLDOWN_DAYS}日** |\n")
+            w("\n")
             dk_holding = cn_dk_result["holding"].iloc[-1]
             dk_top_pair_lp = cn_dk_result["top_pair"].iloc[-1] if "top_pair" in cn_dk_result.columns else "none"
             dk_dir_lp = int(cn_dk_result["direction"].iloc[-1]) if "direction" in cn_dk_result.columns else 0
@@ -5298,7 +5298,7 @@ class CombinedStrategyV65(CombinedStrategyBase):
             w(f"\n**③ 波动率缩放 (Model B):** 近{US_ROT_VOL_WINDOW}日已实现波动率 = {us_rv:.1%}，"
                       f"scale = {US_ROT_TARGET_VOL:.0%}/{us_rv:.1%} = **{us_scale:.2f}x**")
             if us_scale > 1.0:
-                w(f" (>1: 仅放大期货类ETF，上限{US_ROT_MAX_LEV:.1f}x)")
+                w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)")
             elif us_scale < 1.0:
                 w(" (<1: 所有资产等比缩减)")
             w("\n")
@@ -5360,22 +5360,22 @@ class CombinedStrategyV65(CombinedStrategyBase):
                 _c_scale_next = _vs_info_p.get("next_scale", _c_scale_now)
                 _c_scale_changed = bool(_vs_info_p.get("pending_adjustment", abs(_c_scale_next - _c_scale_now) > 0.001))
                 if _c_scale_changed:
-                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一交易时段执行**\n")
+                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
                 w(f"\n**Vol-Scaling 实时状态:**\n\n")
                 w(f"| 指标 | 值 |\n|:-|------:|\n")
-                w(f"| 当前已执行杠杆 | **{_c_scale_now:.2f}x** |\n")
+                w(f"| 当前杠杆 | **{_c_scale_now:.2f}x** |\n")
                 if _c_rv_now is not None:
                     w(f"| 已实现波动率 | {_c_rv_now:.1%} |\n")
                 w(f"| 目标波动率 | {PROD_VS_TARGET_VOL:.0%} |\n")
                 w(f"| 最新理论杠杆 | {_c_ts_now:.2f}x |\n")
-                w(f"| 下一次执行杠杆 | **{_c_scale_next:.2f}x** |\n")
+                w(f"| 下一美股开盘杠杆 | **{_c_scale_next:.2f}x** |\n")
                 if not _c_scale_changed and abs(_c_ts_now - _c_scale_now) > 0.001:
                     w(f"| 阈值状态 | |Δ|={abs(_c_ts_now - _c_scale_now):.4f} < {PROD_VS_THRESHOLD}阈值，未调整 |\n")
                 w(f"| 杠杆范围 | [{PROD_VS_MIN_LEV:.1f}x, {PROD_VS_MAX_LEV:.1f}x] |\n")
                 w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
                 w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
                 if not _c_scale_changed:
-                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一次仍维持）\n")
+                    w(f"\n📊 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
                 if _c_scale_next > 1.0:
                     _c_borrow = _c_scale_next - 1
                     w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
