@@ -1,7 +1,6 @@
 # poe: name=Strategy-Signal-V681
 # poe: privacy_shield=half
 """V6.8.1"""
-import asyncio
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -15,152 +14,10 @@ import json
 import os
 import xlsxwriter
 import time
-import queue
-import threading
-from types import SimpleNamespace
-import fastapi_poe as poe
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import ProtocolMessage, QueryRequest, SettingsRequest, SettingsResponse
+from fastapi_poe.types import SettingsResponse
 
-
-def _safe_poe_update_settings(settings: SettingsResponse) -> None:
-    updater = getattr(poe, "update_settings", None)
-    if callable(updater):
-        updater(settings)
-
-
-class _CompatChatMessage:
-    def __init__(self, text: str):
-        self.text = text
-
-
-class _CompatAttachment:
-    def __init__(self, attachment):
-        self.url = attachment.url
-        self.name = attachment.name
-        self.content_type = attachment.content_type
-        self.parsed_content = getattr(attachment, "parsed_content", None)
-
-    def get_contents(self) -> bytes:
-        if self.parsed_content is not None:
-            return self.parsed_content.encode("utf-8")
-        resp = _session.get(self.url, timeout=30)
-        resp.raise_for_status()
-        return resp.content
-
-
-class _CompatQuery:
-    def __init__(self, text: str, attachments):
-        self.text = text
-        self.attachments = attachments
-
-
-class _CompatMessage:
-    def __init__(self, runtime):
-        self._runtime = runtime
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def write(self, text):
-        if text:
-            self._runtime.emit_text(str(text))
-
-    def attach_file(self, *, name, contents, content_type, is_inline=False):
-        self._runtime.emit_file(
-            name=name,
-            contents=contents,
-            content_type=content_type,
-            is_inline=is_inline,
-        )
-
-
-class _LegacyPoeRuntime:
-    _MISSING = object()
-
-    def __init__(self, request: QueryRequest):
-        self.request = request
-        self.event_queue = queue.Queue()
-        self.error = None
-        latest = request.query[-1] if request.query else None
-        latest_text = latest.content if latest is not None else ""
-        latest_atts = [_CompatAttachment(a) for a in (latest.attachments if latest is not None else [])]
-        self.query = _CompatQuery(latest_text, latest_atts)
-        self.default_chat = [_CompatChatMessage(m.content) for m in request.query]
-        self._patched = {}
-
-    def emit_text(self, text: str):
-        self.event_queue.put(("text", text))
-
-    def emit_file(self, *, name, contents, content_type, is_inline=False):
-        self.event_queue.put((
-            "file",
-            {
-                "name": name,
-                "contents": contents,
-                "content_type": content_type,
-                "is_inline": is_inline,
-            },
-        ))
-
-    def start_message(self):
-        return _CompatMessage(self)
-
-    def call(self, bot_name: str, prompt: str):
-        sub_request = self.request.model_copy(
-            update={
-                "query": [ProtocolMessage(role="user", content=str(prompt), content_type="text/plain")],
-                "tools": None,
-                "tool_calls": None,
-                "tool_results": None,
-            }
-        )
-        text = poe.sync_utils.run_sync(
-            poe.get_final_response(
-                sub_request,
-                bot_name,
-                access_key=self.request.access_key or "",
-                api_key=self.request.api_key or "",
-            )
-        )
-        return SimpleNamespace(text=text)
-
-    def patch(self):
-        self._patched = {}
-        for name, value in {
-            "query": self.query,
-            "default_chat": self.default_chat,
-            "start_message": self.start_message,
-            "call": self.call,
-        }.items():
-            self._patched[name] = getattr(poe, name, self._MISSING)
-            setattr(poe, name, value)
-        return self
-
-    def restore(self):
-        for name, old_value in self._patched.items():
-            if old_value is self._MISSING:
-                try:
-                    delattr(poe, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(poe, name, old_value)
-        self._patched = {}
-
-    def __enter__(self):
-        return self.patch()
-
-    def __exit__(self, exc_type, exc, tb):
-        self.restore()
-        return False
-
-
-_POE_RUNTIME_LOCK = threading.RLock()
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -429,12 +286,13 @@ _DATA_FETCH_ERRORS = (
     TypeError,                             # 意外None/类型不匹配
     IndexError,                            # 空数据访问（.iloc[0]等）
 )
-# 包含 poe.BotError — 用于 fetch_cn_kline 失败后优雅降级的场景
-# poe.BotError 仅在运行时可用（settings提取阶段不可用），因此用 try 保护
-try:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS + (poe.BotError,)
-except AttributeError:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS
+# poe.BotError 在部分 Poe 导入上下文不可用，必须惰性获取。
+def _fetch_or_bot_errors():
+    try:
+        bot_error = poe.BotError
+    except AttributeError:
+        bot_error = None
+    return _DATA_FETCH_ERRORS + ((bot_error,) if isinstance(bot_error, type) else ())
 
 def _secid_to_sina(secid):
     market, code = secid.split(".")
@@ -4514,7 +4372,7 @@ _BOT_SETTINGS = SettingsResponse(
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
 )
-_safe_poe_update_settings(_BOT_SETTINGS)
+poe.update_settings(_BOT_SETTINGS)
 
 class CombinedStrategyV681(CombinedStrategyBase):
 
@@ -6775,63 +6633,5 @@ class CombinedStrategyV681(CombinedStrategyBase):
             )
             w(f"📎 绩效报告: **{filename}**")
 
-class CombinedStrategyV681PoeBot(poe.PoeBot):
-    async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        return _BOT_SETTINGS
-
-    async def get_response(self, request: QueryRequest):
-        runtime = _LegacyPoeRuntime(request)
-
-        def _runner():
-            try:
-                with _POE_RUNTIME_LOCK:
-                    with runtime:
-                        CombinedStrategyV681().run()
-            except Exception as e:
-                runtime.error = e
-
-        worker = threading.Thread(target=_runner, daemon=True)
-        worker.start()
-
-        while worker.is_alive() or not runtime.event_queue.empty():
-            drained = False
-            while True:
-                try:
-                    kind, payload = runtime.event_queue.get_nowait()
-                except queue.Empty:
-                    break
-                drained = True
-                if kind == "text":
-                    yield poe.PartialResponse(text=payload)
-                elif kind == "file":
-                    await self.post_message_attachment(
-                        message_id=request.message_id,
-                        file_data=payload["contents"],
-                        filename=payload["name"],
-                        content_type=payload["content_type"],
-                        is_inline=payload["is_inline"],
-                    )
-            if not drained:
-                await asyncio.sleep(0.05)
-
-        if runtime.error is not None:
-            raise runtime.error
-
-
 if __name__ == "__main__":
-    # Detect Poe Python runtime: the native poe module is registered in
-    # sys.modules['poe'] but has been shadowed by "import fastapi_poe as poe".
-    # When running inside Poe Python, we must restore the native module so that
-    # poe.query / poe.start_message / poe.call etc. work correctly.
-    import sys as _sys
-    _native_poe = _sys.modules.get('poe')
-    if _native_poe is not None and _native_poe is not poe and hasattr(_native_poe, 'start_message'):
-        globals()['poe'] = _native_poe
-        _safe_poe_update_settings(_BOT_SETTINGS)
-        CombinedStrategyV681().run()
-    else:
-        runner = getattr(poe, "run", None)
-        if callable(runner):
-            runner(CombinedStrategyV681PoeBot())
-        else:
-            CombinedStrategyV681().run()
+    CombinedStrategyV681().run()

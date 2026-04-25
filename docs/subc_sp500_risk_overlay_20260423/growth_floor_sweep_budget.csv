@@ -1,0 +1,6 @@
+﻿variant,execution,min_budget,avg_budget,days_below_70pct,days_below_100pct,budget_abs_change_sum,budget_change_days
+growth_original_map,next_trading_day_after_signal,0.15,0.6383618312189742,0.3511674940246369,0.9987129987129987,42.699999999999996,240.0
+growth_floor_50,next_trading_day_after_signal,0.5,0.6588619231476375,0.3511674940246369,0.9987129987129987,32.699999999999996,186.0
+growth_floor_60,next_trading_day_after_signal,0.6,0.6939786725501011,0.3511674940246369,0.9987129987129987,23.1,186.0
+growth_floor_70,next_trading_day_after_signal,0.7,0.7290954219525648,0.0,0.9987129987129987,13.500000000000004,90.0
+growth_floor_80,next_trading_day_after_signal,0.8,0.8098271741128883,0.0,0.9987129987129987,4.699999999999994,90.0

@@ -1,0 +1,201 @@
+# Sub-A / Sub-A-DK Signal-Mix Compare
+
+- Data source: production `fetch_cn_kline()` path from `mnt_bot V 7.1 plus.py`
+- Window: aligned common sample across Sub-A and ADK local data
+- Mix comparison:
+  - `weight_average`: each parameter group runs independently, then combine exposures
+  - `signal_mix_then_select`: average signals first, then run one mixed selector
+
+## Sub-A
+### last_3y
+- baseline_60_20_20 [baseline]: CAGR 34.46%, Sharpe 1.603, MaxDD -12.78%
+- mix_55_15__60_20__80_25 [signal_mix_then_select]: CAGR 28.19%, Sharpe 1.340, MaxDD -15.92%
+- mix_50_15__60_20__70_25 [signal_mix_then_select]: CAGR 27.68%, Sharpe 1.321, MaxDD -15.42%
+- mix_45_15__60_20__90_30 [signal_mix_then_select]: CAGR 26.02%, Sharpe 1.244, MaxDD -16.72%
+- mix_40_10__60_20__120_40 [signal_mix_then_select]: CAGR 11.99%, Sharpe 0.661, MaxDD -21.86%
+- mix_60_20__90_30__120_40 [signal_mix_then_select]: CAGR 4.86%, Sharpe 0.344, MaxDD -34.42%
+- mix_40_10__60_20__120_40 [weight_average]: CAGR 23.17%, Sharpe 1.277, MaxDD -15.48%
+- mix_45_15__60_20__90_30 [weight_average]: CAGR 20.79%, Sharpe 1.148, MaxDD -19.84%
+- mix_60_20__90_30__120_40 [weight_average]: CAGR 19.53%, Sharpe 1.146, MaxDD -16.60%
+- mix_50_15__60_20__70_25 [weight_average]: CAGR 20.27%, Sharpe 1.065, MaxDD -21.70%
+- mix_55_15__60_20__80_25 [weight_average]: CAGR 19.55%, Sharpe 1.018, MaxDD -18.44%
+
+### last_5y
+- baseline_60_20_20 [baseline]: CAGR 28.51%, Sharpe 1.407, MaxDD -15.87%
+- mix_50_15__60_20__70_25 [signal_mix_then_select]: CAGR 21.87%, Sharpe 1.120, MaxDD -17.77%
+- mix_55_15__60_20__80_25 [signal_mix_then_select]: CAGR 21.10%, Sharpe 1.088, MaxDD -16.12%
+- mix_45_15__60_20__90_30 [signal_mix_then_select]: CAGR 19.48%, Sharpe 0.996, MaxDD -17.24%
+- mix_40_10__60_20__120_40 [signal_mix_then_select]: CAGR 12.15%, Sharpe 0.684, MaxDD -24.52%
+- mix_60_20__90_30__120_40 [signal_mix_then_select]: CAGR 6.24%, Sharpe 0.411, MaxDD -37.49%
+- mix_40_10__60_20__120_40 [weight_average]: CAGR 17.00%, Sharpe 1.034, MaxDD -15.48%
+- mix_50_15__60_20__70_25 [weight_average]: CAGR 16.43%, Sharpe 0.932, MaxDD -21.76%
+- mix_45_15__60_20__90_30 [weight_average]: CAGR 14.25%, Sharpe 0.861, MaxDD -23.64%
+- mix_55_15__60_20__80_25 [weight_average]: CAGR 15.13%, Sharpe 0.856, MaxDD -18.44%
+- mix_60_20__90_30__120_40 [weight_average]: CAGR 12.92%, Sharpe 0.807, MaxDD -20.74%
+
+### last_10y
+- baseline_60_20_20 [baseline]: CAGR 23.37%, Sharpe 1.199, MaxDD -23.24%
+- mix_55_15__60_20__80_25 [signal_mix_then_select]: CAGR 19.38%, Sharpe 1.027, MaxDD -28.77%
+- mix_50_15__60_20__70_25 [signal_mix_then_select]: CAGR 19.28%, Sharpe 1.020, MaxDD -31.81%
+- mix_45_15__60_20__90_30 [signal_mix_then_select]: CAGR 17.14%, Sharpe 0.912, MaxDD -35.00%
+- mix_40_10__60_20__120_40 [signal_mix_then_select]: CAGR 7.63%, Sharpe 0.474, MaxDD -28.12%
+- mix_60_20__90_30__120_40 [signal_mix_then_select]: CAGR 4.75%, Sharpe 0.338, MaxDD -38.65%
+- mix_50_15__60_20__70_25 [weight_average]: CAGR 15.20%, Sharpe 0.881, MaxDD -29.14%
+- mix_55_15__60_20__80_25 [weight_average]: CAGR 14.12%, Sharpe 0.822, MaxDD -28.58%
+- mix_45_15__60_20__90_30 [weight_average]: CAGR 13.16%, Sharpe 0.809, MaxDD -33.06%
+- mix_40_10__60_20__120_40 [weight_average]: CAGR 10.71%, Sharpe 0.719, MaxDD -25.79%
+- mix_60_20__90_30__120_40 [weight_average]: CAGR 10.42%, Sharpe 0.672, MaxDD -31.07%
+
+### full_common
+- baseline_60_20_20 [baseline]: CAGR 28.54%, Sharpe 1.375, MaxDD -23.24%
+- mix_50_15__60_20__70_25 [signal_mix_then_select]: CAGR 21.65%, Sharpe 1.098, MaxDD -31.81%
+- mix_55_15__60_20__80_25 [signal_mix_then_select]: CAGR 20.47%, Sharpe 1.054, MaxDD -28.77%
+- mix_45_15__60_20__90_30 [signal_mix_then_select]: CAGR 13.61%, Sharpe 0.741, MaxDD -41.33%
+- mix_40_10__60_20__120_40 [signal_mix_then_select]: CAGR 7.46%, Sharpe 0.462, MaxDD -28.12%
+- mix_60_20__90_30__120_40 [signal_mix_then_select]: CAGR 4.79%, Sharpe 0.336, MaxDD -41.54%
+- mix_50_15__60_20__70_25 [weight_average]: CAGR 16.86%, Sharpe 0.953, MaxDD -29.14%
+- mix_55_15__60_20__80_25 [weight_average]: CAGR 15.41%, Sharpe 0.879, MaxDD -28.58%
+- mix_45_15__60_20__90_30 [weight_average]: CAGR 13.41%, Sharpe 0.818, MaxDD -33.06%
+- mix_40_10__60_20__120_40 [weight_average]: CAGR 9.27%, Sharpe 0.645, MaxDD -28.08%
+- mix_60_20__90_30__120_40 [weight_average]: CAGR 9.67%, Sharpe 0.634, MaxDD -31.07%
+
+## Sub-A-DK
+### last_3y
+- baseline_60_20 [baseline]: CAGR 34.26%, Sharpe 1.487, MaxDD -17.37%
+- mix2_60_20__65_20 [signal_mix_then_select]: CAGR 28.49%, Sharpe 1.294, MaxDD -19.48%
+- mix2_60_20__50_22 [signal_mix_then_select]: CAGR 26.38%, Sharpe 1.213, MaxDD -21.38%
+- mix2_60_20__60_22 [signal_mix_then_select]: CAGR 25.86%, Sharpe 1.200, MaxDD -23.41%
+- mix2_60_20__70_20 [signal_mix_then_select]: CAGR 25.48%, Sharpe 1.175, MaxDD -21.29%
+- mix2_60_20__55_22 [signal_mix_then_select]: CAGR 25.13%, Sharpe 1.169, MaxDD -20.04%
+- mix2_60_20__50_20 [signal_mix_then_select]: CAGR 22.81%, Sharpe 1.079, MaxDD -21.81%
+- mix2_60_20__65_22 [signal_mix_then_select]: CAGR 22.00%, Sharpe 1.050, MaxDD -28.57%
+- mix2_60_20__65_18 [signal_mix_then_select]: CAGR 22.05%, Sharpe 1.043, MaxDD -20.47%
+- mix2_60_20__55_18 [signal_mix_then_select]: CAGR 21.01%, Sharpe 1.010, MaxDD -24.01%
+- mix2_60_20__55_20 [signal_mix_then_select]: CAGR 20.91%, Sharpe 1.002, MaxDD -20.94%
+- mix2_60_20__60_18 [signal_mix_then_select]: CAGR 18.27%, Sharpe 0.901, MaxDD -25.15%
+- mix2_60_20__50_18 [signal_mix_then_select]: CAGR 15.87%, Sharpe 0.832, MaxDD -23.56%
+- mix2_60_20__70_22 [signal_mix_then_select]: CAGR 16.37%, Sharpe 0.814, MaxDD -28.45%
+- mix2_60_20__70_25 [signal_mix_then_select]: CAGR 14.96%, Sharpe 0.762, MaxDD -29.96%
+- mix2_60_20__80_30 [signal_mix_then_select]: CAGR 14.57%, Sharpe 0.749, MaxDD -32.83%
+- mix2_60_20__80_25 [signal_mix_then_select]: CAGR 12.48%, Sharpe 0.661, MaxDD -28.08%
+- mix2_60_20__80_30 [weight_average]: CAGR 19.72%, Sharpe 0.943, MaxDD -31.20%
+- mix2_60_20__80_25 [weight_average]: CAGR 17.24%, Sharpe 0.836, MaxDD -32.95%
+- mix2_60_20__70_25 [weight_average]: CAGR 16.74%, Sharpe 0.809, MaxDD -30.36%
+- mix2_60_20__55_22 [weight_average]: CAGR 16.74%, Sharpe 0.804, MaxDD -29.61%
+- mix2_60_20__50_22 [weight_average]: CAGR 16.72%, Sharpe 0.804, MaxDD -30.46%
+- mix2_60_20__55_18 [weight_average]: CAGR 14.48%, Sharpe 0.739, MaxDD -29.73%
+- mix2_60_20__60_18 [weight_average]: CAGR 14.27%, Sharpe 0.731, MaxDD -30.81%
+- mix2_60_20__60_22 [weight_average]: CAGR 14.59%, Sharpe 0.722, MaxDD -31.86%
+- mix2_60_20__50_20 [weight_average]: CAGR 13.57%, Sharpe 0.678, MaxDD -32.79%
+- mix2_60_20__65_22 [weight_average]: CAGR 13.18%, Sharpe 0.667, MaxDD -33.23%
+- mix2_60_20__55_20 [weight_average]: CAGR 12.76%, Sharpe 0.643, MaxDD -34.12%
+- mix2_60_20__65_18 [weight_average]: CAGR 10.19%, Sharpe 0.567, MaxDD -29.38%
+- mix2_60_20__50_18 [weight_average]: CAGR 10.15%, Sharpe 0.561, MaxDD -31.29%
+- mix2_60_20__65_20 [weight_average]: CAGR 10.58%, Sharpe 0.554, MaxDD -34.16%
+- mix2_60_20__70_22 [weight_average]: CAGR 10.14%, Sharpe 0.546, MaxDD -33.74%
+- mix2_60_20__70_20 [weight_average]: CAGR 9.01%, Sharpe 0.493, MaxDD -33.64%
+
+### last_5y
+- baseline_60_20 [baseline]: CAGR 35.61%, Sharpe 1.575, MaxDD -17.37%
+- mix2_60_20__70_20 [signal_mix_then_select]: CAGR 31.86%, Sharpe 1.446, MaxDD -21.29%
+- mix2_60_20__65_20 [signal_mix_then_select]: CAGR 30.43%, Sharpe 1.397, MaxDD -19.48%
+- mix2_60_20__65_18 [signal_mix_then_select]: CAGR 28.36%, Sharpe 1.314, MaxDD -20.47%
+- mix2_60_20__60_22 [signal_mix_then_select]: CAGR 27.76%, Sharpe 1.300, MaxDD -23.41%
+- mix2_60_20__55_18 [signal_mix_then_select]: CAGR 27.90%, Sharpe 1.299, MaxDD -24.01%
+- mix2_60_20__65_22 [signal_mix_then_select]: CAGR 27.52%, Sharpe 1.285, MaxDD -28.57%
+- mix2_60_20__50_22 [signal_mix_then_select]: CAGR 27.37%, Sharpe 1.283, MaxDD -21.38%
+- mix2_60_20__55_22 [signal_mix_then_select]: CAGR 27.06%, Sharpe 1.272, MaxDD -20.04%
+- mix2_60_20__50_20 [signal_mix_then_select]: CAGR 26.02%, Sharpe 1.228, MaxDD -21.81%
+- mix2_60_20__60_18 [signal_mix_then_select]: CAGR 25.51%, Sharpe 1.207, MaxDD -25.15%
+- mix2_60_20__55_20 [signal_mix_then_select]: CAGR 24.35%, Sharpe 1.160, MaxDD -20.94%
+- mix2_60_20__70_22 [signal_mix_then_select]: CAGR 23.87%, Sharpe 1.133, MaxDD -28.45%
+- mix2_60_20__50_18 [signal_mix_then_select]: CAGR 22.61%, Sharpe 1.123, MaxDD -23.56%
+- mix2_60_20__70_25 [signal_mix_then_select]: CAGR 22.10%, Sharpe 1.074, MaxDD -29.96%
+- mix2_60_20__80_30 [signal_mix_then_select]: CAGR 21.05%, Sharpe 1.030, MaxDD -32.83%
+- mix2_60_20__80_25 [signal_mix_then_select]: CAGR 16.56%, Sharpe 0.850, MaxDD -28.08%
+- mix2_60_20__55_18 [weight_average]: CAGR 18.37%, Sharpe 0.926, MaxDD -29.73%
+- mix2_60_20__70_25 [weight_average]: CAGR 18.38%, Sharpe 0.914, MaxDD -30.36%
+- mix2_60_20__60_18 [weight_average]: CAGR 17.98%, Sharpe 0.909, MaxDD -30.81%
+- mix2_60_20__65_18 [weight_average]: CAGR 17.72%, Sharpe 0.905, MaxDD -29.38%
+- mix2_60_20__80_30 [weight_average]: CAGR 17.65%, Sharpe 0.903, MaxDD -31.20%
+- mix2_60_20__50_22 [weight_average]: CAGR 17.63%, Sharpe 0.880, MaxDD -30.46%
+- mix2_60_20__55_22 [weight_average]: CAGR 17.69%, Sharpe 0.879, MaxDD -29.61%
+- mix2_60_20__60_22 [weight_average]: CAGR 17.45%, Sharpe 0.870, MaxDD -31.86%
+- mix2_60_20__65_20 [weight_average]: CAGR 17.63%, Sharpe 0.866, MaxDD -34.16%
+- mix2_60_20__80_25 [weight_average]: CAGR 16.39%, Sharpe 0.838, MaxDD -32.95%
+- mix2_60_20__55_20 [weight_average]: CAGR 16.33%, Sharpe 0.817, MaxDD -34.12%
+- mix2_60_20__65_22 [weight_average]: CAGR 16.16%, Sharpe 0.817, MaxDD -33.23%
+- mix2_60_20__70_20 [weight_average]: CAGR 16.14%, Sharpe 0.809, MaxDD -33.64%
+- mix2_60_20__50_20 [weight_average]: CAGR 15.72%, Sharpe 0.797, MaxDD -32.79%
+- mix2_60_20__50_18 [weight_average]: CAGR 14.78%, Sharpe 0.779, MaxDD -31.29%
+- mix2_60_20__70_22 [weight_average]: CAGR 14.72%, Sharpe 0.758, MaxDD -33.74%
+
+### last_10y
+- baseline_60_20 [baseline]: CAGR 33.76%, Sharpe 1.548, MaxDD -20.01%
+- mix2_60_20__65_20 [signal_mix_then_select]: CAGR 30.39%, Sharpe 1.425, MaxDD -20.23%
+- mix2_60_20__70_20 [signal_mix_then_select]: CAGR 29.57%, Sharpe 1.390, MaxDD -21.29%
+- mix2_60_20__50_20 [signal_mix_then_select]: CAGR 29.24%, Sharpe 1.372, MaxDD -21.81%
+- mix2_60_20__65_18 [signal_mix_then_select]: CAGR 27.21%, Sharpe 1.307, MaxDD -20.99%
+- mix2_60_20__60_22 [signal_mix_then_select]: CAGR 27.28%, Sharpe 1.305, MaxDD -23.41%
+- mix2_60_20__65_22 [signal_mix_then_select]: CAGR 27.04%, Sharpe 1.293, MaxDD -28.57%
+- mix2_60_20__70_25 [signal_mix_then_select]: CAGR 26.91%, Sharpe 1.288, MaxDD -29.96%
+- mix2_60_20__50_22 [signal_mix_then_select]: CAGR 26.79%, Sharpe 1.278, MaxDD -21.38%
+- mix2_60_20__55_22 [signal_mix_then_select]: CAGR 26.38%, Sharpe 1.271, MaxDD -20.04%
+- mix2_60_20__55_18 [signal_mix_then_select]: CAGR 26.35%, Sharpe 1.264, MaxDD -24.01%
+- mix2_60_20__80_30 [signal_mix_then_select]: CAGR 26.36%, Sharpe 1.259, MaxDD -32.83%
+- mix2_60_20__55_20 [signal_mix_then_select]: CAGR 26.16%, Sharpe 1.253, MaxDD -20.94%
+- mix2_60_20__70_22 [signal_mix_then_select]: CAGR 25.89%, Sharpe 1.242, MaxDD -28.45%
+- mix2_60_20__60_18 [signal_mix_then_select]: CAGR 24.49%, Sharpe 1.193, MaxDD -25.15%
+- mix2_60_20__80_25 [signal_mix_then_select]: CAGR 24.37%, Sharpe 1.191, MaxDD -28.08%
+- mix2_60_20__50_18 [signal_mix_then_select]: CAGR 23.44%, Sharpe 1.163, MaxDD -23.56%
+- mix2_60_20__70_25 [weight_average]: CAGR 16.74%, Sharpe 0.877, MaxDD -30.36%
+- mix2_60_20__80_25 [weight_average]: CAGR 16.39%, Sharpe 0.868, MaxDD -32.95%
+- mix2_60_20__60_22 [weight_average]: CAGR 16.29%, Sharpe 0.847, MaxDD -31.86%
+- mix2_60_20__65_22 [weight_average]: CAGR 16.04%, Sharpe 0.839, MaxDD -33.23%
+- mix2_60_20__55_18 [weight_average]: CAGR 15.65%, Sharpe 0.831, MaxDD -29.73%
+- mix2_60_20__65_20 [weight_average]: CAGR 15.85%, Sharpe 0.821, MaxDD -34.16%
+- mix2_60_20__70_20 [weight_average]: CAGR 15.62%, Sharpe 0.818, MaxDD -33.64%
+- mix2_60_20__70_22 [weight_average]: CAGR 15.33%, Sharpe 0.809, MaxDD -33.74%
+- mix2_60_20__65_18 [weight_average]: CAGR 14.61%, Sharpe 0.791, MaxDD -29.38%
+- mix2_60_20__60_18 [weight_average]: CAGR 14.54%, Sharpe 0.783, MaxDD -30.81%
+- mix2_60_20__55_22 [weight_average]: CAGR 14.84%, Sharpe 0.783, MaxDD -29.61%
+- mix2_60_20__50_22 [weight_average]: CAGR 14.75%, Sharpe 0.783, MaxDD -30.46%
+- mix2_60_20__50_20 [weight_average]: CAGR 14.62%, Sharpe 0.776, MaxDD -32.79%
+- mix2_60_20__80_30 [weight_average]: CAGR 13.64%, Sharpe 0.760, MaxDD -31.20%
+- mix2_60_20__55_20 [weight_average]: CAGR 14.18%, Sharpe 0.750, MaxDD -34.12%
+- mix2_60_20__50_18 [weight_average]: CAGR 12.85%, Sharpe 0.708, MaxDD -31.29%
+
+### full_common
+- baseline_60_20 [baseline]: CAGR 31.65%, Sharpe 1.472, MaxDD -20.01%
+- mix2_60_20__65_20 [signal_mix_then_select]: CAGR 26.87%, Sharpe 1.286, MaxDD -23.23%
+- mix2_60_20__50_20 [signal_mix_then_select]: CAGR 26.15%, Sharpe 1.251, MaxDD -23.11%
+- mix2_60_20__70_20 [signal_mix_then_select]: CAGR 25.94%, Sharpe 1.245, MaxDD -25.57%
+- mix2_60_20__65_18 [signal_mix_then_select]: CAGR 24.64%, Sharpe 1.201, MaxDD -20.99%
+- mix2_60_20__60_22 [signal_mix_then_select]: CAGR 24.35%, Sharpe 1.187, MaxDD -23.41%
+- mix2_60_20__70_25 [signal_mix_then_select]: CAGR 24.14%, Sharpe 1.176, MaxDD -29.96%
+- mix2_60_20__55_18 [signal_mix_then_select]: CAGR 24.03%, Sharpe 1.171, MaxDD -24.01%
+- mix2_60_20__55_20 [signal_mix_then_select]: CAGR 23.84%, Sharpe 1.161, MaxDD -20.94%
+- mix2_60_20__50_22 [signal_mix_then_select]: CAGR 23.88%, Sharpe 1.161, MaxDD -24.85%
+- mix2_60_20__80_30 [signal_mix_then_select]: CAGR 23.60%, Sharpe 1.150, MaxDD -32.83%
+- mix2_60_20__55_22 [signal_mix_then_select]: CAGR 23.36%, Sharpe 1.148, MaxDD -21.81%
+- mix2_60_20__65_22 [signal_mix_then_select]: CAGR 23.00%, Sharpe 1.129, MaxDD -28.57%
+- mix2_60_20__80_25 [signal_mix_then_select]: CAGR 22.57%, Sharpe 1.114, MaxDD -28.08%
+- mix2_60_20__70_22 [signal_mix_then_select]: CAGR 22.70%, Sharpe 1.112, MaxDD -28.45%
+- mix2_60_20__60_18 [signal_mix_then_select]: CAGR 22.15%, Sharpe 1.097, MaxDD -25.17%
+- mix2_60_20__50_18 [signal_mix_then_select]: CAGR 21.41%, Sharpe 1.079, MaxDD -23.56%
+- mix2_60_20__80_25 [weight_average]: CAGR 14.28%, Sharpe 0.780, MaxDD -32.95%
+- mix2_60_20__55_18 [weight_average]: CAGR 13.45%, Sharpe 0.735, MaxDD -33.88%
+- mix2_60_20__70_25 [weight_average]: CAGR 12.83%, Sharpe 0.709, MaxDD -39.15%
+- mix2_60_20__60_22 [weight_average]: CAGR 12.89%, Sharpe 0.702, MaxDD -37.91%
+- mix2_60_20__60_18 [weight_average]: CAGR 12.68%, Sharpe 0.701, MaxDD -31.10%
+- mix2_60_20__70_20 [weight_average]: CAGR 12.87%, Sharpe 0.700, MaxDD -33.64%
+- mix2_60_20__65_18 [weight_average]: CAGR 12.44%, Sharpe 0.694, MaxDD -33.30%
+- mix2_60_20__50_20 [weight_average]: CAGR 12.67%, Sharpe 0.693, MaxDD -32.79%
+- mix2_60_20__65_20 [weight_average]: CAGR 12.65%, Sharpe 0.685, MaxDD -38.19%
+- mix2_60_20__70_22 [weight_average]: CAGR 12.02%, Sharpe 0.665, MaxDD -37.89%
+- mix2_60_20__65_22 [weight_average]: CAGR 11.82%, Sharpe 0.657, MaxDD -41.17%
+- mix2_60_20__80_30 [weight_average]: CAGR 10.90%, Sharpe 0.637, MaxDD -36.12%
+- mix2_60_20__55_20 [weight_average]: CAGR 11.40%, Sharpe 0.629, MaxDD -38.74%
+- mix2_60_20__50_22 [weight_average]: CAGR 11.06%, Sharpe 0.622, MaxDD -41.09%
+- mix2_60_20__50_18 [weight_average]: CAGR 10.93%, Sharpe 0.622, MaxDD -35.28%
+- mix2_60_20__55_22 [weight_average]: CAGR 10.88%, Sharpe 0.611, MaxDD -44.20%

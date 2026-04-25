@@ -1,7 +1,6 @@
 # poe: name=Strategy-Signal-V683
 # poe: privacy_shield=half
 """V6.8.3"""
-import asyncio
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -15,152 +14,10 @@ import json
 import os
 import xlsxwriter
 import time
-import queue
-import threading
-from types import SimpleNamespace
-import fastapi_poe as poe
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import ProtocolMessage, QueryRequest, SettingsRequest, SettingsResponse
+from fastapi_poe.types import SettingsResponse
 
-
-def _safe_poe_update_settings(settings: SettingsResponse) -> None:
-    updater = getattr(poe, "update_settings", None)
-    if callable(updater):
-        updater(settings)
-
-
-class _CompatChatMessage:
-    def __init__(self, text: str):
-        self.text = text
-
-
-class _CompatAttachment:
-    def __init__(self, attachment):
-        self.url = attachment.url
-        self.name = attachment.name
-        self.content_type = attachment.content_type
-        self.parsed_content = getattr(attachment, "parsed_content", None)
-
-    def get_contents(self) -> bytes:
-        if self.parsed_content is not None:
-            return self.parsed_content.encode("utf-8")
-        resp = _session.get(self.url, timeout=30)
-        resp.raise_for_status()
-        return resp.content
-
-
-class _CompatQuery:
-    def __init__(self, text: str, attachments):
-        self.text = text
-        self.attachments = attachments
-
-
-class _CompatMessage:
-    def __init__(self, runtime):
-        self._runtime = runtime
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def write(self, text):
-        if text:
-            self._runtime.emit_text(str(text))
-
-    def attach_file(self, *, name, contents, content_type, is_inline=False):
-        self._runtime.emit_file(
-            name=name,
-            contents=contents,
-            content_type=content_type,
-            is_inline=is_inline,
-        )
-
-
-class _LegacyPoeRuntime:
-    _MISSING = object()
-
-    def __init__(self, request: QueryRequest):
-        self.request = request
-        self.event_queue = queue.Queue()
-        self.error = None
-        latest = request.query[-1] if request.query else None
-        latest_text = latest.content if latest is not None else ""
-        latest_atts = [_CompatAttachment(a) for a in (latest.attachments if latest is not None else [])]
-        self.query = _CompatQuery(latest_text, latest_atts)
-        self.default_chat = [_CompatChatMessage(m.content) for m in request.query]
-        self._patched = {}
-
-    def emit_text(self, text: str):
-        self.event_queue.put(("text", text))
-
-    def emit_file(self, *, name, contents, content_type, is_inline=False):
-        self.event_queue.put((
-            "file",
-            {
-                "name": name,
-                "contents": contents,
-                "content_type": content_type,
-                "is_inline": is_inline,
-            },
-        ))
-
-    def start_message(self):
-        return _CompatMessage(self)
-
-    def call(self, bot_name: str, prompt: str):
-        sub_request = self.request.model_copy(
-            update={
-                "query": [ProtocolMessage(role="user", content=str(prompt), content_type="text/plain")],
-                "tools": None,
-                "tool_calls": None,
-                "tool_results": None,
-            }
-        )
-        text = poe.sync_utils.run_sync(
-            poe.get_final_response(
-                sub_request,
-                bot_name,
-                access_key=self.request.access_key or "",
-                api_key=self.request.api_key or "",
-            )
-        )
-        return SimpleNamespace(text=text)
-
-    def patch(self):
-        self._patched = {}
-        for name, value in {
-            "query": self.query,
-            "default_chat": self.default_chat,
-            "start_message": self.start_message,
-            "call": self.call,
-        }.items():
-            self._patched[name] = getattr(poe, name, self._MISSING)
-            setattr(poe, name, value)
-        return self
-
-    def restore(self):
-        for name, old_value in self._patched.items():
-            if old_value is self._MISSING:
-                try:
-                    delattr(poe, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(poe, name, old_value)
-        self._patched = {}
-
-    def __enter__(self):
-        return self.patch()
-
-    def __exit__(self, exc_type, exc, tb):
-        self.restore()
-        return False
-
-
-_POE_RUNTIME_LOCK = threading.RLock()
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -433,12 +290,13 @@ _DATA_FETCH_ERRORS = (
     TypeError,                             # 意外None/类型不匹配
     IndexError,                            # 空数据访问（.iloc[0]等）
 )
-# 包含 poe.BotError — 用于 fetch_cn_kline 失败后优雅降级的场景
-# poe.BotError 仅在运行时可用（settings提取阶段不可用），因此用 try 保护
-try:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS + (poe.BotError,)
-except AttributeError:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS
+# poe.BotError 在部分 Poe 导入上下文不可用，必须惰性获取。
+def _fetch_or_bot_errors():
+    try:
+        bot_error = poe.BotError
+    except AttributeError:
+        bot_error = None
+    return _DATA_FETCH_ERRORS + ((bot_error,) if isinstance(bot_error, type) else ())
 
 def _secid_to_sina(secid):
     market, code = secid.split(".")
@@ -3506,6 +3364,92 @@ def _dk_pos_str(holding_str):
         return "空仓"
     return f"做多 {_dk_leg_name(info['long_leg'])} / 做空 {_dk_leg_name(info['short_leg'])}"
 
+def _series_value_at(series, date, pos):
+    if series is None or len(series) == 0:
+        return np.nan
+    try:
+        if date in series.index:
+            val = series.loc[date]
+            if isinstance(val, pd.Series):
+                val = val.iloc[-1]
+            return float(val)
+    except Exception:
+        pass
+    try:
+        if -len(series) <= pos < len(series):
+            return float(series.iloc[pos])
+    except Exception:
+        pass
+    return np.nan
+
+def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
+                                   current_idx=-1, effective_cutoff_idx=None):
+    if cn_result is None or len(cn_result) == 0:
+        return [], {
+            "effective_date": None,
+            "current_date": None,
+            "effective_holding": "cash",
+        }
+
+    n = len(cn_result)
+    current_pos = current_idx if current_idx >= 0 else n + current_idx
+    current_pos = int(np.clip(current_pos, 0, n - 1))
+    if effective_cutoff_idx is None:
+        cutoff_pos = current_pos
+    else:
+        cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
+        cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
+
+    effective_pos = cutoff_pos
+    if "is_signal" in cn_result.columns:
+        signal_flags = cn_result["is_signal"].iloc[:cutoff_pos + 1].fillna(False).astype(bool).to_numpy()
+        signal_positions = np.flatnonzero(signal_flags)
+        if len(signal_positions) > 0:
+            effective_pos = int(signal_positions[-1])
+
+    current_date = cn_result.index[current_pos]
+    effective_date = cn_result.index[effective_pos]
+    effective_holding = (
+        cn_result["holding"].iloc[effective_pos]
+        if "holding" in cn_result.columns
+        else "cash"
+    )
+
+    rows = []
+    for code in codes:
+        bm_current = _series_value_at(bias_mom.get(code), current_date, current_pos)
+        if np.isnan(bm_current):
+            continue
+        r2_current = _series_value_at(r2.get(code), current_date, current_pos)
+        bm_effective = _series_value_at(bias_mom.get(code), effective_date, effective_pos)
+        r2_effective = _series_value_at(r2.get(code), effective_date, effective_pos)
+        if not np.isnan(bm_current) and bm_current <= 0:
+            status = "当前动量≤0 ⛔"
+        elif not np.isnan(r2_current) and r2_current >= CN_R2_THRESHOLD:
+            status = f"当前R²={r2_current:.3f} ✅"
+        elif not np.isnan(r2_current):
+            status = f"当前R²={r2_current:.3f} ❌"
+        else:
+            status = "N/A"
+        rows.append({
+            "code": code,
+            "asset_name": CN_NAMES.get(code, code),
+            "marker": "当前已生效" if code == effective_holding else "",
+            "effective_momentum": bm_effective,
+            "current_momentum": bm_current,
+            "effective_r2": r2_effective,
+            "current_r2": r2_current,
+            "status": status,
+        })
+    rows.sort(key=lambda row: row["current_momentum"], reverse=True)
+    for rank, row in enumerate(rows, 1):
+        row["rank"] = rank
+    return rows, {
+        "effective_date": effective_date,
+        "current_date": current_date,
+        "effective_holding": effective_holding,
+    }
+
 def _build_dk_rank_rows(cn_dk_result, use_shifted=True, top_n=3):
     """提取DK多配对实时解释信息。use_shifted=True 表示当前已生效信号。"""
     signals_df = cn_dk_result.attrs.get("signals_df")
@@ -4894,7 +4838,7 @@ _BOT_SETTINGS = SettingsResponse(
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
 )
-_safe_poe_update_settings(_BOT_SETTINGS)
+poe.update_settings(_BOT_SETTINGS)
 
 class CombinedStrategyV681(CombinedStrategyBase):
 
@@ -5628,7 +5572,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
                         w(f"| BIL(未达标{len(_failed)}只) | — | {_bil_share:.1%} |\n")
                     w(f"\n**波动率缩放:** {_us_sig_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
-                        w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n")
+                        w(f" (>1: 仅放大US_ROT_FUTURES(QQQM/GLDM)自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n")
                     elif _us_sig_scale < 1.0:
                         w(" (<1: 所有资产等比缩减)\n")
                     else:
@@ -5874,6 +5818,15 @@ class CombinedStrategyV681(CombinedStrategyBase):
                 if _dk_rv_rt3 is not None and not np.isnan(_dk_rv_rt3):
                     w(f" | 已实现波动率: {_dk_rv_rt3:.1%}")
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
+                if "same_side_overheat_scale" in cn_dk_result.columns:
+                    _dk_oh_scale_rt3 = cn_dk_result["same_side_overheat_scale"].iloc[-1]
+                    _dk_oh_on_rt3 = bool(cn_dk_result["same_side_overheat_on"].iloc[-1])
+                    _dk_oh_abs_rt3 = cn_dk_result["same_side_overheat_abs_bias"].iloc[-1]
+                    _dk_oh_text_rt3 = f" | 当前同向乖离: {_dk_oh_abs_rt3:.1%}" if not np.isnan(_dk_oh_abs_rt3) else ""
+                    if _dk_oh_on_rt3:
+                        w(f"🛡️ **ADK同向过热防守生效:** 触发 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}，当前按 **{_dk_oh_scale_rt3:.2f}x** 防守{_dk_oh_text_rt3}\n")
+                    else:
+                        w(f"🟢 **ADK同向过热防守关闭:** 触发 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}{_dk_oh_text_rt3}\n")
                 if not _dk_pending3:
                     w(f"✅ 杠杆: **{_dk_sc_rt3:.2f}x** (下一交易日维持)")
                     if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw3 - _dk_cur_vs3) > 0.001:
@@ -5887,6 +5840,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
                 w(" ⚡盘中实时")
             w("\n")
             w(f"波动率缩放: {us_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x\n")
+            w(f"杠杆放大资产: **QQQM/GLDM** (US_ROT_FUTURES)；scale>1时只放大自身权重，不承接其他ETF杠杆缺口\n")
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
@@ -6036,7 +5990,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
             w("6. 无冷却期限制（T+1已天然保证最少1天间隔）\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
@@ -6069,7 +6023,8 @@ class CombinedStrategyV681(CombinedStrategyBase):
             w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
-            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES按自身权重放大(QQQM/GLDM) |\n")
+            w(f"| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n")
+            w(f"| 最大杠杆 | **{US_ROT_MAX_LEV:.1f}x** | 仅US_ROT_FUTURES(QQQM/GLDM)按自身权重放大 |\n")
             w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
             w(f"| 调仓阈值 | **{US_ROT_REBALANCE_THRESHOLD}x** | v6.1: 移除阈值(=1.0等于无阈值) |\n")
             w(f"| BTC参与起始 | **{US_ROT_BTC_START.strftime('%Y-%m-%d')}** | 之前BTC不参与排名 |\n")
@@ -6183,39 +6138,47 @@ class CombinedStrategyV681(CombinedStrategyBase):
                 if code in cn_close_with_bond.columns:
                     bias_mom_lp[code] = calc_bias_momentum(cn_close_with_bond[code])
                     r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
-            _bm_latest_lp = {c: float(bias_mom_lp[c].iloc[-1]) for c in all_codes_lp if c in bias_mom_lp and not np.isnan(bias_mom_lp[c].iloc[-1])}
-            _r2_latest_lp = {c: float(r2_lp[c].iloc[-1]) for c in all_codes_lp if c in r2_lp and not np.isnan(r2_lp[c].iloc[-1])}
-            _sorted_lp = sorted(_bm_latest_lp.keys(), key=lambda c: _bm_latest_lp.get(c, float("-inf")), reverse=True)
-            w("**① 乖离动量 & R² 排名:**\n\n")
-            w(f"| # | 资产 | 乖离动量 | R²({CN_R2_WINDOW}) | 状态 |\n")
-            w("|:-|:-|------:|------:|:-|\n")
-            for rank, code in enumerate(_sorted_lp, 1):
-                name = CN_NAMES.get(code, code)
-                bm = _bm_latest_lp.get(code, float("nan"))
-                r2v = _r2_latest_lp.get(code, float("nan"))
-                rank_marker = " 🏆" if rank == 1 else ""
-                if not np.isnan(bm) and bm <= 0:
-                    status = "动量≤0 ⛔"
-                elif not np.isnan(r2v) and r2v >= CN_R2_THRESHOLD:
-                    status = f"R²={r2v:.3f} ✅"
-                elif not np.isnan(r2v):
-                    status = f"R²={r2v:.3f} ❌"
-                else:
-                    status = "N/A"
+            _cn_params_intraday = cn_open and cn_data_is_today and len(cn_result) >= 2
+            _effective_cutoff_idx = -2 if _cn_params_intraday else -1
+            _suba_rows, _suba_meta = _build_suba_momentum_rank_rows(
+                cn_result, bias_mom_lp, r2_lp, all_codes_lp,
+                current_idx=-1, effective_cutoff_idx=_effective_cutoff_idx)
+            _cn_effective_date = _suba_meta["effective_date"]
+            _cn_current_date = _suba_meta["current_date"]
+            _cn_effective_holding = _suba_meta["effective_holding"]
+            _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
+            _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
+            w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
+            w("生效列 = 最近一次Sub-A确认信号；当前列 = 最新实时/收盘快照，用来看动量衰减。\n\n")
+            if _cn_params_intraday:
+                w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
+            else:
+                w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前快照日期 **{_current_label}**。\n\n")
+            w(f"| 排名 | 资产 | 标记 | 生效动量 | 当前动量 | 生效R² | 当前R² | 状态 |\n")
+            w("|:-:|:-|:-|------:|------:|------:|------:|:-|\n")
+            for row in _suba_rows:
+                rank_marker = " 🏆" if row["rank"] == 1 else ""
+                marker = row["marker"] or "—"
+                bm_eff = row["effective_momentum"]
+                bm = row["current_momentum"]
+                r2_eff = row["effective_r2"]
+                r2v = row["current_r2"]
+                bm_eff_str = f"{bm_eff:+.1f}" if not np.isnan(bm_eff) else "N/A"
                 bm_str = f"{bm:+.1f}" if not np.isnan(bm) else "N/A"
+                r2_eff_str = f"{r2_eff:.3f}" if not np.isnan(r2_eff) else "—"
                 r2_str = f"{r2v:.3f}" if not np.isnan(r2v) else "—"
-                w(f"| {rank}. {name}{rank_marker} | {bm_str} | {r2_str} | {status} |\n")
-            best_code = _sorted_lp[0] if _sorted_lp else None
-            if best_code:
-                best_name = CN_NAMES.get(best_code, best_code)
-                _best_bm_lp = _bm_latest_lp.get(best_code, float("nan"))
+                w(f"| {row['rank']}{rank_marker} | {row['asset_name']} | {marker} | {bm_eff_str} | {bm_str} | {r2_eff_str} | {r2_str} | {row['status']} |\n")
+            best_row = _suba_rows[0] if _suba_rows else None
+            if best_row:
+                best_name = best_row["asset_name"]
+                _best_bm_lp = best_row["current_momentum"]
                 if not np.isnan(_best_bm_lp) and _best_bm_lp <= 0:
-                    w(f"\n**② 选股:** 乖离动量最高 -> **{best_name}** (BM={_best_bm_lp:+.1f} ≤ 0) -> **全负, 持现金** 💰\n")
+                    w(f"\n**② 若现在收盘:** 当前动量最高 -> **{best_name}** (当前动量={_best_bm_lp:+.1f} ≤ 0) -> **全负, 持现金** 💰\n")
                 else:
-                    _r2v_best = _r2_latest_lp.get(best_code, float("nan"))
+                    _r2v_best = best_row["current_r2"]
                     _r2_pass = not np.isnan(_r2v_best) and _r2v_best >= CN_R2_THRESHOLD
-                    w(f"\n**② 选股:** 乖离动量最高 -> **{best_name}**\n")
-                    w(f"**③ R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
+                    w(f"\n**② 若现在收盘:** 当前动量最高 -> **{best_name}**\n")
+                    w(f"**③ 当前R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
                 # 成交量情绪（仅展示）
                 _ve_p, _vb_p, _va_p, _vok_p = fetch_volume_emotion()
                 if _vok_p:
@@ -6258,7 +6221,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
                     w(f"\n🔴 **杠杆调仓! {_cn_sc_p:.2f}x → {_cn_next_scale_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.7)\n\n")
+            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
@@ -6350,6 +6313,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed_p:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed_p.items()) + "\n")
+            w(f"杠杆放大资产: **QQQM/GLDM** (US_ROT_FUTURES={sorted(US_ROT_FUTURES)})；scale>1时只放大自身权重，不承接其他ETF杠杆缺口\n")
             # VolReg风控状态
             _vr_p = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
             _vr_cash_p = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
@@ -6439,7 +6403,7 @@ class CombinedStrategyV681(CombinedStrategyBase):
             w(f"\n**③ 波动率缩放 (Model B):** 近{US_ROT_VOL_WINDOW}日已实现波动率 = {us_rv:.1%}，"
                       f"scale = {US_ROT_TARGET_VOL:.0%}/{us_rv:.1%} = **{us_scale:.2f}x**")
             if us_scale > 1.0:
-                w(f" (>1: 仅放大US_ROT_FUTURES自身权重，上限{US_ROT_MAX_LEV:.1f}x)")
+                w(f" (>1: 仅放大US_ROT_FUTURES(QQQM/GLDM)自身权重，上限{US_ROT_MAX_LEV:.1f}x)")
             elif us_scale < 1.0:
                 w(" (<1: 所有资产等比缩减)")
             w("\n")
@@ -7201,63 +7165,5 @@ class CombinedStrategyV681(CombinedStrategyBase):
             )
             w(f"📎 绩效报告: **{filename}**")
 
-class CombinedStrategyV681PoeBot(poe.PoeBot):
-    async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
-        return _BOT_SETTINGS
-
-    async def get_response(self, request: QueryRequest):
-        runtime = _LegacyPoeRuntime(request)
-
-        def _runner():
-            try:
-                with _POE_RUNTIME_LOCK:
-                    with runtime:
-                        CombinedStrategyV681().run()
-            except Exception as e:
-                runtime.error = e
-
-        worker = threading.Thread(target=_runner, daemon=True)
-        worker.start()
-
-        while worker.is_alive() or not runtime.event_queue.empty():
-            drained = False
-            while True:
-                try:
-                    kind, payload = runtime.event_queue.get_nowait()
-                except queue.Empty:
-                    break
-                drained = True
-                if kind == "text":
-                    yield poe.PartialResponse(text=payload)
-                elif kind == "file":
-                    await self.post_message_attachment(
-                        message_id=request.message_id,
-                        file_data=payload["contents"],
-                        filename=payload["name"],
-                        content_type=payload["content_type"],
-                        is_inline=payload["is_inline"],
-                    )
-            if not drained:
-                await asyncio.sleep(0.05)
-
-        if runtime.error is not None:
-            raise runtime.error
-
-
 if __name__ == "__main__":
-    # Detect Poe Python runtime: the native poe module is registered in
-    # sys.modules['poe'] but has been shadowed by "import fastapi_poe as poe".
-    # When running inside Poe Python, we must restore the native module so that
-    # poe.query / poe.start_message / poe.call etc. work correctly.
-    import sys as _sys
-    _native_poe = _sys.modules.get('poe')
-    if _native_poe is not None and _native_poe is not poe and hasattr(_native_poe, 'start_message'):
-        globals()['poe'] = _native_poe
-        _safe_poe_update_settings(_BOT_SETTINGS)
-        CombinedStrategyV681().run()
-    else:
-        runner = getattr(poe, "run", None)
-        if callable(runner):
-            runner(CombinedStrategyV681PoeBot())
-        else:
-            CombinedStrategyV681().run()
+    CombinedStrategyV681().run()

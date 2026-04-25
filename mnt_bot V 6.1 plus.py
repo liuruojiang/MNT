@@ -264,12 +264,13 @@ _DATA_FETCH_ERRORS = (
     TypeError,                             # 意外None/类型不匹配
     IndexError,                            # 空数据访问（.iloc[0]等）
 )
-# 包含 poe.BotError — 用于 fetch_cn_kline 失败后优雅降级的场景
-# poe.BotError 仅在运行时可用（settings提取阶段不可用），因此用 try 保护
-try:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS + (poe.BotError,)
-except AttributeError:
-    _FETCH_OR_BOT_ERRORS = _DATA_FETCH_ERRORS
+# poe.BotError 在部分 Poe 导入上下文不可用，必须惰性获取。
+def _fetch_or_bot_errors():
+    try:
+        bot_error = poe.BotError
+    except AttributeError:
+        bot_error = None
+    return _DATA_FETCH_ERRORS + ((bot_error,) if isinstance(bot_error, type) else ())
 
 def _secid_to_sina(secid):
     market, code = secid.split(".")
@@ -5885,5 +5886,4 @@ class CombinedStrategyV61(CombinedStrategyBase):
             w(f"📎 绩效报告: **{filename}**")
 
 if __name__ == "__main__":
-    bot = CombinedStrategyV61()
-    bot.run()
+    CombinedStrategyV61().run()

@@ -1,0 +1,35 @@
+{
+  "common_start": "2019-05-09",
+  "common_end": "2026-03",
+  "common_months": 83,
+  "weights": {
+    "current_15_25_40_20": {
+      "Sub-A": 0.15,
+      "Sub-A-DK": 0.25,
+      "Sub-B": 0.4,
+      "Sub-C": 0.2,
+      "Microcap": 0.0
+    },
+    "proposal_10_15_15_40_20": {
+      "Sub-A": 0.1,
+      "Sub-A-DK": 0.15,
+      "Sub-B": 0.4,
+      "Sub-C": 0.2,
+      "Microcap": 0.15
+    },
+    "neighbor_10_10_20_40_20": {
+      "Sub-A": 0.1,
+      "Sub-A-DK": 0.1,
+      "Sub-B": 0.4,
+      "Sub-C": 0.2,
+      "Microcap": 0.2
+    }
+  },
+  "columns": [
+    "Sub-A",
+    "Sub-A-DK",
+    "Sub-B",
+    "Sub-C",
+    "Microcap"
+  ]
+}

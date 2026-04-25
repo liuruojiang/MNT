@@ -1,0 +1,5 @@
+window,outperf_rate,median_delta,p25_delta,p75_delta,strategy
+roll_3y,0.0,,,,mix_130_260_390
+roll_5y,0.0,,,,mix_130_260_390
+roll_3y,0.0,,,,mix_signal_top3_130_260_390
+roll_5y,0.0,,,,mix_signal_top3_130_260_390
