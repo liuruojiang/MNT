@@ -135,10 +135,10 @@ class V71SubBMixTests(unittest.TestCase):
         mod = self.module
         close_df = pd.DataFrame(
             {
-                "QQQ": [100, 101, 102, 103, 104],
-                "GLD": [100, 101, 102, 103, 104],
-                "EFA": [100, 101, 102, 103, 104],
-                "DBC": [100, 101, 102, 103, 104],
+                "QQQ": [100, 110, 120, 130, 150],
+                "GLD": [100, 109, 118, 128, 145],
+                "EFA": [100, 105, 110, 115, 126.5],
+                "DBC": [100, 105, 110, 115, 127.0],
             },
             index=pd.date_range("2026-01-01", periods=5, freq="D"),
         )

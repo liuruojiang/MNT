@@ -40,7 +40,7 @@ CN_TARGET_VOL = 0.20          # 目标年化波动率
 CN_VOL_WINDOW = 60            # 波动率计算窗口（与MA60一致）
 CN_MAX_LEV = 1.5              # 最大杠杆
 CN_MIN_LEV = 0.1              # 最小杠杆
-CN_SCALE_THRESHOLD = 0.10     # scale变动阈值
+CN_SCALE_THRESHOLD = 0.15     # scale变动阈值
 CN_ENTRY_INITIAL_FRACTION = 0.5
 
 # 成交量情绪监控（仅展示，不参与交易决策）
@@ -170,7 +170,7 @@ US_ROT_LB = US_ROT_LBS[1]  # compatibility alias for legacy single-window refere
 US_ROT_MAX_LB = max(US_ROT_LBS)
 US_ROT_VOL_LB = 20
 US_ROT_MIN_TURNOVER = 0.0
-US_ROT_ABS_THRESHOLD = 0.0
+US_ROT_ABS_THRESHOLD = 0.04
 
 # 调仓阈值（参与交易决策）
 US_ROT_REBALANCE_THRESHOLD = 1.05  # V7.1: 混合窗口启用1.05x挑战者保护，降低边界资产周度来回切换
@@ -181,11 +181,12 @@ US_ROT_BTC_MAX_W = 0.30
 US_ROT_EMXC_BT_START = pd.Timestamp("2017-08-01")
 US_ROT_EMXC_BT_PROXY = "EEM"
 
-# VolReg 风控: SPY短期/长期波动率比 > 阈值时次日转现金
+# VolReg 风控: SPY短期/长期波动率比 > 进入阈值时次日转现金，低于退出阈值才恢复
 US_ROT_VOLREG_ENABLED = True
 US_ROT_VOLREG_SHORT_W = 10      # 短期波动率窗口(交易日)
 US_ROT_VOLREG_LONG_W = 250      # 长期波动率窗口(交易日)
-US_ROT_VOLREG_THRESHOLD = 2.0   # 短/长波动率比触发阈值
+US_ROT_VOLREG_THRESHOLD = 2.0   # 短/长波动率比进入阈值
+US_ROT_VOLREG_EXIT_THRESHOLD = 1.6  # 短/长波动率比退出阈值
 
 # ─────────────────────────────────────────────
 # 美股 Sub-C 生产组合
@@ -267,6 +268,7 @@ SP500_RISK_REGIME_FILES = [
 SP500_RISK_REGIME_EMBEDDED_SNAPSHOT = {
     "latest_date": "2026-04-24",
     "regime_changed_date": "2026-04-10",
+    "previous_regime": "2-普通模式",
     "risk_score": 45.02319247785299,
     "regime": "3-困难模式",
     "suggested_equity_budget": "70%",
@@ -445,12 +447,15 @@ def _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_so
     latest_regime = _sp500_risk_regime_name(float(latest["risk_score"]))
     regime_series = weekly["risk_score"].apply(lambda x: _sp500_risk_regime_name(float(x)))
     change_date = weekly.index[0]
+    previous_regime = latest_regime
     different_before = np.flatnonzero((regime_series != latest_regime).to_numpy())
     if len(different_before) > 0 and different_before[-1] + 1 < len(weekly):
         change_date = weekly.index[different_before[-1] + 1]
+        previous_regime = regime_series.iloc[different_before[-1]]
     return {
         "latest_date": weekly.index[-1],
         "regime_changed_date": change_date,
+        "previous_regime": previous_regime,
         "risk_score": float(latest["risk_score"]),
         "regime": latest_regime,
         "suggested_equity_budget": _sp500_risk_regime_equity_budget(float(latest["risk_score"])),
@@ -512,12 +517,15 @@ def _load_sp500_risk_regime_csv_snapshot(search_paths=None, live_error=None):
             latest_regime = str(latest["regime"])
             regime_series = df["regime"].astype(str)
             change_date = df.index[0]
+            previous_regime = latest_regime
             different_before = np.flatnonzero((regime_series != latest_regime).to_numpy())
             if len(different_before) > 0 and different_before[-1] + 1 < len(df):
                 change_date = df.index[different_before[-1] + 1]
+                previous_regime = regime_series.iloc[different_before[-1]]
             return {
                 "latest_date": df.index[-1],
                 "regime_changed_date": change_date,
+                "previous_regime": previous_regime,
                 "risk_score": float(latest["risk_score"]),
                 "regime": latest_regime,
                 "suggested_equity_budget": str(latest["suggested_equity_budget"]),
@@ -580,7 +588,12 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
     else:
         source_desc = snapshot.get("source_file", "脚本内置快照")
     w("### S&P 500风险等级（仅提示）\n")
-    w(f"数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{changed_date}**\n")
+    _prev_regime = snapshot.get("previous_regime")
+    if _prev_regime and _prev_regime != snapshot["regime"]:
+        _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
+    else:
+        _change_text = changed_date
+    w(f"数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{_change_text}**\n")
     w(
         f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** "
         f"| 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n"
@@ -3174,7 +3187,7 @@ def run_us_rotation(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_T
     return df
 
 def apply_vol_regime_overlay(us_rot_result, spy_close):
-    """VolReg风控: SPY 短期vol/长期vol > 阈值 → 次日return=0(转现金)。
+    """VolReg风控: SPY短期/长期vol超过进入阈值转现金，低于退出阈值恢复。
     在us_rot_result上新增 volreg_ratio / volreg_cash 两列用于信号展示。"""
     spy_ret = spy_close.pct_change()
     short_vol = spy_ret.rolling(US_ROT_VOLREG_SHORT_W).std() * np.sqrt(US_TRADING_DAYS)
@@ -3182,7 +3195,16 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
     vol_ratio = (short_vol / long_vol).reindex(us_rot_result.index).ffill()
     # shift(1): T日收盘计算信号 → T+1日执行
     ratio_shifted = vol_ratio.shift(1)
-    mask = (ratio_shifted > US_ROT_VOLREG_THRESHOLD).fillna(False)
+    cash_state = False
+    mask_values = []
+    for value in ratio_shifted:
+        if not pd.isna(value):
+            if not cash_state and value > US_ROT_VOLREG_THRESHOLD:
+                cash_state = True
+            elif cash_state and value < US_ROT_VOLREG_EXIT_THRESHOLD:
+                cash_state = False
+        mask_values.append(cash_state)
+    mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
     result = us_rot_result.copy()
     result.loc[mask, "return"] = 0.0
     result["nav"] = (1 + result["return"]).cumprod()
@@ -5662,6 +5684,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
                 msg.write(f" | 目标: {PROD_VS_TARGET_VOL:.0%}\n")
+                msg.write(f"调整阈值: Δ≥{PROD_VS_THRESHOLD:.0%}（未达到阈值不调整Sub-C杠杆）\n")
                 if not _vs_changed:
                     msg.write(f"✅ 杠杆: **{_vs_current:.2f}x** (下一美股开盘维持)")
                     if abs(_vs_ts - _vs_current) > 0.001:
@@ -5790,7 +5813,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_us_live_snapshot=False)
+                msg, include_us_live_snapshot=True)
             w("⏳ 正在计算信号...\n")
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
@@ -5835,6 +5858,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             if cn_open and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
+            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _cn_intraday = cn_open and cn_data_is_today and len(cn_result) >= 2
             _cn_display_idx = -2 if _cn_intraday else -1
             _cn_display_date = cn_result.index[_cn_display_idx]
@@ -5921,6 +5945,19 @@ class CombinedStrategyV71(CombinedStrategyBase):
                     _r2_pass = not np.isnan(_r2v_best) and _r2v_best >= CN_R2_THRESHOLD
                     w(f"\n**选择:** 乖离动量最高 -> **{_best_name}**\n")
                     w(f"**R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
+                # Buffer保护显示
+                if CN_SWITCH_BUFFER > 1.0 and _best != _cn_display_holding and _cn_display_holding != "cash":
+                    _hold_bm = _bm_latest_live.get(_cn_display_holding, float("nan"))
+                    _hold_r2 = _r2_latest_live.get(_cn_display_holding, float("nan"))
+                    _hold_ok = (not np.isnan(_hold_bm) and _hold_bm > 0
+                                and not np.isnan(_hold_r2) and _hold_r2 >= CN_R2_THRESHOLD)
+                    if _hold_ok and not np.isnan(_best_bm) and not np.isnan(_hold_bm):
+                        _buf_needed = _hold_bm * CN_SWITCH_BUFFER
+                        _buf_pass = _best_bm > _buf_needed
+                        w(f"**持仓切换Buffer:** 当前持仓{CN_NAMES.get(_cn_display_holding, _cn_display_holding)}仍合格 | "
+                          f"候选{_best_name} BM={_best_bm:+.1f} {'>' if _buf_pass else '≤'} "
+                          f"当前×{CN_SWITCH_BUFFER:.2f}={_buf_needed:+.1f} -> "
+                          f"{'**切换** ✅' if _buf_pass else '**维持当前持仓** 🛡️'}\n")
             # 成交量情绪（仅展示）
             _ve, _vb, _va, _vok = fetch_volume_emotion()
             if _vok:
@@ -5944,6 +5981,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             if cn_open and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
+            w(f"阈值: Score衰减/恢复 {CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}/{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _dk_intraday = cn_open and cn_data_is_today and len(cn_dk_result) >= 2
             dk_current_name = _dk_pos_str(dk_current)
             hypo_dk_name = _dk_pos_str(hypo_dk)
@@ -6024,16 +6062,19 @@ class CombinedStrategyV71(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
             _vr_cash = d.get("volreg_cash_today", False)
             if US_ROT_VOLREG_ENABLED and _vr is not None:
                 if _vr > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 **VolReg风控:** SPY波动率比={_vr:.2f} > {US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                    w(f"🔴 **VolReg风控:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                elif _vr_cash and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash:
-                    w(f"🟡 **VolReg风控:** 今日已转现金(昨日触发) | 当前SPY波动率比={_vr:.2f}\n")
+                    w(f"🟢 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} < {US_ROT_VOLREG_THRESHOLD}，正常\n")
+                    w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
             else:
@@ -6341,6 +6382,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             if cn_open and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
+            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             hypo_cn_name = CN_NAMES.get(hypo_cn, hypo_cn)
             cn_current_name = CN_NAMES.get(cn_current, cn_current)
             # v6.1: no cooldown, no MA filter
@@ -6426,6 +6468,19 @@ class CombinedStrategyV71(CombinedStrategyBase):
                     _r2_pass2 = not np.isnan(_r2v_best2) and _r2v_best2 >= CN_R2_THRESHOLD
                     w(f"\n**选择:** 乖离动量最高 -> **{_best2_name}**\n")
                     w(f"**R²过滤:** R²({CN_R2_WINDOW})={_r2v_best2:.3f} -> {'**通过** ✅' if _r2_pass2 else '**未通过** ❌ -> 持现金'}\n")
+                # Buffer保护显示
+                if CN_SWITCH_BUFFER > 1.0 and _best2 != cn_current and cn_current != "cash":
+                    _hold_bm2 = _bm_latest_live2.get(cn_current, float("nan"))
+                    _hold_r2_2 = _r2_latest_live2.get(cn_current, float("nan"))
+                    _hold_ok2 = (not np.isnan(_hold_bm2) and _hold_bm2 > 0
+                                 and not np.isnan(_hold_r2_2) and _hold_r2_2 >= CN_R2_THRESHOLD)
+                    if _hold_ok2 and not np.isnan(_best2_bm) and not np.isnan(_hold_bm2):
+                        _buf_needed2 = _hold_bm2 * CN_SWITCH_BUFFER
+                        _buf_pass2 = _best2_bm > _buf_needed2
+                        w(f"**持仓切换Buffer:** 当前持仓{cn_current_name}仍合格 | "
+                          f"候选{_best2_name} BM={_best2_bm:+.1f} {'>' if _buf_pass2 else '≤'} "
+                          f"当前×{CN_SWITCH_BUFFER:.2f}={_buf_needed2:+.1f} -> "
+                          f"{'**切换** ✅' if _buf_pass2 else '**维持当前持仓** 🛡️'}\n")
                 # 成交量情绪（仅展示）
                 _ve2, _vb2, _va2, _vok2 = fetch_volume_emotion()
                 if _vok2:
@@ -6449,6 +6504,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             if cn_open and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
+            w(f"阈值: Score衰减/恢复 {CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}/{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             dk_current_name3 = _dk_pos_str(dk_current)
             _dk_effective_issue_date3 = cn_dk_result.index[-2] if len(cn_dk_result) >= 2 else dk_date
             w(f"**当前已生效Top-1:** **{dk_current_name3}**（对应 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
@@ -6507,16 +6563,19 @@ class CombinedStrategyV71(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
             # VolReg风控 (详细视图)
             _vr_detail = d.get("volreg_ratio")
             _vr_cash_detail = d.get("volreg_cash_today", False)
             if US_ROT_VOLREG_ENABLED and _vr_detail is not None:
                 if _vr_detail > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > {US_ROT_VOLREG_THRESHOLD} → **明日转现金**\n")
+                    w(f"🔴 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日转现金**\n")
+                elif _vr_cash_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 VolReg: 今日已转现金 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash_detail:
-                    w(f"🟡 VolReg: 今日已转现金(昨日触发) | vol比={_vr_detail:.2f}\n")
+                    w(f"🟢 VolReg: 今日已转现金 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < {US_ROT_VOLREG_THRESHOLD} ✅\n")
+                    w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             w("\n")
             _us_mix_live = _us_mix_display_context(
                 us_rot_close,
@@ -6670,6 +6729,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
+            w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
             all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
@@ -6714,7 +6774,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| 动量窗口 | **{' / '.join(str(lb) for lb in US_ROT_LBS)}日** | 130/260/390日分别生成目标仓位后等权平均 |\n")
             w(f"| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 各窗口内均使用20日反波动率加权 |\n")
             w(f"| Top N | **3** | 选动量最高的3只ETF |\n")
-            w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}(>0)** | >0持有,否则转BIL |\n")
+            w(f"| 绝对动量阈值 | **{US_ROT_ABS_THRESHOLD:.0%}** | 动量需超过阈值才持有,否则转BIL |\n")
             w(f"| 波动率缩放窗口 | **{US_ROT_VOL_WINDOW}日** | 已实现波动率 |\n")
             w(f"| 目标年化波动率 | **{US_ROT_TARGET_VOL:.0%}** | 波动率缩放目标 |\n")
             w(f"| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n")
@@ -6725,10 +6785,10 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| 交易成本 | **{US_ROT_COMMISSION:.1%}** | 单边手续费 |\n")
             if US_ROT_VOLREG_ENABLED:
                 _volreg_enabled_text = "开启" if US_ROT_VOLREG_ENABLED else "关闭"
-                w(f"| VolReg风控 | **{_volreg_enabled_text}** | SPY短/长波动率比>{US_ROT_VOLREG_THRESHOLD}时转现金 |\n")
+                w(f"| VolReg风控 | **{_volreg_enabled_text}** | SPY短/长波动率比>{US_ROT_VOLREG_THRESHOLD}时转现金，低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复 |\n")
                 w(f"| VolReg短期窗口 | **{US_ROT_VOLREG_SHORT_W}日** | 短期波动率计算窗口 |\n")
                 w(f"| VolReg长期窗口 | **{US_ROT_VOLREG_LONG_W}日** | 长期波动率计算窗口 |\n")
-                w(f"| VolReg阈值 | **{US_ROT_VOLREG_THRESHOLD}** | 短/长波动率比触发阈值 |\n")
+                w(f"| VolReg进/出阈值 | **{US_ROT_VOLREG_THRESHOLD} / {US_ROT_VOLREG_EXIT_THRESHOLD}** | 进入现金 / 恢复正常 |\n")
             n_etfs = len(US_ROT_ASSETS)
             etf_labels = [f"{k}({v['label']})" for k, v in US_ROT_ASSETS.items()]
             w(f"| 资产池 | **{n_etfs}只** | {', '.join(etf_labels)} |\n")
@@ -6742,7 +6802,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w("5. Sub-B 纳入 BTC/IBIT；历史段使用 BTC-USD 代理，实盘展示与下单使用 IBIT\n")
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
-                          f"次日全仓转现金(return=0)。T日收盘计算 → T+1日执行\n")
+                          f"次日全仓转现金(return=0)；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
             w("\n**执行方式:** 美股因时差无法收盘价执行 → 次日开盘价执行（回测用收盘价对收盘价，shift(1)近似）\n")
             w("\n---\n\n### Sub-C: 美股7ETF组合\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             _prod_timing_text = "开启" if PROD_USE_TIMING else "关闭"
@@ -6816,6 +6876,8 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
+            w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** |\n")
+            w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")
             # v6.1: Compute bias momentum and R² for display
             cn_close_with_bond = cn_close.copy()
@@ -6866,6 +6928,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             best_row = _suba_rows[0] if _suba_rows else None
             if best_row:
                 best_name = best_row["asset_name"]
+                best_code_lp = best_row["code"]
                 _best_bm_lp = best_row["current_momentum"]
                 if not np.isnan(_best_bm_lp) and _best_bm_lp <= 0:
                     w(f"\n**② 若现在收盘:** 当前动量最高 -> **{best_name}** (当前动量={_best_bm_lp:+.1f} ≤ 0) -> **全负, 持现金** 💰\n")
@@ -6874,6 +6937,21 @@ class CombinedStrategyV71(CombinedStrategyBase):
                     _r2_pass = not np.isnan(_r2v_best) and _r2v_best >= CN_R2_THRESHOLD
                     w(f"\n**② 若现在收盘:** 当前动量最高 -> **{best_name}**\n")
                     w(f"**③ 当前R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
+                # Buffer保护显示
+                if CN_SWITCH_BUFFER > 1.0 and best_code_lp != _cn_effective_holding and _cn_effective_holding != "cash":
+                    _hold_row_lp = next((r for r in _suba_rows if r["code"] == _cn_effective_holding), None)
+                    if _hold_row_lp:
+                        _hold_bm_lp = _hold_row_lp["current_momentum"]
+                        _hold_r2_lp = _hold_row_lp["current_r2"]
+                        _hold_ok_lp = (not np.isnan(_hold_bm_lp) and _hold_bm_lp > 0
+                                       and not np.isnan(_hold_r2_lp) and _hold_r2_lp >= CN_R2_THRESHOLD)
+                        if _hold_ok_lp and not np.isnan(_best_bm_lp) and not np.isnan(_hold_bm_lp):
+                            _buf_needed_lp = _hold_bm_lp * CN_SWITCH_BUFFER
+                            _buf_pass_lp = _best_bm_lp > _buf_needed_lp
+                            w(f"**持仓切换Buffer:** 当前持仓{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}仍合格 | "
+                              f"候选{best_name} BM={_best_bm_lp:+.1f} {'>' if _buf_pass_lp else '≤'} "
+                              f"当前×{CN_SWITCH_BUFFER:.2f}={_buf_needed_lp:+.1f} -> "
+                              f"{'**切换** ✅' if _buf_pass_lp else '**维持当前持仓** 🛡️'}\n")
                 # 成交量情绪（仅展示）
                 _ve_p, _vb_p, _va_p, _vok_p = fetch_volume_emotion()
                 if _vok_p:
@@ -6922,6 +7000,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
+            w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** |\n")
             w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
@@ -7011,16 +7090,25 @@ class CombinedStrategyV71(CombinedStrategyBase):
             if changed_p:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed_p.items()) + "\n")
             w(f"杠杆放大资产: **QQQM/GLDM** (US_ROT_FUTURES={sorted(US_ROT_FUTURES)})；scale>1时只放大自身权重，不承接其他ETF杠杆缺口\n")
+            w("**参数配置:**\n\n")
+            w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| 绝对动量阈值 | **>{US_ROT_ABS_THRESHOLD:.0%}** |\n")
+            w(f"| 调仓保护 | **{US_ROT_REBALANCE_THRESHOLD:.2f}x** |\n")
+            w(f"| VolReg进/出阈值 | **{US_ROT_VOLREG_THRESHOLD:.1f} / {US_ROT_VOLREG_EXIT_THRESHOLD:.1f}** |\n")
+            w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** |\n")
+            w(f"| 目标波动率/上限 | **{US_ROT_TARGET_VOL:.0%} / {US_ROT_MAX_LEV:.1f}x** |\n\n")
             # VolReg风控状态
             _vr_p = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
             _vr_cash_p = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
             if US_ROT_VOLREG_ENABLED and _vr_p is not None:
                 if _vr_p > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 **VolReg风控:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > {US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                    w(f"🔴 **VolReg风控:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                elif _vr_cash_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 **VolReg风控:** 今日已转现金 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash_p:
-                    w(f"🟡 **VolReg风控:** 今日已转现金(昨日触发) | 波动率比={_vr_p:.2f}\n")
+                    w(f"🟢 **VolReg风控:** 今日已转现金 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg风控:** SPY 波动率比={_vr_p:.2f} < {US_ROT_VOLREG_THRESHOLD} ✅\n")
+                    w(f"🟢 **VolReg风控:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             # 信号日状态
             us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
@@ -7034,19 +7122,28 @@ class CombinedStrategyV71(CombinedStrategyBase):
                     _last_bj_p = beijing_time_str(_last_us_sig_date_p, "US", "close")
                     w(f"⏸️ 非信号日（上次: {_last_bj_p}）\n")
             w("\n")
+            hist_us_pre = us_rot_result["return"].values
+            if len(hist_us_pre) >= US_ROT_VOL_WINDOW:
+                _us_rv_pre = np.std(hist_us_pre[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+                us_scale = min(max(US_ROT_TARGET_VOL / _us_rv_pre, 0.05), US_ROT_MAX_LEV) if _us_rv_pre > 0.001 else US_ROT_MAX_LEV
+            else:
+                us_scale = 1.0
+            _hypo_prev_mix_risky_by_lb_p = _us_mix_prev_risky_by_lb_from_result(
+                us_rot_result, us_date, include_current=False,
+            )
             _us_mix_params = _us_mix_display_context(
                 us_rot_close,
                 -1,
                 US_ROT_POOL,
                 us_scale,
-                prev_risky_by_lb=d.get("hypo_prev_mix_risky_by_lb"),
+                prev_risky_by_lb=_hypo_prev_mix_risky_by_lb_p,
                 threshold=US_ROT_REBALANCE_THRESHOLD,
             )
             w("**① 分窗口动量排名（130/260/390）:**\n\n")
             w("V7.1 的 Sub-B 先分别计算 130/260/390 日窗口，再把三个窗口生成的目标仓位等权混合。IBIT 参与实盘口径；历史段以 BTC-USD 拼接。\n\n")
             for lb in US_ROT_LBS:
                 w(f"**{lb}日窗口:**\n\n")
-                w("| ETF | 动量 | 年化波动率 | Top3? | 绝对动量>0? | 窗口目标权重 |\n")
+                w(f"| ETF | 动量 | 年化波动率 | Top3? | 绝对动量>{US_ROT_ABS_THRESHOLD:.0%}? | 窗口目标权重 |\n")
                 w("|:-|------:|------:|:-:|:-:|------:|\n")
                 for row in _us_mix_params["per_lb_rows"][lb]:
                     _mom = row["momentum"]
@@ -7158,7 +7255,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
                 _us_mix_params["momentum_rows"],
                 _us_mix_params["vol_row"],
                 US_ROT_POOL,
-                d.get("hypo_prev_mix_risky_by_lb"),
+                _hypo_prev_mix_risky_by_lb_p,
                 US_ROT_REBALANCE_THRESHOLD,
             )
             if _thresh_line_p:
