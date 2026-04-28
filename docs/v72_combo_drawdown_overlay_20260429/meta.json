@@ -1,0 +1,26 @@
+{
+  "version_definition": "V7.2 = Sub-A 10% + Sub-A-DK 15% + Sub-B 60% + Microcap 15%; Sub-C 0%",
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "common_start": "2015-10-13",
+  "common_end": "2026-04-17",
+  "rows": 3840,
+  "baseline_source": "V7.1 formal strategy functions plus microcap live run_signal + apply_cost_model path",
+  "overlay_rule": "prior-day managed portfolio drawdown controls next-day exposure scale",
+  "overlay_cost_bps_settings": [
+    0.0,
+    10.0
+  ],
+  "outputs": [
+    "v72_overlay_summary.csv",
+    "v72_overlay_windows.csv",
+    "v72_overlay_daily_nav.csv",
+    "v72_overlay_scales.csv",
+    "v72_overlay_nav_drawdown.png",
+    "v72_overlay_report.html"
+  ]
+}
