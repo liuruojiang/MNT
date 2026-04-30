@@ -4438,12 +4438,14 @@ def _is_tentative_subb_date(date):
     return (rec_yr, rec_wk) == (now_yr, now_wk) and rec_date.dayofweek < 3
 
 
-def _filter_confirmed_records(records):
+def _filter_confirmed_records(records, bj_now=None, us_schedule=None):
     """非实时输出只保留已确认/已执行记录。"""
+    if bj_now is None:
+        bj_now = beijing_now()
     confirmed = []
     for rec in records:
         strat = rec.get("策略", "")
-        if "Sub-B" in strat and _is_tentative_subb_date(rec["日期"]):
+        if "Sub-B" in strat and not _has_execution_happened(rec["日期"], "US", bj_now, us_schedule):
             continue
         confirmed.append(rec)
     return confirmed
@@ -7238,7 +7240,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
         all_rebalances.extend([r for r in prod_rebs if pd.Timestamp(r["日期"]) >= cutoff])
         vs_rebs = extract_subc_vs_rebalances(us_prod_daily, d.get("prod_sig_a"), d.get("prod_sig_b"), us_open=_us_open)
         all_rebalances.extend([r for r in vs_rebs if pd.Timestamp(r["日期"]) >= cutoff])
-        all_rebalances = _filter_confirmed_records(all_rebalances)
+        all_rebalances = _filter_confirmed_records(all_rebalances, bj_now=bj_now, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x["日期"], reverse=True)
         excel_bytes = generate_signal_excel(now_str, signal_info, all_rebalances)
         filename = f"signal_{now_str}.xlsx"
@@ -8707,7 +8709,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
         _us_open = getattr(self, '_us_open', None)
         us_rebs = extract_us_rot_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
         all_rebalances.extend([r for r in us_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
-        all_rebalances = _filter_confirmed_records(all_rebalances)
+        all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x["日期"])
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates

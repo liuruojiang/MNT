@@ -417,6 +417,31 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertNotIn("脚本内置快照", msg.text)
         self.assertNotIn("2-普通模式", msg.text)
 
+    def test_unexecuted_subb_record_is_filtered_before_next_us_open(self):
+        mod = self.module
+        records = [
+            {"日期": "2026-04-23", "策略": "Sub-B", "买入": "PDBC"},
+            {"日期": "2026-04-30", "策略": "Sub-B", "买入": "QQQM"},
+            {"日期": "2026-04-30", "策略": "Sub-A", "买入": "创业板"},
+        ]
+        filtered = mod._filter_confirmed_records(
+            records,
+            bj_now=pd.Timestamp("2026-04-30 22:25"),
+        )
+
+        self.assertEqual([r["日期"] for r in filtered], ["2026-04-23", "2026-04-30"])
+        self.assertEqual([r["策略"] for r in filtered], ["Sub-B", "Sub-A"])
+
+    def test_subb_record_is_kept_after_next_us_open_execution(self):
+        mod = self.module
+        records = [{"日期": "2026-04-30", "策略": "Sub-B", "买入": "QQQM"}]
+        filtered = mod._filter_confirmed_records(
+            records,
+            bj_now=pd.Timestamp("2026-05-01 21:40"),
+        )
+
+        self.assertEqual(filtered, records)
+
 
 if __name__ == "__main__":
     unittest.main()
