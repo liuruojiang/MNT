@@ -7539,7 +7539,36 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 f"(DBC {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('dbc_mom', np.nan):+.2%}, "
                 f"TLT {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('tlt_mom', np.nan):+.2%})\n\n"
             )
-            w("**实时混合结果（130/260/390 等权混合）:**\n\n")
+            w("**实时分窗口动量排名（130/260/390）：**\n\n")
+            for lb in US_ROT_LBS:
+                w(f"**{lb}日窗口:**\n\n")
+                w(f"| ETF | 动量 | 年化波动率 | Top3? | 绝对动量>{US_ROT_ABS_THRESHOLD:.0%}? | 窗口目标权重 |\n")
+                w("|:-|------:|------:|:-:|:-:|------:|\n")
+                for row in _us_mix_live["per_lb_rows"][lb]:
+                    _mom = row["momentum"]
+                    _vol = row["vol"]
+                    _fmt_mom = f"{_mom:+.2%}" if not np.isnan(_mom) else "—"
+                    _fmt_vol = f"{_vol:.1%}" if not np.isnan(_vol) else "—"
+                    _is_top3 = "✅" if row["top3"] else ""
+                    _abs_pass = "✅" if row["abs_pass"] else "❌"
+                    _selected = " 🏆" if row["window_weight"] > 1e-6 else ""
+                    w(
+                        f"| {row['rank']}. {row['live_name']}{_selected} | {_fmt_mom} | {_fmt_vol} | "
+                        f"{_is_top3} | {_abs_pass} | {row['window_weight']:.1%} |\n"
+                    )
+                for row in _us_mix_live["reference_per_lb_rows"][lb]:
+                    _mom = row["momentum"]
+                    _vol = row["vol"]
+                    _fmt_mom = f"{_mom:+.2%}" if not np.isnan(_mom) else "—"
+                    _fmt_vol = f"{_vol:.1%}" if not np.isnan(_vol) else "—"
+                    _is_top3 = f"参考第{row['rank']}"
+                    _abs_pass = "✅" if row["abs_pass"] else "❌"
+                    w(
+                        f"| 参考. {row['live_name']} | {_fmt_mom} | {_fmt_vol} | "
+                        f"{_is_top3} | {_abs_pass} | 0.0% |\n"
+                    )
+                w("\n")
+            w("**实时混合结果（三个窗口等权合成后的最终目标）:**\n\n")
             w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
             w("|:-|:-|------:|------:|------:|------:|:-:|:-:|\n")
             for row in _us_mix_live["mix_rows"]:

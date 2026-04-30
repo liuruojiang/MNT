@@ -444,6 +444,16 @@ class V72VolumePolicyTests(unittest.TestCase):
 
         self.assertEqual(filtered, records)
 
+    def test_live_signal_displays_subb_windows_separately(self):
+        mod = self.module
+        method_source = inspect.getsource(mod.CombinedStrategyV72._handle_live_signal)
+
+        self.assertIn("实时分窗口动量排名", method_source)
+        self.assertIn('for lb in US_ROT_LBS', method_source)
+        self.assertIn('per_lb_rows', method_source)
+        self.assertIn('reference_per_lb_rows', method_source)
+        self.assertIn("实时混合结果（三个窗口等权合成后的最终目标）", method_source)
+
 
 if __name__ == "__main__":
     unittest.main()
