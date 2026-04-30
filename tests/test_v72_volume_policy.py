@@ -325,7 +325,7 @@ class V72VolumePolicyTests(unittest.TestCase):
             mod._volume_warning_status = old
             mod._microcap_direct_volume_status = old_direct
 
-        self.assertIn("微盘指数成交量黄灯: **黄灯触发**", msg.text)
+        self.assertIn("微盘指数成交量黄灯: **🟡 黄灯触发**", msg.text)
         self.assertIn("883418.TI 成交量低于MA53", msg.text)
         self.assertIn("连续14/13天", msg.text)
         self.assertIn("Sub-A-DK黄灯: **未触发**", msg.text)
@@ -444,15 +444,15 @@ class V72VolumePolicyTests(unittest.TestCase):
 
         self.assertEqual(filtered, records)
 
-    def test_live_signal_displays_subb_windows_separately(self):
+    def test_live_signal_keeps_subb_windows_compact(self):
         mod = self.module
         method_source = inspect.getsource(mod.CombinedStrategyV72._handle_live_signal)
 
-        self.assertIn("实时分窗口动量排名", method_source)
-        self.assertIn('for lb in US_ROT_LBS', method_source)
-        self.assertIn('per_lb_rows', method_source)
-        self.assertIn('reference_per_lb_rows', method_source)
-        self.assertIn("实时混合结果（三个窗口等权合成后的最终目标）", method_source)
+        self.assertIn("实时混合结果（130/260/390 等权混合）", method_source)
+        self.assertNotIn("实时分窗口动量排名", method_source)
+        self.assertNotIn('reference_per_lb_rows', method_source)
+        self.assertIn("🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值", method_source)
+        self.assertIn("🟢 需换仓", method_source)
 
 
 if __name__ == "__main__":

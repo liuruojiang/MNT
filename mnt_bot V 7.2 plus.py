@@ -1814,7 +1814,7 @@ def _write_volume_warning_panel(msg, compact=False):
         w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
     try:
         direct = _microcap_direct_volume_status()
-        direct_mark = "黄灯触发" if direct["triggered"] else "未触发"
+        direct_mark = "🟡 黄灯触发" if direct["triggered"] else "未触发"
         direct_pos = "低于" if direct["below"] else "高于或等于"
         w(
             f"- 微盘指数成交量黄灯: **{direct_mark}** | {MICROCAP_DIRECT_VOLUME_CODE} 成交量{direct_pos}MA{direct['ma']}，"
@@ -1833,7 +1833,7 @@ def _write_volume_warning_panel(msg, compact=False):
             CN_DK_VOLUME_YELLOW_DAYS,
             CN_DK_VOLUME_YELLOW_LABEL,
         )
-        dk_mark = "黄灯触发" if dk["triggered"] else "未触发"
+        dk_mark = "🟡 黄灯触发" if dk["triggered"] else "未触发"
         w(
             f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额低于MA{dk['ma']}连续{dk['streak']}/{dk['days']}天。\n"
         )
@@ -1856,7 +1856,7 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "黄灯触发" if micro_on else "未触发"
+        micro_mark = "🟡 黄灯触发" if micro_on else "未触发"
         w(
             f"- 微盘宽口径黄灯: **{micro_mark}** | 中证2000 {zz['streak']}/{zz['days']}天 AND "
             f"创业板 {cyb['streak']}/{cyb['days']}天。\n"
@@ -6606,7 +6606,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
             if PROD_VS_ENABLED:
                 if _vs_changed:
-                    msg.write(f"\n🔴 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
+                    msg.write(f"\n🟢 **杠杆调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
                 msg.write(f"\n**波动率缩放:** 当前 **{_vs_current:.2f}x**")
                 if _vs_rv is not None:
                     msg.write(f" | 已实现波动率: {_vs_rv:.1%}")
@@ -6820,7 +6820,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     _cn_rv_rt, _cn_sc_raw_rt,
                     CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 if _cn_pending and not _cn_intraday:
-                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_rt):.2f}x → {_cn_next_scale:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **VolScale调仓! {float(_cn_sc_raw_rt):.2f}x → {_cn_next_scale:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
                 w(f"**Sub-A最终敞口:** **{_cn_sc_rt:.2f}x** = VolScale **{float(_cn_sc_raw_rt):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt):.2f}**")
                 if _cn_rv_rt is not None and not np.isnan(_cn_rv_rt):
                     w(f" | 已实现波动率: {_cn_rv_rt:.1%}")
@@ -6955,7 +6955,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 if _dk_pending and not _dk_intraday:
                     # 计算下一交易日总敞口 (VolScale变化, overlay不变)
                     _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
-                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 下一交易日开盘前执行**\n")
                 w(f"**ADK实际敞口:** **{_dk_sc_rt:.2f}x**")
                 w(f" | VolScale: {_dk_cur_vs:.2f}x")
                 if "same_side_overheat_scale" in cn_dk_result.columns:
@@ -6998,7 +6998,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             _vr_cash = d.get("volreg_cash_today", False)
             if US_ROT_VOLREG_ENABLED and _vr is not None:
                 if _vr > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 **VolReg风控:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                    w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
                 elif _vr_cash and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
                     w(f"🟡 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash:
@@ -7109,9 +7109,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     w(f"| {live} | {cur:.1%} | {ds} |\n")
             w(f"\n调仓幅度: **{_us_display_turnover:.1%}**")
             if _us_rebalanced:
-                w(f" ✅ 超{US_ROT_MIN_TURNOVER:.0%}阈值，已调仓\n")
+                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，已调仓\n")
             elif _us_display_turnover >= US_ROT_MIN_TURNOVER:
-                w(f" ✅ 超{US_ROT_MIN_TURNOVER:.0%}阈值，**应调仓**\n")
+                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**应调仓**\n")
             else:
                 w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，维持原仓位\n")
             if _sub_b_capital:
@@ -7330,7 +7330,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"\n持仓: **{cn_current_name}**\n")
                 w(f"假设现在收盘，信号: **{hypo_cn_name}**")
                 if hypo_cn != cn_current:
-                    w(" ⬅️ 需换仓")
+                    w(" 🟢 需换仓")
                 else:
                     w("（无变化）")
                 w("\n\n")
@@ -7354,7 +7354,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     _cn_rv_rt3, float(_cn_sc_raw_rt3),
                     CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 if _cn_pending3:
-                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_rt3):.2f}x → {_cn_next_scale3:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **VolScale调仓! {float(_cn_sc_raw_rt3):.2f}x → {_cn_next_scale3:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
                 w(f"**Sub-A最终敞口:** **{_cn_sc_rt3:.2f}x** = VolScale **{float(_cn_sc_raw_rt3):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt3):.2f}**")
                 if _cn_rv_rt3 is not None and not np.isnan(_cn_rv_rt3):
                     w(f" | 已实现波动率: {_cn_rv_rt3:.1%}")
@@ -7472,7 +7472,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 if _dk_pending3:
                     _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
-                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
                 w(f"**波动率缩放:** 当前 VolScale **{_dk_cur_vs3:.2f}x** | 实际敞口 **{_dk_sc_rt3:.2f}x**")
                 if _dk_rv_rt3 is not None and not np.isnan(_dk_rv_rt3):
                     w(f" | 已实现波动率: {_dk_rv_rt3:.1%}")
@@ -7511,7 +7511,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             _vr_cash_detail = d.get("volreg_cash_today", False)
             if US_ROT_VOLREG_ENABLED and _vr_detail is not None:
                 if _vr_detail > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日转现金**\n")
+                    w(f"🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日转现金**\n")
                 elif _vr_cash_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
                     w(f"🟡 VolReg: 今日已转现金 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash_detail:
@@ -7539,36 +7539,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 f"(DBC {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('dbc_mom', np.nan):+.2%}, "
                 f"TLT {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('tlt_mom', np.nan):+.2%})\n\n"
             )
-            w("**实时分窗口动量排名（130/260/390）：**\n\n")
-            for lb in US_ROT_LBS:
-                w(f"**{lb}日窗口:**\n\n")
-                w(f"| ETF | 动量 | 年化波动率 | Top3? | 绝对动量>{US_ROT_ABS_THRESHOLD:.0%}? | 窗口目标权重 |\n")
-                w("|:-|------:|------:|:-:|:-:|------:|\n")
-                for row in _us_mix_live["per_lb_rows"][lb]:
-                    _mom = row["momentum"]
-                    _vol = row["vol"]
-                    _fmt_mom = f"{_mom:+.2%}" if not np.isnan(_mom) else "—"
-                    _fmt_vol = f"{_vol:.1%}" if not np.isnan(_vol) else "—"
-                    _is_top3 = "✅" if row["top3"] else ""
-                    _abs_pass = "✅" if row["abs_pass"] else "❌"
-                    _selected = " 🏆" if row["window_weight"] > 1e-6 else ""
-                    w(
-                        f"| {row['rank']}. {row['live_name']}{_selected} | {_fmt_mom} | {_fmt_vol} | "
-                        f"{_is_top3} | {_abs_pass} | {row['window_weight']:.1%} |\n"
-                    )
-                for row in _us_mix_live["reference_per_lb_rows"][lb]:
-                    _mom = row["momentum"]
-                    _vol = row["vol"]
-                    _fmt_mom = f"{_mom:+.2%}" if not np.isnan(_mom) else "—"
-                    _fmt_vol = f"{_vol:.1%}" if not np.isnan(_vol) else "—"
-                    _is_top3 = f"参考第{row['rank']}"
-                    _abs_pass = "✅" if row["abs_pass"] else "❌"
-                    w(
-                        f"| 参考. {row['live_name']} | {_fmt_mom} | {_fmt_vol} | "
-                        f"{_is_top3} | {_abs_pass} | 0.0% |\n"
-                    )
-                w("\n")
-            w("**实时混合结果（三个窗口等权合成后的最终目标）:**\n\n")
+            w("**实时混合结果（130/260/390 等权混合）:**\n\n")
             w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
             w("|:-|:-|------:|------:|------:|------:|:-:|:-:|\n")
             for row in _us_mix_live["mix_rows"]:
@@ -7608,7 +7579,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     w(f"| {live} | {prev:.1%} | {sig:.1%} | {ds} |\n")
                 w(f"\n调仓幅度: **{turnover_b:.1%}**")
                 if rebalanced_b:
-                    w(f" ✅ 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n")
+                    w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n")
                 else:
                     w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**\n")
             else:
@@ -7628,7 +7599,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     w(f"| {live} | {cur:.1%} | {hypo:.1%} | {ds} |\n")
                 w(f"\n调仓幅度: **{turnover_b:.1%}**")
                 if would_rebalance:
-                    w(f" ✅ 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n")
+                    w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n")
                 else:
                     w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**\n")
             # 调仓阈值
@@ -7955,7 +7926,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"| 当前最终敞口 | **{_cn_sc_p:.2f}x** |\n")
                 w(f"| VolScale基础杠杆 | **{float(_cn_sc_raw_p):.2f}x** |\n")
                 w(f"| 仓位系数 | **{float(_cn_base_frac_p):.2f}** |\n")
-                w(f"| 下一交易日VolScale | **{_cn_next_scale_p:.2f}x** {'🔴 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
+                w(f"| 下一交易日VolScale | **{_cn_next_scale_p:.2f}x** {'🟢 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
                 if _cn_rv_p is not None and not np.isnan(_cn_rv_p):
                     w(f"| 已实现波动率 | {_cn_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_TARGET_VOL:.0%} |\n")
@@ -7965,7 +7936,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_SCALE_THRESHOLD:.2f} |\n")
                 if _cn_pending_p:
-                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_p):.2f}x → {_cn_next_scale_p:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **VolScale调仓! {float(_cn_sc_raw_p):.2f}x → {_cn_next_scale_p:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 最终敞口: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
@@ -8045,7 +8016,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"| 指标 | 值 |\n")
                 w(f"|:-|------:|\n")
                 w(f"| 当前已生效敞口 | **{_dk_sc_p:.2f}x** (VolScale {_dk_cur_vs_p:.2f}x) |\n")
-                w(f"| 下一交易日敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🔴 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
+                w(f"| 下一交易日敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🟢 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
                 if _dk_rv_p is not None and not np.isnan(_dk_rv_p):
                     w(f"| 已实现波动率 | {_dk_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_DK_TARGET_VOL:.0%} |\n")
@@ -8055,7 +8026,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_DK_SCALE_THRESHOLD:.2f} |\n")
                 if _dk_pending_p:
-                    w(f"\n🔴 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-B: 美股7ETF+通胀宏观3ETF\n\n")
@@ -8076,7 +8047,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             _vr_cash_p = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
             if US_ROT_VOLREG_ENABLED and _vr_p is not None:
                 if _vr_p > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🔴 **VolReg风控:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
+                    w(f"🟢 **VolReg风控:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
                 elif _vr_cash_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
                     w(f"🟡 **VolReg风控:** 今日已转现金 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
                 elif _vr_cash_p:
@@ -8245,7 +8216,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _turnover_p = sum(abs(hypo_w.get(e, 0) - current_us_w.get(e, 0)) for e in _all_etfs_p if e != "BIL")
             w(f"\n**⑤ 调仓幅度:** {_turnover_p:.1%}")
             if _turnover_p >= US_ROT_MIN_TURNOVER:
-                w(f" ✅ 超{US_ROT_MIN_TURNOVER:.0%}阈值，{'如为信号日' if not is_us_signal_p else ''}**会调仓**\n")
+                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，{'如为信号日' if not is_us_signal_p else ''}**会调仓**\n")
             else:
                 w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**\n")
             # ⑥ 调仓阈值
