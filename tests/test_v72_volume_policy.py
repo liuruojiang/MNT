@@ -99,6 +99,56 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertTrue(bool(out["suba_volume_unavailable"].iloc[-1]))
         self.assertIn("EastMoney down", out["suba_volume_error"].iloc[-1])
 
+    def test_suba_volume_loader_falls_back_to_proxy_source(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+
+        def fail_eastmoney(secid):
+            raise RuntimeError("EastMoney down")
+
+        def fake_sina(secid):
+            vals = [100.0] * 70 + [90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0, 10.0, 5.0]
+            return pd.DataFrame(
+                {"close": vals, "volume": vals, "amount": vals, "source": "Sina volume proxy"},
+                index=idx,
+            )
+
+        old_eastmoney = mod._fetch_cn_eastmoney_amount
+        old_sina = mod._fetch_cn_sina_amount_proxy
+        try:
+            mod._fetch_cn_eastmoney_amount = fail_eastmoney
+            mod._fetch_cn_sina_amount_proxy = fake_sina
+            signal, feature = mod._load_suba_volume_signal()
+        finally:
+            mod._fetch_cn_eastmoney_amount = old_eastmoney
+            mod._fetch_cn_sina_amount_proxy = old_sina
+
+        self.assertTrue(bool(signal.iloc[-1]))
+        self.assertEqual(feature["zz2000_source"].iloc[-1], "Sina volume proxy")
+        self.assertEqual(feature["cyb_source"].iloc[-1], "Sina volume proxy")
+
+    def test_suba_volume_loader_uses_available_or_leg(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+        vals = [100.0] * 70 + [90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0, 10.0, 5.0]
+
+        def fake_fetch(secid, label):
+            if label == "ZZ2000":
+                raise RuntimeError("ZZ2000 unavailable")
+            return pd.DataFrame({"amount": vals}, index=idx), "Sina volume proxy"
+
+        old_fetch = mod._fetch_cn_amount_with_fallback
+        try:
+            mod._fetch_cn_amount_with_fallback = fake_fetch
+            signal, feature = mod._load_suba_volume_signal()
+        finally:
+            mod._fetch_cn_amount_with_fallback = old_fetch
+
+        self.assertTrue(bool(signal.iloc[-1]))
+        self.assertEqual(feature["zz2000_source"].iloc[-1], "unavailable")
+        self.assertEqual(feature["cyb_source"].iloc[-1], "Sina volume proxy")
+        self.assertTrue(bool(feature["partial_unavailable"].iloc[-1]))
+
 
 if __name__ == "__main__":
     unittest.main()

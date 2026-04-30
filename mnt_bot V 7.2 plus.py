@@ -945,6 +945,29 @@ def _fetch_cn_sina(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
+def _fetch_cn_sina_amount_proxy(secid):
+    symbol = _secid_to_sina(secid)
+    url = (f"https://money.finance.sina.com.cn/quotes_service/api/json_v2.php"
+           f"/CN_MarketData.getKLineData"
+           f"?symbol={symbol}&scale=240&ma=no&datalen=10000")
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data or not isinstance(data, list) or len(data) == 0:
+        raise ValueError(f"Sina returned empty data for {symbol}")
+    rows = []
+    for item in data:
+        rows.append({
+            "date": item["day"],
+            "close": float(item["close"]),
+            "volume": float(item.get("volume", 0) or 0),
+            "amount": float(item.get("volume", 0) or 0),
+            "source": "Sina volume proxy",
+        })
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date").sort_index()
+
 def _fetch_cn_qq_kline(secid, datalen=2000):
     market, code = secid.split(".")
     symbol = ("sh" if market == "1" else "sz") + code
@@ -959,6 +982,33 @@ def _fetch_cn_qq_kline(secid, datalen=2000):
     if not day:
         raise ValueError(f"QQ returned empty kline for {symbol}")
     rows = [{"date": item[0], "close": float(item[2])} for item in day]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date").sort_index()
+
+def _fetch_cn_qq_amount_proxy(secid, datalen=10000):
+    market, code = secid.split(".")
+    symbol = ("sh" if market == "1" else "sz") + code
+    url = (f"https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
+           f"?param={symbol},day,,,{datalen}")
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json().get("data")
+    if not isinstance(data, dict) or symbol not in data or "day" not in data[symbol]:
+        raise ValueError(f"QQ returned empty data for {symbol}")
+    day = data[symbol]["day"]
+    if not day:
+        raise ValueError(f"QQ returned empty kline for {symbol}")
+    rows = []
+    for item in day:
+        volume = float(item[5]) if len(item) > 5 and item[5] not in ("", None) else 0.0
+        rows.append({
+            "date": item[0],
+            "close": float(item[2]),
+            "volume": volume,
+            "amount": volume,
+            "source": "QQ volume proxy",
+        })
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
@@ -1413,24 +1463,56 @@ def _build_consecutive_below_amount_signal(rule_specs, mode="or"):
     feature["combined_signal"] = signal
     return signal.astype(bool), feature
 
+def _fetch_cn_amount_with_fallback(secid, label):
+    errors = []
+    for source_name, fetcher in [
+        ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid)),
+        ("Sina volume proxy", lambda: _fetch_cn_sina_amount_proxy(secid)),
+        ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid)),
+    ]:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50 and "amount" in df.columns:
+                out = df.copy()
+                out["source"] = source_name
+                return out, source_name
+            errors.append(f"{source_name}: empty")
+        except Exception as exc:
+            errors.append(f"{source_name}: {exc}")
+            time.sleep(0.5)
+    raise RuntimeError(f"{label} volume data unavailable; tried {' | '.join(errors[-3:])}")
+
 def _load_suba_volume_signal():
-    zz = _fetch_cn_eastmoney_amount(CN_SA_VOLUME_ZZ2000_SECID)
-    cyb = _fetch_cn_eastmoney_amount(CN_SA_VOLUME_CYB_SECID)
-    return _build_consecutive_below_amount_signal(
-        {
-            "zz2000": {
-                "amount": zz["amount"],
-                "ma": CN_SA_VOLUME_ZZ2000_MA,
-                "days": CN_SA_VOLUME_ZZ2000_DAYS,
-            },
-            "cyb": {
-                "amount": cyb["amount"],
-                "ma": CN_SA_VOLUME_CYB_MA,
-                "days": CN_SA_VOLUME_CYB_DAYS,
-            },
-        },
+    specs = {}
+    sources = {}
+    errors = {}
+    for name, label, secid, ma, days in [
+        ("zz2000", "ZZ2000", CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS),
+        ("cyb", "CYB", CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS),
+    ]:
+        try:
+            df, source = _fetch_cn_amount_with_fallback(secid, label)
+            specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
+            sources[name] = source
+        except Exception as exc:
+            errors[name] = str(exc)
+    if not specs:
+        raise RuntimeError("Sub-A volume data unavailable for all legs: " + " | ".join(f"{k}: {v}" for k, v in errors.items()))
+    signal, feature = _build_consecutive_below_amount_signal(
+        specs,
         mode=CN_SA_VOLUME_RULE_MODE,
     )
+    if len(feature) > 0:
+        for name in ("zz2000", "cyb"):
+            if name in sources:
+                feature[f"{name}_source"] = sources[name]
+            else:
+                feature[f"{name}_source"] = "unavailable"
+                feature[f"{name}_error"] = errors.get(name, "unknown")
+                feature[f"{name}_streak"] = np.nan
+                feature[f"{name}_signal"] = False
+        feature["partial_unavailable"] = bool(errors)
+    return signal, feature
 
 def _mark_suba_volume_unavailable(cn_result, exc):
     out = cn_result.copy()
@@ -1512,14 +1594,19 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix=""):
     scale = cn_result["suba_volume_rule_scale"].iloc[idx] if "suba_volume_rule_scale" in cn_result.columns else (CN_SA_VOLUME_SCALE if on else 1.0)
     zz_streak = cn_result["suba_volume_zz2000_streak"].iloc[idx] if "suba_volume_zz2000_streak" in cn_result.columns else np.nan
     cyb_streak = cn_result["suba_volume_cyb_streak"].iloc[idx] if "suba_volume_cyb_streak" in cn_result.columns else np.nan
+    zz_source = cn_result["suba_volume_zz2000_source"].iloc[idx] if "suba_volume_zz2000_source" in cn_result.columns else "source NA"
+    cyb_source = cn_result["suba_volume_cyb_source"].iloc[idx] if "suba_volume_cyb_source" in cn_result.columns else "source NA"
     zz_text = f"中证2000连续{int(zz_streak)}天" if pd.notna(zz_streak) else "中证2000 NA"
     cyb_text = f"创业板连续{int(cyb_streak)}天" if pd.notna(cyb_streak) else "创业板 NA"
+    source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
+    if "suba_volume_partial_unavailable" in cn_result.columns and bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
+        source_text += "；部分数据源不可用，按可用腿计算"
     mark = "🟡 **触发，Sub-A权益敞口缩到50%**" if on else "🟢 未触发，Sub-A成交额规则维持100%"
     w(
         f"{prefix}**Sub-A成交额规则:** {mark} | "
         f"OR规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 "
         f"或 CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；"
-        f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f}\n"
+        f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f} | {source_text}\n"
     )
 
 def _ticker_to_stooq(ticker):
