@@ -73,6 +73,12 @@ CN_SA_VOLUME_RULE_NAME = (
     f"Sub-A amount OR: ZZ2000<MA{CN_SA_VOLUME_ZZ2000_MA}x{CN_SA_VOLUME_ZZ2000_DAYS} "
     f"or CYB<MA{CN_SA_VOLUME_CYB_MA}x{CN_SA_VOLUME_CYB_DAYS}; scale={CN_SA_VOLUME_SCALE:.2f}"
 )
+CN_CSI_AMOUNT_INDEX_CODES = {
+    "2.932000": "932000",  # 中证2000
+    "1.000300": "000300",  # 沪深300
+    "1.000852": "000852",  # 中证1000
+    "1.000905": "000905",  # 中证500
+}
 
 # 以下成交额规则只作为黄灯提醒，不参与实盘仓位/回测降仓
 CN_DK_VOLUME_POLICY = "warning_only"
@@ -1244,6 +1250,61 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     _csindex_consecutive_fails += 1
     raise last_err or ValueError(f"csindex failed after {effective_retries} retries for {index_code}")
 
+def _fetch_cn_csindex_amount(secid, beg="20050101", lmt=10000, _max_retries=2):
+    index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
+    if not index_code:
+        raise ValueError(f"no csindex amount mapping for {secid}")
+    detail_code = _csindex_detail_page_code(index_code)
+    detail_url = f"https://www.csindex.com.cn/indices/index-detail/{detail_code}"
+    end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
+    url = (
+        f"https://www.csindex.com.cn/csindex-home/perf/index-perf"
+        f"?indexCode={index_code}&startDate={beg}&endDate={end_date}"
+    )
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Referer": detail_url,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    last_err = None
+    for attempt in range(int(_max_retries)):
+        if attempt > 0:
+            time.sleep(1.5 * attempt)
+        try:
+            sess = requests.Session()
+            try:
+                sess.get(detail_url, timeout=10, headers=headers)
+            except requests.exceptions.RequestException:
+                pass
+            resp = sess.get(url, timeout=20, headers=headers)
+            data = resp.json()
+            rows = []
+            for item in data.get("data", []) if isinstance(data, dict) else []:
+                if not item:
+                    continue
+                trading_value = item.get("tradingValue")
+                if trading_value in (None, ""):
+                    continue
+                rows.append({
+                    "date": item.get("tradeDate"),
+                    "close": float(item.get("close")),
+                    "volume": float(item.get("tradingVol", 0) or 0),
+                    "amount": float(trading_value),
+                    "source": f"CSIndex official amount {index_code}",
+                })
+            if rows:
+                df = pd.DataFrame(rows)
+                df["date"] = pd.to_datetime(df["date"])
+                return df.set_index("date").sort_index().tail(int(lmt))
+            last_err = ValueError(f"CSIndex returned no tradingValue rows for {index_code} (HTTP {resp.status_code})")
+            if resp.status_code != 403:
+                resp.raise_for_status()
+        except Exception as exc:
+            last_err = exc
+    raise last_err or ValueError(f"CSIndex amount failed for {index_code}")
+
 def _fetch_cn_csindex_with_candidates(index_code):
     candidates = CN_CSINDEX_CANDIDATES.get(index_code, [index_code])
     last_err = None
@@ -1605,6 +1666,7 @@ def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
     errors = []
     primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
+        ("CSIndex official amount", lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)),
         ("Sohu amount", lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)),
     ]
     for source_name, fetcher in primary_sources:

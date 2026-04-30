@@ -119,6 +119,9 @@ class V72VolumePolicyTests(unittest.TestCase):
         def fail_eastmoney(secid, beg="20050101", lmt=10000):
             raise RuntimeError("EastMoney down")
 
+        def fail_csindex(secid, beg="20050101", lmt=10000):
+            raise RuntimeError("CSIndex down")
+
         def fake_sohu(secid, beg="20050101", lmt=10000):
             vals = [100.0] * 70 + [90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0, 10.0, 5.0]
             return pd.DataFrame(
@@ -127,17 +130,60 @@ class V72VolumePolicyTests(unittest.TestCase):
             )
 
         old_eastmoney = mod._fetch_cn_eastmoney_amount
+        old_csindex = mod._fetch_cn_csindex_amount
         old_sohu = mod._fetch_cn_sohu_amount
         try:
             mod._fetch_cn_eastmoney_amount = fail_eastmoney
+            mod._fetch_cn_csindex_amount = fail_csindex
             mod._fetch_cn_sohu_amount = fake_sohu
             signal, feature = mod._load_suba_volume_signal()
         finally:
             mod._fetch_cn_eastmoney_amount = old_eastmoney
+            mod._fetch_cn_csindex_amount = old_csindex
             mod._fetch_cn_sohu_amount = old_sohu
 
         self.assertTrue(bool(signal.iloc[-1]))
         self.assertEqual(feature["zz2000_source"].iloc[-1], "Sohu amount")
+        self.assertEqual(feature["cyb_source"].iloc[-1], "Sohu amount")
+
+    def test_suba_volume_loader_falls_back_to_csindex_official_amount(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+
+        def fail_eastmoney(secid, beg="20050101", lmt=10000):
+            raise RuntimeError("EastMoney down")
+
+        def fake_csindex(secid, beg="20050101", lmt=10000):
+            if secid == mod.CN_SA_VOLUME_CYB_SECID:
+                raise RuntimeError("not a CSI index")
+            vals = [100.0] * 70 + [90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0, 10.0, 5.0]
+            return pd.DataFrame(
+                {"close": vals, "volume": vals, "amount": vals, "source": "CSIndex official amount 932000"},
+                index=idx,
+            )
+
+        def fake_sohu(secid, beg="20050101", lmt=10000):
+            vals = [100.0] * 80
+            return pd.DataFrame(
+                {"close": vals, "volume": vals, "amount": vals, "source": "Sohu amount"},
+                index=idx,
+            )
+
+        old_eastmoney = mod._fetch_cn_eastmoney_amount
+        old_csindex = mod._fetch_cn_csindex_amount
+        old_sohu = mod._fetch_cn_sohu_amount
+        try:
+            mod._fetch_cn_eastmoney_amount = fail_eastmoney
+            mod._fetch_cn_csindex_amount = fake_csindex
+            mod._fetch_cn_sohu_amount = fake_sohu
+            signal, feature = mod._load_suba_volume_signal()
+        finally:
+            mod._fetch_cn_eastmoney_amount = old_eastmoney
+            mod._fetch_cn_csindex_amount = old_csindex
+            mod._fetch_cn_sohu_amount = old_sohu
+
+        self.assertTrue(bool(signal.iloc[-1]))
+        self.assertEqual(feature["zz2000_source"].iloc[-1], "CSIndex official amount")
         self.assertEqual(feature["cyb_source"].iloc[-1], "Sohu amount")
 
     def test_zz2000_amount_falls_back_to_largest_etf_proxy(self):
@@ -146,6 +192,9 @@ class V72VolumePolicyTests(unittest.TestCase):
 
         def fail_eastmoney(secid, beg="20050101", lmt=10000):
             raise RuntimeError("EastMoney down")
+
+        def fail_csindex(secid, beg="20050101", lmt=10000):
+            raise RuntimeError("CSIndex down")
 
         def fail_sohu_index(secid, beg="20240101", lmt=300):
             raise RuntimeError("Sohu index down")
@@ -159,10 +208,12 @@ class V72VolumePolicyTests(unittest.TestCase):
             )
 
         old_eastmoney = mod._fetch_cn_eastmoney_amount
+        old_csindex = mod._fetch_cn_csindex_amount
         old_sohu = mod._fetch_cn_sohu_amount
         old_fund = mod._fetch_cn_sohu_fund_amount
         try:
             mod._fetch_cn_eastmoney_amount = fail_eastmoney
+            mod._fetch_cn_csindex_amount = fail_csindex
             mod._fetch_cn_sohu_amount = fail_sohu_index
             mod._fetch_cn_sohu_fund_amount = fake_sohu_fund
             df, source = mod._fetch_cn_amount_with_fallback(
@@ -173,6 +224,7 @@ class V72VolumePolicyTests(unittest.TestCase):
             )
         finally:
             mod._fetch_cn_eastmoney_amount = old_eastmoney
+            mod._fetch_cn_csindex_amount = old_csindex
             mod._fetch_cn_sohu_amount = old_sohu
             mod._fetch_cn_sohu_fund_amount = old_fund
 
