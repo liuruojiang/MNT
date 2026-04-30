@@ -55,6 +55,15 @@ CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
 CN_SA_VOLUME_SCALE = 0.50
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
+CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
+    ("1.563300", "中证2000ETF"),
+    ("0.159531", "中证2000ETF"),
+    ("1.562660", "中证2000ETF"),
+    ("0.159532", "中证2000ETF"),
+    ("0.159533", "中证2000ETF"),
+    ("0.159535", "中证2000ETF"),
+    ("0.159536", "中证2000ETF"),
+)
 CN_SA_VOLUME_ZZ2000_MA = 15
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = "0.399006"
@@ -1003,8 +1012,7 @@ def _fetch_cn_sina_amount_proxy(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
-    symbol = _secid_to_sohu_index(secid)
+def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="Sohu amount"):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://q.stock.sohu.com/hisHq"
            f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
@@ -1025,13 +1033,54 @@ def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
             "close": float(item[2]),
             "volume": float(item[7]),
             "amount": float(item[8]),
-            "source": "Sohu amount",
+            "source": source_name,
         })
     if not rows:
         raise ValueError(f"Sohu returned no usable rows for {symbol}")
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index().tail(int(lmt))
+
+def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+    symbol = _secid_to_sohu_index(secid)
+    return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu amount")
+
+def _fetch_cn_sohu_fund_amount(secid, beg="20240101", lmt=300):
+    _market, code = secid.split(".")
+    symbol = "cn_" + code
+    return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu fund amount")
+
+def _fetch_zz2000_etf_amount_proxy(beg="20240101", lmt=300):
+    candidates = []
+    errors = []
+    for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
+        try:
+            df = _fetch_cn_sohu_fund_amount(secid, beg=beg, lmt=lmt)
+            amount = pd.to_numeric(df["amount"], errors="coerce").dropna()
+            if df.empty or amount.empty:
+                errors.append(f"{secid}: empty")
+                continue
+            candidates.append({
+                "secid": secid,
+                "name": name,
+                "df": df,
+                "latest_date": df.index[-1],
+                "latest_amount": float(amount.iloc[-1]),
+            })
+        except Exception as exc:
+            errors.append(f"{secid}: {exc}")
+    if not candidates:
+        raise RuntimeError(f"ZZ2000 ETF proxy unavailable; tried {' | '.join(errors[-3:])}")
+    latest_date = max(item["latest_date"] for item in candidates)
+    same_date = [item for item in candidates if item["latest_date"] == latest_date]
+    selected = max(same_date, key=lambda item: item["latest_amount"])
+    code = selected["secid"].split(".")[-1]
+    source = f"Sohu ETF amount proxy {code}"
+    out = selected["df"].copy()
+    out["source"] = source
+    out["proxy_name"] = selected["name"]
+    out["proxy_secid"] = selected["secid"]
+    return out, source
 
 def _fetch_cn_qq_kline(secid, datalen=2000):
     market, code = secid.split(".")
@@ -1530,9 +1579,31 @@ def _build_consecutive_below_amount_signal(rule_specs, mode="or"):
 
 def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
     errors = []
-    for source_name, fetcher in [
+    primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
         ("Sohu amount", lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)),
+    ]
+    for source_name, fetcher in primary_sources:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50 and "amount" in df.columns:
+                out = df.copy()
+                out["source"] = source_name
+                return out, source_name
+            errors.append(f"{source_name}: empty")
+        except Exception as exc:
+            errors.append(f"{source_name}: {exc}")
+            time.sleep(0.5)
+    if secid == CN_SA_VOLUME_ZZ2000_SECID:
+        try:
+            df, source_name = _fetch_zz2000_etf_amount_proxy(beg=beg, lmt=lmt)
+            if df is not None and len(df) > 50 and "amount" in df.columns:
+                return df, source_name
+            errors.append("ZZ2000 ETF proxy: empty")
+        except Exception as exc:
+            errors.append(f"ZZ2000 ETF proxy: {exc}")
+            time.sleep(0.5)
+    for source_name, fetcher in [
         ("Sina volume proxy", lambda: _fetch_cn_sina_amount_proxy(secid)),
         ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)),
     ]:
@@ -7601,7 +7672,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；中证2000指数不可用时，用中证2000ETF候选池最新成交额最大者代理 |\n")
             w(f"| 成交额触发后仓位 | **{CN_SA_VOLUME_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
@@ -7734,7 +7805,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%}；ZZ2000指数不可用时用最大成交额中证2000ETF代理 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")

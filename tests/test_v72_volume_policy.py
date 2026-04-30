@@ -140,6 +140,46 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertEqual(feature["zz2000_source"].iloc[-1], "Sohu amount")
         self.assertEqual(feature["cyb_source"].iloc[-1], "Sohu amount")
 
+    def test_zz2000_amount_falls_back_to_largest_etf_proxy(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+
+        def fail_eastmoney(secid, beg="20050101", lmt=10000):
+            raise RuntimeError("EastMoney down")
+
+        def fail_sohu_index(secid, beg="20240101", lmt=300):
+            raise RuntimeError("Sohu index down")
+
+        def fake_sohu_fund(secid, beg="20240101", lmt=300):
+            last_amount = 500.0 if secid == "1.563300" else 100.0
+            vals = [100.0] * 79 + [last_amount]
+            return pd.DataFrame(
+                {"close": vals, "volume": vals, "amount": vals, "source": "Sohu fund amount"},
+                index=idx,
+            )
+
+        old_eastmoney = mod._fetch_cn_eastmoney_amount
+        old_sohu = mod._fetch_cn_sohu_amount
+        old_fund = mod._fetch_cn_sohu_fund_amount
+        try:
+            mod._fetch_cn_eastmoney_amount = fail_eastmoney
+            mod._fetch_cn_sohu_amount = fail_sohu_index
+            mod._fetch_cn_sohu_fund_amount = fake_sohu_fund
+            df, source = mod._fetch_cn_amount_with_fallback(
+                mod.CN_SA_VOLUME_ZZ2000_SECID,
+                "ZZ2000",
+                beg="20240101",
+                lmt=180,
+            )
+        finally:
+            mod._fetch_cn_eastmoney_amount = old_eastmoney
+            mod._fetch_cn_sohu_amount = old_sohu
+            mod._fetch_cn_sohu_fund_amount = old_fund
+
+        self.assertEqual(source, "Sohu ETF amount proxy 563300")
+        self.assertEqual(df["proxy_secid"].iloc[-1], "1.563300")
+        self.assertEqual(float(df["amount"].iloc[-1]), 500.0)
+
     def test_suba_volume_loader_uses_available_or_leg(self):
         mod = self.module
         idx = pd.date_range("2024-01-01", periods=80, freq="D")
