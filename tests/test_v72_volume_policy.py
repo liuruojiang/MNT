@@ -74,6 +74,13 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertNotIn("CN_DK_VOLUME_DERISK_ENABLED = True", V72_BOT_PATH.read_text(encoding="utf-8"))
         self.assertNotIn("MICROCAP_VOLUME_DERISK_ENABLED = True", V72_BOT_PATH.read_text(encoding="utf-8"))
 
+    def test_v72_query_aliases_are_exposed(self):
+        source = V72_BOT_PATH.read_text(encoding="utf-8")
+        self.assertIn("信号实时", source)
+        self.assertIn("参数实时", source)
+        self.assertIn("信号参数", source)
+        self.assertIn('query_compact = re.sub(r"\\s+", "", query)', source)
+
 
 if __name__ == "__main__":
     unittest.main()

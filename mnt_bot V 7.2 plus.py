@@ -6031,8 +6031,9 @@ _BOT_SETTINGS = SettingsResponse(
         "V7.2组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15% + Sub-B 60%\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
-        '- 发送 **"实时信号"** -> 盘中实时快照\n'
-        '- 发送 **"参数"** / **"实时参数"** -> 策略参数\n\n'
+        '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
+        '- 发送 **"参数"** / **"信号参数"** -> 策略参数总览\n'
+        '- 发送 **"实时参数"** / **"参数实时"** -> 实时参数快照\n\n'
         "**绩效分析：**\n"
         '- 发送 **"表现 过去两年"** / **"表现 2024至今"** / **"表现 最近6个月"**\n'
         '- 发送 **"净值曲线 过去两年"** / **"净值曲线 今年"**\n\n'
@@ -6091,6 +6092,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
 
     def run(self):
         query = poe.query.text.strip()
+        query_compact = re.sub(r"\s+", "", query)
         if "净值曲线" in query:
             self._handle_nav_chart(query)
         elif re.search(r'表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
@@ -6103,9 +6105,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     self._handle_performance(query, _forced_range=r)
         elif re.search(r'收益曲线|走势', query):
             self._handle_nav_chart(query)
-        elif "实时信号" in query:
+        elif "实时信号" in query_compact or "信号实时" in query_compact:
             self._handle_live_signal()
-        elif "实时参数" in query:
+        elif "实时参数" in query_compact or "参数实时" in query_compact:
             self._handle_live_params()
         elif ("设置" in query or "设定" in query or "配置" in query) and "资金" in query:
             self._handle_set_capital()
