@@ -395,6 +395,28 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertEqual(snap["previous_regime"], "4-噩梦模式")
         self.assertEqual(snap["regime"], "3-困难模式")
 
+    def test_sp500_note_does_not_use_embedded_snapshot_when_live_fails(self):
+        mod = self.module
+
+        old_csv = mod._load_sp500_risk_regime_csv_snapshot
+        old_live = mod._fetch_sp500_risk_regime_live_snapshot
+        old_inflation = mod._load_inflation_pressure_snapshot
+        try:
+            mod._load_sp500_risk_regime_csv_snapshot = lambda *args, **kwargs: None
+            mod._fetch_sp500_risk_regime_live_snapshot = lambda: (_ for _ in ()).throw(RuntimeError("live down"))
+            mod._load_inflation_pressure_snapshot = lambda: (_ for _ in ()).throw(RuntimeError("inflation down"))
+            msg = _MsgStub()
+            mod._write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
+        finally:
+            mod._load_sp500_risk_regime_csv_snapshot = old_csv
+            mod._fetch_sp500_risk_regime_live_snapshot = old_live
+            mod._load_inflation_pressure_snapshot = old_inflation
+
+        self.assertIn("S&P风险等级: **UNKNOWN**", msg.text)
+        self.assertIn("实时计算失败", msg.text)
+        self.assertNotIn("脚本内置快照", msg.text)
+        self.assertNotIn("2-普通模式", msg.text)
+
 
 if __name__ == "__main__":
     unittest.main()

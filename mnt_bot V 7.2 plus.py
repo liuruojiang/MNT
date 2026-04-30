@@ -640,7 +640,7 @@ def _load_sp500_risk_regime_csv_snapshot(search_paths=None, live_error=None):
     return None
 
 
-def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_recent_csv=False, asof_date=None):
+def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_recent_csv=False, asof_date=None, allow_embedded=True):
     csv_snapshot = _load_sp500_risk_regime_csv_snapshot(search_paths=search_paths)
     if prefer_recent_csv and csv_snapshot is not None and _sp500_risk_regime_snapshot_is_current_week(
         csv_snapshot, asof_date=asof_date
@@ -657,6 +657,11 @@ def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_
     if csv_snapshot is not None:
         csv_snapshot["live_error"] = live_error
         return csv_snapshot
+
+    if not allow_embedded:
+        if live_error:
+            raise RuntimeError(f"S&P 500 risk regime live calculation failed: {live_error}")
+        raise RuntimeError("S&P 500 risk regime data unavailable")
 
     embedded = dict(SP500_RISK_REGIME_EMBEDDED_SNAPSHOT)
     embedded["latest_date"] = pd.Timestamp(embedded["latest_date"])
@@ -788,33 +793,39 @@ def _short_error(exc, max_len=120):
     return text if len(text) <= max_len else text[:max_len] + "..."
 
 def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
-    snapshot = _load_sp500_risk_regime_snapshot(prefer_recent_csv=prefer_recent_csv)
     w = msg.write
-    latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
-    changed_date = snapshot["regime_changed_date"].strftime("%Y-%m-%d")
-    flags = []
-    if snapshot["feature_veto"]:
-        flags.append("单因子否决权触发")
-    if snapshot["oversold_turn_rule"]:
-        flags.append("超跌拐头减分")
-    flag_text = f" | 规则: {'、'.join(flags)}" if flags else ""
-    if snapshot.get("source_type") == "live":
-        source_desc = snapshot.get("source_file", "FRED+Yahoo实时计算")
-    elif snapshot.get("source_type") == "csv":
-        source_desc = f"新策略学习/{snapshot['source_file']}"
-    else:
-        source_desc = snapshot.get("source_file", "脚本内置快照")
     w("### S&P 500风险等级与通胀开关（仅提示）\n")
-    _prev_regime = snapshot.get("previous_regime")
-    if _prev_regime and _prev_regime != snapshot["regime"]:
-        _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
-    else:
-        _change_text = changed_date
-    w(f"数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{_change_text}**\n")
-    w(
-        f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** "
-        f"| 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n"
-    )
+    try:
+        snapshot = _load_sp500_risk_regime_snapshot(prefer_recent_csv=prefer_recent_csv, allow_embedded=False)
+        latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
+        changed_date = snapshot["regime_changed_date"].strftime("%Y-%m-%d")
+        flags = []
+        if snapshot["feature_veto"]:
+            flags.append("单因子否决权触发")
+        if snapshot["oversold_turn_rule"]:
+            flags.append("超跌拐头减分")
+        flag_text = f" | 规则: {'、'.join(flags)}" if flags else ""
+        if snapshot.get("source_type") == "live":
+            source_desc = snapshot.get("source_file", "FRED+Yahoo实时计算")
+        elif snapshot.get("source_type") == "csv":
+            source_desc = f"新策略学习/{snapshot['source_file']}"
+        else:
+            source_desc = snapshot.get("source_file", "脚本内置快照")
+        _prev_regime = snapshot.get("previous_regime")
+        if _prev_regime and _prev_regime != snapshot["regime"]:
+            _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
+        else:
+            _change_text = changed_date
+        w(f"数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{_change_text}**\n")
+        w(
+            f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** "
+            f"| 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n"
+        )
+    except Exception as exc:
+        w(
+            "数据: FRED+Yahoo实时计算 | S&P风险等级: **UNKNOWN** | "
+            f"本次实时计算失败: {_short_error(exc)}\n"
+        )
     inflation = None
     try:
         inflation = _load_inflation_pressure_snapshot()

@@ -137,6 +137,7 @@ MICROCAP_VOLUME_POLICY = "warning_only"
 V7.2 保留 V7.1 已有的 S&P 500 风险等级提醒，并扩展为组合风险观察区：
 
 - S&P 500 风险等级：仅提示，不直接改仓。
+- Poe 运行时 S&P 500 风险等级依赖 FRED+Yahoo 实时计算；实时失败时显示 `UNKNOWN`，不再用脚本内置快照冒充当前信号。
 - 通胀压力：控制 `UUP/DBMF/KMLM` 是否进入 Sub-B。
 - DK 成交额黄灯：仅提示。
 - 微盘成交额/成交量黄灯：仅提示。
