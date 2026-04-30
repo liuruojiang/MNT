@@ -769,7 +769,12 @@ def _subb_inflation_gate_context(close_df, row_idx):
     return out
 
 
-def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
+def _short_error(exc, max_len=120):
+    text = str(exc).replace("\n", " ").replace("\r", " ")
+    text = re.sub(r"https?://\S+", "[url]", text)
+    return text if len(text) <= max_len else text[:max_len] + "..."
+
+def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
     snapshot = _load_sp500_risk_regime_snapshot(prefer_recent_csv=prefer_recent_csv)
     w = msg.write
     latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
@@ -786,7 +791,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
         source_desc = f"新策略学习/{snapshot['source_file']}"
     else:
         source_desc = snapshot.get("source_file", "脚本内置快照")
-    w("### S&P 500风险等级（仅提示）\n")
+    w("### S&P 500风险等级与通胀开关（仅提示）\n")
     _prev_regime = snapshot.get("previous_regime")
     if _prev_regime and _prev_regime != snapshot["regime"]:
         _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
@@ -797,6 +802,25 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
         f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** "
         f"| 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n"
     )
+    inflation = None
+    try:
+        inflation = _load_inflation_pressure_snapshot()
+        infl_state = "ON" if inflation["pressure_on"] else "OFF"
+        macro_action = "UUP/DBMF/KMLM 参与 Sub-B 候选池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不参与 Sub-B，只作参考"
+        w(
+            f"通胀开关: **{infl_state}** | {macro_action} | "
+            f"DBC {inflation['lookback']}日 {inflation['dbc_mom']:+.2%}, "
+            f"TLT {inflation['lookback']}日 {inflation['tlt_mom']:+.2%} | "
+            f"数据日 {inflation['latest_date'].strftime('%Y-%m-%d')}\n"
+        )
+        if compact:
+            w("规则: DBC动量>0 且 TLT动量<0 时，通胀开关为 ON。\n\n---\n\n")
+            return
+    except Exception as exc:
+        w(f"通胀开关: **UNKNOWN** | 本次未取到 DBC/TLT/UUP 市场数据: {_short_error(exc)}\n")
+        if compact:
+            w("\n---\n\n")
+            return
     w(f"信用口径: {snapshot['source_label']}（{snapshot['credit_series']}）\n")
     if snapshot.get("source_type") == "live":
         input_dates = snapshot.get("input_dates", {})
@@ -813,9 +837,10 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
     else:
         if snapshot.get("live_error"):
             w("⚠️ 实时数据源本次未完整取到，当前显示为非实时备用快照；不要把它当作最新确认预警。\n")
-            w(f"实时取数失败原因: {snapshot['live_error']}\n")
+            w(f"实时取数失败原因: {_short_error(snapshot['live_error'])}\n")
     try:
-        inflation = _load_inflation_pressure_snapshot()
+        if inflation is None:
+            inflation = _load_inflation_pressure_snapshot()
         w(
             f"通胀压力: **{inflation['label']}** | DBC {inflation['lookback']}日 **{inflation['dbc_mom']:.2%}** "
             f"| TLT {inflation['lookback']}日 **{inflation['tlt_mom']:.2%}** | UUP {inflation['lookback']}日 **{inflation['uup_mom']:.2%}**\n"
@@ -832,7 +857,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False):
         elif "cpi_error" in inflation:
             w(f"CPI背景: 本次未取到FRED CPIAUCSL，仅显示市场型通胀预警；原因: {inflation['cpi_error']}\n")
     except Exception as exc:
-        w(f"⚠️ 通胀压力提示本次未取到 DBC/TLT/UUP 市场数据: {exc}\n")
+        w(f"⚠️ 通胀压力提示本次未取到 DBC/TLT/UUP 市场数据: {_short_error(exc)}\n")
     w("定位: S&P风险等级只作组合级美股风险预算提示；通胀压力用于控制 UUP/DBMF/KMLM 是否进入 Sub-B 候选池。\n\n---\n\n")
 
 
@@ -1537,10 +1562,11 @@ def _volume_warning_status(secid, ma, days, label):
         "days": int(days),
     }
 
-def _write_volume_warning_panel(msg):
+def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额黄灯提醒（仅提示）\n")
-    w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
+    if not compact:
+        w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
     try:
         dk = _volume_warning_status(
             CN_DK_VOLUME_YELLOW_SECID,
@@ -1548,13 +1574,13 @@ def _write_volume_warning_panel(msg):
             CN_DK_VOLUME_YELLOW_DAYS,
             CN_DK_VOLUME_YELLOW_LABEL,
         )
-        dk_mark = "🟡 触发" if dk["triggered"] else "🟢 未触发"
+        dk_mark = "ON" if dk["triggered"] else "OFF"
         w(
-            f"- Sub-A-DK黄灯: {dk['label']}成交额 < MA{dk['ma']} 连续{dk['days']}天；"
-            f"当前连续{dk['streak']}天，{dk_mark}。政策: {CN_DK_VOLUME_POLICY}。\n"
+            f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额低于MA{dk['ma']}连续{dk['streak']}/{dk['days']}天。\n"
         )
     except Exception as exc:
-        w(f"- Sub-A-DK黄灯: 本次未取到沪深300成交额，政策仍为 {CN_DK_VOLUME_POLICY}；原因: {exc}\n")
+        suffix = "" if compact else f" 原因: {_short_error(exc)}"
+        w(f"- Sub-A-DK黄灯: **UNKNOWN** | 本次未取到沪深300成交额。{suffix}\n")
     try:
         zz = _volume_warning_status(
             MICROCAP_BROAD_VOLUME_ZZ2000_SECID,
@@ -1569,25 +1595,25 @@ def _write_volume_warning_panel(msg):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🟡 触发" if micro_on else "🟢 未触发"
+        micro_mark = "ON" if micro_on else "OFF"
         w(
-            f"- 微盘宽口径黄灯: 中证2000 MA{zz['ma']}/{zz['days']}天 AND "
-            f"创业板 MA{cyb['ma']}/{cyb['days']}天；当前分别连续{zz['streak']}天/{cyb['streak']}天，"
-            f"{micro_mark}。政策: {MICROCAP_VOLUME_POLICY}。\n"
+            f"- 微盘宽口径黄灯: **{micro_mark}** | 中证2000 {zz['streak']}/{zz['days']}天 AND "
+            f"创业板 {cyb['streak']}/{cyb['days']}天。\n"
         )
     except Exception as exc:
-        w(f"- 微盘宽口径黄灯: 本次未取到中证2000/创业板成交额，政策仍为 {MICROCAP_VOLUME_POLICY}；原因: {exc}\n")
-    w(f"- 微盘指数成交量黄灯: {MICROCAP_DIRECT_VOLUME_VENDOR} 已纳入观察口径；样本短，仅提示，不作为 V7.2 实盘参数。\n\n---\n\n")
+        suffix = "" if compact else f" 原因: {_short_error(exc)}"
+        w(f"- 微盘宽口径黄灯: **UNKNOWN** | 本次未取到中证2000/创业板成交额。{suffix}\n")
+    w(f"- 微盘指数成交量: {MICROCAP_DIRECT_VOLUME_VENDOR} 仅观察，不作为 V7.2 实盘参数。\n\n---\n\n")
 
-def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix=""):
+def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
     if "suba_volume_rule_on" not in cn_result.columns:
         return
     w = msg.write
     if "suba_volume_unavailable" in cn_result.columns and bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         reason = cn_result["suba_volume_error"].iloc[idx] if "suba_volume_error" in cn_result.columns else "unknown"
+        suffix = "" if compact else f" 原因: {_short_error(reason)}"
         w(
-            f"{prefix}**Sub-A成交额规则:** ⚠️ 本次未取到中证2000/创业板成交额，"
-            f"无法确认正式缩量规则；本次Sub-A成交额scale暂按1.00处理。原因: {reason}\n"
+            f"{prefix}**Sub-A成交额规则:** UNKNOWN | 本次无法确认正式缩量规则，成交额scale暂按1.00。{suffix}\n"
         )
         return
     on = bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -1601,13 +1627,19 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix=""):
     source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
     if "suba_volume_partial_unavailable" in cn_result.columns and bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
         source_text += "；部分数据源不可用，按可用腿计算"
-    mark = "🟡 **触发，Sub-A权益敞口缩到50%**" if on else "🟢 未触发，Sub-A成交额规则维持100%"
-    w(
-        f"{prefix}**Sub-A成交额规则:** {mark} | "
-        f"OR规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 "
-        f"或 CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；"
-        f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f} | {source_text}\n"
-    )
+    mark = "ON" if on else "OFF"
+    if compact:
+        w(
+            f"{prefix}**Sub-A成交额规则:** **{mark}** | 成交额scale={float(scale):.2f} | "
+            f"ZZ2000 {zz_text.replace('中证2000连续', '')} / CYB {cyb_text.replace('创业板连续', '')}\n"
+        )
+    else:
+        w(
+            f"{prefix}**Sub-A成交额规则:** **{mark}** | "
+            f"OR规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 "
+            f"或 CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；"
+            f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f} | {source_text}\n"
+        )
 
 def _ticker_to_stooq(ticker):
     special = {"BTC-USD": "btc.v"}
@@ -6518,14 +6550,15 @@ class CombinedStrategyV72(CombinedStrategyBase):
             if "weight" in cn_result.columns:
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 _cn_sc_raw_rt = cn_result["scale_raw"].iloc[_cn_display_idx] if "scale_raw" in cn_result.columns else _cn_sc_rt
+                _cn_base_frac_rt = cn_result["base_weight"].iloc[_cn_display_idx] if "base_weight" in cn_result.columns else (_cn_sc_rt / _cn_sc_raw_rt if _cn_sc_raw_rt else 0.0)
                 _cn_rv_rt = cn_result["realized_vol"].iloc[_cn_display_idx] if "realized_vol" in cn_result.columns else None
                 # 前瞻: 用最新 realized_vol 计算下一交易日杠杆
                 _cn_next_raw, _cn_next_scale, _cn_pending = _compute_next_vol_scale(
                     _cn_rv_rt, _cn_sc_raw_rt,
                     CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 if _cn_pending and not _cn_intraday:
-                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt:.2f}x → {_cn_next_scale:.2f}x | 下一交易日开盘前执行**\n")
-                w(f"**波动率缩放:** 当前 **{_cn_sc_rt:.2f}x**")
+                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_rt):.2f}x → {_cn_next_scale:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
+                w(f"**Sub-A最终敞口:** **{_cn_sc_rt:.2f}x** = VolScale **{float(_cn_sc_raw_rt):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt):.2f}**")
                 if _cn_rv_rt is not None and not np.isnan(_cn_rv_rt):
                     w(f" | 已实现波动率: {_cn_rv_rt:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
@@ -6537,9 +6570,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f"🛡️ **Sub-A同向过热防守生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
                     else:
                         w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
-                _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx)
+                _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx, compact=True)
                 if not _cn_pending:
-                    w(f"✅ 杠杆: **{_cn_sc_rt:.2f}x** (下一交易日维持)")
+                    w(f"✅ 最终敞口: **{_cn_sc_rt:.2f}x** (下一交易日维持)")
                     if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw - float(_cn_sc_raw_rt)) > 0.001:
                         w(f" | 理论: {_cn_next_raw:.2f}x (|Δ|={abs(_cn_next_raw - float(_cn_sc_raw_rt)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
@@ -6688,8 +6721,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True)
-            _write_volume_warning_panel(msg)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
+            _write_volume_warning_panel(msg, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
@@ -7053,13 +7086,14 @@ class CombinedStrategyV72(CombinedStrategyBase):
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
                 _cn_sc_raw_rt3 = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_rt3
+                _cn_base_frac_rt3 = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else (_cn_sc_rt3 / _cn_sc_raw_rt3 if _cn_sc_raw_rt3 else 0.0)
                 _cn_rv_rt3 = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
                 _cn_next_raw3, _cn_next_scale3, _cn_pending3 = _compute_next_vol_scale(
                     _cn_rv_rt3, float(_cn_sc_raw_rt3),
                     CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
                 if _cn_pending3:
-                    w(f"\n🔴 **杠杆调仓! {_cn_sc_rt3:.2f}x → {_cn_next_scale3:.2f}x | 下一交易日开盘前执行**\n")
-                w(f"**波动率缩放:** 当前 **{_cn_sc_rt3:.2f}x**")
+                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_rt3):.2f}x → {_cn_next_scale3:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
+                w(f"**Sub-A最终敞口:** **{_cn_sc_rt3:.2f}x** = VolScale **{float(_cn_sc_raw_rt3):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt3):.2f}**")
                 if _cn_rv_rt3 is not None and not np.isnan(_cn_rv_rt3):
                     w(f" | 已实现波动率: {_cn_rv_rt3:.1%}")
                 w(f" | 目标: {CN_TARGET_VOL:.0%}\n")
@@ -7073,7 +7107,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
                 _write_suba_volume_overlay_status(msg, cn_result, -1)
                 if not _cn_pending3:
-                    w(f"✅ 杠杆: **{_cn_sc_rt3:.2f}x** (下一交易日维持)")
+                    w(f"✅ 最终敞口: **{_cn_sc_rt3:.2f}x** (下一交易日维持)")
                     if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)) > 0.001:
                         w(f" | 理论: {_cn_next_raw3:.2f}x (|Δ|={abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)):.4f} < {CN_SCALE_THRESHOLD}阈值)")
                     w("\n")
@@ -7196,8 +7230,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True)
-            _write_volume_warning_panel(msg)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
+            _write_volume_warning_panel(msg, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
@@ -7639,6 +7673,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _write_suba_volume_overlay_status(msg, cn_result, -1, prefix="⑥ ")
                 _cn_sc_p = cn_result["weight"].iloc[-1]
                 _cn_sc_raw_p = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_p
+                _cn_base_frac_p = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else (_cn_sc_p / _cn_sc_raw_p if _cn_sc_raw_p else 0.0)
                 _cn_rv_p = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
                 _cn_next_raw_p, _cn_next_scale_p, _cn_pending_p = _compute_next_vol_scale(
                     _cn_rv_p, float(_cn_sc_raw_p),
@@ -7646,8 +7681,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"\n**⑦ 波动率缩放:**\n\n")
                 w(f"| 指标 | 值 |\n")
                 w(f"|:-|------:|\n")
-                w(f"| 当前已生效杠杆 | **{_cn_sc_p:.2f}x** |\n")
-                w(f"| 下一交易日杠杆 | **{_cn_next_scale_p:.2f}x** {'🔴 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
+                w(f"| 当前最终敞口 | **{_cn_sc_p:.2f}x** |\n")
+                w(f"| VolScale基础杠杆 | **{float(_cn_sc_raw_p):.2f}x** |\n")
+                w(f"| 仓位系数 | **{float(_cn_base_frac_p):.2f}** |\n")
+                w(f"| 下一交易日VolScale | **{_cn_next_scale_p:.2f}x** {'🔴 需调仓' if _cn_pending_p else '✅ 维持'} |\n")
                 if _cn_rv_p is not None and not np.isnan(_cn_rv_p):
                     w(f"| 已实现波动率 | {_cn_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_TARGET_VOL:.0%} |\n")
@@ -7657,9 +7694,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_SCALE_THRESHOLD:.2f} |\n")
                 if _cn_pending_p:
-                    w(f"\n🔴 **杠杆调仓! {_cn_sc_p:.2f}x → {_cn_next_scale_p:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🔴 **VolScale调仓! {float(_cn_sc_raw_p):.2f}x → {_cn_next_scale_p:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
                 else:
-                    w(f"\n✅ 杠杆: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
+                    w(f"\n✅ 最终敞口: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
