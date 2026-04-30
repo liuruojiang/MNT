@@ -347,6 +347,14 @@ class V72VolumePolicyTests(unittest.TestCase):
             self.assertNotIn("### Sub-C", method_source)
             self.assertNotIn('"Sub-C"', method_source)
 
+    def test_embedded_sp500_regime_transition_matches_v71_display(self):
+        mod = self.module
+        snap = mod.SP500_RISK_REGIME_EMBEDDED_SNAPSHOT
+        self.assertEqual(snap["latest_date"], "2026-04-24")
+        self.assertEqual(snap["regime_changed_date"], "2026-04-10")
+        self.assertEqual(snap["previous_regime"], "4-噩梦模式")
+        self.assertEqual(snap["regime"], "3-困难模式")
+
 
 if __name__ == "__main__":
     unittest.main()

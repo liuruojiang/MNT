@@ -329,7 +329,7 @@ SP500_RISK_REGIME_FILES = [
 SP500_RISK_REGIME_EMBEDDED_SNAPSHOT = {
     "latest_date": "2026-04-24",
     "regime_changed_date": "2026-04-10",
-    "previous_regime": "2-普通模式",
+    "previous_regime": "4-噩梦模式",
     "risk_score": 45.02319247785299,
     "regime": "3-困难模式",
     "suggested_equity_budget": "70%",
