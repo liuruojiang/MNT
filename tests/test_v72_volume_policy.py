@@ -112,6 +112,45 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertTrue(bool(out["suba_volume_unavailable"].iloc[-1]))
         self.assertIn("EastMoney down", out["suba_volume_error"].iloc[-1])
 
+    def test_suba_volume_overlay_forward_fills_latest_confirmed_amount_status(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=3, freq="D")
+        cn_result = pd.DataFrame(
+            {
+                "return": [0.0, 0.01, 0.02],
+                "holding": ["1.H00852", "1.H00852", "1.H00852"],
+                "holding_fraction": [1.0, 1.0, 1.0],
+            },
+            index=idx,
+        )
+        close_df = pd.DataFrame({"1.H00852": [100.0, 101.0, 102.0]}, index=idx)
+        volume_signal = pd.Series([False, True], index=idx[:2])
+        volume_feature = pd.DataFrame(
+            {
+                "zz2000_streak": [0, 3],
+                "cyb_streak": [0, 0],
+                "zz2000_source": ["CSIndex official amount", "CSIndex official amount"],
+                "cyb_source": ["Sohu amount", "Sohu amount"],
+                "combined_unresolved": [False, False],
+                "partial_unavailable": [False, False],
+            },
+            index=idx[:2],
+        )
+
+        out = mod.apply_suba_volume_overlay(cn_result, close_df, volume_signal, volume_feature)
+
+        self.assertTrue(bool(out["suba_volume_rule_on"].iloc[-1]))
+        self.assertEqual(int(out["suba_volume_zz2000_streak"].iloc[-1]), 3)
+        self.assertEqual(out["suba_volume_zz2000_source"].iloc[-1], "CSIndex official amount")
+        self.assertFalse(bool(out["suba_volume_partial_unavailable"].iloc[-1]))
+
+        msg = _MsgStub()
+        mod._write_suba_volume_overlay_status(msg, out, compact=False)
+        self.assertIn("当前**触发**", msg.text)
+        self.assertIn("中证2000连续3天", msg.text)
+        self.assertIn("ZZ2000=CSIndex official amount", msg.text)
+        self.assertNotIn("nan", msg.text)
+
     def test_suba_volume_loader_falls_back_to_sohu_amount_source(self):
         mod = self.module
         idx = pd.date_range("2024-01-01", periods=80, freq="D")

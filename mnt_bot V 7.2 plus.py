@@ -1949,7 +1949,14 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if "suba_volume_rule_on" not in cn_result.columns:
         return
     w = msg.write
-    if "suba_volume_unavailable" in cn_result.columns and bool(cn_result["suba_volume_unavailable"].iloc[idx]):
+
+    def _cell_bool(value):
+        return False if pd.isna(value) else bool(value)
+
+    def _cell_text(value, fallback="unavailable"):
+        return fallback if pd.isna(value) else str(value)
+
+    if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         reason = cn_result["suba_volume_error"].iloc[idx] if "suba_volume_error" in cn_result.columns else "unknown"
         suffix = "" if compact else f" 原因: {_short_error(reason)}"
         w(
@@ -1957,18 +1964,18 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
             f"本次无法确认正式缩量规则，成交额scale暂按1.00。{suffix}\n"
         )
         return
-    on = bool(cn_result["suba_volume_rule_on"].iloc[idx])
+    on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
     scale = cn_result["suba_volume_rule_scale"].iloc[idx] if "suba_volume_rule_scale" in cn_result.columns else (CN_SA_VOLUME_SCALE if on else 1.0)
     zz_streak = cn_result["suba_volume_zz2000_streak"].iloc[idx] if "suba_volume_zz2000_streak" in cn_result.columns else np.nan
     cyb_streak = cn_result["suba_volume_cyb_streak"].iloc[idx] if "suba_volume_cyb_streak" in cn_result.columns else np.nan
-    zz_source = cn_result["suba_volume_zz2000_source"].iloc[idx] if "suba_volume_zz2000_source" in cn_result.columns else "source NA"
-    cyb_source = cn_result["suba_volume_cyb_source"].iloc[idx] if "suba_volume_cyb_source" in cn_result.columns else "source NA"
+    zz_source = _cell_text(cn_result["suba_volume_zz2000_source"].iloc[idx]) if "suba_volume_zz2000_source" in cn_result.columns else "source NA"
+    cyb_source = _cell_text(cn_result["suba_volume_cyb_source"].iloc[idx]) if "suba_volume_cyb_source" in cn_result.columns else "source NA"
     zz_text = f"中证2000连续{int(zz_streak)}天" if pd.notna(zz_streak) else "中证2000 NA"
     cyb_text = f"创业板连续{int(cyb_streak)}天" if pd.notna(cyb_streak) else "创业板 NA"
     source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
-    if "suba_volume_partial_unavailable" in cn_result.columns and bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
+    if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
         source_text += "；部分数据源不可用，按可用腿计算"
-    unresolved = "suba_volume_unresolved" in cn_result.columns and bool(cn_result["suba_volume_unresolved"].iloc[idx])
+    unresolved = "suba_volume_unresolved" in cn_result.columns and _cell_bool(cn_result["suba_volume_unresolved"].iloc[idx])
     if unresolved and not on:
         if compact:
             w(
@@ -2815,7 +2822,13 @@ def apply_suba_volume_overlay(
         if "effective_fraction" in cn_result.columns
         else cn_result["holding_fraction"].fillna(0.0).astype(float)
     )
-    signal_s = pd.Series(volume_signal, dtype=bool).reindex(cn_result.index).fillna(False).astype(bool)
+    signal_s = (
+        pd.Series(volume_signal, dtype="boolean")
+        .reindex(cn_result.index)
+        .ffill()
+        .fillna(False)
+        .astype(bool)
+    )
     eff_h = []
     eff_f = []
     signal_flags = []
@@ -2839,7 +2852,15 @@ def apply_suba_volume_overlay(
         "suba_volume_rule_name": pd.Series(rule_name, index=cn_result.index),
     }
     if volume_feature is not None and len(volume_feature) > 0:
-        aligned_feature = volume_feature.reindex(cn_result.index)
+        aligned_feature = volume_feature.reindex(cn_result.index).copy()
+        try:
+            with pd.option_context("future.no_silent_downcasting", True):
+                for col in aligned_feature.columns:
+                    aligned_feature[col] = aligned_feature[col].ffill()
+        except Exception:
+            for col in aligned_feature.columns:
+                aligned_feature[col] = aligned_feature[col].ffill()
+        aligned_feature = aligned_feature.infer_objects(copy=False)
         for col in aligned_feature.columns:
             extra_cols[f"suba_volume_{col}"] = aligned_feature[col]
         if "combined_unresolved" in aligned_feature.columns:
