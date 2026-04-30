@@ -502,6 +502,34 @@ class V72VolumePolicyTests(unittest.TestCase):
 
         self.assertIn("通胀开关: **🟢 ON**", msg.text)
 
+    def test_sp500_note_noncompact_survives_risk_failure_with_inflation_data(self):
+        mod = self.module
+        old_snapshot = mod._load_sp500_risk_regime_snapshot
+        old_inflation = mod._load_inflation_pressure_snapshot
+        try:
+            mod._load_sp500_risk_regime_snapshot = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("risk down"))
+            mod._load_inflation_pressure_snapshot = lambda: {
+                "pressure_on": True,
+                "label": "2-通胀压力",
+                "lookback": 126,
+                "dbc_mom": 0.3974,
+                "tlt_mom": -0.0381,
+                "uup_mom": 0.0123,
+                "latest_date": pd.Timestamp("2026-04-30"),
+                "source": "test",
+                "action": "UUP/DBMF/KMLM进入Sub-B宏观候选池",
+            }
+            msg = _MsgStub()
+            mod._write_sp500_risk_regime_note(msg, compact=False)
+        finally:
+            mod._load_sp500_risk_regime_snapshot = old_snapshot
+            mod._load_inflation_pressure_snapshot = old_inflation
+
+        self.assertIn("S&P风险等级: **UNKNOWN**", msg.text)
+        self.assertIn("通胀开关: **🟢 ON**", msg.text)
+        self.assertIn("通胀压力: **2-通胀压力**", msg.text)
+        self.assertNotIn("信用口径:", msg.text)
+
     def test_pv_performance_excludes_microcap_independent_script(self):
         mod = self.module
         self.assertEqual(mod.PERFORMANCE_COMBO_ORDER, ["Sub-A", "Sub-A-DK", "Sub-B"])

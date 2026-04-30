@@ -814,6 +814,7 @@ def _short_error(exc, max_len=120):
 def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
     w = msg.write
     w("### S&P 500风险等级与通胀开关（仅提示）\n")
+    snapshot = None
     try:
         snapshot = _load_sp500_risk_regime_snapshot(prefer_recent_csv=prefer_recent_csv, allow_embedded=False)
         latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
@@ -864,23 +865,24 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
         if compact:
             w("\n---\n\n")
             return
-    w(f"信用口径: {snapshot['source_label']}（{snapshot['credit_series']}）\n")
-    if snapshot.get("source_type") == "live":
-        input_dates = snapshot.get("input_dates", {})
-        if input_dates:
-            w(
-                "输入日期: "
-                f"SPX {input_dates.get('SPX', 'NA')} | "
-                f"VIX {input_dates.get('VIXCLS', 'NA')} | "
-                f"HY OAS {input_dates.get(snapshot['credit_series'], 'NA')} | "
-                f"10Y-2Y {input_dates.get('T10Y2Y', 'NA')}\n"
-            )
-        if snapshot.get("spx_source"):
-            w(f"价格源: {snapshot['spx_source']} | 宏观源: FRED文本镜像/CSV\n")
-    else:
-        if snapshot.get("live_error"):
-            w("⚠️ 实时数据源本次未完整取到，当前显示为非实时备用快照；不要把它当作最新确认预警。\n")
-            w(f"实时取数失败原因: {_short_error(snapshot['live_error'])}\n")
+    if snapshot is not None:
+        w(f"信用口径: {snapshot['source_label']}（{snapshot['credit_series']}）\n")
+        if snapshot.get("source_type") == "live":
+            input_dates = snapshot.get("input_dates", {})
+            if input_dates:
+                w(
+                    "输入日期: "
+                    f"SPX {input_dates.get('SPX', 'NA')} | "
+                    f"VIX {input_dates.get('VIXCLS', 'NA')} | "
+                    f"HY OAS {input_dates.get(snapshot['credit_series'], 'NA')} | "
+                    f"10Y-2Y {input_dates.get('T10Y2Y', 'NA')}\n"
+                )
+            if snapshot.get("spx_source"):
+                w(f"价格源: {snapshot['spx_source']} | 宏观源: FRED文本镜像/CSV\n")
+        else:
+            if snapshot.get("live_error"):
+                w("⚠️ 实时数据源本次未完整取到，当前显示为非实时备用快照；不要把它当作最新确认预警。\n")
+                w(f"实时取数失败原因: {_short_error(snapshot['live_error'])}\n")
     try:
         if inflation is None:
             inflation = _load_inflation_pressure_snapshot()
