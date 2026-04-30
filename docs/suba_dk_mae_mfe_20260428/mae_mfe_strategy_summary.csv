@@ -1,0 +1,2 @@
+﻿strategy,trade_count,win_rate,avg_profit_pct,median_profit_pct,avg_mfe_pct,avg_mae_pct,median_profit_capture,avg_giveback_pct,profit_then_loss_rate,deep_mae_profit_rate
+Sub-A-DK,450,0.5466666666666666,0.007775230974017854,0.0027307335470884153,0.021693270880571575,-0.010306035855788313,0.8233813843661739,0.01391803990655372,0.17555555555555555,0.0

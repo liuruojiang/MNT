@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-04-29T20:52:42.550810+08:00",
+  "v72_start": "2015-10-13",
+  "v72_end": "2026-04-17",
+  "rows": 3840,
+  "price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "cpi_source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+  "usd_source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS",
+  "note": "Research check only; no production strategy changes."
+}

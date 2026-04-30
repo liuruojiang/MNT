@@ -1,0 +1,121 @@
+{
+  "classification": "proxy stress test, not official production backtest",
+  "script_reused": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.1 plus.py",
+  "sub_b_path": "run_us_rotation_mix(..., us_open=proxy_open) + apply_vol_regime_overlay",
+  "sub_c_path": "_compute_daily_subc_phased + _apply_subc_vol_scaling with PROD_USE_TIMING=False equivalent all-ones signals",
+  "proxy_map": {
+    "QQQ": "^NDX",
+    "EMXC": "VEIEX",
+    "EFA": "VGTSX",
+    "GLD": "GC=F",
+    "TLT": "VUSTX",
+    "DBC": "^SPGSCI",
+    "BIL": "VFISX",
+    "SPY": "SPY",
+    "VTI": "VTSMX",
+    "VEA": "VGTSX",
+    "VGIT": "VFITX",
+    "BTC-USD": "BTC-USD",
+    "DBMF": "RYMFX"
+  },
+  "sources": {
+    "QQQ": {
+      "ticker": "^NDX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-28",
+      "rows": 7882
+    },
+    "EMXC": {
+      "ticker": "VEIEX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-27",
+      "rows": 7881
+    },
+    "EFA": {
+      "ticker": "VGTSX",
+      "source": "Yahoo",
+      "start": "1996-04-29",
+      "end": "2026-04-27",
+      "rows": 7547
+    },
+    "GLD": {
+      "ticker": "GC=F",
+      "source": "Yahoo",
+      "start": "2000-08-30",
+      "end": "2026-04-28",
+      "rows": 6438
+    },
+    "TLT": {
+      "ticker": "VUSTX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-27",
+      "rows": 7881
+    },
+    "DBC": {
+      "ticker": "^SPGSCI",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-28",
+      "rows": 7882
+    },
+    "BIL": {
+      "ticker": "VFISX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-27",
+      "rows": 7881
+    },
+    "SPY": {
+      "ticker": "SPY",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-28",
+      "rows": 7882
+    },
+    "VTI": {
+      "ticker": "VTSMX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-27",
+      "rows": 7881
+    },
+    "VEA": {
+      "ticker": "VGTSX",
+      "source": "Yahoo",
+      "start": "1996-04-29",
+      "end": "2026-04-27",
+      "rows": 7547
+    },
+    "VGIT": {
+      "ticker": "VFITX",
+      "source": "Yahoo",
+      "start": "1995-01-03",
+      "end": "2026-04-27",
+      "rows": 7881
+    },
+    "BTC-USD": {
+      "ticker": "BTC-USD",
+      "source": "Yahoo",
+      "start": "2014-09-17",
+      "end": "2026-04-28",
+      "rows": 4242
+    },
+    "DBMF": {
+      "ticker": "RYMFX",
+      "source": "Yahoo",
+      "start": "2007-02-22",
+      "end": "2026-04-27",
+      "rows": 4825
+    }
+  },
+  "limitations": [
+    "A-share Sub-A/Sub-A-DK intentionally excluded per user request.",
+    "Several proxies are mutual funds or indices, not executable ETFs; their open prices are not true ETF next-day opens.",
+    "EMXC is proxied by VEIEX and is not ex-China.",
+    "GLD is proxied by GC=F, which starts on 2000-08-30 in Yahoo; before that the gold sleeve has no price movement in this run.",
+    "DBMF is not used before 2019 by the official phased Sub-C portfolio; RYMFX is only present for later proxy completeness."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-04-29T21:14:39.104662+08:00",
+  "script": "analyze_v72_subb_cta_dbmf.py",
+  "source_strategy": "mnt_bot V 7.1 plus.py",
+  "price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "cta_ticker": "DBMF",
+  "dbmf_price_start": "2019-05-08",
+  "dbmf_first_weight_date": "2019-10-03",
+  "subb_base_start": "2015-10-13",
+  "subb_base_end": "2026-04-17",
+  "subb_dbmf_start": "2015-10-13",
+  "subb_dbmf_end": "2026-04-17",
+  "v72_common_start": "2015-10-13",
+  "v72_common_end": "2026-04-17",
+  "ranking_base": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD"
+  ],
+  "ranking_variant": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD",
+    "DBMF"
+  ],
+  "v72_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "note": "Research check only; no production strategy changes."
+}

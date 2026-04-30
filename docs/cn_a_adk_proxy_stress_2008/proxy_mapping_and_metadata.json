@@ -1,0 +1,49 @@
+{
+  "classification": "A-share proxy stress test, not official production backtest",
+  "script_reused": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.1 plus.py",
+  "source_csv": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+  "suba_proxy": {
+    "path": "run_cn_strategy + official Sub-A overlays",
+    "included": [
+      "1.H20955",
+      "1.H00016",
+      "1.H00852",
+      "1.H00905",
+      "1.H11077"
+    ],
+    "excluded": {
+      "0.399606": "ChiNext starts 2010-06-01, unavailable for 2008"
+    },
+    "data_start": "2005-01-01",
+    "data_end": "2026-04-17"
+  },
+  "adk_proxy_3_price": {
+    "path": "run_dk_strategy + official ADK overlays, monkey-patched index pool",
+    "map": {
+      "SZ50": "1.000016",
+      "HS300": "1.000300",
+      "ZZ500": "1.000905"
+    },
+    "data_start": "2005-01-04",
+    "data_end": "2026-04-17",
+    "excluded": {
+      "CYB": "starts 2010-06-01",
+      "ZZ1000_price": "1.000852 starts 2014-10-17"
+    }
+  },
+  "adk_proxy_4_plus_ZZ1000_TR": {
+    "path": "run_dk_strategy + official ADK overlays, monkey-patched index pool",
+    "map": {
+      "SZ50": "1.000016",
+      "HS300": "1.000300",
+      "ZZ500": "1.000905",
+      "ZZ1000_TR_PROXY": "1.H00852"
+    },
+    "note": "ZZ1000 uses total-return H00852 as proxy because price index 1.000852 starts 2014.",
+    "data_start": "2005-01-04",
+    "data_end": "2026-04-17",
+    "excluded": {
+      "CYB": "starts 2010-06-01"
+    }
+  }
+}

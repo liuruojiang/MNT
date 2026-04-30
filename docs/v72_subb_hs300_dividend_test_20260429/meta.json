@@ -1,0 +1,71 @@
+{
+  "strategy_file": "mnt_bot V 7.1 plus.py",
+  "function": "run_us_rotation_mix + apply_vol_regime_overlay",
+  "base_pool": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD"
+  ],
+  "base_data": "mnt_strategy_data_us.csv adjusted close columns; EMXC uses EMXC_spliced combine_first",
+  "cn_data": "mnt_strategy_data_cn.csv local close columns, ffilled to US calendar for this Sub-B pool proxy test",
+  "windows": [
+    "full",
+    "latest_5y",
+    "latest_3y",
+    "latest_1y",
+    "2022_shock",
+    "2021_2022_infl"
+  ],
+  "base_close_sample": [
+    "2014-09-17",
+    "2026-04-17",
+    4231
+  ],
+  "result_sample": [
+    "2015-10-13",
+    "2026-04-17",
+    3840
+  ],
+  "us_dividend_fetch": {
+    "SCHD": {
+      "source": "Yahoo",
+      "start": "2011-10-20",
+      "end": "2026-04-29",
+      "rows": 3651
+    },
+    "VIG": {
+      "source": "Yahoo",
+      "start": "2006-05-02",
+      "end": "2026-04-29",
+      "rows": 5030
+    },
+    "DGRO": {
+      "source": "Yahoo",
+      "start": "2014-06-12",
+      "end": "2026-04-29",
+      "rows": 2988
+    },
+    "DVY": {
+      "source": "Yahoo",
+      "start": "2003-11-07",
+      "end": "2026-04-29",
+      "rows": 5653
+    },
+    "SDY": {
+      "source": "Yahoo",
+      "start": "2005-11-15",
+      "end": "2026-04-29",
+      "rows": 5144
+    },
+    "NOBL": {
+      "source": "Yahoo",
+      "start": "2013-10-10",
+      "end": "2026-04-29",
+      "rows": 3156
+    }
+  }
+}

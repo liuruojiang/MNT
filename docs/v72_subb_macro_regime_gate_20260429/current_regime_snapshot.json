@@ -1,0 +1,25 @@
+{
+  "asof_market_date": "2026-04-29",
+  "market_data_sources": {
+    "DBC": "Yahoo",
+    "TLT": "Yahoo",
+    "UUP": "Yahoo",
+    "SPY": "Yahoo"
+  },
+  "inflation_pressure": true,
+  "dbc_126d_mom": 0.40087598746825326,
+  "tlt_126d_mom": -0.044410952188629116,
+  "uup_126d_mom": 0.022468267717755452,
+  "credit_stress": false,
+  "hy_oas_lag1": 2.85,
+  "hy_oas_ma252": 2.9875396825396825,
+  "hy_oas_sd252": 0.21600386047877662,
+  "hy_oas_threshold_ma_plus_1sd": 3.2035435430184593,
+  "hy_oas_63d_change": 0.14000000000000012,
+  "macro_stress_or": true,
+  "macro_stress_and": false,
+  "latest_hy_oas_date_from_fred": "2026-04-28",
+  "latest_hy_oas_value_from_fred": 2.85,
+  "latest_cpi_date": "2026-03-01",
+  "latest_cpi_yoy": 0.033202055812236786
+}

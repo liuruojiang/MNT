@@ -1,0 +1,44 @@
+{
+  "ma_grid": [
+    5,
+    8,
+    10,
+    13,
+    15,
+    20,
+    25,
+    30,
+    40,
+    50,
+    60,
+    80,
+    100,
+    120
+  ],
+  "days_grid": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "scale_grid": [
+    0.0,
+    0.25,
+    0.5,
+    0.75
+  ],
+  "source": "EastMoney 2.932000 CSI2000 daily amount",
+  "timing": "same-day amount observed after close, affects next close-to-close exposure via current Sub-A rebuild path",
+  "robust_pass": "10Y/5Y/3Y annual and sharpe positive, 10Y/5Y/3Y MaxDD non-worse, full annual delta >= -1pp"
+}

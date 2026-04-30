@@ -1,0 +1,45 @@
+{
+  "candidates": [
+    {
+      "name": "ma33_d16_s050",
+      "ma": 33,
+      "days": 16,
+      "scale": 0.5,
+      "note": "balanced candidate from the MA30-80 retest"
+    },
+    {
+      "name": "ma32_d16_s050",
+      "ma": 32,
+      "days": 16,
+      "scale": 0.5,
+      "note": "nearby robustness neighbor"
+    },
+    {
+      "name": "ma43_d16_s050",
+      "ma": 43,
+      "days": 16,
+      "scale": 0.5,
+      "note": "full-sample MaxDD-friendly neighbor"
+    },
+    {
+      "name": "ma21_d10_s025",
+      "ma": 21,
+      "days": 10,
+      "scale": 0.25,
+      "note": "older HS300 ridge-top defensive cell"
+    },
+    {
+      "name": "ma50_d13_s050",
+      "ma": 50,
+      "days": 13,
+      "scale": 0.5,
+      "note": "rounded reference, not selected as a preferred candidate"
+    }
+  ],
+  "source": "EastMoney cached HS300 amount, secid 1.000300",
+  "bot_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "baseline_start": "2004-06-28",
+  "baseline_end": "2026-04-17",
+  "timing": "T-day volume signal shifted one DK trading day before affecting returns",
+  "rolling": "monthly endpoints, trailing 3Y and 5Y"
+}

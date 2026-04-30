@@ -1,0 +1,2 @@
+﻿strategy,trade_count,win_rate,avg_profit_pct,median_profit_pct,avg_mfe_pct,avg_mae_pct,median_profit_capture,avg_giveback_pct,profit_then_loss_rate,deep_mae_profit_rate
+Sub-A,286,0.5944055944055944,0.014787703935800764,0.0025853927672100374,0.030464118061911995,-0.012127008191062365,0.7041261594041114,0.01567641412611123,0.2062937062937063,0.0

@@ -1,0 +1,22 @@
+{
+  "bot_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "baseline_start": "2004-07-23",
+  "baseline_end": "2026-04-17",
+  "stress_defs": [
+    "vix_gt25",
+    "vix_gt30",
+    "credit_below_ma100_d3",
+    "credit_below_ma100_d5",
+    "combo_vix25_or_credit_d3",
+    "growth_underperform_ma100_d5"
+  ],
+  "modes": [
+    "no_btc",
+    "no_growth_btc",
+    "no_equity_btc",
+    "defensive_core",
+    "defensive_plus_equity"
+  ],
+  "timing": "Stress is evaluated on signal day close and affects pending next trading day allocation through run_us_rotation_mix."
+}

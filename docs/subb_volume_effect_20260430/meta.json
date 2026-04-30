@@ -1,0 +1,26 @@
+{
+  "bot_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "baseline_start": "2004-07-23",
+  "baseline_end": "2026-04-17",
+  "baseline_rows": 6787,
+  "volume_tickers": [
+    "BIL",
+    "DBC",
+    "DBMF",
+    "DIA",
+    "EEM",
+    "EFA",
+    "EMXC",
+    "GLD",
+    "IWM",
+    "KMLM",
+    "QQQ",
+    "SPY",
+    "TLT",
+    "UUP"
+  ],
+  "timing": "US volume at date t is shifted one trading day before affecting Sub-B returns.",
+  "cost_model": "External scale changes pay US_ROT_COMMISSION * risky_gross_weight * abs(delta_scale).",
+  "subb_path": "run_us_rotation_mix with _subb_active_ranking_codes and apply_vol_regime_overlay."
+}

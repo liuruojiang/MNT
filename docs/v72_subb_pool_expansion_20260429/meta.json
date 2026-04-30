@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-04-29T22:35:15.717143+08:00",
+  "repo": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略",
+  "strategy_file": "mnt_bot V 7.1 plus.py",
+  "us_data": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "cn_data": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+  "baseline_pool": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD"
+  ],
+  "candidate_method": "one candidate added to Sub-B ranking pool at a time; existing 130/260/390 momentum mix, 4% absolute momentum gate, BIL fallback, target-vol scaling, 0.1% commission, and VolReg overlay preserved",
+  "cn_proxy_warning": "CN candidates are local CNY index proxies reindexed to the US calendar; no FX, no US-listed ETF mapping, no A-share execution/limit/T+1 model.",
+  "sample_start": "2015-10-13",
+  "sample_end": "2026-04-17",
+  "correction": "Removed invalid duplicate live ETF candidates QQQM, GLDM, and PDBC; production script already maps them to historical proxies QQQ, GLD, and DBC."
+}

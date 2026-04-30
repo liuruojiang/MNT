@@ -1,0 +1,44 @@
+{
+  "sample_start": "2015-10-13",
+  "sample_end": "2026-04-17",
+  "rows": 3840,
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "weight_cases": {
+    "baseline_10_15_15_60": {
+      "Sub-A": 0.1,
+      "Sub-A-DK": 0.15,
+      "Microcap": 0.15,
+      "Sub-B": 0.6
+    },
+    "balanced_sharpe_12p5_20_32p5_35": {
+      "Sub-A": 0.125,
+      "Sub-A-DK": 0.2,
+      "Microcap": 0.325,
+      "Sub-B": 0.35
+    },
+    "dd6_candidate_22p5_10_25_42p5": {
+      "Sub-A": 0.225,
+      "Sub-A-DK": 0.1,
+      "Microcap": 0.25,
+      "Sub-B": 0.425
+    },
+    "recent_sharpe_27p5_12p5_20_40": {
+      "Sub-A": 0.275,
+      "Sub-A-DK": 0.125,
+      "Microcap": 0.2,
+      "Sub-B": 0.4
+    }
+  },
+  "data_paths": [
+    "mnt_strategy_data_cn.csv",
+    "mnt_strategy_data_us.csv",
+    "../微盘股对冲策略/mnt_strategy_data_cn.csv",
+    "../微盘股对冲策略/outputs/wind_microcap_top_100_biweekly_thursday_16y_cached.csv",
+    "../微盘股对冲策略/outputs/microcap_top100_mom16_biweekly_live_proxy_turnover.csv"
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "generated_at": "2026-04-29T23:24:36.019811+08:00",
+  "strategy_file": "mnt_bot V 7.1 plus.py",
+  "base_pool": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD"
+  ],
+  "macro_candidates": [
+    "UUP",
+    "DBMF",
+    "KMLM"
+  ],
+  "candidate_fetch": {
+    "BIL": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2007-05-30",
+      "end": "2026-04-17",
+      "rows": 4752
+    },
+    "BTC-USD": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2014-09-17",
+      "end": "2026-04-17",
+      "rows": 4231
+    },
+    "DBC": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2006-02-06",
+      "end": "2026-04-17",
+      "rows": 5081
+    },
+    "DBMF": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2019-05-08",
+      "end": "2026-04-17",
+      "rows": 1746
+    },
+    "EFA": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2003-01-02",
+      "end": "2026-04-17",
+      "rows": 5860
+    },
+    "EMXC": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2003-04-14",
+      "end": "2026-04-17",
+      "rows": 5790
+    },
+    "GLD": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2004-11-18",
+      "end": "2026-04-17",
+      "rows": 5386
+    },
+    "KMLM": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2020-12-02",
+      "end": "2026-04-29",
+      "rows": 1357
+    },
+    "QQQ": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2003-01-02",
+      "end": "2026-04-17",
+      "rows": 5860
+    },
+    "SPY": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2003-01-02",
+      "end": "2026-04-17",
+      "rows": 5860
+    },
+    "TLT": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2003-01-02",
+      "end": "2026-04-17",
+      "rows": 5860
+    },
+    "UUP": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2007-03-01",
+      "end": "2026-04-29",
+      "rows": 4822
+    }
+  },
+  "fred_sources": {
+    "hy_oas": "BAMLH0A0HYM2 via https://fred.stlouisfed.org/graph/fredgraph.csv",
+    "cpi": "CPIAUCSL via https://fred.stlouisfed.org/graph/fredgraph.csv"
+  },
+  "inflation_pressure_rule": "DBC 126 trading-day momentum > 0 and TLT 126 trading-day momentum < 0, using signal-date closes",
+  "credit_stress_rule": "Lagged HY OAS > trailing 252 trading-day mean + 1 std OR lagged HY OAS 63 trading-day change >= 1.0 percentage point",
+  "sample": [
+    "2015-10-13",
+    "2026-04-17",
+    3840
+  ]
+}

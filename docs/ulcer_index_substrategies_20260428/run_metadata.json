@@ -1,0 +1,32 @@
+{
+  "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.1 plus.py",
+  "official_entry": "CombinedStrategyV71._fetch_data(include_us_live_snapshot=False) + _run_strategies; Sub-C daily via _get_subc_daily_ret",
+  "common_end_for_5_10_15y": "2026-04-27",
+  "data_ranges": {
+    "Sub-A": {
+      "start": "2010-09-29",
+      "end": "2026-04-28",
+      "rows": 3783
+    },
+    "Sub-A-DK": {
+      "start": "2010-11-22",
+      "end": "2026-04-28",
+      "rows": 3750
+    },
+    "Sub-B": {
+      "start": "2008-12-15",
+      "end": "2026-04-27",
+      "rows": 4367
+    },
+    "Sub-C": {
+      "start": "2009-11-24",
+      "end": "2026-04-27",
+      "rows": 4127
+    }
+  },
+  "assumptions": {
+    "ulcer_index": "sqrt(mean(drawdown_pct^2)); drawdown is daily NAV below running peak, in percent",
+    "sub_b_execution": "official _fetch_data retained Yahoo open data in bot._us_open and run_us_rotation_mix received us_open",
+    "sub_c": "daily production portfolio with Vol-Scaling enabled=True"
+  }
+}

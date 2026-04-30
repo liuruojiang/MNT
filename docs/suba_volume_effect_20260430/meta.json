@@ -1,0 +1,34 @@
+{
+  "bot_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "cn_price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+  "baseline_start": "1991-04-15",
+  "baseline_end": "2026-04-17",
+  "baseline_rows": 8545,
+  "volume_sources": {
+    "sh_comp": "1.000001",
+    "hs300": "1.000300",
+    "zz500": "1.000905",
+    "zz1000": "1.000852",
+    "zz2000": "2.932000",
+    "cyb": "0.399006",
+    "asset_1.H20955": "1.000827",
+    "asset_0.399606": "0.399606",
+    "asset_1.H00016": "1.000016",
+    "asset_1.H00852": "1.000852",
+    "asset_1.H00905": "1.000905",
+    "etf_1.H20955": "1.515100",
+    "etf_0.399606": "0.159915",
+    "etf_1.H00016": "1.510050",
+    "etf_1.H00852": "1.512100",
+    "etf_1.H00905": "1.510500"
+  },
+  "etf_source_notes": {
+    "1.H20955": "EastMoney amount cache",
+    "0.399606": "Yahoo volume * close amount proxy",
+    "1.H00016": "Yahoo volume * close amount proxy",
+    "1.H00852": "Yahoo volume * close amount proxy",
+    "1.H00905": "Yahoo volume * close amount proxy"
+  },
+  "rule_timing": "Volume observed at date t changes the effective close-to-close holding from t to t+1 via the repo _rebuild_suba_from_effective path.",
+  "cost_model": "Uses current Sub-A CN_COMMISSION and vol-scaling rebuild; extra exposure changes pay turnover costs."
+}

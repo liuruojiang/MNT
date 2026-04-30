@@ -1,0 +1,102 @@
+{
+  "generated_at": "2026-04-29T23:09:14.333086+08:00",
+  "strategy_file": "mnt_bot V 7.1 plus.py",
+  "function": "run_us_rotation_mix + apply_vol_regime_overlay",
+  "base_pool": [
+    "QQQ",
+    "EMXC",
+    "EFA",
+    "GLD",
+    "TLT",
+    "DBC",
+    "BTC-USD"
+  ],
+  "base_data": "mnt_strategy_data_us.csv adjusted close columns; EMXC uses EMXC_spliced combine_first",
+  "candidate_fetch": {
+    "DBMF": {
+      "source": "local mnt_strategy_data_us.csv adjusted close column",
+      "start": "2019-05-08",
+      "end": "2026-04-17",
+      "rows": 1746
+    },
+    "KMLM": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2020-12-02",
+      "end": "2026-04-29",
+      "rows": 1357
+    },
+    "CTA": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2022-03-08",
+      "end": "2026-04-29",
+      "rows": 1040
+    },
+    "WTMF": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2011-01-05",
+      "end": "2026-04-29",
+      "rows": 3851
+    },
+    "FMF": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2013-08-02",
+      "end": "2026-04-29",
+      "rows": 3204
+    },
+    "UUP": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2007-03-01",
+      "end": "2026-04-29",
+      "rows": 4822
+    },
+    "UDN": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2007-03-01",
+      "end": "2026-04-29",
+      "rows": 4822
+    },
+    "USMV": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2011-10-20",
+      "end": "2026-04-29",
+      "rows": 3651
+    },
+    "SPLV": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2011-05-05",
+      "end": "2026-04-29",
+      "rows": 3768
+    },
+    "QUAL": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2013-07-18",
+      "end": "2026-04-29",
+      "rows": 3215
+    },
+    "SPHQ": {
+      "source": "Yahoo adjusted close via mnt.fetch_yahoo",
+      "start": "2005-12-06",
+      "end": "2026-04-29",
+      "rows": 5130
+    }
+  },
+  "base_close_sample": [
+    "2014-09-17",
+    "2026-04-17",
+    4231
+  ],
+  "result_sample": [
+    "2015-10-13",
+    "2026-04-17",
+    3840
+  ],
+  "windows": [
+    "full",
+    "since_2020",
+    "latest_5y",
+    "latest_3y",
+    "latest_1y",
+    "2022_shock",
+    "2021_2022_infl"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-04-29T21:26:43.186033+08:00",
+  "script": "analyze_v72_stagflation_cta_context.py",
+  "stagflation_rule": {
+    "cpi_yoy_min": 0.04,
+    "gdp_yoy_max": 0.015,
+    "gdp_qoq_ann_max": 0.0,
+    "nber_recession_flag": true,
+    "unrate_12m_change_min": 1.0
+  },
+  "fred_sources": {
+    "CPIAUCSL": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL",
+    "GDPC1": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDPC1",
+    "UNRATE": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE",
+    "USREC": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=USREC"
+  },
+  "local_price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_us.csv",
+  "source_strategy": "mnt_bot V 7.1 plus.py",
+  "cta_ticker": "DBMF",
+  "note": "Research context only; no production strategy changes."
+}

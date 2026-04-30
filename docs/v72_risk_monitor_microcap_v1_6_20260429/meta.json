@@ -1,0 +1,50 @@
+{
+  "definition": "V7.2 risk monitor scenario: replace current Microcap leg with Microcap v1.6 target-vol costed NAV",
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "common_start": "2015-10-13",
+  "common_end": "2026-04-17",
+  "rows": 3840,
+  "data_path": "V7.1 formal strategy functions plus Microcap v1.6 costed NAV return_net",
+  "portfolio_construction": "Sleeve NAVs are normalized from the common start date and combined by initial nominal weights, matching prior V7.2 studies. Effective weights drift with sleeve NAV performance.",
+  "microcap_v1_6": {
+    "microcap_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol15_max1p5_v1_6_costed_nav.csv",
+    "microcap_rows": 3936,
+    "microcap_start": "2010-02-02",
+    "microcap_end": "2026-04-28",
+    "microcap_latest_version": "1.6",
+    "microcap_return_column": "return_net",
+    "common_end_limited_by": {
+      "Sub-A": "2026-04-17",
+      "Sub-A-DK": "2026-04-17",
+      "Sub-B": "2026-04-17",
+      "Microcap": "2026-04-28"
+    },
+    "microcap_version_note": "Target-volatility overlay on top of v1.4. Uses v1.6-specific 0.30% momentum-gap exit buffer, 60-day realized volatility, 15% annual target volatility, max 1.5x leverage, 10bp scale-change cost, and 3% annual financing cost on exposure above 1.0x.",
+    "microcap_core_params": {
+      "target_vol": 0.15,
+      "vol_window": 60,
+      "max_leverage": 1.5,
+      "min_leverage": 0.0,
+      "scale_change_cost": 0.001,
+      "financing_rate": 0.03,
+      "trading_days": 244,
+      "timing": "T day realized volatility uses trailing window shifted by one trading day"
+    }
+  },
+  "baseline_comparison_dir": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\v72_risk_monitor_20260429",
+  "outputs": [
+    "summary.md",
+    "meta.json",
+    "comparison.json",
+    "v72_v16_risk_snapshot.csv",
+    "v72_v16_risk_window_metrics.csv",
+    "v72_v16_risk_contribution.csv",
+    "v72_v16_recent_correlation_252d.csv",
+    "v72_v16_drawdown_episodes.csv"
+  ]
+}

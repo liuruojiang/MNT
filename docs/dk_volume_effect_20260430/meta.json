@@ -1,0 +1,26 @@
+{
+  "bot_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "cn_price_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+  "baseline_start": "2004-06-28",
+  "baseline_end": "2026-04-17",
+  "baseline_rows": 5301,
+  "timing": "Volume at date t is treated as known only after close and affects the next DK trading day via signal_scale.shift(1).",
+  "cost_model": "Extra volume overlay uses the existing DK overlay convention: 2 * CN_COMMISSION * current DK weight * abs(delta_scale).",
+  "sources": {
+    "broad": {
+      "sh_comp": "1.000001",
+      "hs300": "1.000300",
+      "zz500": "1.000905",
+      "zz1000": "1.000852",
+      "zz2000": "2.932000",
+      "cyb": "0.399006"
+    },
+    "dk_legs": {
+      "SZ50": "1.000016",
+      "HS300": "1.000300",
+      "ZZ500": "1.000905",
+      "ZZ1000": "1.000852",
+      "CYB": "0.399006"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "rule": "DK volume v1.4: HS300 amount < MA33 for 16 days, scale DK to 0.5",
+  "hs300_source": "EastMoney 1.000300 daily amount",
+  "ma": 33,
+  "consecutive_days": 16,
+  "scale": 0.5,
+  "timing": "T-day volume is shifted one DK trading day before affecting returns.",
+  "window_start": "2023-04-17",
+  "window_end": "2026-04-17",
+  "baseline_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py"
+}

@@ -1,0 +1,23 @@
+{
+  "definition": "V7.2 risk monitor: Sub-A 10%, Sub-A-DK 15%, Sub-B 60%, Microcap 15%, Sub-C 0%",
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "common_start": "2015-10-13",
+  "common_end": "2026-04-17",
+  "rows": 3840,
+  "data_path": "V7.1 formal strategy functions plus current Microcap run_signal + apply_cost_model path",
+  "portfolio_construction": "Sleeve NAVs are normalized from the common start date and combined by initial nominal weights, matching prior V7.2 studies. Effective weights drift with sleeve NAV performance.",
+  "note": "Current report uses the existing official Microcap path, not a future Microcap 1.6 replacement.",
+  "outputs": [
+    "summary.md",
+    "v72_risk_snapshot.csv",
+    "v72_risk_window_metrics.csv",
+    "v72_risk_contribution.csv",
+    "v72_recent_correlation_252d.csv",
+    "v72_drawdown_episodes.csv"
+  ]
+}

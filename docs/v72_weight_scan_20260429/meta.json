@@ -1,0 +1,60 @@
+{
+  "definition": "V7.2 four-sleeve scan: Sub-A, Sub-A-DK, Sub-B, Microcap; Sub-C excluded",
+  "sleeves": [
+    "Sub-A",
+    "Sub-A-DK",
+    "Sub-B",
+    "Microcap"
+  ],
+  "baseline_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Sub-B": 0.6,
+    "Microcap": 0.15
+  },
+  "grid_step": 0.025,
+  "grid_count": 12341,
+  "practical_constraints": {
+    "Sub-A": ">= 5%",
+    "Sub-A-DK": ">= 5%",
+    "Microcap": ">= 5%",
+    "Sub-B": "30%..70%"
+  },
+  "recent_window_weights": {
+    "last_1y": 0.15,
+    "last_3y": 0.35,
+    "last_5y": 0.35,
+    "last_10y": 0.15
+  },
+  "baseline_recent_weighted": {
+    "weight_label": "10.0%/15.0%/15.0%/60.0%",
+    "w_suba": 0.1,
+    "w_adk": 0.15,
+    "w_microcap": 0.15,
+    "w_subb": 0.6,
+    "last_1y_annual": 42.76093817915934,
+    "last_1y_sharpe": 3.0634400053879274,
+    "last_1y_max_dd": -5.298436233590076,
+    "last_1y_calmar": 8.070482741317374,
+    "last_3y_annual": 34.390451847451246,
+    "last_3y_sharpe": 2.6073921740852146,
+    "last_3y_max_dd": -5.853843325880714,
+    "last_3y_calmar": 5.87485006566642,
+    "last_5y_annual": 28.495457900739286,
+    "last_5y_sharpe": 2.2824252026766443,
+    "last_5y_max_dd": -5.853843325880714,
+    "last_5y_calmar": 4.867820389855092,
+    "last_10y_annual": 29.154665255032963,
+    "last_10y_sharpe": 2.3677420239625167,
+    "last_10y_max_dd": -6.984444006523427,
+    "last_10y_calmar": 4.174228503772482,
+    "weighted_annual": 32.79740892699553,
+    "weighted_sharpe": 2.5261133862692167,
+    "weighted_max_dd": -5.940122364133526,
+    "weighted_calmar": 5.596641346196007
+  },
+  "common_start": "2015-10-13",
+  "common_end": "2026-04-17",
+  "rows": 3840,
+  "path": "V7.1 formal strategy functions plus microcap live run_signal + apply_cost_model path"
+}
