@@ -419,6 +419,52 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertNotIn("脚本内置快照", msg.text)
         self.assertNotIn("2-普通模式", msg.text)
 
+    def test_inflation_switch_on_uses_green_marker(self):
+        mod = self.module
+        old_snapshot = mod._load_sp500_risk_regime_snapshot
+        old_inflation = mod._load_inflation_pressure_snapshot
+        try:
+            mod._load_sp500_risk_regime_snapshot = lambda *args, **kwargs: {
+                "latest_date": pd.Timestamp("2026-04-24"),
+                "regime_changed_date": pd.Timestamp("2026-04-10"),
+                "previous_regime": "4-噩梦模式",
+                "regime": "3-困难模式",
+                "risk_score": 45.0,
+                "suggested_equity_budget": "70%",
+                "source_label": "HY OAS",
+                "source_type": "live",
+            }
+            mod._load_inflation_pressure_snapshot = lambda: {
+                "pressure_on": True,
+                "lookback": 126,
+                "dbc_mom": 0.3974,
+                "tlt_mom": -0.0381,
+                "latest_date": pd.Timestamp("2026-04-30"),
+                "source": "test",
+            }
+            msg = _MsgStub()
+            mod._write_sp500_risk_regime_note(msg, compact=True)
+        finally:
+            mod._load_sp500_risk_regime_snapshot = old_snapshot
+            mod._load_inflation_pressure_snapshot = old_inflation
+
+        self.assertIn("通胀开关: **🟢 ON**", msg.text)
+
+    def test_pv_performance_excludes_microcap_independent_script(self):
+        mod = self.module
+        self.assertEqual(mod.PERFORMANCE_COMBO_ORDER, ["Sub-A", "Sub-A-DK", "Sub-B"])
+        self.assertEqual(mod.PERFORMANCE_COLUMNS, ["Sub-A", "Sub-A-DK", "Sub-B", "Combined"])
+        self.assertIn("Microcap", mod.COMBINED_DISPLAY_ORDER)
+        self.assertAlmostEqual(sum(mod._performance_combo_weights().values()), 1.0)
+
+        nav_source = inspect.getsource(mod.CombinedStrategyV72._handle_nav_chart)
+        perf_source = inspect.getsource(mod.CombinedStrategyV72._handle_performance)
+        self.assertNotIn("_load_microcap_daily_ret", nav_source)
+        self.assertNotIn("_load_microcap_daily_ret", perf_source)
+        self.assertNotIn("Microcap", nav_source)
+        self.assertNotIn("Microcap", perf_source)
+        self.assertIn("PV三策略组合", perf_source)
+
     def test_unexecuted_subb_record_is_filtered_before_next_us_open(self):
         mod = self.module
         records = [

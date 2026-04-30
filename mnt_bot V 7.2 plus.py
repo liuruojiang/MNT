@@ -317,7 +317,8 @@ COMBINED_WEIGHTS = {
     "Sub-C": 0.00,  # V7.2主组合不再分配Sub-C；用户展示层不再显示Sub-C。
 }
 COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-B"]
-PERFORMANCE_COLUMNS = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-B", "Combined"]
+PERFORMANCE_COMBO_ORDER = ["Sub-A", "Sub-A-DK", "Sub-B"]
+PERFORMANCE_COLUMNS = PERFORMANCE_COMBO_ORDER + ["Combined"]
 
 
 def _combined_weight_label():
@@ -326,6 +327,18 @@ def _combined_weight_label():
         for name in COMBINED_DISPLAY_ORDER
         if COMBINED_WEIGHTS.get(name, 0) > 0
     )
+
+
+def _performance_combo_weights():
+    total = sum(COMBINED_WEIGHTS[name] for name in PERFORMANCE_COMBO_ORDER)
+    return {name: COMBINED_WEIGHTS[name] / total for name in PERFORMANCE_COMBO_ORDER}
+
+
+def _performance_combo_weight_label():
+    return "/".join(
+        str(int(round(COMBINED_WEIGHTS[name] * 100)))
+        for name in PERFORMANCE_COMBO_ORDER
+    ) + "归一"
 
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
 STRATEGY_WEIGHTS = COMBINED_WEIGHTS
@@ -829,7 +842,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
     inflation = None
     try:
         inflation = _load_inflation_pressure_snapshot()
-        infl_state = "ON" if inflation["pressure_on"] else "OFF"
+        infl_state = "🟢 ON" if inflation["pressure_on"] else "OFF"
         macro_action = "UUP/DBMF/KMLM 参与 Sub-B 候选池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不参与 Sub-B，只作参考"
         w(
             f"通胀开关: **{infl_state}** | {macro_action} | "
@@ -5630,8 +5643,8 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
         num_fmt = wb.add_format({"border": 1, "num_format": "0.00"})
         ws = wb.add_worksheet("绩效概览")
         ws.set_column("A:A", 14)
-        ws.set_column("B:G", 12)
-        metric_headers = ["指标", "Sub-A", "A-DK", "微盘", "Sub-B", "组合"]
+        ws.set_column("B:E", 14)
+        metric_headers = ["指标", "Sub-A", "A-DK", "Sub-B", "PV三策略组合"]
         for j, h in enumerate(metric_headers):
             ws.write(0, j, h, header_fmt)
         pct2_fmt = wb.add_format({"border": 1, "num_format": "0.00%"})
@@ -5660,8 +5673,8 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
         if monthly_returns is not None and len(monthly_returns) > 0:
             ws2 = wb.add_worksheet("月度收益")
             ws2.set_column("A:A", 10)
-            ws2.set_column("B:G", 12)
-            mr_headers = ["月份", "Sub-A", "A-DK", "微盘", "Sub-B", "组合"]
+            ws2.set_column("B:E", 14)
+            mr_headers = ["月份", "Sub-A", "A-DK", "Sub-B", "PV三策略组合"]
             for j, h in enumerate(mr_headers):
                 ws2.write(0, j, h, header_fmt)
             for i in range(len(monthly_returns)):
@@ -7204,7 +7217,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     if _us_sig_mix_ctx["reference_rows"]:
                         w("\n注: 通胀开关off时，UUP/DBMF/KMLM只显示参考，不参与Sub-B仓位计算。\n")
                     w(
-                        f"\n**通胀开关:** {'ON' if _us_sig_gate['pressure_on'] else 'OFF'} "
+                        f"\n**通胀开关:** {'🟢 ON' if _us_sig_gate['pressure_on'] else 'OFF'} "
                         f"(DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, "
                         f"TLT {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('tlt_mom', np.nan):+.2%})\n"
                     )
@@ -7535,7 +7548,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名。\n\n"
             )
             w(
-                f"**通胀开关:** {'ON' if _us_live_gate['pressure_on'] else 'OFF'} "
+                f"**通胀开关:** {'🟢 ON' if _us_live_gate['pressure_on'] else 'OFF'} "
                 f"(DBC {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('dbc_mom', np.nan):+.2%}, "
                 f"TLT {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('tlt_mom', np.nan):+.2%})\n\n"
             )
@@ -7770,7 +7783,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
             w(f"| 微盘黄灯政策 | **{MICROCAP_VOLUME_POLICY}**，只进提醒面板，不参与微盘独立脚本仓位/回测降仓 |\n")
-            w("| 合并方式 | 加权合并，月度对齐收益率 |\n")
+            w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
             w = msg.write
@@ -8093,7 +8106,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名；历史段以 BTC-USD 拼接。\n\n"
             )
             w(
-                f"**通胀开关:** {'ON' if _us_params_gate['pressure_on'] else 'OFF'} "
+                f"**通胀开关:** {'🟢 ON' if _us_params_gate['pressure_on'] else 'OFF'} "
                 f"(DBC {INFLATION_PRESSURE_LB}日 {_us_params_gate.get('dbc_mom', np.nan):+.2%}, "
                 f"TLT {INFLATION_PRESSURE_LB}日 {_us_params_gate.get('tlt_mom', np.nan):+.2%})\n\n"
             )
@@ -8395,11 +8408,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
         cn_daily_ret = cn_result["return"]
         dk_daily_ret = cn_dk_result["return"]
         us_daily_ret = us_rot_result["return"]
-        microcap_daily_ret = _load_microcap_daily_ret()
         cn_period = cn_daily_ret[(cn_daily_ret.index >= start_date) & (cn_daily_ret.index <= end_date)]
         dk_period = dk_daily_ret[(dk_daily_ret.index >= start_date) & (dk_daily_ret.index <= end_date)]
         us_period = us_daily_ret[(us_daily_ret.index >= start_date) & (us_daily_ret.index <= end_date)]
-        microcap_period = microcap_daily_ret[(microcap_daily_ret.index >= start_date) & (microcap_daily_ret.index <= end_date)]
         if len(cn_period) < 2 and len(us_period) < 2:
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间数据不足")
         nav_series = {}
@@ -8415,12 +8426,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
             nav_b = (1 + us_period).cumprod()
             nav_b = nav_b / nav_b.iloc[0]
             nav_series["Sub-B"] = nav_b
-        if len(microcap_period) > 1:
-            nav_micro = (1 + microcap_period).cumprod()
-            nav_micro = nav_micro / nav_micro.iloc[0]
-            nav_series["Microcap"] = nav_micro
         if len(nav_series) >= 2:
-            cw = COMBINED_WEIGHTS
+            cw = _performance_combo_weights()
             all_nav_dates = sorted(set().union(*(s.index for s in nav_series.values())))
             nav_df = pd.DataFrame({
                 name: s.reindex(pd.DatetimeIndex(all_nav_dates)).ffill()
@@ -8440,23 +8447,20 @@ class CombinedStrategyV72(CombinedStrategyBase):
         colors = {
             "Sub-A": "#E74C3C",    # red
             "Sub-A-DK": "#9B59B6", # purple
-            "Microcap": "#16A085",  # teal
             "Sub-B": "#2980B9",    # blue
             "Combined": "#F39C12", # orange/gold
         }
         chart_labels = {
             "Sub-A": "Sub-A (CN Long)",
             "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
-            "Microcap": "Microcap (Top100 independent)",
             "Sub-B": "Sub-B (US Rotation)",
-            "Combined": f"Combined ({_combined_weight_label()})",
+            "Combined": f"PV 3-sleeve ({_performance_combo_weight_label()})",
         }
         labels = {
             "Sub-A": "Sub-A (A股做多)",
             "Sub-A-DK": "Sub-A-DK (多空)",
-            "Microcap": "微盘股Top100",
             "Sub-B": "Sub-B (美股轮动)",
-            "Combined": f"组合 ({_combined_weight_label()})",
+            "Combined": f"PV三策略组合 ({_performance_combo_weight_label()})",
         }
         fig, ax = plt.subplots(figsize=(12, 6))
         for name, nav in nav_series.items():
@@ -8530,21 +8534,17 @@ class CombinedStrategyV72(CombinedStrategyBase):
             lambda x: (1+x).prod()-1)
         us_rot_monthly = us_rot_result["return"].groupby(us_rot_result.index.to_period("M")).apply(
             lambda x: (1+x).prod()-1)
-        microcap_daily_ret = _load_microcap_daily_ret()
-        microcap_monthly = microcap_daily_ret.groupby(microcap_daily_ret.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
         all_periods = cn_monthly.index.intersection(dk_monthly.index).intersection(
-            us_rot_monthly.index).intersection(microcap_monthly.index)
+            us_rot_monthly.index)
         if len(all_periods) == 0:
-            raise poe.BotError("V7.2四个主组合策略没有重叠的月度数据")
+            raise poe.BotError("PV三策略组合没有重叠的月度数据")
         aligned = pd.DataFrame({
             "Sub-A": cn_monthly.reindex(all_periods),
             "Sub-A-DK": dk_monthly.reindex(all_periods),
-            "Microcap": microcap_monthly.reindex(all_periods),
             "Sub-B": us_rot_monthly.reindex(all_periods),
         }).dropna()
-        w = COMBINED_WEIGHTS
-        _strat_cols = COMBINED_DISPLAY_ORDER
+        w = _performance_combo_weights()
+        _strat_cols = PERFORMANCE_COMBO_ORDER
         _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
         _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
         _nav_comb = _nav_comb / _nav_comb.iloc[0]
@@ -8560,8 +8560,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             (dk_monthly.index >= start_period) & (dk_monthly.index <= end_period)]
         us_monthly_period = us_rot_monthly[
             (us_rot_monthly.index >= start_period) & (us_rot_monthly.index <= end_period)]
-        microcap_monthly_period = microcap_monthly[
-            (microcap_monthly.index >= start_period) & (microcap_monthly.index <= end_period)]
         if len(cn_monthly_period) < 1 and len(us_monthly_period) < 1:
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m')} 到 {end_date.strftime('%Y-%m')} 期间没有数据")
         metrics = {}
@@ -8571,8 +8569,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             metrics["Sub-A-DK"] = calc_monthly_metrics(dk_monthly_period)
         if len(us_monthly_period) >= 1:
             metrics["Sub-B"] = calc_monthly_metrics(us_monthly_period)
-        if len(microcap_monthly_period) >= 1:
-            metrics["Microcap"] = calc_monthly_metrics(microcap_monthly_period)
         if len(filtered) >= 1:
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
         cn_daily_period = cn_result["return"][
@@ -8590,11 +8586,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
         if len(us_daily_period) > 1 and "Sub-B" in metrics:
             nav_b = (1 + us_daily_period).cumprod()
             metrics["Sub-B"]["max_dd"] = ((nav_b - nav_b.cummax()) / nav_b.cummax()).min() * 100
-        microcap_daily_period = microcap_daily_ret[
-            (microcap_daily_ret.index >= start_date) & (microcap_daily_ret.index <= end_date)]
-        if len(microcap_daily_period) > 1 and "Microcap" in metrics:
-            nav_micro = (1 + microcap_daily_period).cumprod()
-            metrics["Microcap"]["max_dd"] = ((nav_micro - nav_micro.cummax()) / nav_micro.cummax()).min() * 100
         comb_daily = None
         common_start = start_date
         if len(cn_daily_period) > 0:
@@ -8603,21 +8594,18 @@ class CombinedStrategyV72(CombinedStrategyBase):
             common_start = max(common_start, dk_daily_period.index[0])
         if len(us_daily_period) > 0:
             common_start = max(common_start, us_daily_period.index[0])
-        if len(microcap_daily_period) > 0:
-            common_start = max(common_start, microcap_daily_period.index[0])
         if "Combined" in metrics:
             nav_parts = {}
             for sname, dret in [
                 ("Sub-A", cn_daily_period),
                 ("Sub-A-DK", dk_daily_period),
-                ("Microcap", microcap_daily_period),
                 ("Sub-B", us_daily_period),
             ]:
                 if len(dret) > 1:
                     nv = (1 + dret).cumprod()
                     nav_parts[sname] = nv / nv.iloc[0]
             if len(nav_parts) >= 2:
-                cw = COMBINED_WEIGHTS
+                cw = _performance_combo_weights()
                 all_daily_dates = sorted(set().union(*(s.index for s in nav_parts.values())))
                 all_daily_dates = [d for d in all_daily_dates if d >= common_start]
                 if len(all_daily_dates) > 1:
@@ -8638,7 +8626,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     comb_daily = nav_comb.pct_change().dropna()
         for _sname, _dret in [
             ("Sub-A", cn_daily_period), ("Sub-A-DK", dk_daily_period),
-            ("Microcap", microcap_daily_period), ("Sub-B", us_daily_period),
+            ("Sub-B", us_daily_period),
         ]:
             if _sname in metrics and len(_dret) > 1:
                 _nav_d = (1 + _dret).cumprod()
@@ -8663,7 +8651,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
         excel_monthly = pd.DataFrame({
             "Sub-A": cn_monthly_period,
             "Sub-A-DK": dk_monthly_period,
-            "Microcap": microcap_monthly_period,
             "Sub-B": us_monthly_period,
         }).sort_index()
         if len(filtered) > 0:
@@ -8690,7 +8677,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             for strat_name, daily_data in [
                 ("Sub-A", cn_daily_period),
                 ("Sub-A-DK", dk_daily_period),
-                ("Microcap", microcap_daily_period),
                 ("Sub-B", us_daily_period),
                 ("Combined", comb_daily),
             ]:
@@ -8721,9 +8707,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
         if len(us_daily_period) > 1:
             _nav_b = (1 + us_daily_period).cumprod()
             nav_series["Sub-B"] = _nav_b / _nav_b.iloc[0]
-        if len(microcap_daily_period) > 1:
-            _nav_micro = (1 + microcap_daily_period).cumprod()
-            nav_series["Microcap"] = _nav_micro / _nav_micro.iloc[0]
         if comb_daily is not None and len(comb_daily) > 1:
             _nav_comb = (1 + comb_daily).cumprod()
             nav_series["Combined"] = _nav_comb / _nav_comb.iloc[0]
@@ -8731,14 +8714,13 @@ class CombinedStrategyV72(CombinedStrategyBase):
         if nav_series:
             colors = {
                 "Sub-A": "#E74C3C", "Sub-A-DK": "#9B59B6",
-                "Microcap": "#16A085", "Sub-B": "#2980B9", "Combined": "#F39C12",
+                "Sub-B": "#2980B9", "Combined": "#F39C12",
             }
             chart_labels = {
                 "Sub-A": "Sub-A (CN Long)",
                 "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
-                "Microcap": "Microcap (Top100 independent)",
                 "Sub-B": "Sub-B (US Rotation)",
-                "Combined": f"Combined ({_combined_weight_label()})",
+                "Combined": f"PV 3-sleeve ({_performance_combo_weight_label()})",
             }
             fig, ax = plt.subplots(figsize=(12, 6))
             for name, nav in nav_series.items():
@@ -8778,8 +8760,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 range_info["Sub-A-DK"] = (dk_monthly_period.index[0], dk_monthly_period.index[-1])
             if len(us_monthly_period) >= 1:
                 range_info["Sub-B"] = (us_monthly_period.index[0], us_monthly_period.index[-1])
-            if len(microcap_monthly_period) >= 1:
-                range_info["Microcap"] = (microcap_monthly_period.index[0], microcap_monthly_period.index[-1])
             if len(filtered) >= 1:
                 range_info["Combined"] = (filtered.index[0], filtered.index[-1])
             starts = set(v[0] for v in range_info.values())
@@ -8790,7 +8770,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         s, e = range_info[name]
                         w(f"- {name}: {s} ~ {e}\n")
                 w("\n")
-            w("| 指标 | Sub-A | A-DK | 微盘 | Sub-B | 组合 |\n|:-|------:|------:|------:|------:|-----:|\n")
+            w(f"说明: PV/收益查询不合并微盘独立脚本，只展示 Sub-A、Sub-A-DK、Sub-B 及三策略组合（{_performance_combo_weight_label()}）。\n\n")
+            w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合 |\n|:-|------:|------:|------:|-----:|\n")
             metric_labels = [
                 ("年化收益", "annual", "%"), ("波动率", "vol", "%"),
                 ("夏普比率", "sharpe", ""), ("最大回撤", "max_dd", "%"),
@@ -8817,7 +8798,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     years_available.update(m["yearly"].keys())
             if years_available:
                 w(f"\n### 年度收益\n")
-                w("| 年份 | Sub-A | A-DK | 微盘 | Sub-B | 组合 |\n|:-|------:|------:|------:|------:|-----:|\n")
+                w("| 年份 | Sub-A | A-DK | Sub-B | PV三策略组合 |\n|:-|------:|------:|------:|-----:|\n")
                 for yr in sorted(years_available):
                     row = f"| {yr} |"
                     for col in PERFORMANCE_COLUMNS:
