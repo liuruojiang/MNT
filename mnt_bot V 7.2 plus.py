@@ -301,7 +301,7 @@ COMBINED_WEIGHTS = {
     "Sub-A-DK": 0.15,
     "Microcap": 0.15,
     "Sub-B": 0.60,
-    "Sub-C": 0.00,  # V7.2主组合不再分配Sub-C；Sub-C信号仍保留为独立观察模块。
+    "Sub-C": 0.00,  # V7.2主组合不再分配Sub-C；用户展示层不再显示Sub-C。
 }
 COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-B"]
 PERFORMANCE_COLUMNS = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-B", "Combined"]
@@ -1567,6 +1567,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w("### 成交额黄灯提醒（仅提示）\n")
     if not compact:
         w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
+    w(f"- 微盘指数成交量: {MICROCAP_DIRECT_VOLUME_VENDOR} 仅观察，不作为 V7.2 实盘参数。\n")
     try:
         dk = _volume_warning_status(
             CN_DK_VOLUME_YELLOW_SECID,
@@ -1574,7 +1575,7 @@ def _write_volume_warning_panel(msg, compact=False):
             CN_DK_VOLUME_YELLOW_DAYS,
             CN_DK_VOLUME_YELLOW_LABEL,
         )
-        dk_mark = "ON" if dk["triggered"] else "OFF"
+        dk_mark = "黄灯触发" if dk["triggered"] else "未触发"
         w(
             f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额低于MA{dk['ma']}连续{dk['streak']}/{dk['days']}天。\n"
         )
@@ -1595,7 +1596,7 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "ON" if micro_on else "OFF"
+        micro_mark = "黄灯触发" if micro_on else "未触发"
         w(
             f"- 微盘宽口径黄灯: **{micro_mark}** | 中证2000 {zz['streak']}/{zz['days']}天 AND "
             f"创业板 {cyb['streak']}/{cyb['days']}天。\n"
@@ -1603,7 +1604,7 @@ def _write_volume_warning_panel(msg, compact=False):
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(f"- 微盘宽口径黄灯: **UNKNOWN** | 本次未取到中证2000/创业板成交额。{suffix}\n")
-    w(f"- 微盘指数成交量: {MICROCAP_DIRECT_VOLUME_VENDOR} 仅观察，不作为 V7.2 实盘参数。\n\n---\n\n")
+    w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
     if "suba_volume_rule_on" not in cn_result.columns:
@@ -1613,7 +1614,8 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
         reason = cn_result["suba_volume_error"].iloc[idx] if "suba_volume_error" in cn_result.columns else "unknown"
         suffix = "" if compact else f" 原因: {_short_error(reason)}"
         w(
-            f"{prefix}**Sub-A成交额规则:** UNKNOWN | 本次无法确认正式缩量规则，成交额scale暂按1.00。{suffix}\n"
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
+            f"本次无法确认正式缩量规则，成交额scale暂按1.00。{suffix}\n"
         )
         return
     on = bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -1627,15 +1629,15 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
     if "suba_volume_partial_unavailable" in cn_result.columns and bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
         source_text += "；部分数据源不可用，按可用腿计算"
-    mark = "ON" if on else "OFF"
+    status = "触发" if on else "未触发"
     if compact:
         w(
-            f"{prefix}**Sub-A成交额规则:** **{mark}** | 成交额scale={float(scale):.2f} | "
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 成交额scale={float(scale):.2f} | "
             f"ZZ2000 {zz_text.replace('中证2000连续', '')} / CYB {cyb_text.replace('创业板连续', '')}\n"
         )
     else:
         w(
-            f"{prefix}**Sub-A成交额规则:** **{mark}** | "
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | "
             f"OR规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 "
             f"或 CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；"
             f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f} | {source_text}\n"
@@ -4441,7 +4443,7 @@ def _is_trade_recording(query):
     if any(kw in q for kw in _TRADE_RECORD_KEYWORDS):
         return True
     has_strat = any(s in q for s in [
-        "sub-a", "sub-b", "sub-c", "a股", "美股轮动", "多空", "dk", "生产组合"])
+        "sub-a", "sub-b", "a股", "美股轮动", "多空", "dk"])
     has_asset = any(a in q for a in _KNOWN_ASSETS)
     has_act = any(a in q for a in ["买", "卖", "换", "翻转", "做多", "做空", "平衡"])
     return (has_strat or has_asset) and has_act
@@ -5816,15 +5818,7 @@ class CombinedStrategyBase:
         current_am_raw = (ret_n_prod > 0).astype(float)
         current_sma_raw = _sma_raw_signals(prod_monthly, PROD_SMA_WINDOW, PROD_SMA_BAND)
         last_sig_month = current_am_raw.index[-1]
-        # Sub-C vol-scaling 实时信息
         subc_vs_info = {}
-        if PROD_VS_ENABLED:
-            _subc_daily = _compute_daily_subc_phased(
-                us_prod_daily, prod_sig_a, PROD_CASH,
-                prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
-            _, _vs_actual_scale, _ = _apply_subc_vol_scaling(
-                _subc_daily, us_prod_daily)
-            subc_vs_info = _build_subc_vs_info(_subc_daily, _vs_actual_scale)
         return {
             "cn_result": cn_result, "cn_dk_result": cn_dk_result,
             "us_rot_result": us_rot_result,
@@ -5861,7 +5855,7 @@ class CombinedStrategyBase:
     def _handle_set_capital(self):
         existing = _scan_capital_config(poe.default_chat) or {}
         ctx_parts = []
-        for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+        for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
             v = existing.get(s)
             if v:
                 ctx_parts.append(f"- {s}: {v:,.0f}")
@@ -5869,9 +5863,9 @@ class CombinedStrategyBase:
                 ctx_parts.append(f"- {s}: 未设置")
         prompt = f"""解析资金设置。
 
-资金设置支持: Sub-A, Sub-A-DK, Sub-B, Sub-C
+资金设置支持: Sub-A, Sub-A-DK, Sub-B
 V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
-注意: Sub-A和Sub-A-DK使用人民币, Sub-B和Sub-C使用美元；Sub-C在V7.2主组合中权重为0%
+注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；V7.2不再设置Sub-C
 
 当前已设置:
 {chr(10).join(ctx_parts)}
@@ -5884,7 +5878,7 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
   "Sub-A": 数字或null,
   "Sub-A-DK": 数字或null,
   "Sub-B": 数字或null,
-  "Sub-C": 数字或null
+  "Sub-C": null
 }}
 ```
 
@@ -5896,8 +5890,9 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
-7. 用户说"总共10万美元给美股" -> 默认全部给Sub-B；只有用户明确提到Sub-C时才分给Sub-C
-8. 关键: 人民币/RMB/CNY -> 只分给Sub-A和Sub-A-DK; 美元/USD -> 只分给Sub-B和Sub-C"""
+7. 用户说"总共10万美元给美股" -> 默认全部给Sub-B
+8. 关键: 人民币/RMB/CNY -> 只分给Sub-A和Sub-A-DK; 美元/USD -> 只分给Sub-B
+9. V7.2没有Sub-C；即使用户提到Sub-C也输出null"""
 
         with _sm() as msg:
             w = msg.write
@@ -5908,19 +5903,19 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
         except (json.JSONDecodeError, ValueError):
             raise poe.BotError(
                 "无法解析资金设置，请用更明确的语言，例如:\n"
-                "- 设置资金 Sub-B 5万美元 Sub-C 3万美元\n"
+                "- 设置资金 Sub-B 5万美元\n"
                 "- 设置资金 A股共20万 美股共8万美元\n"
                 "- 设置资金 总共100万人民币 按默认比例")
         config = dict(existing)
-        for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+        for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
             v = parsed.get(s)
             if v is not None and isinstance(v, (int, float)) and v > 0:
                 config[s] = v
-        currency = {"Sub-A": "¥", "Sub-A-DK": "¥", "Sub-B": "$", "Sub-C": "$"}
+        currency = {"Sub-A": "¥", "Sub-A-DK": "¥", "Sub-B": "$"}
         with _sm() as msg:
             w = msg.write
             w("## 💰 资金配置已更新\n\n| 策略 | 资金 | 默认权重 |\n|:-|-----:|:-|\n")
-            for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+            for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                 v = config.get(s)
                 c = currency[s]
                 _sw = STRATEGY_WEIGHTS[s]
@@ -5976,18 +5971,15 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
                 else:
                     query_text = poe.query.text.strip()
                     strategy = None
-                    for s in ["Sub-A-DK", "Sub-A", "Sub-B", "Sub-C"]:
+                    for s in ["Sub-A-DK", "Sub-A", "Sub-B"]:
                         if s.lower() in query_text.lower() or s in query_text:
                             strategy = s
                             break
                     if not strategy:
                         us_rot_etfs = set(_ROT_PROXY_TO_LIVE.keys()) | set(_ROT_PROXY_TO_LIVE.values())
-                        prod_etfs = set(PROD_PORTFOLIO.keys())
                         etfs = [str(r).strip().upper() for r in df[col_map['etf']]]
                         if any(e in us_rot_etfs for e in etfs):
                             strategy = "Sub-B"
-                        elif any(e in prod_etfs for e in etfs):
-                            strategy = "Sub-C"
                         else:
                             raise poe.BotError(
                                 "无法判断仓位属于哪个策略。请在消息中指明策略，例如:\n"
@@ -6004,7 +5996,7 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
         else:
             # Use LLM to parse text
             ctx_parts = []
-            for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+            for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                 v = existing.get(s)
                 if v:
                     items_list = []
@@ -6019,7 +6011,7 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
 
             prompt = f"""解析仓位设置。
 
-四个子策略可设置仓位:
+V7.2可设置仓位:
 Sub-A: A股轮动 - 必须使用以下全收益指数代码(不要用ETF代码):
   1.H20955 = 中证红利 / 红利低波 / 红利低波100 / 中证红利低波100
   0.399606 = 创业板 / 创业板指
@@ -6034,7 +6026,6 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
 Sub-B: 美股7ETF+通胀宏观3ETF轮动 - 基础ETF如 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT；通胀开关ON时加入 UUP, DBMF, KMLM
-Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
@@ -6047,7 +6038,7 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
   "Sub-A": {{"指数代码": 股数或{{"amount": 金额数字}}}} 或 null,
   "Sub-A-DK": {{"做多_中文名": {{"amount": 金额}}, "做空_中文名": {{"amount": 金额}}}} 或 null,
   "Sub-B": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null,
-  "Sub-C": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null
+  "Sub-C": null
 }}
 ```
 
@@ -6062,10 +6053,10 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
 8. 如果用户指定某个标的的金额(万/百万/元/人民币/美元等), 对应标的输出 {{"amount": 金额数字(转为基本单位,元或美元)}}
    例: "中证1000持仓200万" -> "中证1000": {{"amount": 2000000}}
    如果用户说"100股", 直接输出整数 100
-9. 关键: 如果用户只指定策略的总金额, 不列出具体标的(如"策略C持仓100万美元"、"Sub-B总共50万"), 输出 {{"_total_amount": 金额数字}}
-   例: "策略C持仓100万美元" -> "Sub-C": {{"_total_amount": 1000000}}
+9. 关键: 如果用户只指定策略的总金额, 不列出具体标的(如"Sub-B总共50万"), 输出 {{"_total_amount": 金额数字}}
    例: "Sub-B总共50万美元" -> "Sub-B": {{"_total_amount": 500000}}
-   注意: _total_amount表示策略总金额, 和具体标的的amount不同"""
+   注意: _total_amount表示策略总金额, 和具体标的的amount不同
+10. V7.2没有Sub-C；即使用户提到Sub-C也输出null"""
 
             with _sm() as msg:
                 msg.write("⏳ 正在解析仓位设置...\n")
@@ -6078,28 +6069,19 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
                     "- 设置仓位 Sub-B: QQQM 100股 GLDM 50股 PDBC 200股\n"
                     "- 设置仓位 Sub-A: 红利低波100 750万\n"
                     "- 设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\n"
-                    "- 设置仓位 Sub-C: VTI 300 QQQM 100 VEA 200\n"
                     "- 或上传CSV文件(列: ETF, 数量)")
             config = dict(existing)
             cap_config = _scan_capital_config(poe.default_chat) or {}
             cap_updated = False
-            for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+            for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                 v = parsed.get(s)
                 if v is not None and isinstance(v, dict):
                     # Check for total amount (user specified strategy total, not per-ETF)
                     if '_total_amount' in v:
                         total = float(v['_total_amount'])
                         if total > 0:
-                            if s == "Sub-C":
-                                # Sub-C has fixed weights -> distribute to per-ETF amounts
-                                new_pos = {}
-                                for etf, cfg in PROD_PORTFOLIO.items():
-                                    new_pos[etf] = {"amount": round(total * cfg['w'], 2)}
-                                config[s] = new_pos
-                            else:
-                                # Sub-B/Sub-A/Sub-A-DK: weights are dynamic -> set as capital
-                                cap_config[s] = total
-                                cap_updated = True
+                            cap_config[s] = total
+                            cap_updated = True
                     else:
                         new_pos = {}
                         for k, v_ in v.items():
@@ -6111,12 +6093,12 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
                                 new_pos[k] = int(float(v_))
                         config[s] = new_pos
 
-        currency_label = {"Sub-A": "A股", "Sub-A-DK": "A股(多空)", "Sub-B": "美股", "Sub-C": "美股"}
-        currency_symbol = {"Sub-A": "¥", "Sub-A-DK": "¥", "Sub-B": "$", "Sub-C": "$"}
+        currency_label = {"Sub-A": "A股", "Sub-A-DK": "A股(多空)", "Sub-B": "美股"}
+        currency_symbol = {"Sub-A": "¥", "Sub-A-DK": "¥", "Sub-B": "$"}
         with _sm() as msg:
             w = msg.write
             w("## 📊 仓位配置已更新\n\n")
-            for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+            for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                 pos = config.get(s)
                 if pos:
                     ccy = currency_symbol.get(s, "")
@@ -6145,7 +6127,7 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
             # Show capital updates from _total_amount conversion
             if cap_updated:
                 w("### 💰 资金配置（按总额设置）\n")
-                for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]:
+                for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                     if s in cap_config and parsed.get(s) and '_total_amount' in parsed[s]:
                         ccy = currency_symbol.get(s, "")
                         w(f"- **{s}**: {ccy}{cap_config[s]:,.0f}")
@@ -6155,7 +6137,7 @@ Sub-C: 美股7ETF组合 - ETF代码如 VTI, QQQM, VEA, VGIT, DBMF, GLDM, IBIT
                             w("（持仓标的随信号变化，查询信号时自动计算目标数量）")
                         w("\n")
                 w("\n")
-            if not any(config.get(s) for s in ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]) and not cap_updated:
+            if not any(config.get(s) for s in ["Sub-A", "Sub-A-DK", "Sub-B"]) and not cap_updated:
                 w("暂无仓位设置\n")
             w("\n✅ 信号查询时将自动显示仓位调整建议\n")
             w(_build_position_marker(config))
@@ -6962,7 +6944,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     if _thresh_line:
                         w(f"\n**\u8c03\u4ed3\u4fdd\u62a4 ({US_ROT_REBALANCE_THRESHOLD}x, \u9010\u7a97\u53e3):** {_thresh_line}\n")
             w("\n---\n\n")
-            signal_info["Sub-C"] = self._write_sub_c(msg, d, us_prod_daily)
         cutoff = cn_date - timedelta(days=60)
         all_rebalances = []
         cn_rebs = extract_cn_rebalances(cn_result, cn_close)
@@ -7399,7 +7380,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
                             cur_display = f"{cur_shares:,}"
                         w(f"| {etf_live} | {cur_display} | {target_shares:,} | {adj_str} |\n")
             w("\n---\n\n")
-            self._write_sub_c(msg, d, us_prod_daily)
     def _handle_params(self):
         with _sm() as msg:
             w = msg.write
@@ -7500,31 +7480,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
                           f"次日全仓转现金(return=0)；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
             w("\n**执行方式:** 美股因时差无法收盘价执行 → 次日开盘价执行（回测用收盘价对收盘价，shift(1)近似）\n")
-            w("\n---\n\n### Sub-C: 美股7ETF组合\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
-            _prod_timing_text = "开启" if PROD_USE_TIMING else "关闭"
-            w(f"| 择时 | **{_prod_timing_text}** | 纯买入持有，无择时信号 |\n")
-            w(f"| 再平衡月份 | **{PROD_REBAL_MONTH}月** | 每年12月恢复目标权重 |\n")
-            w(f"| 现金ETF | **{PROD_CASH}** | 未持有时的现金替代 |\n")
-            w(f"| 交易成本 | **{PROD_COMMISSION:.1%}** | 单边手续费 |\n")
-            w(f"| BTC参与起始 | **{BTC_BT_START.strftime('%Y-%m-%d')}** | 回测中BTC从此日起参与 |\n")
-            if PROD_VS_ENABLED:
-                w(f"\n**波动率缩放 (Vol-Scaling):**\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
-                w(f"| 启用 | **是** | 根据已实现波动率动态调整仓位 |\n")
-                w(f"| 目标波动率 | **{PROD_VS_TARGET_VOL:.0%}** | 年化目标波动率 |\n")
-                w(f"| 回看窗口 | **{PROD_VS_VOL_WINDOW}日** | 已实现波动率计算窗口 |\n")
-                w(f"| 杠杆上限 | **{PROD_VS_MAX_LEV:.1f}x** | scale最大值 |\n")
-                w(f"| 仓位下限 | **{PROD_VS_MIN_LEV:.1f}x** | scale最小值 |\n")
-                w(f"| 调整阈值 | **Δ≥{PROD_VS_THRESHOLD:.0%}** | scale变动超此值才调整 |\n")
-                w(f"| 融资spread | **{PROD_VS_SPREAD_BPS}bp** | 杠杆部分年化融资成本(over rf) |\n")
-                w(f"| 交易成本 | **{PROD_VS_REBAL_COST_BPS}bp** | ETF双边bid-ask |\n")
-            w("\n**目标权重:**\n\n| 资产 | 标签 | 权重 | 类别 |\n|:-|:-|-----:|:-|\n")
-            for name, cfg in PROD_PORTFOLIO.items():
-                w(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | {cfg['cls']} |\n")
-            _vs_note = "+Vol-Scaling" if PROD_VS_ENABLED else ""
-            w(f"\n**计算:** 持有7ETF+年度12月再平衡(BTC 2022起参与){_vs_note}\n")
-            w("\n**执行方式:** 美股因时差无法收盘价执行 → 次日开盘价执行（回测用收盘价对收盘价近似）\n")
             w("\n---\n\n### 组合\n\n| 参数 | 值 |\n|:-|:-|\n")
-            for _cname, _cw in COMBINED_WEIGHTS.items():
+            for _cname in COMBINED_DISPLAY_ORDER:
+                _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(f"| 微盘成交额黄灯 | **中证2000/创业板 AND + {MICROCAP_DIRECT_VOLUME_VENDOR}** |\n")
             w(f"| 微盘黄灯政策 | **{MICROCAP_VOLUME_POLICY}**，只进提醒面板，不参与微盘独立脚本仓位/回测降仓 |\n")
@@ -7987,51 +7945,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
             )
             if _thresh_line_p:
                 w(f"\n**⑥ 调仓保护 ({US_ROT_REBALANCE_THRESHOLD}x, 逐窗口):** {_thresh_line_p}\n")
-            _vs_label = " + Vol-Scaling" if PROD_VS_ENABLED else ""
-            w(f"\n---\n\n### Sub-C: 7ETF组合{_vs_label}\n\n买入持有+年度再平衡\n\n| 资产 | 权重 | 类别 |\n|:-|:-|:-|\n")
-            for name, cfg in PROD_PORTFOLIO.items():
-                w(f"| {name} | {cfg['w']:.0%} | {cfg['cls']} |\n")
-            if PROD_VS_ENABLED:
-                # 计算Sub-C实际杠杆倍数
-                _subc_daily_p = _compute_daily_subc_phased(
-                    us_prod_daily, prod_sig_a, PROD_CASH,
-                    prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
-                _, _vs_actual_scale_p, _ = _apply_subc_vol_scaling(
-                    _subc_daily_p, us_prod_daily)
-                _vs_info_p = _build_subc_vs_info(_subc_daily_p, _vs_actual_scale_p)
-                _c_scale_now = _vs_info_p.get("current_scale", 1.0)
-                _c_rv_now = _vs_info_p.get("realized_vol")
-                _c_ts_now = _vs_info_p.get("next_target_scale", _c_scale_now)
-                _c_scale_next = _vs_info_p.get("next_scale", _c_scale_now)
-                _c_scale_changed = bool(_vs_info_p.get("pending_adjustment", abs(_c_scale_next - _c_scale_now) > 0.001))
-                if _c_scale_changed:
-                    w(f"\n🔴 **杠杆调整! {_c_scale_now:.2f}x → {_c_scale_next:.2f}x | 基于最新收盘，下一美股开盘执行**\n")
-                w(f"\n**Vol-Scaling 实时状态:**\n\n")
-                w(f"| 指标 | 值 |\n|:-|------:|\n")
-                w(f"| 当前杠杆 | **{_c_scale_now:.2f}x** |\n")
-                if _c_rv_now is not None:
-                    w(f"| 已实现波动率 | {_c_rv_now:.1%} |\n")
-                w(f"| 目标波动率 | {PROD_VS_TARGET_VOL:.0%} |\n")
-                w(f"| 最新理论杠杆 | {_c_ts_now:.2f}x |\n")
-                w(f"| 下一美股开盘杠杆 | **{_c_scale_next:.2f}x** |\n")
-                if not _c_scale_changed and abs(_c_ts_now - _c_scale_now) > 0.001:
-                    w(f"| 阈值状态 | |Δ|={abs(_c_ts_now - _c_scale_now):.4f} < {PROD_VS_THRESHOLD}阈值，未调整 |\n")
-                w(f"| 杠杆范围 | [{PROD_VS_MIN_LEV:.1f}x, {PROD_VS_MAX_LEV:.1f}x] |\n")
-                w(f"| 观察窗口 | {PROD_VS_VOL_WINDOW}d |\n")
-                w(f"| 阈值 | Δ≥{PROD_VS_THRESHOLD:.0%} |\n")
-                if not _c_scale_changed:
-                    w(f"\n✅ 杠杆维持: **{_c_scale_now:.2f}x**（下一美股开盘仍维持）\n")
-                if _c_scale_next > 1.0:
-                    _c_borrow = _c_scale_next - 1
-                    w(f"💰 杠杆 {_c_scale_next:.2f}x: 借入{_c_borrow:.0%}资金 | "
-                      f"融资成本≈{_c_borrow * PROD_VS_SPREAD_BPS / 100:.1f}bp/年 over rf\n")
-                elif _c_scale_next < 1.0:
-                    _c_cash = 1 - _c_scale_next
-                    w(f"💰 减仓 {_c_scale_next:.2f}x: {_c_cash:.0%}转入BIL现金\n")
-            w(f"\n下次再平衡: **{datetime.now().year}年12月**"
-                      f"（若已过则{datetime.now().year + 1}年12月）\n")
             w("\n---\n\n### 组合权重\n\n| 策略 | 权重 |\n|:-|------:|\n")
-            for name, cw in COMBINED_WEIGHTS.items():
+            for name in COMBINED_DISPLAY_ORDER:
+                cw = COMBINED_WEIGHTS[name]
                 w(f"| {name} | {cw:.0%} |\n")
     def _handle_signal_history(self, query):
         """显示指定日期范围内的所有交易信号（调仓记录）。"""
@@ -8171,35 +8087,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         parts.append(f"BIL({bil_w:.0%})")
                     w(f"| {tdate.strftime('%Y-%m-%d')} | {', '.join(parts)} |\n")
                 w(f"\n共 **{len(us_rebal)}** 次调仓\n\n")
-            # ===== Sub-C Vol-Scaling =====
-            if PROD_VS_ENABLED:
-                w("### Sub-C: Vol-Scaling 杠杆调仓\n\n")
-                try:
-                    _subc_daily_hist = _compute_daily_subc_phased(
-                        us_prod_daily, prod_sig_a, PROD_CASH,
-                        prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
-                    _, _vs_actual_hist, _ = _apply_subc_vol_scaling(
-                        _subc_daily_hist, us_prod_daily)
-                    _vs_period = _vs_actual_hist[(_vs_actual_hist.index >= start_date) & (_vs_actual_hist.index <= end_date)]
-                    if len(_vs_period) >= 2:
-                        _vs_diff = _vs_period.diff().abs()
-                        _vs_changes = _vs_period[_vs_diff > 0.001]
-                        if len(_vs_changes) > 0:
-                            w(f"| 日期 | 杠杆变动 |\n")
-                            w(f"|:--|:--|\n")
-                            for tdate in _vs_changes.index:
-                                _loc = _vs_actual_hist.index.get_loc(tdate)
-                                _prev_s = _vs_actual_hist.iloc[_loc - 1] if _loc > 0 else 1.0
-                                _new_s = _vs_actual_hist.loc[tdate]
-                                w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_s:.2f}x → **{_new_s:.2f}x** |\n")
-                            w(f"\n共 **{len(_vs_changes)}** 次杠杆调整\n\n")
-                        else:
-                            w("该时段无杠杆调整。\n\n")
-                    else:
-                        w("该时段数据不足。\n\n")
-                except Exception as e:
-                    w(f"⚠️ Sub-C Vol-Scaling 计算失败: {e}\n\n")
-
     def _handle_nav_chart(self, query, *, chart_only=False):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
@@ -8224,12 +8111,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
         cn_daily_ret = cn_result["return"]
         dk_daily_ret = cn_dk_result["return"]
         us_daily_ret = us_rot_result["return"]
-        subc_daily_ret = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=prod_sig_b)
         microcap_daily_ret = _load_microcap_daily_ret()
         cn_period = cn_daily_ret[(cn_daily_ret.index >= start_date) & (cn_daily_ret.index <= end_date)]
         dk_period = dk_daily_ret[(dk_daily_ret.index >= start_date) & (dk_daily_ret.index <= end_date)]
         us_period = us_daily_ret[(us_daily_ret.index >= start_date) & (us_daily_ret.index <= end_date)]
-        subc_period = subc_daily_ret[(subc_daily_ret.index >= start_date) & (subc_daily_ret.index <= end_date)]
         microcap_period = microcap_daily_ret[(microcap_daily_ret.index >= start_date) & (microcap_daily_ret.index <= end_date)]
         if len(cn_period) < 2 and len(us_period) < 2:
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间数据不足")
@@ -8273,16 +8158,13 @@ class CombinedStrategyV72(CombinedStrategyBase):
             "Sub-A-DK": "#9B59B6", # purple
             "Microcap": "#16A085",  # teal
             "Sub-B": "#2980B9",    # blue
-            "Sub-C": "#27AE60",    # green
             "Combined": "#F39C12", # orange/gold
         }
-        _vs_tag = f"+VS{PROD_VS_TARGET_VOL:.0%}" if PROD_VS_ENABLED else ""
         chart_labels = {
             "Sub-A": "Sub-A (CN Long)",
             "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
             "Microcap": "Microcap (Top100 independent)",
             "Sub-B": "Sub-B (US Rotation)",
-            "Sub-C": f"Sub-C (US Production{_vs_tag})",
             "Combined": f"Combined ({_combined_weight_label()})",
         }
         labels = {
@@ -8290,7 +8172,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             "Sub-A-DK": "Sub-A-DK (多空)",
             "Microcap": "微盘股Top100",
             "Sub-B": "Sub-B (美股轮动)",
-            "Sub-C": "Sub-C (生产组合)",
             "Combined": f"组合 ({_combined_weight_label()})",
         }
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -8365,14 +8246,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             lambda x: (1+x).prod()-1)
         us_rot_monthly = us_rot_result["return"].groupby(us_rot_result.index.to_period("M")).apply(
             lambda x: (1+x).prod()-1)
-        if PROD_VS_ENABLED:
-            # Vol-scaling 启用时，从日度缩放后收益推导月度收益
-            _subc_vs_daily = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=prod_sig_b)
-            prod_monthly_ret = _subc_vs_daily.groupby(_subc_vs_daily.index.to_period("M")).apply(
-                lambda x: (1+x).prod()-1)
-        else:
-            prod_monthly_ret = prod_nav.pct_change().dropna()
-            prod_monthly_ret.index = prod_monthly_ret.index.to_period("M")
         microcap_daily_ret = _load_microcap_daily_ret()
         microcap_monthly = microcap_daily_ret.groupby(microcap_daily_ret.index.to_period("M")).apply(
             lambda x: (1+x).prod()-1)
@@ -8405,8 +8278,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             (us_rot_monthly.index >= start_period) & (us_rot_monthly.index <= end_period)]
         microcap_monthly_period = microcap_monthly[
             (microcap_monthly.index >= start_period) & (microcap_monthly.index <= end_period)]
-        prod_monthly_period = prod_monthly_ret[
-            (prod_monthly_ret.index >= start_period) & (prod_monthly_ret.index <= end_period)]
         if len(cn_monthly_period) < 1 and len(us_monthly_period) < 1:
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m')} 到 {end_date.strftime('%Y-%m')} 期间没有数据")
         metrics = {}
@@ -8418,8 +8289,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             metrics["Sub-B"] = calc_monthly_metrics(us_monthly_period)
         if len(microcap_monthly_period) >= 1:
             metrics["Microcap"] = calc_monthly_metrics(microcap_monthly_period)
-        if len(prod_monthly_period) >= 1:
-            metrics["Sub-C"] = calc_monthly_metrics(prod_monthly_period)
         if len(filtered) >= 1:
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
         cn_daily_period = cn_result["return"][
@@ -8442,12 +8311,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
         if len(microcap_daily_period) > 1 and "Microcap" in metrics:
             nav_micro = (1 + microcap_daily_period).cumprod()
             metrics["Microcap"]["max_dd"] = ((nav_micro - nav_micro.cummax()) / nav_micro.cummax()).min() * 100
-        subc_daily = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=prod_sig_b)
-        subc_period = subc_daily[
-            (subc_daily.index >= start_date) & (subc_daily.index <= end_date)]
-        if len(subc_period) > 1 and "Sub-C" in metrics:
-            nav_c = (1 + subc_period).cumprod()
-            metrics["Sub-C"]["max_dd"] = ((nav_c - nav_c.cummax()) / nav_c.cummax()).min() * 100
         comb_daily = None
         common_start = start_date
         if len(cn_daily_period) > 0:
@@ -8491,7 +8354,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     comb_daily = nav_comb.pct_change().dropna()
         for _sname, _dret in [
             ("Sub-A", cn_daily_period), ("Sub-A-DK", dk_daily_period),
-            ("Microcap", microcap_daily_period), ("Sub-B", us_daily_period), ("Sub-C", subc_period),
+            ("Microcap", microcap_daily_period), ("Sub-B", us_daily_period),
         ]:
             if _sname in metrics and len(_dret) > 1:
                 _nav_d = (1 + _dret).cumprod()
@@ -8584,14 +8447,13 @@ class CombinedStrategyV72(CombinedStrategyBase):
         if nav_series:
             colors = {
                 "Sub-A": "#E74C3C", "Sub-A-DK": "#9B59B6",
-                "Microcap": "#16A085", "Sub-B": "#2980B9", "Sub-C": "#27AE60", "Combined": "#F39C12",
+                "Microcap": "#16A085", "Sub-B": "#2980B9", "Combined": "#F39C12",
             }
             chart_labels = {
                 "Sub-A": "Sub-A (CN Long)",
                 "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
                 "Microcap": "Microcap (Top100 independent)",
                 "Sub-B": "Sub-B (US Rotation)",
-                "Sub-C": f"Sub-C (US Production{'+VS' + f'{PROD_VS_TARGET_VOL:.0%}' if PROD_VS_ENABLED else ''})",
                 "Combined": f"Combined ({_combined_weight_label()})",
             }
             fig, ax = plt.subplots(figsize=(12, 6))
@@ -8634,8 +8496,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 range_info["Sub-B"] = (us_monthly_period.index[0], us_monthly_period.index[-1])
             if len(microcap_monthly_period) >= 1:
                 range_info["Microcap"] = (microcap_monthly_period.index[0], microcap_monthly_period.index[-1])
-            if len(prod_monthly_period) >= 1:
-                range_info["Sub-C"] = (prod_monthly_period.index[0], prod_monthly_period.index[-1])
             if len(filtered) >= 1:
                 range_info["Combined"] = (filtered.index[0], filtered.index[-1])
             starts = set(v[0] for v in range_info.values())

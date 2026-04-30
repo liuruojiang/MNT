@@ -1,5 +1,6 @@
 import builtins
 import importlib.util
+import inspect
 import unittest
 from pathlib import Path
 
@@ -19,6 +20,18 @@ class _PoeStub:
 
     def update_settings(self, settings):
         self.settings = settings
+
+
+class _MsgStub:
+    def __init__(self):
+        self.parts = []
+
+    def write(self, text):
+        self.parts.append(text)
+
+    @property
+    def text(self):
+        return "".join(self.parts)
 
 
 def load_module(path, name):
@@ -148,6 +161,66 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertEqual(feature["zz2000_source"].iloc[-1], "unavailable")
         self.assertEqual(feature["cyb_source"].iloc[-1], "Sina volume proxy")
         self.assertTrue(bool(feature["partial_unavailable"].iloc[-1]))
+
+    def test_volume_status_wording_distinguishes_rule_from_trigger(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=1, freq="D")
+        cn_result = pd.DataFrame(
+            {
+                "suba_volume_rule_on": [False],
+                "suba_volume_rule_scale": [1.0],
+                "suba_volume_zz2000_streak": [0],
+                "suba_volume_cyb_streak": [0],
+                "suba_volume_zz2000_source": ["EastMoney amount"],
+                "suba_volume_cyb_source": ["EastMoney amount"],
+            },
+            index=idx,
+        )
+
+        msg = _MsgStub()
+        mod._write_suba_volume_overlay_status(msg, cn_result, compact=True)
+
+        self.assertIn("规则启用", msg.text)
+        self.assertIn("当前**未触发**", msg.text)
+        self.assertIn("成交额scale=1.00", msg.text)
+        self.assertNotIn("**OFF**", msg.text)
+
+    def test_warning_panel_always_includes_direct_microcap_volume_note(self):
+        mod = self.module
+
+        def fake_warning_status(secid, ma, days, label):
+            return {
+                "label": label,
+                "date": pd.Timestamp("2026-04-30"),
+                "streak": 0,
+                "triggered": False,
+                "ma": ma,
+                "days": days,
+            }
+
+        old = mod._volume_warning_status
+        try:
+            mod._volume_warning_status = fake_warning_status
+            msg = _MsgStub()
+            mod._write_volume_warning_panel(msg, compact=True)
+        finally:
+            mod._volume_warning_status = old
+
+        self.assertIn("微盘指数成交量: QVeris/同花顺 883418.TI 仅观察，不作为 V7.2 实盘参数。", msg.text)
+        self.assertIn("Sub-A-DK黄灯: **未触发**", msg.text)
+        self.assertIn("微盘宽口径黄灯: **未触发**", msg.text)
+        self.assertNotIn("**OFF**", msg.text)
+
+    def test_v72_user_facing_paths_do_not_show_sub_c(self):
+        mod = self.module
+        source = V72_BOT_PATH.read_text(encoding="utf-8")
+        self.assertNotIn('signal_info["Sub-C"] = self._write_sub_c', source)
+        self.assertNotIn('self._write_sub_c(msg, d, us_prod_daily)', source)
+
+        for method_name in ["_handle_params", "_handle_live_params", "_handle_signal_history", "_handle_nav_chart", "_handle_performance"]:
+            method_source = inspect.getsource(getattr(mod.CombinedStrategyV72, method_name))
+            self.assertNotIn("### Sub-C", method_source)
+            self.assertNotIn('"Sub-C"', method_source)
 
 
 if __name__ == "__main__":
