@@ -356,7 +356,9 @@ class V72VolumePolicyTests(unittest.TestCase):
             mod._volume_warning_status = old_warning
 
         self.assertIn("微盘指数成交量黄灯: **UNKNOWN**", msg.text)
-        self.assertIn("无法判断高/低于MA53", msg.text)
+        self.assertIn("未取到883418.TI历史成交量，无法判断。", msg.text)
+        self.assertNotIn("MICROCAP_DIRECT_VOLUME_CSV", msg.text)
+        self.assertNotIn("原因:", msg.text)
 
     def test_warning_status_uses_amount_fallback_chain(self):
         mod = self.module

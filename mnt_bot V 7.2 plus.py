@@ -1823,10 +1823,8 @@ def _write_volume_warning_panel(msg, compact=False):
         if not compact:
             w(f"  数据源: {MICROCAP_DIRECT_VOLUME_VENDOR} / {direct.get('source', 'unknown')}；仅提示，不参与V7.2实盘参数。\n")
     except Exception as exc:
-        suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(
-            f"- 微盘指数成交量黄灯: **UNKNOWN** | 未取到{MICROCAP_DIRECT_VOLUME_CODE}历史成交量，"
-            f"无法判断高/低于MA{MICROCAP_DIRECT_VOLUME_MA}。{suffix}\n"
+            f"- 微盘指数成交量黄灯: **UNKNOWN** | 未取到{MICROCAP_DIRECT_VOLUME_CODE}历史成交量，无法判断。\n"
         )
     try:
         dk = _volume_warning_status(
