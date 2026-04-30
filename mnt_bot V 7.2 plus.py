@@ -1432,6 +1432,15 @@ def _load_suba_volume_signal():
         mode=CN_SA_VOLUME_RULE_MODE,
     )
 
+def _mark_suba_volume_unavailable(cn_result, exc):
+    out = cn_result.copy()
+    out["suba_volume_rule_on"] = False
+    out["suba_volume_rule_scale"] = 1.0
+    out["suba_volume_rule_name"] = CN_SA_VOLUME_RULE_NAME
+    out["suba_volume_unavailable"] = True
+    out["suba_volume_error"] = str(exc)
+    return out
+
 def _volume_warning_status(secid, ma, days, label):
     df = _fetch_cn_eastmoney_amount(secid, beg="20200101", lmt=max(120, int(ma) + int(days) + 30))
     streak = _consecutive_below_amount(df["amount"], ma)
@@ -1492,6 +1501,13 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix=""):
     if "suba_volume_rule_on" not in cn_result.columns:
         return
     w = msg.write
+    if "suba_volume_unavailable" in cn_result.columns and bool(cn_result["suba_volume_unavailable"].iloc[idx]):
+        reason = cn_result["suba_volume_error"].iloc[idx] if "suba_volume_error" in cn_result.columns else "unknown"
+        w(
+            f"{prefix}**Sub-A成交额规则:** ⚠️ 本次未取到中证2000/创业板成交额，"
+            f"无法确认正式缩量规则；本次Sub-A成交额scale暂按1.00处理。原因: {reason}\n"
+        )
+        return
     on = bool(cn_result["suba_volume_rule_on"].iloc[idx])
     scale = cn_result["suba_volume_rule_scale"].iloc[idx] if "suba_volume_rule_scale" in cn_result.columns else (CN_SA_VOLUME_SCALE if on else 1.0)
     zz_streak = cn_result["suba_volume_zz2000_streak"].iloc[idx] if "suba_volume_zz2000_streak" in cn_result.columns else np.nan
@@ -5495,15 +5511,18 @@ class CombinedStrategyBase:
                 derisk_scale=CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE,
             )
         if CN_SA_VOLUME_OVERLAY_ENABLED:
-            suba_volume_signal, suba_volume_feature = _load_suba_volume_signal()
-            cn_result = apply_suba_volume_overlay(
-                cn_result,
-                cn_close_with_bond,
-                suba_volume_signal,
-                suba_volume_feature,
-                scale=CN_SA_VOLUME_SCALE,
-                rule_name=CN_SA_VOLUME_RULE_NAME,
-            )
+            try:
+                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal()
+                cn_result = apply_suba_volume_overlay(
+                    cn_result,
+                    cn_close_with_bond,
+                    suba_volume_signal,
+                    suba_volume_feature,
+                    scale=CN_SA_VOLUME_SCALE,
+                    rule_name=CN_SA_VOLUME_RULE_NAME,
+                )
+            except Exception as exc:
+                cn_result = _mark_suba_volume_unavailable(cn_result, exc)
         # v6.1: Sub-A-DK uses multi-pair Top-1
         cn_dk_result = run_dk_strategy(cn_close, cn_dk_close)
         if CN_DK_PAIR_SCORE_DECAY_ENABLED:

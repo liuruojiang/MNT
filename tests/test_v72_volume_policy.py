@@ -81,6 +81,24 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertIn("信号参数", source)
         self.assertIn('query_compact = re.sub(r"\\s+", "", query)', source)
 
+    def test_suba_volume_fetch_failure_degrades_without_crashing(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=3, freq="D")
+        cn_result = pd.DataFrame(
+            {
+                "return": [0.0, 0.01, -0.005],
+                "holding": ["cash", "1.H00852", "1.H00852"],
+                "weight": [0.0, 1.0, 1.0],
+            },
+            index=idx,
+        )
+        out = mod._mark_suba_volume_unavailable(cn_result, RuntimeError("EastMoney down"))
+        self.assertIn("suba_volume_rule_on", out.columns)
+        self.assertFalse(bool(out["suba_volume_rule_on"].iloc[-1]))
+        self.assertEqual(float(out["suba_volume_rule_scale"].iloc[-1]), 1.0)
+        self.assertTrue(bool(out["suba_volume_unavailable"].iloc[-1]))
+        self.assertIn("EastMoney down", out["suba_volume_error"].iloc[-1])
+
 
 if __name__ == "__main__":
     unittest.main()
