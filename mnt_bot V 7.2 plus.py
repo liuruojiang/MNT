@@ -909,6 +909,12 @@ def _secid_to_sina(secid):
     market, code = secid.split(".")
     return ("sh" if market == "1" else "sz") + code
 
+def _secid_to_sohu_index(secid):
+    _market, code = secid.split(".")
+    if code.startswith("H"):
+        code = code[1:].zfill(6)
+    return "zs_" + code
+
 def _fetch_cn_eastmoney(secid):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
@@ -996,6 +1002,36 @@ def _fetch_cn_sina_amount_proxy(secid):
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
+
+def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+    symbol = _secid_to_sohu_index(secid)
+    end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
+    url = (f"https://q.stock.sohu.com/hisHq"
+           f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
+    resp = _session.get(url, timeout=30, headers={"Referer": "https://q.stock.sohu.com/"})
+    resp.raise_for_status()
+    data = resp.json()
+    if not data or not isinstance(data, list):
+        raise ValueError(f"Sohu returned empty data for {symbol}")
+    first = data[0]
+    if not isinstance(first, dict) or first.get("status") != 0 or not first.get("hq"):
+        raise ValueError(f"Sohu returned unavailable data for {symbol}: {first.get('msg') if isinstance(first, dict) else first}")
+    rows = []
+    for item in first["hq"]:
+        if len(item) < 9:
+            continue
+        rows.append({
+            "date": item[0],
+            "close": float(item[2]),
+            "volume": float(item[7]),
+            "amount": float(item[8]),
+            "source": "Sohu amount",
+        })
+    if not rows:
+        raise ValueError(f"Sohu returned no usable rows for {symbol}")
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df.set_index("date").sort_index().tail(int(lmt))
 
 def _fetch_cn_qq_kline(secid, datalen=2000):
     market, code = secid.split(".")
@@ -1496,6 +1532,7 @@ def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
     errors = []
     for source_name, fetcher in [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
+        ("Sohu amount", lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)),
         ("Sina volume proxy", lambda: _fetch_cn_sina_amount_proxy(secid)),
         ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)),
     ]:
@@ -1520,7 +1557,12 @@ def _load_suba_volume_signal():
         ("cyb", "CYB", CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS),
     ]:
         try:
-            df, source = _fetch_cn_amount_with_fallback(secid, label)
+            df, source = _fetch_cn_amount_with_fallback(
+                secid,
+                label,
+                beg="20240101",
+                lmt=max(180, int(ma) + int(days) + 80),
+            )
             specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
             sources[name] = source
         except Exception as exc:
