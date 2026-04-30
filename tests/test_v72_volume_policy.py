@@ -161,6 +161,51 @@ class V72VolumePolicyTests(unittest.TestCase):
         self.assertEqual(feature["zz2000_source"].iloc[-1], "unavailable")
         self.assertEqual(feature["cyb_source"].iloc[-1], "Sina volume proxy")
         self.assertTrue(bool(feature["partial_unavailable"].iloc[-1]))
+        self.assertFalse(bool(feature["combined_unresolved"].iloc[-1]))
+
+    def test_suba_volume_loader_marks_or_false_with_missing_leg_unresolved(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+        vals = [100.0] * 80
+
+        def fake_fetch(secid, label):
+            if label == "ZZ2000":
+                raise RuntimeError("ZZ2000 unavailable")
+            return pd.DataFrame({"amount": vals}, index=idx), "Sina volume proxy"
+
+        old_fetch = mod._fetch_cn_amount_with_fallback
+        try:
+            mod._fetch_cn_amount_with_fallback = fake_fetch
+            signal, feature = mod._load_suba_volume_signal()
+        finally:
+            mod._fetch_cn_amount_with_fallback = old_fetch
+
+        self.assertFalse(bool(signal.iloc[-1]))
+        self.assertTrue(bool(feature["combined_unresolved"].iloc[-1]))
+
+    def test_suba_volume_unresolved_status_is_unknown_not_off(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=1, freq="D")
+        cn_result = pd.DataFrame(
+            {
+                "suba_volume_rule_on": [False],
+                "suba_volume_rule_scale": [1.0],
+                "suba_volume_unresolved": [True],
+                "suba_volume_partial_unavailable": [True],
+                "suba_volume_zz2000_streak": [pd.NA],
+                "suba_volume_cyb_streak": [0],
+                "suba_volume_zz2000_source": ["unavailable"],
+                "suba_volume_cyb_source": ["Sina volume proxy"],
+            },
+            index=idx,
+        )
+
+        msg = _MsgStub()
+        mod._write_suba_volume_overlay_status(msg, cn_result, compact=True)
+
+        self.assertIn("当前**未知**", msg.text)
+        self.assertIn("成交额scale暂按1.00", msg.text)
+        self.assertNotIn("当前**未触发**", msg.text)
 
     def test_volume_status_wording_distinguishes_rule_from_trigger(self):
         mod = self.module
@@ -199,17 +244,76 @@ class V72VolumePolicyTests(unittest.TestCase):
             }
 
         old = mod._volume_warning_status
+        old_direct = mod._microcap_direct_volume_status
         try:
             mod._volume_warning_status = fake_warning_status
+            mod._microcap_direct_volume_status = lambda: {
+                "date": pd.Timestamp("2026-04-30"),
+                "value": 90.0,
+                "ma_value": 100.0,
+                "below": True,
+                "streak": 14,
+                "triggered": True,
+                "ma": 53,
+                "days": 13,
+                "source": "CSV 883418.TI.csv",
+            }
             msg = _MsgStub()
             mod._write_volume_warning_panel(msg, compact=True)
         finally:
             mod._volume_warning_status = old
+            mod._microcap_direct_volume_status = old_direct
 
-        self.assertIn("微盘指数成交量: QVeris/同花顺 883418.TI 仅观察，不作为 V7.2 实盘参数。", msg.text)
+        self.assertIn("微盘指数成交量黄灯: **黄灯触发**", msg.text)
+        self.assertIn("883418.TI 成交量低于MA53", msg.text)
+        self.assertIn("连续14/13天", msg.text)
         self.assertIn("Sub-A-DK黄灯: **未触发**", msg.text)
         self.assertIn("微盘宽口径黄灯: **未触发**", msg.text)
         self.assertNotIn("**OFF**", msg.text)
+
+    def test_direct_microcap_volume_unknown_when_data_missing(self):
+        mod = self.module
+        def fake_warning_status(secid, ma, days, label):
+            return {
+                "label": label,
+                "date": pd.Timestamp("2026-04-30"),
+                "streak": 0,
+                "triggered": False,
+                "ma": ma,
+                "days": days,
+            }
+
+        old_direct = mod._microcap_direct_volume_status
+        old_warning = mod._volume_warning_status
+        try:
+            mod._microcap_direct_volume_status = lambda: (_ for _ in ()).throw(RuntimeError("missing 883418"))
+            mod._volume_warning_status = fake_warning_status
+            msg = _MsgStub()
+            mod._write_volume_warning_panel(msg, compact=True)
+        finally:
+            mod._microcap_direct_volume_status = old_direct
+            mod._volume_warning_status = old_warning
+
+        self.assertIn("微盘指数成交量黄灯: **UNKNOWN**", msg.text)
+        self.assertIn("无法判断高/低于MA53", msg.text)
+
+    def test_warning_status_uses_amount_fallback_chain(self):
+        mod = self.module
+        idx = pd.date_range("2024-01-01", periods=80, freq="D")
+        vals = [100.0] * 70 + [90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0, 10.0, 5.0]
+
+        def fake_fetch(secid, label, beg="20050101", lmt=10000):
+            return pd.DataFrame({"amount": vals}, index=idx), "QQ volume proxy"
+
+        old_fetch = mod._fetch_cn_amount_with_fallback
+        try:
+            mod._fetch_cn_amount_with_fallback = fake_fetch
+            status = mod._volume_warning_status("2.932000", 2, 3, "中证2000")
+        finally:
+            mod._fetch_cn_amount_with_fallback = old_fetch
+
+        self.assertTrue(status["triggered"])
+        self.assertEqual(status["source"], "QQ volume proxy")
 
     def test_v72_user_facing_paths_do_not_show_sub_c(self):
         mod = self.module

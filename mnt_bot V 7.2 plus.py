@@ -80,7 +80,11 @@ MICROCAP_BROAD_VOLUME_ZZ2000_DAYS = 13
 MICROCAP_BROAD_VOLUME_CYB_SECID = "0.399006"
 MICROCAP_BROAD_VOLUME_CYB_MA = 53
 MICROCAP_BROAD_VOLUME_CYB_DAYS = 13
+MICROCAP_DIRECT_VOLUME_CODE = "883418.TI"
+MICROCAP_DIRECT_VOLUME_MA = 53
+MICROCAP_DIRECT_VOLUME_DAYS = 13
 MICROCAP_DIRECT_VOLUME_VENDOR = "QVeris/同花顺 883418.TI"
+MICROCAP_DIRECT_VOLUME_CSV_ENV = "MICROCAP_DIRECT_VOLUME_CSV"
 
 # 防接刀监控（仅展示，不参与交易决策）
 CN_KNIFE_WINDOW = 3        # 观察窗口（交易日）
@@ -1488,12 +1492,12 @@ def _build_consecutive_below_amount_signal(rule_specs, mode="or"):
     feature["combined_signal"] = signal
     return signal.astype(bool), feature
 
-def _fetch_cn_amount_with_fallback(secid, label):
+def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
     errors = []
     for source_name, fetcher in [
-        ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid)),
+        ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
         ("Sina volume proxy", lambda: _fetch_cn_sina_amount_proxy(secid)),
-        ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid)),
+        ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)),
     ]:
         try:
             df = fetcher()
@@ -1528,6 +1532,15 @@ def _load_suba_volume_signal():
         mode=CN_SA_VOLUME_RULE_MODE,
     )
     if len(feature) > 0:
+        if errors:
+            if CN_SA_VOLUME_RULE_MODE == "or":
+                feature["combined_unresolved"] = ~feature["combined_signal"].astype(bool)
+            elif CN_SA_VOLUME_RULE_MODE == "and":
+                feature["combined_unresolved"] = feature["combined_signal"].astype(bool)
+            else:
+                feature["combined_unresolved"] = True
+        else:
+            feature["combined_unresolved"] = False
         for name in ("zz2000", "cyb"):
             if name in sources:
                 feature[f"{name}_source"] = sources[name]
@@ -1545,11 +1558,17 @@ def _mark_suba_volume_unavailable(cn_result, exc):
     out["suba_volume_rule_scale"] = 1.0
     out["suba_volume_rule_name"] = CN_SA_VOLUME_RULE_NAME
     out["suba_volume_unavailable"] = True
+    out["suba_volume_unresolved"] = True
     out["suba_volume_error"] = str(exc)
     return out
 
 def _volume_warning_status(secid, ma, days, label):
-    df = _fetch_cn_eastmoney_amount(secid, beg="20200101", lmt=max(120, int(ma) + int(days) + 30))
+    df, source = _fetch_cn_amount_with_fallback(
+        secid,
+        label,
+        beg="20200101",
+        lmt=max(120, int(ma) + int(days) + 30),
+    )
     streak = _consecutive_below_amount(df["amount"], ma)
     latest_date = streak.index[-1]
     latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
@@ -1560,6 +1579,108 @@ def _volume_warning_status(secid, ma, days, label):
         "triggered": latest_streak >= int(days),
         "ma": int(ma),
         "days": int(days),
+        "source": source,
+    }
+
+def _read_volume_csv(path, label):
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    if df.empty:
+        raise ValueError(f"{label} volume csv is empty: {path}")
+    date_candidates = ["date", "Date", "日期", "trade_date", "datetime", "time", "交易日期"]
+    value_candidates = ["amount", "成交额", "turnover", "volume", "成交量", "vol", "Volume"]
+    date_col = next((c for c in date_candidates if c in df.columns), None)
+    if date_col is None:
+        date_col = df.columns[0]
+    value_col = next((c for c in value_candidates if c in df.columns), None)
+    if value_col is None:
+        numeric_cols = [c for c in df.columns if c != date_col and pd.to_numeric(df[c], errors="coerce").notna().sum() > 0]
+        if not numeric_cols:
+            raise ValueError(f"{label} volume csv has no numeric volume/amount column: {path}")
+        value_col = numeric_cols[-1]
+    out = pd.DataFrame({
+        "date": pd.to_datetime(df[date_col], errors="coerce"),
+        "amount": pd.to_numeric(df[value_col], errors="coerce"),
+    }).dropna()
+    if out.empty:
+        raise ValueError(f"{label} volume csv has no usable rows: {path}")
+    out = out.set_index("date").sort_index()
+    out["source"] = f"CSV {os.path.basename(path)}"
+    return out
+
+def _microcap_direct_volume_candidate_paths():
+    base = _repo_base_dir() if "_repo_base_dir" in globals() else os.getcwd()
+    paths = []
+    env_path = os.environ.get(MICROCAP_DIRECT_VOLUME_CSV_ENV)
+    if env_path:
+        paths.append(env_path)
+    for rel in [
+        os.path.join(".microcap_index_cache", "883418.TI.csv"),
+        os.path.join(".microcap_index_cache", "883418_TI.csv"),
+        os.path.join(".microcap_index_cache", "microcap_direct_volume.csv"),
+        os.path.join("data", "883418.TI.csv"),
+        os.path.join("data", "883418_TI.csv"),
+        "883418.TI.csv",
+        "883418_TI.csv",
+    ]:
+        paths.append(os.path.join(base, rel))
+    cache_root = os.path.join(base, ".microcap_index_cache")
+    if os.path.isdir(cache_root):
+        for root, _dirs, files in os.walk(cache_root):
+            for filename in files:
+                low = filename.lower()
+                if "883418" in low and low.endswith((".csv", ".txt")):
+                    paths.append(os.path.join(root, filename))
+    seen = set()
+    out = []
+    for path in paths:
+        if not path:
+            continue
+        norm = os.path.abspath(path)
+        if norm not in seen:
+            seen.add(norm)
+            out.append(norm)
+    return out
+
+def _fetch_microcap_direct_volume():
+    errors = []
+    for path in _microcap_direct_volume_candidate_paths():
+        if not os.path.exists(path):
+            continue
+        try:
+            df = _read_volume_csv(path, MICROCAP_DIRECT_VOLUME_CODE)
+            if len(df) >= max(60, MICROCAP_DIRECT_VOLUME_MA + MICROCAP_DIRECT_VOLUME_DAYS):
+                return df, df["source"].iloc[-1]
+            errors.append(f"{os.path.basename(path)}: too few rows ({len(df)})")
+        except Exception as exc:
+            errors.append(f"{os.path.basename(path)}: {exc}")
+    raise RuntimeError(
+        f"{MICROCAP_DIRECT_VOLUME_CODE} volume data unavailable; set {MICROCAP_DIRECT_VOLUME_CSV_ENV} "
+        f"or place 883418.TI.csv under .microcap_index_cache. "
+        + ("; ".join(errors[-3:]) if errors else "no candidate file found")
+    )
+
+def _microcap_direct_volume_status():
+    df, source = _fetch_microcap_direct_volume()
+    amount = df["amount"].dropna().sort_index()
+    if len(amount) < max(60, MICROCAP_DIRECT_VOLUME_MA + MICROCAP_DIRECT_VOLUME_DAYS):
+        raise ValueError(f"{MICROCAP_DIRECT_VOLUME_CODE} has too few usable volume rows: {len(amount)}")
+    ma = amount.rolling(MICROCAP_DIRECT_VOLUME_MA).mean()
+    streak = _consecutive_below_amount(amount, MICROCAP_DIRECT_VOLUME_MA)
+    latest_date = amount.index[-1]
+    latest_value = float(amount.iloc[-1])
+    latest_ma = float(ma.iloc[-1])
+    latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
+    below = bool(pd.notna(ma.iloc[-1]) and latest_value < latest_ma)
+    return {
+        "date": latest_date,
+        "value": latest_value,
+        "ma_value": latest_ma,
+        "below": below,
+        "streak": latest_streak,
+        "triggered": latest_streak >= MICROCAP_DIRECT_VOLUME_DAYS,
+        "ma": MICROCAP_DIRECT_VOLUME_MA,
+        "days": MICROCAP_DIRECT_VOLUME_DAYS,
+        "source": source,
     }
 
 def _write_volume_warning_panel(msg, compact=False):
@@ -1567,7 +1688,22 @@ def _write_volume_warning_panel(msg, compact=False):
     w("### 成交额黄灯提醒（仅提示）\n")
     if not compact:
         w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
-    w(f"- 微盘指数成交量: {MICROCAP_DIRECT_VOLUME_VENDOR} 仅观察，不作为 V7.2 实盘参数。\n")
+    try:
+        direct = _microcap_direct_volume_status()
+        direct_mark = "黄灯触发" if direct["triggered"] else "未触发"
+        direct_pos = "低于" if direct["below"] else "高于或等于"
+        w(
+            f"- 微盘指数成交量黄灯: **{direct_mark}** | {MICROCAP_DIRECT_VOLUME_CODE} 成交量{direct_pos}MA{direct['ma']}，"
+            f"连续{direct['streak']}/{direct['days']}天；最新{direct['value']:.4g} vs MA{direct['ma']} {direct['ma_value']:.4g}。\n"
+        )
+        if not compact:
+            w(f"  数据源: {MICROCAP_DIRECT_VOLUME_VENDOR} / {direct.get('source', 'unknown')}；仅提示，不参与V7.2实盘参数。\n")
+    except Exception as exc:
+        suffix = "" if compact else f" 原因: {_short_error(exc)}"
+        w(
+            f"- 微盘指数成交量黄灯: **UNKNOWN** | 未取到{MICROCAP_DIRECT_VOLUME_CODE}历史成交量，"
+            f"无法判断高/低于MA{MICROCAP_DIRECT_VOLUME_MA}。{suffix}\n"
+        )
     try:
         dk = _volume_warning_status(
             CN_DK_VOLUME_YELLOW_SECID,
@@ -1579,6 +1715,8 @@ def _write_volume_warning_panel(msg, compact=False):
         w(
             f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额低于MA{dk['ma']}连续{dk['streak']}/{dk['days']}天。\n"
         )
+        if not compact:
+            w(f"  数据源: {dk.get('source', 'unknown')}\n")
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(f"- Sub-A-DK黄灯: **UNKNOWN** | 本次未取到沪深300成交额。{suffix}\n")
@@ -1601,6 +1739,8 @@ def _write_volume_warning_panel(msg, compact=False):
             f"- 微盘宽口径黄灯: **{micro_mark}** | 中证2000 {zz['streak']}/{zz['days']}天 AND "
             f"创业板 {cyb['streak']}/{cyb['days']}天。\n"
         )
+        if not compact:
+            w(f"  数据源: 中证2000={zz.get('source', 'unknown')}, 创业板={cyb.get('source', 'unknown')}\n")
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(f"- 微盘宽口径黄灯: **UNKNOWN** | 本次未取到中证2000/创业板成交额。{suffix}\n")
@@ -1629,6 +1769,21 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
     if "suba_volume_partial_unavailable" in cn_result.columns and bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
         source_text += "；部分数据源不可用，按可用腿计算"
+    unresolved = "suba_volume_unresolved" in cn_result.columns and bool(cn_result["suba_volume_unresolved"].iloc[idx])
+    if unresolved and not on:
+        if compact:
+            w(
+                f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
+                f"部分数据源不可用，成交额scale暂按1.00 | "
+                f"ZZ2000 {zz_text.replace('中证2000连续', '')} / CYB {cyb_text.replace('创业板连续', '')}\n"
+            )
+        else:
+            w(
+                f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
+                f"OR规则需要确认任一腿是否触发；当前 {zz_text} / {cyb_text} | "
+                f"成交额scale暂按1.00 | {source_text}\n"
+            )
+        return
     status = "触发" if on else "未触发"
     if compact:
         w(
@@ -2488,6 +2643,8 @@ def apply_suba_volume_overlay(
         aligned_feature = volume_feature.reindex(cn_result.index)
         for col in aligned_feature.columns:
             extra_cols[f"suba_volume_{col}"] = aligned_feature[col]
+        if "combined_unresolved" in aligned_feature.columns:
+            extra_cols["suba_volume_unresolved"] = aligned_feature["combined_unresolved"].fillna(False).astype(bool)
 
     return _rebuild_suba_from_effective(
         cn_result,
@@ -7484,7 +7641,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
             for _cname in COMBINED_DISPLAY_ORDER:
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
-            w(f"| 微盘成交额黄灯 | **中证2000/创业板 AND + {MICROCAP_DIRECT_VOLUME_VENDOR}** |\n")
+            w(
+                f"| 微盘成交量黄灯 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
+            )
             w(f"| 微盘黄灯政策 | **{MICROCAP_VOLUME_POLICY}**，只进提醒面板，不参与微盘独立脚本仓位/回测降仓 |\n")
             w("| 合并方式 | 加权合并，月度对齐收益率 |\n")
     def _handle_live_params(self):
