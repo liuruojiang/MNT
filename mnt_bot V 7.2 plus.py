@@ -98,8 +98,12 @@ MICROCAP_BROAD_VOLUME_CYB_DAYS = 13
 MICROCAP_DIRECT_VOLUME_CODE = "883418.TI"
 MICROCAP_DIRECT_VOLUME_MA = 53
 MICROCAP_DIRECT_VOLUME_DAYS = 13
-MICROCAP_DIRECT_VOLUME_VENDOR = "QVeris/同花顺 883418.TI"
+MICROCAP_DIRECT_VOLUME_VENDOR = "Tonghuashun 883418.TI"
 MICROCAP_DIRECT_VOLUME_CSV_ENV = "MICROCAP_DIRECT_VOLUME_CSV"
+MICROCAP_DIRECT_VOLUME_THS_SYMBOL = "48_883418"
+MICROCAP_DIRECT_VOLUME_THS_URL = (
+    f"http://d.10jqka.com.cn/v6/line/{MICROCAP_DIRECT_VOLUME_THS_SYMBOL}/01/all.js"
+)
 
 # 防接刀监控（仅展示，不参与交易决策）
 CN_KNIFE_WINDOW = 3        # 观察窗口（交易日）
@@ -514,8 +518,19 @@ def _fetch_sp500_risk_regime_spx_close():
     return sp500.rename("SPX"), "FRED SP500"
 
 
-def _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source="Yahoo"):
-    credit_col = SP500_RISK_REGIME_CREDIT_PROXY["column"]
+def _build_sp500_risk_regime_snapshot_from_series(
+    spx,
+    vix,
+    credit,
+    term,
+    spx_source="Yahoo",
+    credit_meta=None,
+    source_file=None,
+    source_type="live",
+    live_error=None,
+):
+    credit_meta = credit_meta or SP500_RISK_REGIME_CREDIT_PROXY
+    credit_col = credit_meta["column"]
     daily = pd.concat([spx.rename("SPX"), vix.rename("VIXCLS"), credit.rename(credit_col), term.rename("T10Y2Y")], axis=1).sort_index()
     source_input_dates = {
         "SPX": spx.dropna().index[-1].strftime("%Y-%m-%d"),
@@ -574,24 +589,79 @@ def _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_so
         "risk_score": float(latest["risk_score"]),
         "regime": latest_regime,
         "suggested_equity_budget": _sp500_risk_regime_equity_budget(float(latest["risk_score"])),
-        "credit_proxy": "hy_oas",
-        "credit_series": SP500_RISK_REGIME_CREDIT_PROXY["series_id"],
+        "credit_proxy": credit_meta.get("proxy", "hy_oas"),
+        "credit_series": credit_meta.get("series_id", credit_col),
         "feature_veto": bool(latest["feature_veto"]),
         "oversold_turn_rule": bool(latest["oversold_turn_rule"]),
-        "source_label": SP500_RISK_REGIME_CREDIT_PROXY["label"],
-        "source_type": "live",
-        "source_file": "FRED+Yahoo实时计算",
+        "source_label": credit_meta.get("label", credit_col),
+        "source_type": source_type,
+        "source_file": source_file or "FRED+Yahoo实时计算",
         "spx_source": spx_source,
         "input_dates": source_input_dates,
+        "credit_input_key": credit_col,
+        "live_error": live_error,
     }
 
 
-def _fetch_sp500_risk_regime_live_snapshot():
+def _fetch_yahoo_close_series_for_sp500_risk(ticker, start_date="2007-01-01"):
+    df, source = fetch_yahoo(ticker, start_date=start_date)
+    if df is None or "close" not in df.columns:
+        raise ValueError(f"Yahoo proxy returned no close data for {ticker}")
+    close = df["close"].dropna().sort_index()
+    if len(close) < 1000:
+        raise ValueError(f"Yahoo proxy {ticker} has too few rows: {len(close)}")
+    return close.rename(ticker), source
+
+
+def _fetch_sp500_risk_regime_yahoo_proxy_snapshot(exact_error=None):
     spx, spx_source = _fetch_sp500_risk_regime_spx_close()
-    vix = _fetch_sp500_risk_regime_fred_series("VIXCLS")
-    credit = _fetch_sp500_risk_regime_fred_series(SP500_RISK_REGIME_CREDIT_PROXY["series_id"])
-    term = _fetch_sp500_risk_regime_fred_series("T10Y2Y")
-    return _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source=spx_source)
+    vix, vix_source = _fetch_yahoo_close_series_for_sp500_risk("^VIX", start_date="2007-01-01")
+    hyg, hyg_source = _fetch_yahoo_close_series_for_sp500_risk("HYG", start_date="2007-01-01")
+    lqd, lqd_source = _fetch_yahoo_close_series_for_sp500_risk("LQD", start_date="2007-01-01")
+    ief, ief_source = _fetch_yahoo_close_series_for_sp500_risk("IEF", start_date="2007-01-01")
+    shy, shy_source = _fetch_yahoo_close_series_for_sp500_risk("SHY", start_date="2007-01-01")
+
+    credit = (np.log(lqd / hyg) * 100.0).dropna().rename("HYG_LQD_CREDIT_PROXY")
+    term = (-np.log(ief / shy) * 100.0).dropna().rename("IEF_SHY_TERM_PROXY")
+    credit_meta = {
+        "series_id": "HYG/LQD",
+        "column": "HYG_LQD_CREDIT_PROXY",
+        "label": "HYG/LQD信用代理",
+        "proxy": "hyg_lqd",
+    }
+    snapshot = _build_sp500_risk_regime_snapshot_from_series(
+        spx,
+        vix,
+        credit,
+        term,
+        spx_source=spx_source,
+        credit_meta=credit_meta,
+        source_file="Yahoo代理实时计算",
+        source_type="live_proxy",
+        live_error=str(exact_error) if exact_error else None,
+    )
+    input_sources = snapshot.setdefault("input_sources", {})
+    input_sources.update({
+        "SPX": spx_source,
+        "VIXCLS": vix_source,
+        "HYG": hyg_source,
+        "LQD": lqd_source,
+        "IEF": ief_source,
+        "SHY": shy_source,
+    })
+    return snapshot
+
+
+def _fetch_sp500_risk_regime_live_snapshot():
+    try:
+        spx, spx_source = _fetch_sp500_risk_regime_spx_close()
+        vix = _fetch_sp500_risk_regime_fred_series("VIXCLS")
+        credit = _fetch_sp500_risk_regime_fred_series(SP500_RISK_REGIME_CREDIT_PROXY["series_id"])
+        term = _fetch_sp500_risk_regime_fred_series("T10Y2Y")
+        return _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source=spx_source)
+    except Exception as exc:
+        return _fetch_sp500_risk_regime_yahoo_proxy_snapshot(exact_error=exc)
+
 
 
 def _sp500_risk_regime_expected_weekly_label(asof_date=None):
@@ -825,7 +895,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
         if snapshot["oversold_turn_rule"]:
             flags.append("超跌拐头减分")
         flag_text = f" | 规则: {'、'.join(flags)}" if flags else ""
-        if snapshot.get("source_type") == "live":
+        if snapshot.get("source_type") in ("live", "live_proxy"):
             source_desc = snapshot.get("source_file", "FRED+Yahoo实时计算")
         elif snapshot.get("source_type") == "csv":
             source_desc = f"新策略学习/{snapshot['source_file']}"
@@ -867,18 +937,22 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
             return
     if snapshot is not None:
         w(f"信用口径: {snapshot['source_label']}（{snapshot['credit_series']}）\n")
-        if snapshot.get("source_type") == "live":
+        if snapshot.get("source_type") in ("live", "live_proxy"):
             input_dates = snapshot.get("input_dates", {})
             if input_dates:
+                credit_input_key = snapshot.get("credit_input_key", snapshot.get("credit_series", ""))
                 w(
                     "输入日期: "
                     f"SPX {input_dates.get('SPX', 'NA')} | "
                     f"VIX {input_dates.get('VIXCLS', 'NA')} | "
-                    f"HY OAS {input_dates.get(snapshot['credit_series'], 'NA')} | "
+                    f"{snapshot['credit_series']} {input_dates.get(credit_input_key, 'NA')} | "
                     f"10Y-2Y {input_dates.get('T10Y2Y', 'NA')}\n"
                 )
             if snapshot.get("spx_source"):
-                w(f"价格源: {snapshot['spx_source']} | 宏观源: FRED文本镜像/CSV\n")
+                macro_source = "Yahoo代理" if snapshot.get("source_type") == "live_proxy" else "FRED文本镜像/CSV"
+                w(f"价格源: {snapshot['spx_source']} | 宏观源: {macro_source}\n")
+            if snapshot.get("source_type") == "live_proxy":
+                w("⚠️ FRED本次未完整取到，S&P风险等级改用Yahoo代理实时计算；仅提示，不作为正式口径替代。\n")
         else:
             if snapshot.get("live_error"):
                 w("⚠️ 实时数据源本次未完整取到，当前显示为非实时备用快照；不要把它当作最新确认预警。\n")
@@ -1770,12 +1844,22 @@ def _volume_warning_status(secid, ma, days, label):
         beg="20200101",
         lmt=max(120, int(ma) + int(days) + 30),
     )
-    streak = _consecutive_below_amount(df["amount"], ma)
-    latest_date = streak.index[-1]
+    amount = pd.to_numeric(df["amount"], errors="coerce").dropna().sort_index()
+    if amount.empty:
+        raise ValueError(f"{label} amount has no usable rows")
+    ma_series = amount.rolling(int(ma)).mean()
+    streak = _consecutive_below_amount(amount, ma)
+    latest_date = amount.index[-1]
+    latest_value = float(amount.iloc[-1])
+    latest_ma = float(ma_series.iloc[-1]) if pd.notna(ma_series.iloc[-1]) else np.nan
     latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
+    below = bool(pd.notna(latest_ma) and latest_value < latest_ma)
     return {
         "label": label,
         "date": latest_date,
+        "value": latest_value,
+        "ma_value": latest_ma,
+        "below": below,
         "streak": latest_streak,
         "triggered": latest_streak >= int(days),
         "ma": int(ma),
@@ -1807,6 +1891,75 @@ def _read_volume_csv(path, label):
     out = out.set_index("date").sort_index()
     out["source"] = f"CSV {os.path.basename(path)}"
     return out
+
+def _parse_tonghuashun_line_volume_payload(payload, source):
+    dates_raw = str(payload.get("dates") or "").split(",")
+    volumes_raw = str(payload.get("volumn") or payload.get("volume") or "").split(",")
+    dates = [x.strip() for x in dates_raw if x.strip()]
+    volumes = [x.strip() for x in volumes_raw if x.strip()]
+    if not dates or not volumes:
+        raise ValueError("Tonghuashun returned empty dates/volumn")
+    if len(dates) != len(volumes):
+        raise ValueError(f"Tonghuashun dates/volumn length mismatch: {len(dates)} vs {len(volumes)}")
+
+    year_counts = payload.get("sortYear") or []
+    expanded = []
+    pos = 0
+    try:
+        for year, count in year_counts:
+            year = int(year)
+            count = int(count)
+            for mmdd in dates[pos:pos + count]:
+                expanded.append(pd.to_datetime(f"{year}{str(mmdd).zfill(4)}", format="%Y%m%d"))
+            pos += count
+    except Exception as exc:
+        raise ValueError(f"Tonghuashun sortYear parse failed: {exc}")
+    if len(expanded) != len(dates):
+        start = str(payload.get("start") or "")
+        if len(start) >= 4 and start[:4].isdigit():
+            year = int(start[:4])
+            expanded = []
+            prev_mmdd = None
+            for mmdd in dates:
+                mmdd = str(mmdd).zfill(4)
+                if prev_mmdd is not None and mmdd < prev_mmdd:
+                    year += 1
+                expanded.append(pd.to_datetime(f"{year}{mmdd}", format="%Y%m%d"))
+                prev_mmdd = mmdd
+        else:
+            raise ValueError("Tonghuashun sortYear does not cover all dates")
+
+    out = pd.DataFrame({
+        "date": expanded,
+        "volume": pd.to_numeric(volumes, errors="coerce"),
+    }).dropna()
+    if out.empty:
+        raise ValueError("Tonghuashun returned no usable volume rows")
+    out["amount"] = out["volume"]
+    out["source"] = source
+    return out.set_index("date").sort_index()
+
+def _fetch_tonghuashun_microcap_direct_volume():
+    source = "Tonghuashun 883418.TI"
+    resp = _session.get(
+        MICROCAP_DIRECT_VOLUME_THS_URL,
+        timeout=20,
+        headers={
+            "Referer": "http://q.10jqka.com.cn/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+    )
+    resp.raise_for_status()
+    text = resp.text.strip()
+    match = re.search(r"^[^(]+\((.*)\)\s*;?\s*$", text, flags=re.S)
+    if not match:
+        raise ValueError("Tonghuashun returned non-JSONP payload")
+    payload = json.loads(match.group(1))
+    df = _parse_tonghuashun_line_volume_payload(payload, source)
+    if len(df) < max(60, MICROCAP_DIRECT_VOLUME_MA + MICROCAP_DIRECT_VOLUME_DAYS):
+        raise ValueError(f"Tonghuashun returned too few rows: {len(df)}")
+    return df
 
 def _microcap_direct_volume_candidate_paths():
     base = _repo_base_dir() if "_repo_base_dir" in globals() else os.getcwd()
@@ -1844,6 +1997,13 @@ def _microcap_direct_volume_candidate_paths():
 
 def _fetch_microcap_direct_volume():
     errors = []
+    try:
+        df = _fetch_tonghuashun_microcap_direct_volume()
+        if len(df) >= max(60, MICROCAP_DIRECT_VOLUME_MA + MICROCAP_DIRECT_VOLUME_DAYS):
+            return df, df["source"].iloc[-1]
+        errors.append(f"Tonghuashun: too few rows ({len(df)})")
+    except Exception as exc:
+        errors.append(f"Tonghuashun: {exc}")
     for path in _microcap_direct_volume_candidate_paths():
         if not os.path.exists(path):
             continue
@@ -1855,9 +2015,8 @@ def _fetch_microcap_direct_volume():
         except Exception as exc:
             errors.append(f"{os.path.basename(path)}: {exc}")
     raise RuntimeError(
-        f"{MICROCAP_DIRECT_VOLUME_CODE} volume data unavailable; set {MICROCAP_DIRECT_VOLUME_CSV_ENV} "
-        f"or place 883418.TI.csv under .microcap_index_cache. "
-        + ("; ".join(errors[-3:]) if errors else "no candidate file found")
+        f"{MICROCAP_DIRECT_VOLUME_CODE} volume data unavailable. "
+        + ("; ".join(errors[-3:]) if errors else "")
     )
 
 def _microcap_direct_volume_status():
@@ -1889,20 +2048,17 @@ def _write_volume_warning_panel(msg, compact=False):
     w("### 成交额黄灯提醒（仅提示）\n")
     if not compact:
         w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
-    try:
-        direct = _microcap_direct_volume_status()
-        direct_mark = "🟡 黄灯触发" if direct["triggered"] else "未触发"
-        direct_pos = "低于" if direct["below"] else "高于或等于"
-        w(
-            f"- 微盘指数成交量黄灯: **{direct_mark}** | {MICROCAP_DIRECT_VOLUME_CODE} 成交量{direct_pos}MA{direct['ma']}，"
-            f"连续{direct['streak']}/{direct['days']}天；最新{direct['value']:.4g} vs MA{direct['ma']} {direct['ma_value']:.4g}。\n"
-        )
-        if not compact:
-            w(f"  数据源: {MICROCAP_DIRECT_VOLUME_VENDOR} / {direct.get('source', 'unknown')}；仅提示，不参与V7.2实盘参数。\n")
-    except Exception as exc:
-        w(
-            f"- 微盘指数成交量黄灯: **UNKNOWN** | 未取到{MICROCAP_DIRECT_VOLUME_CODE}历史成交量，无法判断。\n"
-        )
+
+    def _status_pos(status):
+        return "低于" if bool(status.get("below", False)) else "高于或等于"
+
+    def _latest_vs_ma_text(status):
+        value = status.get("value")
+        ma_value = status.get("ma_value")
+        if value is None or ma_value is None or pd.isna(value) or pd.isna(ma_value):
+            return ""
+        return f"；最新{float(value):.4g} vs MA{status['ma']} {float(ma_value):.4g}"
+
     try:
         dk = _volume_warning_status(
             CN_DK_VOLUME_YELLOW_SECID,
@@ -1911,8 +2067,10 @@ def _write_volume_warning_panel(msg, compact=False):
             CN_DK_VOLUME_YELLOW_LABEL,
         )
         dk_mark = "🟡 黄灯触发" if dk["triggered"] else "未触发"
+        dk_pos = _status_pos(dk)
         w(
-            f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额低于MA{dk['ma']}连续{dk['streak']}/{dk['days']}天。\n"
+            f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
+            f"连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}。\n"
         )
         if not compact:
             w(f"  数据源: {dk.get('source', 'unknown')}\n")
@@ -1934,9 +2092,13 @@ def _write_volume_warning_panel(msg, compact=False):
         )
         micro_on = zz["triggered"] and cyb["triggered"]
         micro_mark = "🟡 黄灯触发" if micro_on else "未触发"
+        zz_pos = _status_pos(zz)
+        cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径黄灯: **{micro_mark}** | 中证2000 {zz['streak']}/{zz['days']}天 AND "
-            f"创业板 {cyb['streak']}/{cyb['days']}天。\n"
+            f"- 微盘宽口径黄灯: **{micro_mark}** | "
+            f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
+            f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天。\n"
         )
         if not compact:
             w(f"  数据源: 中证2000={zz.get('source', 'unknown')}, 创业板={cyb.get('source', 'unknown')}\n")
@@ -2860,7 +3022,7 @@ def apply_suba_volume_overlay(
         except Exception:
             for col in aligned_feature.columns:
                 aligned_feature[col] = aligned_feature[col].ffill()
-        aligned_feature = aligned_feature.infer_objects(copy=False)
+        aligned_feature = aligned_feature.infer_objects()
         for col in aligned_feature.columns:
             extra_cols[f"suba_volume_{col}"] = aligned_feature[col]
         if "combined_unresolved" in aligned_feature.columns:

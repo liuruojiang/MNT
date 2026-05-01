@@ -1,0 +1,105 @@
+{
+  "version_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.2 plus.py",
+  "official_sw_signal_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\dadk_microcap_official_sw_width_volume_filter_20260501\\official_sw_width_signals.csv",
+  "amount_source": "CSIndex official amount",
+  "amount_secid": "1.000300",
+  "amount_label": "沪深300",
+  "current_dk_volume_policy": "warning_only",
+  "current_dk_volume_ma": 40,
+  "current_dk_volume_days": 16,
+  "performance_combo_weights": {
+    "Sub-A": 0.11764705882352942,
+    "Sub-A-DK": 0.17647058823529413,
+    "Sub-B": 0.7058823529411765
+  },
+  "scan_ma_values": [
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80
+  ],
+  "scan_day_values": [
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    14,
+    16,
+    18,
+    20,
+    22,
+    24,
+    26,
+    28,
+    30
+  ],
+  "fixed_stirrer_condition": "official SW stock breadth top1_is_stirrer",
+  "volume_condition": "HS300 amount below rolling MA for N consecutive days",
+  "action": "main scope scans DK/ADK itself: next-day DK exposure scale 0.5 when both official stirrer and scanned HS300 volume condition are true",
+  "cost_model": "10bp times abs(scale change), added on top of the source DK sleeve returns",
+  "baseline_diagnostics": {
+    "dk_sleeve_full": {
+      "max_dd": -20.006213687351405,
+      "peak": "2016-12-12",
+      "trough": "2017-02-20",
+      "start": "2015-04-03",
+      "end": "2026-04-17",
+      "annual": 32.70585097841023,
+      "vol": 20.45636567575882,
+      "sharpe": 1.5361026641230708,
+      "calmar": 1.6347846468863803,
+      "total_return": 2172.9258242752903
+    },
+    "dk_sleeve_last_10y": {
+      "annual": 34.287477908865085,
+      "vol": 20.522865950393633,
+      "sharpe": 1.591850592069164,
+      "max_dd": -20.006213687351437,
+      "calmar": 1.7138414317019275,
+      "total_return": 1804.7121833786243
+    },
+    "pv_combo_full": {
+      "annual": 31.866217899655247,
+      "vol": 10.580028983356025,
+      "sharpe": 1.8566183430842498,
+      "max_dd": -9.543150681966338,
+      "calmar": 3.3391716175950923,
+      "total_return": 407.5830273205917
+    }
+  },
+  "ridge": {
+    "scope": "dk_sleeve",
+    "window": "full",
+    "score_col": "sharpe_delta",
+    "tolerance": 0.02,
+    "best": {
+      "ma": 65,
+      "days": 4,
+      "sharpe_delta": 0.09470926263607682,
+      "annual": 32.939767514056605,
+      "sharpe": 1.6308119267591477,
+      "max_dd": -16.439019462727668,
+      "annual_delta": 0.23391653564637238,
+      "max_dd_delta": 3.567194224623737,
+      "defense_days_pct": 12.928464977645305
+    },
+    "near_count": 5,
+    "near_ma_min": 60,
+    "near_ma_max": 70,
+    "near_days_min": 4,
+    "near_days_max": 14
+  }
+}

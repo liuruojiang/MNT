@@ -1,0 +1,110 @@
+{
+  "microcap_costed_nav_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_hedge_zz1000_biweekly_thursday_16y_costed_nav.csv",
+  "microcap_costed_nav_rows": 3940,
+  "microcap_return_start": "2010-02-02",
+  "microcap_return_end": "2026-04-30",
+  "microcap_latest_trade_date": "2026-04-30",
+  "microcap_history_anchor": {
+    "latest_trade_date": "2026-04-30",
+    "current_date": "2026-05-01",
+    "stale_calendar_days": 1,
+    "max_stale_anchor_days": 5,
+    "is_stale": false,
+    "status": "fresh"
+  },
+  "microcap_proxy_source_used": "local_cache_proxy_recent_extension",
+  "microcap_proxy_method_note": "Local cache reconstruction using raw close data, OHLC tradeability checks, and share-change data. This practical version anchors biweekly rebalances to Thursday signal dates, excludes suspended names from signal-date ranking, and applies conservative close execution: if the signal-date close is locked at the price limit, buys or sells are blocked at the close.",
+  "official_sw_signal_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\dadk_microcap_official_sw_width_volume_filter_20260501\\official_sw_width_signals.csv",
+  "official_sw_rows": 3944,
+  "official_sw_start": "2010-01-29",
+  "official_sw_end": "2026-04-30",
+  "stirrer_condition": "official SW industry breadth top1 is one of steel/nonferrous/bank/coal/legacy mining",
+  "volume_meta": {
+    "broad_volume_mode": "and",
+    "sources": {
+      "zz2000": {
+        "secid": "2.932000",
+        "label": "中证2000",
+        "source": "CSIndex official amount",
+        "rows": 2998,
+        "start": "2010-01-01",
+        "end": "2026-04-30"
+      },
+      "cyb": {
+        "secid": "0.399006",
+        "label": "创业板",
+        "source": "Sohu amount",
+        "rows": 3861,
+        "start": "2010-06-01",
+        "end": "2026-04-30"
+      }
+    }
+  },
+  "direct_volume": {
+    "available": false,
+    "error": "RuntimeError: 883418.TI volume data unavailable; set MICROCAP_DIRECT_VOLUME_CSV or place 883418.TI.csv under .microcap_index_cache. no candidate file found"
+  },
+  "current_formal_broad_param": {
+    "ma": 53,
+    "days": 13,
+    "mode": "and"
+  },
+  "scale_when_true": 0.5,
+  "extra_cost_bps_per_abs_scale_change": 10.0,
+  "ma_values": [
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    53,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90
+  ],
+  "day_values": [
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    13,
+    14,
+    16,
+    18,
+    20,
+    22,
+    24,
+    26,
+    28,
+    30
+  ],
+  "ridge": {
+    "window": "full",
+    "tolerance_sharpe_delta": 0.02,
+    "best": {
+      "ma": 53,
+      "days": 13,
+      "annual": 31.45936584231659,
+      "sharpe": 2.521144214461152,
+      "max_dd": -11.936913813673977,
+      "annual_delta": 0.40378816314177257,
+      "sharpe_delta": 0.06713469462493427,
+      "max_dd_delta": 0.2646986274757239,
+      "defense_days_pct": 2.8934010152284264
+    },
+    "near_count": 23,
+    "near_ma_min": 45,
+    "near_ma_max": 65,
+    "near_days_min": 6,
+    "near_days_max": 16
+  }
+}

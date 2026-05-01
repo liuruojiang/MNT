@@ -1,0 +1,20 @@
+{
+  "classification_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\新策略学习\\outputs\\sws_official_probe_20260501\\StockClassifyUse_stock.xls",
+  "price_raw_dir": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\.microcap_index_cache\\prices_raw",
+  "price_file_count": 5014,
+  "used_stocks": 5012,
+  "skipped_no_classification": 0,
+  "skipped_no_prices": 2,
+  "classification_segment_count_used": 10451,
+  "date_start": "2010-01-04",
+  "date_end": "2026-04-30",
+  "stirrer_l1_codes": [
+    "210000",
+    "230000",
+    "240000",
+    "480000",
+    "740000"
+  ],
+  "universe_note": "Uses local microcap cache prices_raw stock files, not exact point-in-time CSI All Share constituents.",
+  "volume_note": "Combines official SW stock breadth with V7.2 existing broad amount contraction signal."
+}

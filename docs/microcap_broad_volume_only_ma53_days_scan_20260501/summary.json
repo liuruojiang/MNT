@@ -1,0 +1,48 @@
+{
+  "nav_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_hedge_zz1000_biweekly_thursday_16y_costed_nav.csv",
+  "return_start": "2010-02-02",
+  "return_end": "2026-04-30",
+  "ma": 53,
+  "days_min": 1,
+  "days_max": 30,
+  "sources": {
+    "zz2000": {
+      "source": "CSIndex official amount",
+      "rows": 2998,
+      "start": "2010-01-01",
+      "end": "2026-04-30"
+    },
+    "cyb": {
+      "source": "Sohu amount",
+      "rows": 3861,
+      "start": "2010-06-01",
+      "end": "2026-04-30"
+    }
+  },
+  "mode": "and",
+  "scale_when_triggered": 0.5,
+  "transition_cost_bps_per_abs_scale_change": 10.0,
+  "best_full_by_sharpe_delta": {
+    "scope": "microcap_v1_0_costed_broad_own_volume_only_half_official_logic",
+    "window": "full",
+    "ma": 53,
+    "days": 13,
+    "start": "2010-02-02",
+    "end": "2026-04-30",
+    "n_days": 3940,
+    "annual": 31.276544361208792,
+    "vol": 11.39477378933515,
+    "sharpe": 2.5386755157472094,
+    "max_dd": -11.380932944868682,
+    "calmar": 2.7481529425327507,
+    "total_return": 8201.288901327329,
+    "annual_delta": 0.22096668203397485,
+    "sharpe_delta": 0.0843545140896147,
+    "max_dd_delta": 0.8206794962810182,
+    "signal_days": 237,
+    "signal_days_pct": 6.015228426395939,
+    "defense_days": 237,
+    "defense_days_pct": 6.015228426395939,
+    "switch_count": 54
+  }
+}

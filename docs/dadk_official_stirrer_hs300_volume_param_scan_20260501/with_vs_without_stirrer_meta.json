@@ -1,0 +1,18 @@
+{
+  "sample_start": "2015-04-03",
+  "sample_end": "2026-04-17",
+  "n_days": 2684,
+  "baseline": {
+    "annual": 32.70585097841023,
+    "vol": 20.45636567575882,
+    "sharpe": 1.5361026641230708,
+    "max_dd": -20.006213687351405,
+    "calmar": 1.6347846468863803,
+    "total_return": 2172.9258242752903
+  },
+  "amount_source": "CSIndex official amount",
+  "amount_start": "2005-01-01",
+  "amount_end": "2026-04-30",
+  "volume_only_output": "hs300_volume_only_ma_days_scan_by_window.csv",
+  "comparison_output": "with_vs_without_stirrer_comparison.csv"
+}

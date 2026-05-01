@@ -1,0 +1,75 @@
+{
+  "source": "official mnt_bot V 7.2 broad-volume signal logic; no stirrer condition",
+  "nav_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_hedge_zz1000_biweekly_thursday_16y_costed_nav.csv",
+  "return_start": "2010-02-02",
+  "return_end": "2026-04-30",
+  "sources": {
+    "zz2000": {
+      "secid": "2.932000",
+      "label": "ZZ2000",
+      "source": "CSIndex official amount",
+      "rows": 2998,
+      "start": "2010-01-01",
+      "end": "2026-04-30"
+    },
+    "cyb": {
+      "secid": "0.399006",
+      "label": "CYB",
+      "source": "Sohu amount",
+      "rows": 3861,
+      "start": "2010-06-01",
+      "end": "2026-04-30"
+    }
+  },
+  "days": 13,
+  "ma_min": 20,
+  "ma_max": 80,
+  "mode": "and",
+  "scale_when_triggered": 0.5,
+  "transition_cost_bps_per_abs_scale_change": 10.0,
+  "parity_max_abs_diff_vs_2104_coarse_table": {
+    "annual": 3.552713678800501e-15,
+    "sharpe": 0.001427000364013331,
+    "max_dd": 1.7763568394002505e-15,
+    "signal_days": 0.0,
+    "defense_days": 0.0,
+    "switch_count": 0.0
+  },
+  "current_status": {
+    "MA53": {
+      "date": "2026-04-30",
+      "triggered": false,
+      "zz2000_streak": 0,
+      "cyb_streak": 0
+    },
+    "MA57": {
+      "date": "2026-04-30",
+      "triggered": false,
+      "zz2000_streak": 0,
+      "cyb_streak": 0
+    }
+  },
+  "best_full_by_sharpe_delta": {
+    "scope": "microcap_v1_0_costed_broad_own_volume_only_half_official_logic",
+    "window": "full",
+    "ma": 64,
+    "days": 13,
+    "start": "2010-02-02",
+    "end": "2026-04-30",
+    "n_days": 3940,
+    "annual": 31.077674827007982,
+    "vol": 11.28166497658167,
+    "sharpe": 2.5490076689590393,
+    "max_dd": -12.201612441149734,
+    "calmar": 2.547013763705446,
+    "total_return": 7999.424933768288,
+    "annual_delta": 0.022097147833164854,
+    "sharpe_delta": 0.0946866673014446,
+    "max_dd_delta": -3.375077994860476e-14,
+    "signal_days": 284,
+    "signal_days_pct": 7.208121827411168,
+    "defense_days": 284,
+    "defense_days_pct": 7.208121827411168,
+    "switch_count": 50
+  }
+}
