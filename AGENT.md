@@ -19,6 +19,15 @@
 
 只要有一项不明确，就不能下结论。
 
+## 组合回测刷新铁律
+
+以后凡是回测 V7.2 或任何四腿组合，必须先把所有子策略数据刷新到最新可用交易日，再合成组合：
+
+1. `Sub-A` 和 `Sub-A-DK`：刷新本仓库 `mnt_strategy_data_cn.csv`，并确认正式脚本使用的 A 股字段最新日期。
+2. `Sub-B`：刷新本仓库 `mnt_strategy_data_us.csv`，并确认美股 ETF 最新日期；不能让 `BTC-USD` 周末数据污染美股交易日历。
+3. `Microcap`：先运行微盘仓库官方脚本刷新 `outputs/microcap_top100_mom16_biweekly_live_panel_refreshed.csv`、Top100 proxy index、turnover、costed NAV，再由组合脚本读取刷新后的官方输出。
+4. 合成前必须打印或记录四条腿的可用起止日期；若任一腿落后，先刷新或明确标注结果不是最新正式结果。
+
 ## Sub-B 专项铁律
 
 `Sub-B` 是最容易被口径污染的部分，必须额外检查：
@@ -29,6 +38,16 @@
 4. 是否带了该版本默认的 `asset overlay`。
 5. 是否正确处理了 `EMXC/EEM` 和 `IBIT/BTC-USD` 的正式拼接。
 6. 没有 `open` 数据时，不能宣称结果是正式口径。
+
+## Sub-A-DK 专项铁律
+
+`Sub-A-DK` / `DK` 回测最容易被指数未上市前的供应商回填数据污染，必须额外检查：
+
+1. DK 结果用于版本、参数、波动率缩放、配比或优劣判断前，必须先确认参与指数的正式发布日期/上市日期。
+2. 禁止把指数正式发布前的历史回填价格纳入正式或准正式结论；这些早期数据只能作为无效样本或另行标注的代理研究。
+3. 如果 DK 使用当前完整指数池 `SZ50 / HS300 / ZZ500 / ZZ1000 / CYB`，样本起点必须不早于最晚上市的参与指数日期；当前完整池至少要从 `ZZ1000` 正式发布日 `2014-10-17` 之后开始统计。
+4. 如果某轮 DK 测试使用了缩减指数池，样本起点必须取该轮实际参与指数发布日期的最大值，并在输出中记录。
+5. DK 临时研究脚本即使通过收益、权重、调仓日 parity，也不能越过上述上市日期约束；发现样本起点早于参与指数正式日期时，该轮 DK 绩效结论直接作废并重跑。
 
 ## 明确禁止
 
@@ -113,3 +132,125 @@
 4. 本地服务优先绑定 `127.0.0.1`，例如：
    `python -m http.server 8765 --bind 127.0.0.1 --directory <output_dir>`
 5. 如果端口被占用，换一个端口，但必须重新验证链接可访问。
+
+## 测试数据与 outputs 纪律
+
+以下纪律从微盘策略仓库同步过来，适用于本仓库所有 Sub-A / Sub-A-DK / Sub-B / Microcap / 四腿组合测试：
+
+1. 不能把旧的比较 CSV、导出 CSV、临时 scan 结果或 `outputs/` 里的旧文件当成新结论的数据源。
+   - 新结论必须从当前目标版本的正式函数、正式脚本入口或当前官方输出重新生成。
+   - 若必须引用旧文件做诊断，必须先说明它只是诊断材料，并和当前官方基准做日期级核对。
+2. 做版本对比、参数对比、组合权重对比时，所有候选必须共享同一套口径：
+   - 同一基准；
+   - 同一日期索引；
+   - 同一收益列；
+   - 同一成本模型；
+   - 同一窗口定义。
+3. 发布 CAGR、年化波动、Sharpe、最大回撤、总收益、年度收益等指标前，必须至少内部确认并在必要时汇报：
+   - source script/function/file；
+   - return column；
+   - start/end date；
+   - row count；
+   - duplicate-date count；
+   - common-index row count。
+4. 不能静默混用 `gross`、`return`、`return_net`、`nav`、`nav_net`。
+   - 实盘/可执行口径默认使用扣费后的收益和净值。
+   - 如果某条腿只有近似或未扣费口径，必须显式标注，不能混入正式结论。
+5. 目标波动率、杠杆、风控 overlay、现金 overlay、成本 overlay 的测试必须从同一个 freshly rebuilt base return stream 生成。
+   - 不得把旧的 target-vol CSV 和新生成的 base/v1.x 文件混在同一张表里比较。
+   - 若复算结果与旧表差异明显，先停下来查 data lineage，不得继续发布新的绩效表。
+6. 接受 overlay 或 target-vol 结果前必须做成本 sanity check：
+   - 同一 base return stream 上，costed NAV 不应高于 no-cost NAV；
+   - entry/exit cost columns 必须实际影响 `return_net`；
+   - `cash -> long` 入场日即使当日执行 scale 为 0，也必须按策略约定扣除入场成本。
+7. `outputs/` 视为可再生导出空间。
+   - 当前正式产物、必要缓存和已写入 docs 的结论证据可以保留。
+   - stale comparison、scan、custom、corrected、temporary exports 在结论被替代或写入文档后应清理。
+   - 清理前若文件可能还有复核价值，先备份到 `.codex_backups`。
+
+## 2026-05-03 V7.3旧版 POE 回测事故复盘
+
+这次在核对 `performance_20260503.xlsx` 和 V7.3 旧版/新版近10年收益时，出现过多轮错误。以后遇到 POE、Excel、备份脚本、本地当前脚本之间的回测对账，必须按下面纪律执行。
+
+### 本次实际错误
+
+1. 把“旧版”说得不够精确。
+   - 不能只说旧版或新版，必须写清楚具体文件路径、备份目录、生成时间和入口函数。
+   - 例如 `.codex_backups/20260503_084518/mnt_bot V 7.3 plus.py`、当前 `mnt_bot V 7.3 plus.py`、POE 上传脚本不是天然等价。
+   - 若无法拿到 POE 上传的原始脚本，只能说“最接近某备份”，不能说“已复现 POE 旧版”。
+2. Sub-B 曾被错误压到 A股/DK 共同交易日。
+   - `Sub-B` 是美股/加密混合日历，不能为了组合或对比方便压到 A股交易日。
+   - 近10年 `Sub-B` 应保留完整美股/策略可用日频；若只剩约 2429 个 A股交易日，结果直接作废。
+3. Sub-B 曾被错误算成 close-to-close。
+   - V7.3 旧版 POE 的 `Sub-B` 正式口径是 `T日收盘信号 -> T+1 adjusted open 调仓 -> T+1 close 收益`。
+   - 本地复刻若没有传入 `us_open`，就不是正式口径，不能拿来和 POE Excel 比较。
+   - 缺 `us_open` 时跑出的 B 年化只能标为“无效/近似 close-to-close”，不能标为旧版正式收益。
+4. 混淆了成本修复前后脚本。
+   - 当前脚本和 `20260503_084518` 旧备份的 A/ADK/B 成本路径不同。
+   - 成本修复会改变 A、ADK、B，尤其 ADK；不能把当前脚本结果拿去解释 POE 未修订前 Excel。
+5. 混用了日频绩效口径和月频绩效口径。
+   - POE 绩效 Excel 的展示表虽有月度收益，但累计收益、年化收益、最大回撤会被日频区间重新覆盖。
+   - 对账时必须同时检查：月收益乘积、日频累计、日频年化、日频最大回撤；不能只用月表年化下结论。
+6. 没有先做外部 Excel 对账就发布判断。
+   - 外部 Excel 必须逐月 diff、相关系数、MAE、最大单月差异、起止月份、日频行数一起核对。
+   - 只看 CAGR 接近或不接近都不够；必须定位差异集中在哪些月份、哪些数据源、哪个执行假设。
+
+### 以后强制对账流程
+
+1. 先冻结四个身份：
+   - 外部结果文件，例如 `performance_20260503.xlsx`；
+   - 目标脚本，例如 POE 上传脚本或具体 `.codex_backups/<timestamp>/...py`；
+   - 当前本地脚本；
+   - 数据文件和生成时间，例如 `mnt_strategy_data_cn.csv`、`mnt_strategy_data_us.csv`。
+2. 再打印每条腿的最小审计信息：
+   - return column 名称；
+   - start/end date；
+   - row count；
+   - monthly count；
+   - 是否有 duplicate dates；
+   - 是否有 `open` 数据；
+   - 是否使用 `us_open`；
+   - 是否启用该版本默认 `VolReg`、成本、overlay、代理拼接。
+3. 对 Sub-B 必须额外打印执行口径：
+   - signal timing；
+   - execution price；
+   - 是否 `T+1 open`；
+   - 是否使用 adjusted open；
+   - `BTC-USD/IBIT` 拼接方式；
+   - `EMXC/EEM` 拼接方式；
+   - 是否排除 BTC 周末日期对美股日历的污染。
+4. 对 A/ADK 必须额外打印：
+   - A 股输入字段；
+   - DK 输入字段；
+   - 是否使用全收益指数或价格指数；
+   - 近期最后可用日期；
+   - 成本修复前后路径；
+   - 成交额/过热/衰减 overlay 是否真的参与收益。
+5. 对外部 Excel 复现必须输出三层证据：
+   - `overview` 指标差异；
+   - 月收益逐月差异；
+   - 日频收益重算后的累计、年化、最大回撤。
+6. 若发现某条腿对不上，先暂停结论，按顺序排查：
+   - 版本是否同一份；
+   - 数据是否同一份；
+   - 窗口是否同一段；
+   - 交易日历是否同一套；
+   - 执行价是否同一口径；
+   - 成本/overlay 是否同一顺序；
+   - 绩效函数是否同一计算方式。
+
+### 发布纪律
+
+1. 任何“新旧版本收益对比”必须在表头写清：
+   - old script；
+   - new script；
+   - data files；
+   - date window；
+   - execution assumption；
+   - performance function。
+2. 若旧版本不能复现 POE 上传文件，必须明确说：
+   - “本地旧备份结果”；
+   - “POE Excel 结果”；
+   - “两者尚未证明同源”。
+3. 若结果后来被证明口径错误，必须直接标注为作废，不得继续引用。
+4. 用户指出结果和 POE/Excel 不一致时，第一反应必须是对账和复现，不能先解释策略原因。

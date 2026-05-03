@@ -15,14 +15,93 @@ import os
 import sys
 import xlsxwriter
 import time
+import types
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi_poe.types import SettingsResponse
+try:
+    from fastapi_poe.types import SettingsResponse
+except Exception:
+    class SettingsResponse:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+if "poe" not in globals():
+    import fastapi_poe as poe
+
+
+class _CompatStartMessage:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def write(self, value):
+        data = str(value).encode("utf-8", errors="replace")
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+
+    def attach_file(self, **kwargs):
+        name = kwargs.get("name", "attachment")
+        data = f"\n[attachment: {name}]\n".encode("utf-8", errors="replace")
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+
+
+def _install_poe_native_compat(poe_module):
+    """Lightweight CLI shim.
+
+    Poe native runtime remains the full production environment. Local/fastapi-poe
+    execution only supports paths that do not require poe.call LLM parsing.
+    """
+    required = ("update_settings", "start_message", "query", "default_chat", "call")
+    if all(hasattr(poe_module, attr) for attr in required):
+        return poe_module
+
+    class _PoeNativeCompatProxy:
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+            self._settings = None
+            self.query = getattr(
+                wrapped,
+                "query",
+                types.SimpleNamespace(text=" ".join(sys.argv[1:]), attachments=[]),
+            )
+            self.default_chat = getattr(wrapped, "default_chat", [])
+
+        def __getattr__(self, name):
+            return getattr(self._wrapped, name)
+
+        def update_settings(self, settings):
+            update_settings = getattr(self._wrapped, "update_settings", None)
+            if update_settings is not None:
+                return update_settings(settings)
+            self._settings = settings
+            return None
+
+        def start_message(self):
+            start_message = getattr(self._wrapped, "start_message", None)
+            if start_message is not None:
+                return start_message()
+            return _CompatStartMessage()
+
+        def call(self, *_args, **_kwargs):
+            call = getattr(self._wrapped, "call", None)
+            if call is not None:
+                return call(*_args, **_kwargs)
+            bot_error = getattr(self._wrapped, "BotError", RuntimeError)
+            raise bot_error("本地兼容模式不支持 poe.call，请在 Poe 原生环境运行需要 LLM 解析的指令。")
+
+    return _PoeNativeCompatProxy(poe_module)
+
+
+poe = _install_poe_native_compat(poe)
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
 # ─────────────────────────────────────────────
 CN_COMMISSION = 0.001
+CN_DK_COMMISSION = 0.0005
 CN_RF_ANNUAL = 0.03
 CN_TRADING_DAYS = 244
 CN_RF_DAILY = (1 + CN_RF_ANNUAL) ** (1 / CN_TRADING_DAYS) - 1
@@ -69,25 +148,35 @@ CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = "0.399006"
 CN_SA_VOLUME_CYB_MA = 10
 CN_SA_VOLUME_CYB_DAYS = 3
+CN_SA_VOLUME_CLEAR_RATIO_ENABLED = True
+CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID = CN_SA_VOLUME_ZZ2000_SECID
+CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL = "ZZ2000"
+CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID = "1.000016"
+CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL = "SZ50"
+CN_SA_VOLUME_CLEAR_RATIO_MA = 30
+CN_SA_VOLUME_CLEAR_RATIO_DAYS = 15
+CN_SA_VOLUME_CLEAR_RATIO_SCALE = 0.0
 CN_SA_VOLUME_RULE_NAME = (
     f"Sub-A amount OR: ZZ2000<MA{CN_SA_VOLUME_ZZ2000_MA}x{CN_SA_VOLUME_ZZ2000_DAYS} "
-    f"or CYB<MA{CN_SA_VOLUME_CYB_MA}x{CN_SA_VOLUME_CYB_DAYS}; scale={CN_SA_VOLUME_SCALE:.2f}"
+    f"or CYB<MA{CN_SA_VOLUME_CYB_MA}x{CN_SA_VOLUME_CYB_DAYS}; scale={CN_SA_VOLUME_SCALE:.2f}; "
+    f"clear if ZZ2000/SZ50 amount ratio<MA{CN_SA_VOLUME_CLEAR_RATIO_MA}x{CN_SA_VOLUME_CLEAR_RATIO_DAYS}"
 )
 CN_CSI_AMOUNT_INDEX_CODES = {
     "2.932000": "932000",  # 中证2000
+    "1.000016": "000016",  # 上证50
     "1.000300": "000300",  # 沪深300
     "1.000852": "000852",  # 中证1000
     "1.000905": "000905",  # 中证500
 }
 
-# 以下成交额规则只作为黄灯提醒，不参与实盘仓位/回测降仓
+# DK和微盘成交额规则只做清仓警示，不参与本脚本仓位/回测降仓。
 CN_DK_VOLUME_POLICY = "warning_only"
 CN_DK_VOLUME_YELLOW_SECID = "1.000300"
 CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
 
-MICROCAP_VOLUME_POLICY = "warning_only"
+MICROCAP_VOLUME_POLICY = "warning_manual_clear"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
 MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
@@ -163,6 +252,7 @@ CN_DK_NAMES = {
 }
 CN_DK_BIAS_N = 60            # 乖离动量均线周期
 CN_DK_MOM_DAY = 20           # 斜率拟合窗口
+CN_DK_VOL_SCALE_ENABLED = True
 CN_DK_TARGET_VOL = 0.20
 CN_DK_VOL_WINDOW = 30
 CN_DK_MAX_LEV = 1.5
@@ -320,8 +410,8 @@ US_ALL_TICKERS = sorted(set(
 # 组合权重
 # ─────────────────────────────────────────────
 COMBINED_WEIGHTS = {
-    "Sub-A": 0.10,
-    "Sub-A-DK": 0.15,
+    "Sub-A": 0.15,
+    "Sub-A-DK": 0.10,
     "Microcap": 0.15,
     "Sub-B": 0.60,
     "Sub-C": 0.00,  # V7.2主组合不再分配Sub-C；用户展示层不再显示Sub-C。
@@ -351,6 +441,10 @@ def _performance_combo_weight_label():
     ) + "归一"
 
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
+
+def _subc_enabled():
+    return float(COMBINED_WEIGHTS.get("Sub-C", 0.0) or 0.0) > 1e-12
+
 STRATEGY_WEIGHTS = COMBINED_WEIGHTS
 
 SP500_RISK_REGIME_FILES = [
@@ -397,18 +491,55 @@ def _repo_base_dir():
     return os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
 
 
-def _load_microcap_daily_ret(msg=None):
+def _check_microcap_cache_latest(ret, expected_latest_date=None, source_label="microcap", msg=None):
+    if expected_latest_date is None:
+        return
+    expected = pd.Timestamp(expected_latest_date).normalize()
+    actual = pd.Timestamp(ret.index.max()).normalize()
+    if actual < expected:
+        message = (
+            f"微盘缓存过期: {source_label} 截至 {actual.strftime('%Y-%m-%d')}, "
+            f"但本次A股合并数据截至 {expected.strftime('%Y-%m-%d')}。请先刷新微盘股独立脚本缓存。"
+        )
+        if msg is not None:
+            msg.write(f"  ⚠️ **{message}**\n")
+        raise poe.BotError(message)
+    if msg is not None:
+        msg.write(
+            f"  ✅ 微盘缓存日期OK: {actual.strftime('%Y-%m-%d')} "
+            f"(A股合并截至 {expected.strftime('%Y-%m-%d')})\n"
+        )
+
+
+def _load_microcap_daily_ret(msg=None, expected_latest_date=None):
     microcap_root = os.path.join(os.path.dirname(_repo_base_dir()), "微盘股对冲策略")
-    close_path = os.path.join(microcap_root, "mnt_strategy_data_cn.csv")
+    base_close_path = os.path.join(microcap_root, "mnt_strategy_data_cn.csv")
+    refreshed_close_path = os.path.join(
+        microcap_root,
+        "outputs",
+        "microcap_top100_mom16_biweekly_live_panel_refreshed.csv",
+    )
     cache_path = os.path.join(microcap_root, "outputs", "wind_microcap_top_100_biweekly_thursday_16y_cached.csv")
     turnover_path = os.path.join(microcap_root, "outputs", "microcap_top100_mom16_biweekly_live_proxy_turnover.csv")
-    missing = [p for p in (close_path, cache_path, turnover_path) if not os.path.exists(p)]
+    close_candidates = [p for p in (base_close_path, refreshed_close_path) if os.path.exists(p)]
+    missing = [p for p in (cache_path, turnover_path) if not os.path.exists(p)]
+    if not close_candidates:
+        missing.append(base_close_path)
     if missing:
         raise poe.BotError("V7.2需要微盘股独立脚本数据参与回测，但以下文件缺失: " + ", ".join(missing))
     if microcap_root not in sys.path:
         sys.path.insert(0, microcap_root)
     try:
         import microcap_top100_mom16_biweekly_live as microcap_live
+
+        def _last_csv_date(path):
+            try:
+                dates = pd.read_csv(path, usecols=["date"], parse_dates=["date"])["date"].dropna()
+                return pd.Timestamp(dates.max()) if len(dates) else pd.Timestamp.min
+            except Exception:
+                return pd.Timestamp.min
+
+        close_path = max(close_candidates, key=_last_csv_date)
         close_df = microcap_live.load_close_df(close_path, cache_path)
         gross = microcap_live.run_signal(close_df)
         turnover = pd.read_csv(turnover_path, parse_dates=["rebalance_date"])
@@ -416,9 +547,16 @@ def _load_microcap_daily_ret(msg=None):
         ret = net["return_net"].dropna()
         if ret.empty:
             raise ValueError("empty microcap return series")
+        _check_microcap_cache_latest(ret, expected_latest_date, "v1.6 rebuild", msg)
         if msg is not None:
-            msg.write(f"  微盘股独立脚本: {ret.index[0].strftime('%Y-%m-%d')}~{ret.index[-1].strftime('%Y-%m-%d')}\n")
+            source_name = os.path.basename(close_path)
+            msg.write(
+                f"  微盘股独立脚本: {ret.index[0].strftime('%Y-%m-%d')}~"
+                f"{ret.index[-1].strftime('%Y-%m-%d')} [{source_name}]\n"
+            )
         return ret
+    except poe.BotError:
+        raise
     except Exception as exc:
         raise poe.BotError(f"加载微盘股独立脚本收益失败: {exc}") from exc
 
@@ -857,6 +995,10 @@ def _subb_active_ranking_codes(close_df, row_idx, base_codes=None):
         return base
     available_macro = [code for code in US_ROT_MACRO_POOL if code in close_df.columns]
     return base + [code for code in available_macro if code not in base]
+
+
+def _us_rot_late_history_tickers():
+    return {"BTC-USD", "EMXC", *US_ROT_MACRO_POOL}
 
 
 def _subb_inflation_gate_context(close_df, row_idx):
@@ -1738,6 +1880,22 @@ def _build_consecutive_below_amount_signal(rule_specs, mode="or"):
     feature["combined_signal"] = signal
     return signal.astype(bool), feature
 
+def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma, days):
+    pair = pd.concat(
+        [
+            pd.Series(numerator_amount, dtype=float).sort_index().rename("numerator"),
+            pd.Series(denominator_amount, dtype=float).sort_index().rename("denominator"),
+        ],
+        axis=1,
+    ).dropna()
+    pair = pair[pair["denominator"] > 0]
+    ratio = (pair["numerator"] / pair["denominator"]).rename("severe_ratio_value")
+    ratio_ma = ratio.rolling(int(ma)).mean().rename("severe_ratio_ma_value")
+    streak = _consecutive_below_amount(ratio, ma).rename("severe_ratio_streak")
+    signal = (streak >= int(days)).rename("severe_ratio_signal")
+    feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
+    return signal.astype(bool), feature
+
 def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
     errors = []
     primary_sources = [
@@ -1802,16 +1960,83 @@ def _load_suba_volume_signal():
             errors[name] = str(exc)
     if not specs:
         raise RuntimeError("Sub-A volume data unavailable for all legs: " + " | ".join(f"{k}: {v}" for k, v in errors.items()))
-    signal, feature = _build_consecutive_below_amount_signal(
+    old_signal, feature = _build_consecutive_below_amount_signal(
         specs,
         mode=CN_SA_VOLUME_RULE_MODE,
     )
+    severe_signal = pd.Series(dtype=bool)
+    severe_feature = pd.DataFrame()
+    severe_error = None
+    severe_sources = {}
+    if CN_SA_VOLUME_CLEAR_RATIO_ENABLED:
+        try:
+            numerator = specs.get("zz2000", {}).get("amount")
+            if numerator is None:
+                numerator_df, numerator_source = _fetch_cn_amount_with_fallback(
+                    CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID,
+                    CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL,
+                    beg="20240101",
+                    lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                )
+                numerator = numerator_df["amount"]
+                severe_sources["numerator"] = numerator_source
+            else:
+                severe_sources["numerator"] = sources.get("zz2000", "unknown")
+            denominator_df, denominator_source = _fetch_cn_amount_with_fallback(
+                CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID,
+                CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL,
+                beg="20240101",
+                lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+            )
+            severe_sources["denominator"] = denominator_source
+            severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(
+                numerator,
+                denominator_df["amount"],
+                CN_SA_VOLUME_CLEAR_RATIO_MA,
+                CN_SA_VOLUME_CLEAR_RATIO_DAYS,
+            )
+        except Exception as exc:
+            severe_error = str(exc)
+    combined_index = old_signal.index.union(severe_signal.index).sort_values()
+    old_signal = old_signal.reindex(combined_index).fillna(False).astype(bool)
+    severe_signal = severe_signal.reindex(combined_index).fillna(False).astype(bool)
+    combined_signal = old_signal | severe_signal
+    combined_scale = pd.Series(
+        np.where(
+            severe_signal,
+            CN_SA_VOLUME_CLEAR_RATIO_SCALE,
+            np.where(old_signal, CN_SA_VOLUME_SCALE, 1.0),
+        ),
+        index=combined_index,
+        dtype=float,
+    )
+    feature = feature.reindex(combined_index)
+    if len(severe_feature) > 0:
+        severe_feature = severe_feature.reindex(combined_index)
+        for col in severe_feature.columns:
+            feature[col] = severe_feature[col]
+    feature["old_combined_signal"] = old_signal
+    feature["severe_ratio_signal"] = severe_signal
+    feature["combined_signal"] = combined_signal
+    feature["combined_scale"] = combined_scale
+    feature["clear_signal"] = severe_signal
+    feature["clear_ratio_rule"] = (
+        f"{CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL}/{CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL} "
+        f"MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}"
+    )
+    feature["clear_ratio_enabled"] = bool(CN_SA_VOLUME_CLEAR_RATIO_ENABLED)
+    feature["clear_ratio_unavailable"] = severe_error is not None
+    if severe_sources:
+        feature["clear_ratio_numerator_source"] = severe_sources.get("numerator", "unknown")
+        feature["clear_ratio_denominator_source"] = severe_sources.get("denominator", "unknown")
+    if severe_error is not None:
+        feature["clear_ratio_error"] = severe_error
     if len(feature) > 0:
         if errors:
             if CN_SA_VOLUME_RULE_MODE == "or":
-                feature["combined_unresolved"] = ~feature["combined_signal"].astype(bool)
+                feature["combined_unresolved"] = ~feature["old_combined_signal"].astype(bool)
             elif CN_SA_VOLUME_RULE_MODE == "and":
-                feature["combined_unresolved"] = feature["combined_signal"].astype(bool)
+                feature["combined_unresolved"] = feature["old_combined_signal"].astype(bool)
             else:
                 feature["combined_unresolved"] = True
         else:
@@ -1825,7 +2050,7 @@ def _load_suba_volume_signal():
                 feature[f"{name}_streak"] = np.nan
                 feature[f"{name}_signal"] = False
         feature["partial_unavailable"] = bool(errors)
-    return signal, feature
+    return combined_signal, feature
 
 def _mark_suba_volume_unavailable(cn_result, exc):
     out = cn_result.copy()
@@ -2045,9 +2270,9 @@ def _microcap_direct_volume_status():
 
 def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
-    w("### 成交额黄灯提醒（仅提示）\n")
+    w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK成交额、微盘成交额/成交量规则只做黄灯，不参与仓位计算、不触发自动降仓。\n")
+        w("定位: DK和微盘成交额规则只做清仓警示，不参与仓位计算、不触发自动降仓；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2066,17 +2291,16 @@ def _write_volume_warning_panel(msg, compact=False):
             CN_DK_VOLUME_YELLOW_DAYS,
             CN_DK_VOLUME_YELLOW_LABEL,
         )
-        dk_mark = "🟡 黄灯触发" if dk["triggered"] else "未触发"
+        dk_mark = "🔴 清仓触发" if dk["triggered"] else "未触发"
         dk_pos = _status_pos(dk)
         w(
-            f"- Sub-A-DK黄灯: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
-            f"连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}。\n"
+            f"- Sub-A-DK成交额清仓警示: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
+            f"连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}；"
+            f"触发后提示DK清仓，不自动改写DK仓位。\n"
         )
-        if not compact:
-            w(f"  数据源: {dk.get('source', 'unknown')}\n")
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- Sub-A-DK黄灯: **UNKNOWN** | 本次未取到沪深300成交额。{suffix}\n")
+        w(f"- Sub-A-DK成交额清仓警示: **UNKNOWN** | 本次未取到沪深300成交额，无法确认警示条件。{suffix}\n")
     try:
         zz = _volume_warning_status(
             MICROCAP_BROAD_VOLUME_ZZ2000_SECID,
@@ -2091,20 +2315,18 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🟡 黄灯触发" if micro_on else "未触发"
+        micro_mark = "🔴 清仓触发" if micro_on else "未触发"
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径黄灯: **{micro_mark}** | "
+            f"- 微盘宽口径清仓提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；触发后微盘策略清仓。\n"
         )
-        if not compact:
-            w(f"  数据源: 中证2000={zz.get('source', 'unknown')}, 创业板={cyb.get('source', 'unknown')}\n")
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径黄灯: **UNKNOWN** | 本次未取到中证2000/创业板成交额。{suffix}\n")
+        w(f"- 微盘宽口径清仓提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认清仓条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
@@ -2118,53 +2340,52 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     def _cell_text(value, fallback="unavailable"):
         return fallback if pd.isna(value) else str(value)
 
+    def _streak_status(label, streak, days):
+        if pd.isna(streak):
+            return f"{label}数据不可用"
+        return f"{label}连续{int(streak)}/{int(days)}天"
+
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
-        reason = cn_result["suba_volume_error"].iloc[idx] if "suba_volume_error" in cn_result.columns else "unknown"
-        suffix = "" if compact else f" 原因: {_short_error(reason)}"
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"本次无法确认正式缩量规则，成交额scale暂按1.00。{suffix}\n"
+            f"本次无法确认旧半仓规则和新清仓规则，当前执行仓位暂按100%。\n"
         )
         return
     on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
     scale = cn_result["suba_volume_rule_scale"].iloc[idx] if "suba_volume_rule_scale" in cn_result.columns else (CN_SA_VOLUME_SCALE if on else 1.0)
     zz_streak = cn_result["suba_volume_zz2000_streak"].iloc[idx] if "suba_volume_zz2000_streak" in cn_result.columns else np.nan
     cyb_streak = cn_result["suba_volume_cyb_streak"].iloc[idx] if "suba_volume_cyb_streak" in cn_result.columns else np.nan
-    zz_source = _cell_text(cn_result["suba_volume_zz2000_source"].iloc[idx]) if "suba_volume_zz2000_source" in cn_result.columns else "source NA"
-    cyb_source = _cell_text(cn_result["suba_volume_cyb_source"].iloc[idx]) if "suba_volume_cyb_source" in cn_result.columns else "source NA"
-    zz_text = f"中证2000连续{int(zz_streak)}天" if pd.notna(zz_streak) else "中证2000 NA"
-    cyb_text = f"创业板连续{int(cyb_streak)}天" if pd.notna(cyb_streak) else "创业板 NA"
-    source_text = f"数据源: ZZ2000={zz_source}, CYB={cyb_source}"
+    old_on = _cell_bool(cn_result["suba_volume_old_combined_signal"].iloc[idx]) if "suba_volume_old_combined_signal" in cn_result.columns else on
+    clear_on = _cell_bool(cn_result["suba_volume_clear_signal"].iloc[idx]) if "suba_volume_clear_signal" in cn_result.columns else False
+    ratio_streak = cn_result["suba_volume_severe_ratio_streak"].iloc[idx] if "suba_volume_severe_ratio_streak" in cn_result.columns else np.nan
+    clear_unavailable = _cell_bool(cn_result["suba_volume_clear_ratio_unavailable"].iloc[idx]) if "suba_volume_clear_ratio_unavailable" in cn_result.columns else False
+    zz_text = _streak_status("中证2000", zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
+    cyb_text = _streak_status("创业板", cyb_streak, CN_SA_VOLUME_CYB_DAYS)
+    ratio_text = _streak_status("中证2000/上证50成交额比值", ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
+    old_status = "已触发半仓" if old_on else "未触发半仓"
+    clear_status = "已触发清仓" if clear_on else "未触发清仓"
+    data_note_parts = []
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
-        source_text += "；部分数据源不可用，按可用腿计算"
+        data_note_parts.append("部分数据不可用，旧半仓规则按可用腿判断")
+    if clear_unavailable:
+        data_note_parts.append("新清仓规则本次不可确认")
+    data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
     unresolved = "suba_volume_unresolved" in cn_result.columns and _cell_bool(cn_result["suba_volume_unresolved"].iloc[idx])
     if unresolved and not on:
-        if compact:
-            w(
-                f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-                f"部分数据源不可用，成交额scale暂按1.00 | "
-                f"ZZ2000 {zz_text.replace('中证2000连续', '')} / CYB {cyb_text.replace('创业板连续', '')}\n"
-            )
-        else:
-            w(
-                f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-                f"OR规则需要确认任一腿是否触发；当前 {zz_text} / {cyb_text} | "
-                f"成交额scale暂按1.00 | {source_text}\n"
-            )
+        w(
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
+            f"旧半仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
+            f"新清仓规则: {ratio_text}；当前执行仓位暂按100%{data_note}\n"
+        )
         return
-    status = "触发" if on else "未触发"
-    if compact:
-        w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 成交额scale={float(scale):.2f} | "
-            f"ZZ2000 {zz_text.replace('中证2000连续', '')} / CYB {cyb_text.replace('创业板连续', '')}\n"
-        )
-    else:
-        w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | "
-            f"OR规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 "
-            f"或 CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；"
-            f"当前 {zz_text} / {cyb_text} | 规则scale={float(scale):.2f} | {source_text}\n"
-        )
+    status = "清仓触发" if clear_on else ("半仓触发" if old_on else "未触发")
+    w(
+        f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
+        f"旧半仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天）"
+        f"{old_status}：{zz_text}；{cyb_text} | "
+        f"新清仓规则（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
+        f"{clear_status}：{ratio_text}{data_note}\n"
+    )
 
 def _ticker_to_stooq(ticker):
     special = {"BTC-USD": "btc.v"}
@@ -2424,6 +2645,70 @@ def calc_rolling_r2(close_series, window=None):
         r2[i] = (ss_xy ** 2) / (ss_x * ss_y)
     return pd.Series(r2, index=close_series.index)
 
+def _single_asset_position_turnover(old_h, old_weight, new_h, new_weight):
+    old_h = "cash" if old_h is None or pd.isna(old_h) else str(old_h)
+    new_h = "cash" if new_h is None or pd.isna(new_h) else str(new_h)
+    old_w = 0.0 if old_h == "cash" else max(float(old_weight or 0.0), 0.0)
+    new_w = 0.0 if new_h == "cash" else max(float(new_weight or 0.0), 0.0)
+    if old_h == new_h:
+        return abs(new_w - old_w)
+    return old_w + new_w
+
+def _single_asset_turnover_series(holdings, weights):
+    holdings = pd.Series(holdings).fillna("cash").astype(str)
+    weights = pd.Series(weights, index=holdings.index).fillna(0.0).astype(float)
+    turnover = []
+    for i in range(len(holdings)):
+        if i == 0:
+            old_h, old_w = "cash", 0.0
+        else:
+            old_h, old_w = holdings.iloc[i - 1], weights.iloc[i - 1]
+        turnover.append(_single_asset_position_turnover(old_h, old_w, holdings.iloc[i], weights.iloc[i]))
+    return pd.Series(turnover, index=holdings.index, dtype=float)
+
+def _suba_state_machine_return_components(holdings, weights, close_df, commission=CN_COMMISSION, financing_daily=CN_RF_DAILY):
+    holdings = pd.Series(holdings).fillna("cash").astype(str)
+    weights = pd.Series(weights, index=holdings.index).fillna(0.0).astype(float)
+    asset_component = pd.Series(0.0, index=holdings.index, dtype=float)
+    cash_component = pd.Series(0.0, index=holdings.index, dtype=float)
+    trade_cost = pd.Series(0.0, index=holdings.index, dtype=float)
+
+    for i, dt in enumerate(holdings.index):
+        if i == 0:
+            old_h, old_w = "cash", 0.0
+        else:
+            old_h = holdings.iloc[i - 1]
+            old_w = float(weights.iloc[i - 1])
+            prev_dt = holdings.index[i - 1]
+            if old_h != "cash" and old_w > 1e-12:
+                asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1.0
+                asset_component.iloc[i] = old_w * float(asset_ret)
+
+        cash_weight = max(1.0 - float(old_w), 0.0)
+        borrow_weight = max(float(old_w) - 1.0, 0.0)
+        cash_component.iloc[i] = cash_weight * CN_RF_DAILY - borrow_weight * financing_daily
+        trade_cost.iloc[i] = commission * _single_asset_position_turnover(
+            old_h,
+            old_w,
+            holdings.iloc[i],
+            float(weights.iloc[i]),
+        )
+
+    return asset_component, cash_component, trade_cost
+
+def _dict_weight_turnover(old_weights, new_weights):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    assets = set(old_weights) | set(new_weights)
+    return float(sum(abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets))
+
+def _dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=("CASH",)):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    skip = set(non_tradeable_assets or ())
+    assets = (set(old_weights) | set(new_weights)) - skip
+    return float(sum(abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets))
+
 def run_cn_strategy(close_df, equity_codes):
     """Sub-A V6.1: 乖离动量 + R²过滤 + 国债轮动 + 波动率缩放.
     v6.1变更: 乖离动量替代双动量排名, R²过滤替代MA拐头和冷却期, 国债加入轮动池, 波动率缩放控制风险.
@@ -2603,15 +2888,21 @@ def run_cn_strategy(close_df, equity_codes):
     df["base_weight"] = base_weight
     df["weight"] = effective_weight
     df["realized_vol"] = realized_vol
-    # 纯杠杆调整交易成本: 持仓不变且非现金时, 扣除 |Δscale| × 单边佣金
-    _prev_scale = np.concatenate([[effective_weight[0]], effective_weight[:-1]])
-    _delta_scale = np.abs(effective_weight - _prev_scale)
-    _no_holding_change = ~df["is_signal"].values
-    _scale_tc = np.where(_no_holding_change & ~is_cash,
-                         CN_COMMISSION * _delta_scale, 0.0)
-    df["scale_tc"] = _scale_tc
-    scaled_gross = 1.0 + df["asset_component"].values * scale_arr + df["cash_component"].values
-    df["return"] = scaled_gross * (1.0 - df["trade_cost"].values) * (1.0 - _scale_tc) - 1.0
+    df["base_trade_cost"] = df["trade_cost"].astype(float)
+    state_asset, state_cash, state_cost = _suba_state_machine_return_components(
+        df["holding"],
+        pd.Series(effective_weight, index=df.index),
+        close_df,
+        commission=CN_COMMISSION,
+    )
+    effective_turnover = state_cost / CN_COMMISSION if CN_COMMISSION else pd.Series(0.0, index=df.index)
+    df["asset_component"] = state_asset
+    df["cash_component"] = state_cash
+    df["effective_turnover"] = effective_turnover
+    df["trade_cost"] = state_cost
+    df["scale_tc"] = 0.0
+    scaled_gross = 1.0 + df["asset_component"].values + df["cash_component"].values
+    df["return"] = scaled_gross * (1.0 - df["trade_cost"].values) - 1.0
     df["nav"] = (1 + df["return"]).cumprod()
     return df
 
@@ -2812,15 +3103,16 @@ def apply_suba_cash_peak_decay_overlay(
     is_cash = eff_f.values <= 1e-12
     scale_arr[is_cash] = 1.0
     effective_weight = scale_arr * eff_f.values
-    prev_weight = pd.Series(effective_weight, index=out.index).shift(1).fillna(effective_weight[0])
-    delta_weight = (pd.Series(effective_weight, index=out.index) - prev_weight).abs()
-    no_holding_change = ~pd.Series(effective_signals, index=out.index, dtype=bool)
+    asset_component_s, cash_component_s, trade_cost_s = _suba_state_machine_return_components(
+        eff_h,
+        pd.Series(effective_weight, index=out.index),
+        close_df,
+        commission=commission,
+    )
+    effective_turnover = trade_cost_s / commission if commission else pd.Series(0.0, index=out.index)
     scale_tc = pd.Series(0.0, index=out.index, dtype=float)
-    scale_tc.loc[no_holding_change & (~pd.Series(is_cash, index=out.index))] = commission * delta_weight.loc[
-        no_holding_change & (~pd.Series(is_cash, index=out.index))
-    ]
 
-    scaled_gross = 1.0 + asset_component_s.values * scale_arr + cash_component_s.values
+    scaled_gross = 1.0 + asset_component_s.values + cash_component_s.values
     out["base_holding"] = base_holding
     out["base_fraction"] = base_fraction
     out["effective_holding"] = eff_h
@@ -2835,13 +3127,15 @@ def apply_suba_cash_peak_decay_overlay(
     out["waiting_for_new_peak"] = pd.Series(waiting_flags, index=out.index, dtype=bool)
     out["asset_component"] = asset_component_s
     out["cash_component"] = cash_component_s
+    out["base_trade_cost"] = out["trade_cost"] if "trade_cost" in out.columns else np.nan
+    out["effective_turnover"] = effective_turnover
     out["trade_cost"] = trade_cost_s
     out["scale_raw"] = raw_scale
     out["base_weight"] = eff_f.values
     out["weight"] = effective_weight
     out["realized_vol"] = realized_vol
     out["scale_tc"] = scale_tc
-    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) * (1.0 - scale_tc.values) - 1.0
+    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) - 1.0
     out["nav"] = (1.0 + out["return"]).cumprod()
     out["is_signal"] = pd.Series(effective_signals, index=out.index, dtype=bool)
     out["target"] = out["effective_holding"].where(out["is_signal"], None)
@@ -2926,28 +3220,31 @@ def _rebuild_suba_from_effective(base_result, close_df, eff_h, eff_f, signal_fla
     is_cash = eff_f.values <= 1e-12
     scale_arr[is_cash] = 1.0
     effective_weight = scale_arr * eff_f.values
-    prev_weight = pd.Series(effective_weight, index=out.index).shift(1).fillna(effective_weight[0])
-    delta_weight = (pd.Series(effective_weight, index=out.index) - prev_weight).abs()
+    asset_component_s, cash_component_s, trade_cost_s = _suba_state_machine_return_components(
+        eff_h,
+        pd.Series(effective_weight, index=out.index),
+        close_df,
+        commission=CN_COMMISSION,
+    )
+    effective_turnover = trade_cost_s / CN_COMMISSION if CN_COMMISSION else pd.Series(0.0, index=out.index)
     scale_tc = pd.Series(0.0, index=out.index, dtype=float)
-    no_holding_change = ~signal_flags
-    scale_tc.loc[no_holding_change & (~pd.Series(is_cash, index=out.index))] = CN_COMMISSION * delta_weight.loc[
-        no_holding_change & (~pd.Series(is_cash, index=out.index))
-    ]
 
-    scaled_gross = 1.0 + asset_component_s.values * scale_arr + cash_component_s.values
+    scaled_gross = 1.0 + asset_component_s.values + cash_component_s.values
     out["effective_holding"] = eff_h
     out["effective_fraction"] = eff_f
     out["holding"] = eff_h
     out["holding_fraction"] = eff_f
     out["asset_component"] = asset_component_s
     out["cash_component"] = cash_component_s
+    out["base_trade_cost"] = out["trade_cost"] if "trade_cost" in out.columns else np.nan
+    out["effective_turnover"] = effective_turnover
     out["trade_cost"] = trade_cost_s
     out["scale_raw"] = raw_scale
     out["base_weight"] = eff_f.values
     out["weight"] = effective_weight
     out["realized_vol"] = realized_vol
     out["scale_tc"] = scale_tc
-    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) * (1.0 - scale_tc.values) - 1.0
+    out["return"] = scaled_gross * (1.0 - trade_cost_s.values) - 1.0
     out["nav"] = (1.0 + out["return"]).cumprod()
     out["is_signal"] = signal_flags
     out["target"] = out["holding"].where(out["is_signal"], None)
@@ -2991,6 +3288,17 @@ def apply_suba_volume_overlay(
         .fillna(False)
         .astype(bool)
     )
+    scale_s = pd.Series(np.where(signal_s, scale, 1.0), index=cn_result.index, dtype=float)
+    if volume_feature is not None and len(volume_feature) > 0 and "combined_scale" in volume_feature.columns:
+        scale_s = (
+            pd.to_numeric(volume_feature["combined_scale"], errors="coerce")
+            .reindex(cn_result.index)
+            .ffill()
+            .fillna(1.0)
+            .clip(lower=0.0, upper=1.0)
+            .astype(float)
+        )
+        signal_s = scale_s < 1.0 - 1e-12
     eff_h = []
     eff_f = []
     signal_flags = []
@@ -3000,7 +3308,7 @@ def apply_suba_volume_overlay(
         h = str(pre_h.loc[dt])
         f = float(pre_f.loc[dt])
         if h in CN_STOCK_CODES and f > 1e-12 and bool(signal_s.loc[dt]):
-            f *= float(scale)
+            f *= float(scale_s.loc[dt])
         h2 = h if f > 1e-12 else "cash"
         eff_h.append(h2)
         eff_f.append(f)
@@ -3010,7 +3318,7 @@ def apply_suba_volume_overlay(
 
     extra_cols = {
         "suba_volume_rule_on": signal_s,
-        "suba_volume_rule_scale": pd.Series(np.where(signal_s, scale, 1.0), index=cn_result.index, dtype=float),
+        "suba_volume_rule_scale": scale_s,
         "suba_volume_rule_name": pd.Series(rule_name, index=cn_result.index),
     }
     if volume_feature is not None and len(volume_feature) > 0:
@@ -3223,10 +3531,14 @@ def _run_single_pair_dk(a_prices, b_prices):
     d = d.dropna(subset=['position', 'raw_ret'])
     # 波动率缩放
     d['realized_vol'] = d['raw_ret'].rolling(CN_DK_VOL_WINDOW).std() * np.sqrt(CN_DK_TRADING_DAYS)
-    d['scale'] = (CN_DK_TARGET_VOL / d['realized_vol']).clip(CN_DK_MIN_LEV, CN_DK_MAX_LEV)
-    d['scale'] = d['scale'].shift(1)
-    d['scale_raw'] = d['scale'].copy()  # 保存阈值过滤前的原始scale
-    if CN_DK_SCALE_THRESHOLD > 0:
+    if CN_DK_VOL_SCALE_ENABLED:
+        d['scale'] = (CN_DK_TARGET_VOL / d['realized_vol']).clip(CN_DK_MIN_LEV, CN_DK_MAX_LEV)
+        d['scale'] = d['scale'].shift(1)
+        d['scale_raw'] = d['scale'].copy()  # 保存阈值过滤前的原始scale
+    else:
+        d['scale'] = 1.0
+        d['scale_raw'] = 1.0
+    if CN_DK_VOL_SCALE_ENABLED and CN_DK_SCALE_THRESHOLD > 0:
         _sa = d['scale'].values.copy()
         _last = np.nan
         for _i in range(len(_sa)):
@@ -3241,13 +3553,13 @@ def _run_single_pair_dk(a_prices, b_prices):
     pos_prev = d['position'].shift(1)
     is_flip = (d['position'] != pos_prev) & pos_prev.notna()
     is_initial = d['position'].notna() & pos_prev.isna()
-    if CN_COMMISSION > 0:
+    if CN_DK_COMMISSION > 0:
         d['tc'] = 0.0
-        d.loc[is_flip, 'tc'] = 4 * CN_COMMISSION * d['scale'][is_flip]
-        d.loc[is_initial, 'tc'] = 2 * CN_COMMISSION * d['scale'][is_initial]
+        d.loc[is_flip, 'tc'] = 4 * CN_DK_COMMISSION * d['scale'][is_flip]
+        d.loc[is_initial, 'tc'] = 2 * CN_DK_COMMISSION * d['scale'][is_initial]
         _chg = d['scale'].diff().abs().fillna(0)
         _only = ~is_flip & ~is_initial & d['position'].notna()
-        d.loc[_only, 'tc'] += 2 * CN_COMMISSION * _chg[_only]
+        d.loc[_only, 'tc'] += 2 * CN_DK_COMMISSION * _chg[_only]
         d['strategy_ret'] = (1 + d['strategy_ret']) * (1 - d['tc']) - 1
     return d['strategy_ret'], d['bias_mom'].abs(), d
 
@@ -3272,6 +3584,202 @@ def _build_top_n_dk(rets_df, signals_df, n=1):
         if cnt > 0:
             combined.iloc[i] = day_ret / cnt
     return combined
+
+
+def _dk_position_legs(pair, direction, scale):
+    if pair is None or str(pair) == "none" or int(direction or 0) == 0 or float(scale or 0.0) <= 1e-12:
+        return {}
+    parts = str(pair).split("/")
+    if len(parts) != 2:
+        return {}
+    a, b = parts[0].strip(), parts[1].strip()
+    if not a or not b:
+        return {}
+    direction = int(direction)
+    scale = float(scale)
+    return {a: direction * scale, b: -direction * scale}
+
+def _dk_leg_fields(pair, direction, active=True):
+    if not active or pair is None or str(pair) == "none" or int(direction or 0) == 0:
+        return None, None, None, None
+    parts = str(pair).split("/")
+    if len(parts) != 2:
+        return None, None, None, None
+    a, b = parts[0].strip(), parts[1].strip()
+    if not a or not b:
+        return None, None, None, None
+    if int(direction) == 1:
+        return a, b, a, b
+    return a, b, b, a
+
+def _sync_dk_execution_fields(dk_result, weight_change_threshold=0.001):
+    """Make DK display/rebalance fields reflect actual executed legs."""
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    idx = out.index
+    top_pair = out.get("top_pair", pd.Series("none", index=idx)).fillna("none").astype(str)
+    direction_src = out.get("actual_direction", out.get("direction", pd.Series(0, index=idx)))
+    direction = pd.to_numeric(direction_src, errors="coerce").fillna(0).astype(int)
+    weight = pd.to_numeric(out.get("weight", pd.Series(1.0, index=idx)), errors="coerce").fillna(0.0)
+
+    active_pairs = []
+    effective_dirs = []
+    holdings = []
+    pair_a_list = []
+    pair_b_list = []
+    long_leg_list = []
+    short_leg_list = []
+    for pair, dir_val, w in zip(top_pair, direction, weight):
+        active = pair != "none" and int(dir_val) != 0 and abs(float(w)) > 1e-12
+        eff_dir = int(dir_val) if active else 0
+        active_pair = pair if active else "none"
+        pair_a, pair_b, long_leg, short_leg = _dk_leg_fields(pair, eff_dir, active=active)
+        active_pairs.append(active_pair)
+        effective_dirs.append(eff_dir)
+        holdings.append(f"{pair}_{eff_dir}" if active else "none_0")
+        pair_a_list.append(pair_a)
+        pair_b_list.append(pair_b)
+        long_leg_list.append(long_leg)
+        short_leg_list.append(short_leg)
+
+    active_pair_s = pd.Series(active_pairs, index=idx, dtype=object)
+    direction_s = pd.Series(effective_dirs, index=idx, dtype=int)
+    pair_changed = active_pair_s.ne(active_pair_s.shift(1))
+    direction_changed = direction_s.ne(direction_s.shift(1))
+    active_mask = active_pair_s.ne("none") & direction_s.ne(0)
+    effective_weight = weight.where(active_mask, 0.0)
+    scale_rebalanced = effective_weight.diff().abs().fillna(0.0) > float(weight_change_threshold)
+    if len(out) > 0:
+        pair_changed.iloc[0] = False
+        direction_changed.iloc[0] = False
+        scale_rebalanced.iloc[0] = False
+
+    out["direction"] = direction_s
+    out["holding"] = pd.Series(holdings, index=idx, dtype=object)
+    out["pair_a"] = pd.Series(pair_a_list, index=idx, dtype=object)
+    out["pair_b"] = pd.Series(pair_b_list, index=idx, dtype=object)
+    out["long_leg"] = pd.Series(long_leg_list, index=idx, dtype=object)
+    out["short_leg"] = pd.Series(short_leg_list, index=idx, dtype=object)
+    out["pair_changed"] = pair_changed.astype(bool)
+    out["direction_changed"] = direction_changed.astype(bool)
+    out["scale_rebalanced"] = scale_rebalanced.astype(bool)
+    out["is_signal"] = (pair_changed | direction_changed | scale_rebalanced).astype(bool)
+    out["target"] = out["holding"].where(out["is_signal"], None)
+    return out
+
+
+def _rebuild_dk_actual_execution_costs(dk_result, pair_data, commission=CN_DK_COMMISSION):
+    """Rebuild DK Top-1 returns from the actually selected pair and charge actual turnover."""
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    returns = []
+    costs = []
+    turnovers = []
+    gross_returns = []
+    actual_positions = []
+    actual_directions = []
+    prev_legs = {}
+
+    for dt, row in out.iterrows():
+        pair = str(row.get("top_pair", "none"))
+        pdata = pair_data.get(pair) if pair != "none" else None
+        scale = float(row.get("weight", 1.0))
+        direction = 0
+        gross_ret = 0.0
+        if pdata is not None and dt in pdata.index:
+            prow = pdata.loc[dt]
+            direction = int(prow.get("position", 0)) if pd.notna(prow.get("position", np.nan)) else 0
+            raw_ret = prow.get("raw_ret", np.nan)
+            if pd.notna(raw_ret):
+                gross_ret = float(raw_ret) * scale
+            else:
+                tc = float(prow.get("tc", 0.0)) if pd.notna(prow.get("tc", np.nan)) else 0.0
+                strategy_ret = float(prow.get("strategy_ret", 0.0)) if pd.notna(prow.get("strategy_ret", np.nan)) else 0.0
+                gross_ret = (1.0 + strategy_ret) / (1.0 - tc) - 1.0 if tc < 1.0 else strategy_ret
+
+        key = f"{pair}_{direction}" if pair != "none" and direction != 0 and scale > 1e-12 else None
+        new_legs = _dk_position_legs(pair, direction, scale)
+        turnover = _dict_weight_turnover(prev_legs, new_legs)
+        trade_cost = float(commission) * max(turnover, 0.0)
+
+        gross_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(trade_cost)
+        returns.append((1.0 + gross_ret) * (1.0 - trade_cost) - 1.0)
+        actual_positions.append(key or "none")
+        actual_directions.append(direction)
+        prev_legs = new_legs
+
+    out["return_before_dk_execution_cost"] = pd.Series(gross_returns, index=out.index)
+    out["dk_execution_turnover"] = pd.Series(turnovers, index=out.index)
+    out["dk_execution_cost"] = pd.Series(costs, index=out.index)
+    out["actual_position"] = pd.Series(actual_positions, index=out.index)
+    out["actual_direction"] = pd.Series(actual_directions, index=out.index)
+    out["return"] = pd.Series(returns, index=out.index)
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    return _sync_dk_execution_fields(out)
+
+def _rebuild_dk_effective_execution_costs(dk_result, pair_data, commission=CN_DK_COMMISSION):
+    """Rebuild DK returns/costs from final effective long/short legs."""
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    returns = []
+    costs = []
+    turnovers = []
+    gross_returns = []
+    actual_positions = []
+    actual_directions = []
+    prev_legs = {}
+
+    for dt, row in out.iterrows():
+        pair = str(row.get("top_pair", "none"))
+        pdata = pair_data.get(pair) if pair != "none" else None
+        total_scale = float(row.get("weight", 0.0) or 0.0)
+        direction = int(row.get("direction", 0) or 0)
+        raw_pair_ret = 0.0
+        if pdata is not None and dt in pdata.index:
+            prow = pdata.loc[dt]
+            direction = int(prow.get("position", direction)) if pd.notna(prow.get("position", np.nan)) else direction
+            raw_ret = prow.get("raw_ret", np.nan)
+            if pd.notna(raw_ret):
+                raw_pair_ret = float(raw_ret)
+            else:
+                base_scale = float(row.get("base_weight", row.get("weight", 1.0)) or 1.0)
+                base_gross = float(row.get("return_before_dk_execution_cost", 0.0) or 0.0)
+                raw_pair_ret = base_gross / base_scale if abs(base_scale) > 1e-12 else 0.0
+
+        if pair == "none" or direction == 0 or abs(total_scale) <= 1e-12:
+            new_legs = {}
+            key = None
+            gross_ret = 0.0
+        else:
+            new_legs = _dk_position_legs(pair, direction, total_scale)
+            key = f"{pair}_{direction}"
+            gross_ret = raw_pair_ret * total_scale
+        turnover = _dict_weight_turnover(prev_legs, new_legs)
+        trade_cost = float(commission) * max(turnover, 0.0)
+
+        gross_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(trade_cost)
+        returns.append((1.0 + gross_ret) * (1.0 - trade_cost) - 1.0)
+        actual_positions.append(key or "none")
+        actual_directions.append(direction if key else 0)
+        prev_legs = new_legs
+
+    out["return_before_dk_execution_cost"] = pd.Series(gross_returns, index=out.index)
+    out["dk_execution_turnover"] = pd.Series(turnovers, index=out.index)
+    out["dk_execution_cost"] = pd.Series(costs, index=out.index)
+    out["dk_overlay_execution_cost"] = 0.0
+    out["same_side_overheat_tc"] = 0.0
+    out["actual_position"] = pd.Series(actual_positions, index=out.index)
+    out["actual_direction"] = pd.Series(actual_directions, index=out.index)
+    out["return"] = pd.Series(returns, index=out.index)
+    out["nav"] = (1.0 + out["return"]).cumprod()
+    return _sync_dk_execution_fields(out)
 
 def run_dk_strategy(cn_close, cn_dk_close):
     """Sub-A-DK V6.5: 多配对Top-1 + 乖离动量 + VolScaling.
@@ -3315,10 +3823,10 @@ def run_dk_strategy(cn_close, cn_dk_close):
         else:
             best = row_sig.idxmax()
             top_pair_list.append(best)
-            # Get direction from pair_data
+            # Execution direction is prior-day signal, stored as position.
             if best in pair_data and date in pair_data[best].index:
-                sig_val = pair_data[best].loc[date, 'signal'] if 'signal' in pair_data[best].columns else np.nan
-                top_dir_list.append(int(sig_val) if not np.isnan(sig_val) else 0)
+                pos_val = pair_data[best].loc[date, 'position'] if 'position' in pair_data[best].columns else np.nan
+                top_dir_list.append(int(pos_val) if not np.isnan(pos_val) else 0)
             else:
                 top_dir_list.append(0)
     # 从top-1配对中提取实际的scale/scale_raw/realized_vol
@@ -3351,17 +3859,11 @@ def run_dk_strategy(cn_close, cn_dk_close):
     _pair_a_list, _pair_b_list = [], []
     _long_leg_list, _short_leg_list = [], []
     for p, d in zip(top_pair_list, top_dir_list):
-        if p == "none" or d == 0:
-            _pair_a_list.append(None); _pair_b_list.append(None)
-            _long_leg_list.append(None); _short_leg_list.append(None)
-        else:
-            parts = p.split('/')
-            a, b = parts[0], parts[1] if len(parts) > 1 else parts[0]
-            _pair_a_list.append(a); _pair_b_list.append(b)
-            if d == 1:
-                _long_leg_list.append(a); _short_leg_list.append(b)
-            else:
-                _long_leg_list.append(b); _short_leg_list.append(a)
+        pair_a, pair_b, long_leg, short_leg = _dk_leg_fields(p, d, active=(p != "none" and d != 0))
+        _pair_a_list.append(pair_a)
+        _pair_b_list.append(pair_b)
+        _long_leg_list.append(long_leg)
+        _short_leg_list.append(short_leg)
     result = pd.DataFrame({
         'return': combined_ret,
         'nav': (1 + combined_ret).cumprod(),
@@ -3380,6 +3882,7 @@ def run_dk_strategy(cn_close, cn_dk_close):
         'scale_raw': _scale_raw_arr,
         'realized_vol': _realized_vol_arr,
     }, index=common_idx)
+    result = _rebuild_dk_actual_execution_costs(result, pair_data, CN_DK_COMMISSION)
     # Store extra data for display
     result.attrs['pair_rets'] = pair_rets
     result.attrs['pair_abs_mom'] = pair_abs_mom
@@ -3429,7 +3932,10 @@ def apply_dk_pair_score_peak_decay_overlay(
         raise KeyError(f"Missing required DK columns: {sorted(missing)}")
 
     out = dk_result.copy()
-    base_ret = out["return"].fillna(0.0)
+    base_ret = out.get("return_before_dk_overlay", out.get("return_before_dk_execution_cost", out["return"])).fillna(0.0)
+    base_execution_cost = out.get("dk_execution_cost", pd.Series(0.0, index=out.index)).fillna(0.0)
+    if "dk_overlay_execution_cost" in out.columns:
+        base_execution_cost = base_execution_cost + out["dk_overlay_execution_cost"].fillna(0.0)
     base_weight = out["weight"].fillna(1.0) if "weight" in out.columns else pd.Series(1.0, index=out.index)
     holdings = out["holding"].fillna("none_0").astype(str)
     active_score = _extract_active_pair_score(out)
@@ -3443,6 +3949,7 @@ def apply_dk_pair_score_peak_decay_overlay(
     score_peaks = []
     score_decay_ratios = []
     waiting_flags = []
+    overlay_costs = []
 
     trade_id = 0
     score_peak = None
@@ -3467,12 +3974,12 @@ def apply_dk_pair_score_peak_decay_overlay(
         triggered_today = cur_scale < 0.999999 and prev_scale >= 0.999999
         recovered_today = cur_scale >= 0.999999 and prev_scale < 0.999999
 
-        realized_ret = float(base_ret.iloc[i]) * cur_scale
+        realized_gross = float(base_ret.iloc[i]) * cur_scale
         delta_scale = abs(cur_scale - prev_scale)
         overlay_tc = 0.0
         if delta_scale > 1e-12:
             overlay_tc = 2.0 * commission * float(base_weight.iloc[i]) * delta_scale
-        realized_ret = (1.0 + realized_ret) * (1.0 - overlay_tc) - 1.0
+        realized_ret = (1.0 + realized_gross) * (1.0 - float(base_execution_cost.iloc[i])) * (1.0 - overlay_tc) - 1.0
 
         cur_score = active_score.iloc[i]
         if pd.notna(cur_score):
@@ -3508,6 +4015,7 @@ def apply_dk_pair_score_peak_decay_overlay(
         score_peaks.append(None if score_peak is None else float(score_peak))
         score_decay_ratios.append(None if decay_ratio is None else float(decay_ratio))
         waiting_flags.append(bool(next_waiting))
+        overlay_costs.append(float(overlay_tc))
 
         derisked_for_today = next_derisked
         waiting_for_new_peak = next_waiting
@@ -3515,6 +4023,8 @@ def apply_dk_pair_score_peak_decay_overlay(
         prev_scale = cur_scale
 
     out["raw_return"] = base_ret
+    out["return_before_dk_overlay"] = base_ret
+    out["dk_overlay_execution_cost"] = pd.Series(overlay_costs, index=out.index, dtype=float)
     out["base_weight"] = base_weight
     out["return"] = pd.Series(final_ret, index=out.index, dtype=float)
     out["nav"] = (1.0 + out["return"]).cumprod()
@@ -3609,8 +4119,12 @@ def apply_dk_same_side_overheat_overlay(
         raise KeyError(f"Missing required DK columns: {sorted(missing)}")
 
     out = dk_result.copy()
-    base_ret = out["return"].fillna(0.0)
+    base_ret = out.get("return_before_dk_execution_cost", out.get("return_before_dk_overlay", out["return"])).fillna(0.0)
+    base_execution_cost = out.get("dk_execution_cost", pd.Series(0.0, index=out.index)).fillna(0.0)
+    if "dk_overlay_execution_cost" in out.columns:
+        base_execution_cost = base_execution_cost + out["dk_overlay_execution_cost"].fillna(0.0)
     pre_weight = out["weight"].fillna(1.0) if "weight" in out.columns else pd.Series(1.0, index=out.index)
+    prior_overlay_scale = out.get("overlay_scale", pd.Series(1.0, index=out.index)).fillna(1.0)
     holdings = out["holding"].fillna("none_0").astype(str)
     active_abs_bias, active_same_side = _extract_active_pair_same_side_overheat(out)
 
@@ -3625,6 +4139,11 @@ def apply_dk_same_side_overheat_overlay(
 
     for i, dt in enumerate(base_ret.index):
         holding = holdings.iloc[i]
+        prev_holding = holdings.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or holding != prev_holding
+        if new_trade:
+            defense_on = False
+            prev_scale = 1.0
         abs_bias = active_abs_bias.iloc[i]
         same_side = bool(active_same_side.iloc[i])
 
@@ -3647,8 +4166,8 @@ def apply_dk_same_side_overheat_overlay(
         if delta_scale > 1e-12:
             tc = 2.0 * commission * float(pre_weight.iloc[i]) * delta_scale
 
-        realized_ret = float(base_ret.iloc[i]) * cur_scale
-        realized_ret = (1.0 + realized_ret) * (1.0 - tc) - 1.0
+        realized_gross = float(base_ret.iloc[i]) * float(prior_overlay_scale.iloc[i]) * cur_scale
+        realized_ret = (1.0 + realized_gross) * (1.0 - float(base_execution_cost.iloc[i])) * (1.0 - tc) - 1.0
         final_ret.append(float(realized_ret))
         overheat_scale.append(float(cur_scale))
         overheat_on.append(bool(cur_scale < 0.999999))
@@ -3658,6 +4177,7 @@ def apply_dk_same_side_overheat_overlay(
         prev_scale = cur_scale
 
     out["pre_overheat_return"] = base_ret
+    out["return_before_dk_overheat"] = base_ret
     out["pre_overheat_weight"] = pre_weight
     out["same_side_overheat_abs_bias"] = active_abs_bias
     out["same_side_overheat_signal"] = active_same_side
@@ -3666,6 +4186,7 @@ def apply_dk_same_side_overheat_overlay(
     out["same_side_overheat_triggered"] = pd.Series(overheat_triggered, index=out.index, dtype=bool)
     out["same_side_overheat_recovered"] = pd.Series(overheat_recovered, index=out.index, dtype=bool)
     out["same_side_overheat_tc"] = pd.Series(overheat_tc, index=out.index, dtype=float)
+    out["dk_total_overlay_scale"] = prior_overlay_scale * out["same_side_overheat_scale"]
     out["return"] = pd.Series(final_ret, index=out.index, dtype=float)
     out["nav"] = (1.0 + out["return"]).cumprod()
     out["weight"] = out["pre_overheat_weight"] * out["same_side_overheat_scale"]
@@ -3693,9 +4214,24 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
     if dk_result is None or len(dk_result) == 0:
         return dk_result
 
-    base_ret = dk_result["return"].fillna(0.0)
+    gate_base_ret = dk_result["return"].fillna(0.0)
+    base_ret = dk_result.get("return_before_dk_execution_cost", gate_base_ret).fillna(0.0)
     base_weight = dk_result["weight"].fillna(1.0)
-    base_nav = (1.0 + base_ret).cumprod()
+    prior_overlay_scale = dk_result.get("dk_total_overlay_scale", None)
+    if prior_overlay_scale is None:
+        prior_overlay_scale = pd.Series(1.0, index=dk_result.index)
+        if "overlay_scale" in dk_result.columns:
+            prior_overlay_scale = prior_overlay_scale * dk_result["overlay_scale"].fillna(1.0)
+        if "same_side_overheat_scale" in dk_result.columns:
+            prior_overlay_scale = prior_overlay_scale * dk_result["same_side_overheat_scale"].fillna(1.0)
+    else:
+        prior_overlay_scale = prior_overlay_scale.fillna(1.0)
+    prior_cost = dk_result.get("dk_execution_cost", pd.Series(0.0, index=dk_result.index)).fillna(0.0)
+    if "dk_overlay_execution_cost" in dk_result.columns:
+        prior_cost = prior_cost + dk_result["dk_overlay_execution_cost"].fillna(0.0)
+    if "same_side_overheat_tc" in dk_result.columns:
+        prior_cost = prior_cost + dk_result["same_side_overheat_tc"].fillna(0.0)
+    base_nav = (1.0 + gate_base_ret).cumprod()
     base_dd = base_nav / base_nav.cummax() - 1.0
 
     gated_ret = []
@@ -3704,11 +4240,11 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
     prev_scale = 1.0
     cooldown_left = 0
 
-    for i, dt in enumerate(base_ret.index):
+    for i, dt in enumerate(gate_base_ret.index):
         if i == 0:
             cur_scale = 1.0
         else:
-            prev_dt = base_ret.index[i - 1]
+            prev_dt = gate_base_ret.index[i - 1]
             prev_dd = float(base_dd.loc[prev_dt])
             trigger = prev_dd <= -enter
             release_ready = prev_dd >= -exit_value if exit_value is not None else prev_dd > -enter
@@ -3724,12 +4260,12 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
             else:
                 cur_scale = 1.0
 
-        scaled_ret = base_ret.iloc[i] * cur_scale
+        scaled_ret = base_ret.iloc[i] * float(prior_overlay_scale.iloc[i]) * cur_scale
         delta_scale = abs(cur_scale - prev_scale)
         overlay_tc = 0.0
         if delta_scale > 1e-12:
-            overlay_tc = 2.0 * CN_COMMISSION * delta_scale * float(base_weight.iloc[i])
-        final_ret = (1.0 + scaled_ret) * (1.0 - overlay_tc) - 1.0
+            overlay_tc = 2.0 * CN_DK_COMMISSION * delta_scale * float(base_weight.iloc[i])
+        final_ret = (1.0 + scaled_ret) * (1.0 - float(prior_cost.iloc[i])) * (1.0 - overlay_tc) - 1.0
 
         gated_ret.append(final_ret)
         gate_scale.append(cur_scale)
@@ -3737,7 +4273,7 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
         prev_scale = cur_scale
 
     out = dk_result.copy()
-    out["raw_return"] = base_ret
+    out["raw_return"] = gate_base_ret
     out["raw_nav"] = base_nav
     out["base_weight"] = base_weight
     out["risk_gate_scale"] = pd.Series(gate_scale, index=base_ret.index)
@@ -3746,6 +4282,7 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
     out["return"] = pd.Series(gated_ret, index=base_ret.index)
     out["nav"] = (1.0 + out["return"]).cumprod()
     out["weight"] = out["base_weight"] * out["risk_gate_scale"]
+    out["dk_total_overlay_scale"] = prior_overlay_scale * out["risk_gate_scale"]
     out.attrs["risk_gate"] = {
         "kind": "dd",
         "enter": enter,
@@ -4132,12 +4669,16 @@ def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_A
             open_row = _us_open_row(close_df.index[i], w_assets, us_open, close_df)
             overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
             intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
-            adj = (1 + overnight) * (1 + intraday) * (1 - pending_comm) - 1
+            gross_adj = (1 + overnight) * (1 + intraday) - 1
+            execution_cost = float(pending_comm)
+            adj = (1 + gross_adj) * (1 - execution_cost) - 1
             holdings = dict(pending_act)
             pending_act = None
             pending_comm = 0.0
         else:
-            adj = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            gross_adj = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            adj = gross_adj
         hist.append(adj)
         is_sig = i in signal_days
         rebalanced = False
@@ -4172,13 +4713,17 @@ def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_A
         row = {
             "date": close_df.index[i],
             "return": adj,
+            "return_before_execution_cost": gross_adj,
+            "execution_cost": execution_cost,
             "is_signal": is_sig,
             "rebalanced": rebalanced,
             "inflation_pressure_on": _inflation_pressure_on_from_prices(close_df, i),
             "ranking_codes": ",".join(active_ranking_codes),
         }
         for a in w_assets:
-            row[f"w_{a}"] = act.get(a, 0.0)
+            row[f"w_{a}"] = holdings.get(a, 0.0)
+            row[f"actual_w_{a}"] = holdings.get(a, 0.0)
+            row[f"target_w_{a}"] = act.get(a, 0.0)
         for lb in US_ROT_LBS:
             row[f"sel_{lb}"] = _serialize_us_mix_selected(row_selected_by_lb.get(lb))
         rows.append(row)
@@ -4371,6 +4916,43 @@ def run_us_rotation(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_T
     df["nav"] = (1 + df["return"]).cumprod()
     return df
 
+def _prefixed_weight_dict(row, prefix, assets):
+    out = {}
+    for asset in assets:
+        value = row.get(f"{prefix}{asset}", 0.0)
+        if pd.notna(value):
+            out[asset] = float(value)
+    return out
+
+def _weight_columns_assets(df, prefixes=("w_", "actual_w_", "target_w_")):
+    assets = set()
+    for col in df.columns:
+        for prefix in prefixes:
+            if col.startswith(prefix):
+                assets.add(col[len(prefix):])
+    return sorted(assets)
+
+def _volreg_next_cash_state(current_cash, ratio):
+    if pd.isna(ratio):
+        return bool(current_cash)
+    ratio = float(ratio)
+    if not current_cash and ratio > US_ROT_VOLREG_THRESHOLD:
+        return True
+    if current_cash and ratio < US_ROT_VOLREG_EXIT_THRESHOLD:
+        return False
+    return bool(current_cash)
+
+def _subb_effective_display_weights(signal_weights, prev_weights=None, force_cash=False):
+    signal_weights = dict(signal_weights or {})
+    prev_weights = dict(prev_weights or {})
+    assets = set(signal_weights) | set(prev_weights)
+    if force_cash:
+        assets.add("CASH")
+        display_weights = {asset: 0.0 for asset in assets}
+        display_weights["CASH"] = 1.0
+        return display_weights, assets
+    return dict(signal_weights), assets
+
 def apply_vol_regime_overlay(us_rot_result, spy_close):
     """VolReg风控: SPY短期/长期vol超过进入阈值转现金，低于退出阈值恢复。
     在us_rot_result上新增 volreg_ratio / volreg_cash 两列用于信号展示。"""
@@ -4391,7 +4973,67 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         mask_values.append(cash_state)
     mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
     result = us_rot_result.copy()
-    result.loc[mask, "return"] = 0.0
+    base_ret = pd.to_numeric(
+        result.get(
+            "return_before_subb_execution_cost",
+            result.get("return_before_execution_cost", result["return"]),
+        ),
+        errors="coerce",
+    ).fillna(0.0)
+    assets = _weight_columns_assets(result)
+    if "BIL" not in assets:
+        assets.append("BIL")
+    if "CASH" not in assets:
+        assets.append("CASH")
+    prev_effective = {"CASH": 1.0}
+    turnovers = []
+    costs = []
+    final_returns = []
+    volreg_actions = []
+    for dt in result.index:
+        row = result.loc[dt]
+        model_w = _prefixed_weight_dict(row, "actual_w_", assets)
+        if not any(abs(v) > 1e-12 for v in model_w.values()):
+            model_w = _prefixed_weight_dict(row, "w_", assets)
+        if bool(mask.loc[dt]):
+            effective_w = {asset: 0.0 for asset in assets}
+            effective_w["CASH"] = 1.0
+            gross_ret = 0.0
+        else:
+            effective_w = {asset: float(model_w.get(asset, 0.0) or 0.0) for asset in assets}
+            effective_w["CASH"] = 0.0
+            gross_ret = float(base_ret.loc[dt])
+        turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH",))
+        cost = turnover * US_ROT_COMMISSION
+        final_returns.append((1.0 + gross_ret) * (1.0 - cost) - 1.0)
+        turnovers.append(turnover)
+        costs.append(cost)
+        prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
+        cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
+        if cur_cash and not prev_cash:
+            volreg_actions.append("enter_cash")
+        elif prev_cash and not cur_cash:
+            volreg_actions.append("exit_cash")
+        else:
+            volreg_actions.append("")
+        for asset in assets:
+            if f"model_w_{asset}" not in result.columns:
+                result.loc[:, f"model_w_{asset}"] = 0.0
+            result.loc[dt, f"model_w_{asset}"] = model_w.get(asset, 0.0)
+            result.loc[dt, f"effective_w_{asset}"] = effective_w.get(asset, 0.0)
+            result.loc[dt, f"w_{asset}"] = effective_w.get(asset, 0.0)
+        prev_effective = effective_w
+    result["return_before_volreg"] = base_ret
+    result["volreg_action"] = pd.Series(volreg_actions, index=result.index, dtype=object)
+    result["subb_effective_turnover"] = pd.Series(turnovers, index=result.index, dtype=float)
+    result["subb_effective_cost"] = pd.Series(costs, index=result.index, dtype=float)
+    result["volreg_transition"] = result["volreg_action"].isin(["enter_cash", "exit_cash"])
+    result["volreg_transition_turnover"] = result["subb_effective_turnover"].where(result["volreg_transition"], 0.0)
+    result["volreg_transition_cost"] = result["subb_effective_cost"].where(result["volreg_transition"], 0.0)
+    result["volreg_rebalanced"] = result["volreg_transition"]
+    base_rebalanced = result.get("rebalanced", pd.Series(False, index=result.index)).fillna(False).astype(bool)
+    result["rebalanced"] = base_rebalanced | (result["subb_effective_turnover"].abs() > 1e-9)
+    result["return"] = pd.Series(final_returns, index=result.index, dtype=float)
     result["nav"] = (1 + result["return"]).cumprod()
     result["volreg_ratio"] = vol_ratio        # 当日收盘的ratio(未shift), 用于信号展示
     result["volreg_cash"]  = mask             # 当日是否因昨日信号已转现金
@@ -5343,35 +5985,71 @@ def _build_dk_rank_rows(cn_dk_result, use_shifted=True, top_n=3):
         })
     return rows
 
+def _split_dk_history_trades(dk_period):
+    if dk_period is None or len(dk_period) == 0:
+        return dk_period, dk_period
+    idx = dk_period.index
+    holding_s = dk_period.get("holding", pd.Series("none_0", index=idx)).fillna("none_0").astype(str)
+    active_mask = holding_s.map(lambda h: parse_dk_holding(h) is not None)
+    effective_holding = holding_s.where(active_mask, "none_0")
+    position_mask = effective_holding.ne(effective_holding.shift()).fillna(False)
+    if len(position_mask) > 0:
+        position_mask.iloc[0] = False
+    if "scale_rebalanced" in dk_period.columns:
+        scale_rebalanced = dk_period.get("scale_rebalanced", pd.Series(False, index=idx)).fillna(False).astype(bool)
+    else:
+        weight_s = pd.to_numeric(dk_period.get("weight", pd.Series(1.0, index=idx)), errors="coerce").fillna(0.0)
+        effective_weight = weight_s.where(active_mask, 0.0)
+        scale_rebalanced = effective_weight.diff().abs().fillna(0.0) > 0.001
+        if len(scale_rebalanced) > 0:
+            scale_rebalanced.iloc[0] = False
+    scale_mask = scale_rebalanced & ~position_mask
+    return dk_period[position_mask], dk_period[scale_mask]
+
+
 def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None):
-    """P1-2修复: 基于parse_dk_holding()重写，支持多配对Top-1框架。"""
+    """P1-2 fix: parse DK holding states and effective exposure changes."""
     records = []
     prev_holding = None
     prev_weight = None
     has_weight = "weight" in dk_result.columns
-    has_is_signal = "is_signal" in dk_result.columns
     for i in range(len(dk_result)):
         date = dk_result.index[i]
         holding = dk_result["holding"].iloc[i]
         weight = dk_result["weight"].iloc[i] if has_weight else None
-        is_sig = bool(dk_result["is_signal"].iloc[i]) if has_is_signal else (
-            prev_holding is not None and holding != prev_holding)
-        if is_sig and prev_holding is not None and str(holding) not in ("none_0", "none"):
-            # 持仓变化: 换配对或换方向
+        old_active = parse_dk_holding(prev_holding) is not None
+        new_active = parse_dk_holding(holding) is not None
+        prev_effective_holding = str(prev_holding) if old_active else "none_0"
+        new_effective_holding = str(holding) if new_active else "none_0"
+        position_changed = prev_holding is not None and new_effective_holding != prev_effective_holding
+        prev_eff_weight = (
+            float(prev_weight)
+            if old_active and prev_weight is not None and pd.notna(prev_weight)
+            else 0.0
+        )
+        new_eff_weight = (
+            float(weight)
+            if new_active and weight is not None and pd.notna(weight)
+            else 0.0
+        )
+        scale_changed = has_weight and prev_weight is not None and abs(new_eff_weight - prev_eff_weight) > 0.001
+        if position_changed:
             old_info = parse_dk_holding(prev_holding)
             new_info = parse_dk_holding(holding)
-            if old_info:
+            if old_info and new_info:
                 sell_text = f"平多{_dk_leg_name(old_info['long_leg'])}/平空{_dk_leg_name(old_info['short_leg'])}"
-            else:
-                sell_text = f"平仓 {prev_holding}"
-            if new_info:
+                buy_text = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
+            elif old_info and not new_info:
+                sell_text = f"平多{_dk_leg_name(old_info['long_leg'])}/平空{_dk_leg_name(old_info['short_leg'])}"
+                buy_text = "转现金 / 零敞口"
+            elif not old_info and new_info:
+                sell_text = "现金 / 零敞口"
                 buy_text = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
             else:
+                sell_text = f"平仓 {prev_holding}"
                 buy_text = f"开仓 {holding}"
             sell_p = _dk_holding_prices(prev_holding, cn_dk_close, date)
             buy_p = _dk_holding_prices(holding, cn_dk_close, date)
-            # DK 全部信号含 shift(1): date 是执行日, 信号在 date-1 收盘发出
-            # 执行时间应为 date 的开盘 (09:30)
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
                 "北京时间": beijing_time_str(date, "CN", "open"),
@@ -5381,8 +6059,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
                 "买入": buy_text,
                 "买入价格": buy_p,
             })
-        elif not is_sig and has_weight and prev_weight is not None and weight is not None and abs(weight - prev_weight) > 0.001:
-            # 仅杠杆调整(持仓不变)
+        elif scale_changed:
             new_info = parse_dk_holding(holding)
             if new_info:
                 h_name = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
@@ -5393,9 +6070,9 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
                 "日期": date.strftime("%Y-%m-%d"),
                 "北京时间": beijing_time_str(date, "CN", "open"),
                 "策略": strategy_name,
-                "卖出": f"杠杆 {prev_weight:.2f}x",
+                "卖出": f"杠杆 {prev_eff_weight:.2f}x",
                 "卖出价格": h_prices,
-                "买入": f"杠杆 {weight:.2f}x ({h_name})",
+                "买入": f"杠杆 {new_eff_weight:.2f}x ({h_name})",
                 "买入价格": h_prices,
             })
         prev_holding = holding
@@ -5787,6 +6464,8 @@ def _compute_next_vol_scale(rv_latest, cur_post_thr, tgt_vol, min_l, max_l, thr)
         is_pending: 是否存在待执行的调整
     """
     cur_post_thr = float(cur_post_thr) if not np.isnan(cur_post_thr) else 1.0
+    if tgt_vol is None:
+        return 1.0, 1.0, False
     if rv_latest is None or np.isnan(rv_latest) or rv_latest <= 1e-10:
         return cur_post_thr, cur_post_thr, False
     raw = float(np.clip(tgt_vol / rv_latest, min_l, max_l))
@@ -6025,7 +6704,7 @@ class CombinedStrategyBase:
         if include_us_live_snapshot:
             _supplement_us_today_close(us_raw, US_ALL_TICKERS, msg)
         rot_tickers = US_ROT_POOL + ["BIL"]
-        _late_rot = {"BTC-USD", "EMXC"}
+        _late_rot = _us_rot_late_history_tickers()
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
         if "EMXC" in US_ROT_POOL and US_ROT_EMXC_BT_PROXY not in rot_tickers_core:
             if US_ROT_EMXC_BT_PROXY in us_raw:
@@ -6145,7 +6824,8 @@ class CombinedStrategyBase:
         except _DATA_FETCH_ERRORS as e:
             raise poe.BotError(f"A-DK多空数据获取失败: {e}")
         return cn_close, cn_dk_close, us_rot_close, us_prod_daily
-    def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+    def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily,
+                        allow_unresolved_suba_volume=False):
         # v6.1: Sub-A uses bias momentum + R² + bond ETF
         cn_close_with_bond = cn_close.copy()
         if CN_BOND_CODE not in cn_close_with_bond.columns:
@@ -6184,6 +6864,11 @@ class CombinedStrategyBase:
                     rule_name=CN_SA_VOLUME_RULE_NAME,
                 )
             except Exception as exc:
+                if not allow_unresolved_suba_volume:
+                    raise poe.BotError(
+                        "Sub-A成交额风控数据不可用，正式回测/绩效查询已中止；"
+                        "信号查询可降级显示“成交额风控不可判定”。"
+                    ) from exc
                 cn_result = _mark_suba_volume_unavailable(cn_result, exc)
         # v6.1: Sub-A-DK uses multi-pair Top-1
         cn_dk_result = run_dk_strategy(cn_close, cn_dk_close)
@@ -6193,7 +6878,7 @@ class CombinedStrategyBase:
                 decay_ratio_threshold=CN_DK_PAIR_SCORE_DECAY_RATIO,
                 recovery_ratio_threshold=CN_DK_PAIR_SCORE_RECOVERY_RATIO,
                 derisk_scale=CN_DK_PAIR_SCORE_DERISK_SCALE,
-                commission=CN_COMMISSION,
+                commission=CN_DK_COMMISSION,
             )
         if CN_DK_SAME_SIDE_OVERHEAT_ENABLED:
             cn_dk_result = apply_dk_same_side_overheat_overlay(
@@ -6201,7 +6886,7 @@ class CombinedStrategyBase:
                 enter_threshold=CN_DK_SAME_SIDE_OVERHEAT_ENTER,
                 exit_threshold=CN_DK_SAME_SIDE_OVERHEAT_EXIT,
                 derisk_scale=CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE,
-                commission=CN_COMMISSION,
+                commission=CN_DK_COMMISSION,
             )
         if CN_DK_RISK_GATE_ENABLED:
             cn_dk_result = apply_dk_drawdown_risk_gate(
@@ -6211,6 +6896,11 @@ class CombinedStrategyBase:
                 exit_value=CN_DK_RISK_GATE_EXIT,
                 cooldown_days=CN_DK_RISK_GATE_COOLDOWN_DAYS,
             )
+        cn_dk_result = _rebuild_dk_effective_execution_costs(
+            cn_dk_result,
+            cn_dk_result.attrs.get("pair_data", {}),
+            CN_DK_COMMISSION,
+        )
         us_rot_result = run_us_rotation_mix(
             us_rot_close,
             US_ROT_BASE_POOL,
@@ -6239,7 +6929,13 @@ class CombinedStrategyBase:
         return cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details
     def _compute_signal_data(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
-            self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            self._run_strategies(
+                cn_close,
+                cn_dk_close,
+                us_rot_close,
+                us_prod_daily,
+                allow_unresolved_suba_volume=True,
+            )
         cn_date = cn_close.index[-1]
         cn_current = cn_result["holding"].iloc[-1]
         is_cn_signal = bool(cn_result["is_signal"].iloc[-1]) if "is_signal" in cn_result.columns else False
@@ -6318,7 +7014,7 @@ class CombinedStrategyBase:
             include_current=False,
         )
         hypo_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
-        hypo_us_w, _, _ = _us_mix_snapshot(
+        model_hypo_us_w, _, _ = _us_mix_snapshot(
             us_rot_close,
             -1,
             hypo_ranking_codes,
@@ -6326,6 +7022,14 @@ class CombinedStrategyBase:
             prev_risky_by_lb=hypo_prev_mix_risky_by_lb,
             threshold=US_ROT_REBALANCE_THRESHOLD,
         )
+        volreg_cash_today = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
+        volreg_ratio_today = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
+        volreg_cash_next = _volreg_next_cash_state(volreg_cash_today, volreg_ratio_today) if US_ROT_VOLREG_ENABLED else False
+        if US_ROT_VOLREG_ENABLED and volreg_cash_next:
+            hypo_us_w = {asset: 0.0 for asset in set(model_hypo_us_w) | set(current_us_w) | {"CASH"}}
+            hypo_us_w["CASH"] = 1.0
+        else:
+            hypo_us_w = dict(model_hypo_us_w)
         if is_us_signal:
             rebalanced_b = bool(us_rot_result.iloc[-1].get("rebalanced", False))
             rloc = len(us_rot_result) - 1
@@ -6333,12 +7037,12 @@ class CombinedStrategyBase:
             if rloc > 0:
                 prev_us_w = {c.replace("w_", ""): us_rot_result.iloc[rloc - 1][c] for c in rot_w_cols}
             if not prev_us_w:
-                prev_us_w = {"BIL": 1.0}
+                prev_us_w = {"CASH": 1.0}
             all_a = set(list(hypo_us_w.keys()) + list(prev_us_w.keys()))
-            turnover_b = sum(abs(hypo_us_w.get(a, 0) - prev_us_w.get(a, 0)) for a in all_a if a != "BIL")
+            turnover_b = sum(abs(hypo_us_w.get(a, 0) - prev_us_w.get(a, 0)) for a in all_a if a not in ("BIL", "CASH"))
         else:
             all_a = set(list(hypo_us_w.keys()) + list(current_us_w.keys()))
-            turnover_b = sum(abs(hypo_us_w.get(a, 0) - current_us_w.get(a, 0)) for a in all_a if a != "BIL")
+            turnover_b = sum(abs(hypo_us_w.get(a, 0) - current_us_w.get(a, 0)) for a in all_a if a not in ("BIL", "CASH"))
             would_rebalance = turnover_b >= US_ROT_MIN_TURNOVER
         dk_date = cn_dk_close.index[-1]
         # v6.1: Multi-pair DK - extract top pair and direction
@@ -6355,10 +7059,15 @@ class CombinedStrategyBase:
         dk_hypo_top_pair = dk_rank_today[0]["pair"] if dk_rank_today else dk_top_pair
         dk_hypo_direction = int(dk_rank_today[0]["direction"]) if dk_rank_today else dk_direction
         hypo_dk = f"{dk_hypo_top_pair}_{dk_hypo_direction}" if dk_hypo_top_pair != "none" and dk_hypo_direction != 0 else "none_0"
-        ret_n_prod = prod_monthly / prod_monthly.shift(PROD_ABS_MOM_LB) - 1
-        current_am_raw = (ret_n_prod > 0).astype(float)
-        current_sma_raw = _sma_raw_signals(prod_monthly, PROD_SMA_WINDOW, PROD_SMA_BAND)
-        last_sig_month = current_am_raw.index[-1]
+        if prod_monthly is not None and len(prod_monthly) > 0:
+            ret_n_prod = prod_monthly / prod_monthly.shift(PROD_ABS_MOM_LB) - 1
+            current_am_raw = (ret_n_prod > 0).astype(float)
+            current_sma_raw = _sma_raw_signals(prod_monthly, PROD_SMA_WINDOW, PROD_SMA_BAND)
+            last_sig_month = current_am_raw.index[-1]
+        else:
+            current_am_raw = pd.DataFrame()
+            current_sma_raw = pd.DataFrame()
+            last_sig_month = None
         subc_vs_info = {}
         return {
             "cn_result": cn_result, "cn_dk_result": cn_dk_result,
@@ -6382,6 +7091,7 @@ class CombinedStrategyBase:
             "is_us_signal": is_us_signal, "current_us_w": current_us_w,
             "us_scale": us_scale, "last_confirmed_us_scale": last_confirmed_us_scale,
             "prev_us_w": prev_us_w, "hypo_us_w": hypo_us_w,
+            "model_hypo_us_w": model_hypo_us_w, "effective_hypo_us_w": hypo_us_w,
             "hypo_prev_mix_risky_by_lb": hypo_prev_mix_risky_by_lb,
             "rebalanced_b": rebalanced_b, "would_rebalance": would_rebalance,
             "turnover_b": turnover_b, "all_a": all_a,
@@ -6389,8 +7099,9 @@ class CombinedStrategyBase:
             "current_am_raw": current_am_raw, "current_sma_raw": current_sma_raw,
             "last_sig_month": last_sig_month,
             "subc_vs_info": subc_vs_info,
-            "volreg_ratio": float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None,
-            "volreg_cash_today": bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False,
+            "volreg_ratio": volreg_ratio_today,
+            "volreg_cash_today": volreg_cash_today,
+            "volreg_cash_next": volreg_cash_next,
         }
 
     def _handle_set_capital(self):
@@ -6405,7 +7116,7 @@ class CombinedStrategyBase:
         prompt = f"""解析资金设置。
 
 资金设置支持: Sub-A, Sub-A-DK, Sub-B
-V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
+V7.2主组合权重: Sub-A 15%, Sub-A-DK 10%, 微盘 15%, Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
 注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；V7.2不再设置Sub-C
 
 当前已设置:
@@ -6425,9 +7136,9 @@ V7.2主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%, Sub-B 60%（微盘由�
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=10:15拆分, 美元金额默认给Sub-B
-   例: "人民币300万, 美元100万" -> Sub-A: 1200000, Sub-A-DK: 1800000, Sub-B: 1000000, Sub-C: null
-3. 用户说"总共100万, 按V7.2比例" (未区分币种) -> Sub-A: 100000, Sub-A-DK: 150000, Sub-B: 600000, Sub-C: null（微盘15%由独立脚本处理）
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:10拆分, 美元金额默认给Sub-B
+   例: "人民币300万, 美元100万" -> Sub-A: 1800000, Sub-A-DK: 1200000, Sub-B: 1000000, Sub-C: null
+3. 用户说"总共100万, 按V7.2比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 100000, Sub-B: 600000, Sub-C: null（微盘15%由独立脚本处理）
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -6689,7 +7400,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.2 — 策略信号查询**\n\n"
-        "V7.2组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15% + Sub-B 60%\n\n"
+        "V7.2组合: Sub-A 15% + Sub-A-DK 10% + 微盘 15% + Sub-B 60%\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
@@ -7211,7 +7922,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _dk_cur_vs = _dk_get_vol_scale(cn_dk_result, _dk_display_idx if _dk_display_idx >= 0 else len(cn_dk_result) + _dk_display_idx)
                 _dk_next_raw, _dk_next_vs, _dk_pending = _compute_next_vol_scale(
                     _dk_rv_rt, _dk_cur_vs,
-                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                    CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None,
+                    CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 if _dk_pending and not _dk_intraday:
                     # 计算下一交易日总敞口 (VolScale变化, overlay不变)
                     _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
@@ -7256,6 +7968,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
             _vr_cash = d.get("volreg_cash_today", False)
+            _vr_cash_next = d.get("volreg_cash_next", _vr_cash)
             if US_ROT_VOLREG_ENABLED and _vr is not None:
                 if _vr > US_ROT_VOLREG_THRESHOLD:
                     w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
@@ -7265,6 +7978,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                     w(f"🟢 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
                     w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
+                if _vr_cash_next and not _vr_cash:
+                    w("📌 VolReg后实际执行目标: **CASH 100%**\n")
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
             else:
@@ -7284,9 +7999,13 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 if len(_hist_before) >= US_ROT_VOL_WINDOW:
                     _us_rv_sig = np.std(_hist_before[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
                     _us_sig_scale = min(max(US_ROT_TARGET_VOL / _us_rv_sig, 0.05), US_ROT_MAX_LEV) if _us_rv_sig > 0.001 else US_ROT_MAX_LEV
-            _us_all_etfs = set(list(_us_sig_w.keys()) + list(_us_prev_w.keys()))
-            _us_display_w = dict(_us_sig_w)
-            _us_display_turnover = sum(abs(_us_display_w.get(e, 0) - _us_prev_w.get(e, 0)) for e in _us_all_etfs if e != "BIL")
+            _force_volreg_cash_display = bool(US_ROT_VOLREG_ENABLED and _vr_cash_next and not _vr_cash)
+            _us_display_w, _us_all_etfs = _subb_effective_display_weights(
+                _us_sig_w,
+                _us_prev_w,
+                force_cash=_force_volreg_cash_display,
+            )
+            _us_display_turnover = sum(abs(_us_display_w.get(e, 0) - _us_prev_w.get(e, 0)) for e in _us_all_etfs if e not in ("BIL", "CASH"))
             _us_schedule = _coerce_session_index(getattr(self, "_us_open", None))
             if _us_schedule is None:
                 _us_schedule = _coerce_session_index(us_rot_close)
@@ -7729,7 +8448,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _dk_cur_vs3 = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
                 _dk_next_raw3, _dk_next_vs3, _dk_pending3 = _compute_next_vol_scale(
                     _dk_rv_rt3, _dk_cur_vs3,
-                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                    CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None,
+                    CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 if _dk_pending3:
                     _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
                     w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
@@ -7943,8 +8663,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；中证2000指数不可用时，用中证2000ETF候选池最新成交额最大者代理 |\n")
-            w(f"| 成交额触发后仓位 | **{CN_SA_VOLUME_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后半仓；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
+            w(f"| 成交额触发后仓位 | **旧规则{CN_SA_VOLUME_SCALE:.0%} / 新规则{CN_SA_VOLUME_CLEAR_RATIO_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
@@ -7973,12 +8693,11 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| Score衰减开关 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** | 当前pair score从本轮峰值衰减后降低ADK敞口 |\n")
             w(f"| Score衰减触发 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}** | 当前pair score相对本轮trade peak衰减到阈值以下后次日降风险 |\n")
             w(f"| Score恢复阈值 | **{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** | 恢复到阈值以上后回满仓，并等待新peak后才能再次触发 |\n")
-            w(f"| 成交额黄灯 | **HS300 MA{CN_DK_VOLUME_YELLOW_MA}/{CN_DK_VOLUME_YELLOW_DAYS}天** | {CN_DK_VOLUME_POLICY}: 只进提醒面板，不参与DK仓位/回测降仓 |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
             w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | ratio/MA{CN_DK_BIAS_N}乖离与动量同向且过热时降低ADK敞口 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** | T日收盘判断，T+1按防守敞口执行 |\n")
             w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 对Score衰减后的ADK敞口再乘该系数 |\n")
-            w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费(翻转=4笔单边) |\n")
+            w(f"| 交易成本 | **{CN_DK_COMMISSION:.3%}** | DK单边成本；翻转=4笔单边 |\n")
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
             w("\n**计算过程:**\n")
@@ -8026,10 +8745,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量黄灯 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"| 微盘成交量清仓提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
-            w(f"| 微盘黄灯政策 | **{MICROCAP_VOLUME_POLICY}**，只进提醒面板，不参与微盘独立脚本仓位/回测降仓 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，宽口径中证2000+创业板同时触发后应清仓；当前V7.2面板提示，不自动改写微盘独立脚本仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
@@ -8076,7 +8795,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%}；ZZ2000指数不可用时用最大成交额中证2000ETF代理 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；旧规则ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%}；新规则ZZ2000/SZ50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天，触发后清仓 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")
@@ -8270,7 +8989,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _dk_cur_vs_p = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
                 _dk_next_raw_p, _dk_next_vs_p, _dk_pending_p = _compute_next_vol_scale(
                     _dk_rv_p, _dk_cur_vs_p,
-                    CN_DK_TARGET_VOL, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+                    CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None,
+                    CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 _dk_next_total_p = _dk_sc_p / _dk_cur_vs_p * _dk_next_vs_p if _dk_cur_vs_p > 1e-10 else _dk_next_vs_p
                 w(f"\n**③ 波动率缩放:**\n\n")
                 w(f"| 指标 | 值 |\n")
@@ -8567,41 +9287,35 @@ class CombinedStrategyV72(CombinedStrategyBase):
             # ===== Sub-A-DK =====
             w("### Sub-A-DK: 多空策略\n\n")
             dk_period = cn_dk_result[(cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
-            dk_trades = dk_period[dk_period["is_signal"] == True]
-            if len(dk_trades) == 0:
-                w("该时段无方向翻转信号。\n")
+            dk_position_trades, dk_scale_trades = _split_dk_history_trades(dk_period)
+            if len(dk_position_trades) == 0:
+                w("该时段无配对/方向变化。\n")
                 if len(dk_period) > 0:
                     _dk_h = dk_period["holding"].iloc[-1]
-                    _dk_name = CN_DK_NAMES.get(_dk_h, _dk_h)
-                    w(f"方向: 做多**{_dk_name}**/做空另一腿\n\n")
+                    w(f"当前持仓: **{_dk_pos_str(_dk_h)}**\n\n")
                 else:
                     w("\n")
             else:
-                w("| 日期 | 方向 | 做多 | 杠杆 |\n")
+                w("**配对/方向变化:**\n\n")
+                w("| 日期 | 动作 | 持仓 | 杠杆 |\n")
                 w("|:--|:--|:--|------:|\n")
-                for tdate in dk_trades.index:
+                for tdate in dk_position_trades.index:
                     _dk_h = dk_period.loc[tdate, "holding"]
-                    _dk_name = CN_DK_NAMES.get(_dk_h, _dk_h)
                     _dk_w = dk_period.loc[tdate, "weight"] if "weight" in dk_period.columns else 1.0
-                    w(f"| {tdate.strftime('%Y-%m-%d')} | 翻转 | **{_dk_name}** | {_dk_w:.2f}x |\n")
-                w(f"\n共 **{len(dk_trades)}** 次翻转\n\n")
-            # ── Sub-A-DK 杠杆缩放调仓 ──
-            if CN_DK_SCALE_THRESHOLD > 0 and "weight" in dk_period.columns and len(dk_period) >= 2:
-                _dk_scale = dk_period["weight"]
-                _dk_scale_diff = _dk_scale.diff().abs()
-                _dk_scale_changes = dk_period[(_dk_scale_diff > 0.001) & (dk_period["is_signal"] == False)]
-                if len(_dk_scale_changes) > 0:
-                    w(f"**杠杆缩放调仓 ({len(_dk_scale_changes)}次):**\n\n")
-                    w("| 日期 | 杠杆变动 | 持仓 |\n")
-                    w("|:--|:--|:--|\n")
-                    for tdate in _dk_scale_changes.index:
-                        _loc = cn_dk_result.index.get_loc(tdate)
-                        _prev_w = cn_dk_result["weight"].iloc[_loc - 1] if _loc > 0 else 1.0
-                        _new_w = cn_dk_result.loc[tdate, "weight"]
-                        _h = dk_period.loc[tdate, "holding"]
-                        _h_name = CN_DK_NAMES.get(_h, _h)
-                        w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_w:.2f}x → **{_new_w:.2f}x** | {_h_name} |\n")
-                    w("\n")
+                    action = "清零敞口" if str(_dk_h) in ("none_0", "none") else "切换"
+                    w(f"| {tdate.strftime('%Y-%m-%d')} | {action} | **{_dk_pos_str(_dk_h)}** | {_dk_w:.2f}x |\n")
+                w(f"\n共 **{len(dk_position_trades)}** 次配对/方向变化\n\n")
+            if len(dk_scale_trades) > 0:
+                w(f"**杠杆缩放调整 ({len(dk_scale_trades)}次):**\n\n")
+                w("| 日期 | 杠杆变动 | 持仓 |\n")
+                w("|:--|:--|:--|\n")
+                for tdate in dk_scale_trades.index:
+                    _loc = cn_dk_result.index.get_loc(tdate)
+                    _prev_w = cn_dk_result["weight"].iloc[_loc - 1] if _loc > 0 else 1.0
+                    _new_w = cn_dk_result.loc[tdate, "weight"]
+                    _h = dk_period.loc[tdate, "holding"]
+                    w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_w:.2f}x → **{_new_w:.2f}x** | {_dk_pos_str(_h)} |\n")
+                w("\n")
             # ===== Sub-B =====
             w("### Sub-B: 美股轮动\n\n")
             us_period = us_rot_result[(us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
