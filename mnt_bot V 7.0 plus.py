@@ -16,7 +16,7 @@ import sys
 import xlsxwriter
 import time
 import types
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 try:
     from fastapi_poe.types import SettingsResponse
@@ -3046,16 +3046,31 @@ def _us_signal_days(close_df, start_idx):
 
 
 def _should_suppress_early_week_us_signal(us_date, now=None):
-    now = beijing_now() if now is None else now
-    us_date = pd.Timestamp(us_date)
-    current_us_data_date = (now - timedelta(days=1)).date() if now.hour < 6 else now.date()
-    last_yr, last_wk, _ = us_date.isocalendar()
-    now_yr, now_wk, _ = pd.Timestamp(current_us_data_date).isocalendar()
-    return (
-        (last_yr, last_wk) == (now_yr, now_wk)
-        and us_date.dayofweek < 3
-        and us_date.date() == current_us_data_date
+    """Suppress current-week Mon/Tue/Wed US signals until after NY Thu close."""
+    bj_now = beijing_now() if now is None else now
+    now_et = _bj_naive_to_utc(bj_now).astimezone(ZoneInfo("America/New_York"))
+
+    us_date = pd.Timestamp(us_date).normalize()
+    if us_date.dayofweek >= 3:
+        return False
+
+    sig_year, sig_week, _ = us_date.isocalendar()
+    now_year, now_week, _ = pd.Timestamp(now_et.date()).isocalendar()
+    if (sig_year, sig_week) != (now_year, now_week):
+        return False
+
+    before_thu_close = (
+        now_et.weekday() < 3
+        or (now_et.weekday() == 3 and now_et.hour < 16)
     )
+    return before_thu_close
+
+
+def _bj_naive_to_utc(now):
+    if now.tzinfo is not None:
+        return now.astimezone(timezone.utc)
+    return (now - timedelta(hours=8)).replace(tzinfo=timezone.utc)
+
 
 def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
                     prev_risky=None, threshold=1.0):
@@ -3636,6 +3651,56 @@ def is_cn_market_open():
     afternoon_close = bj.replace(hour=15, minute=0, second=0)
     return (morning_open <= bj <= morning_close) or (afternoon_open <= bj <= afternoon_close), bj
 
+def _is_cn_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return session_start <= bj < session_close
+
+
+def is_cn_unconfirmed_intraday_snapshot():
+    bj = beijing_now()
+    return _is_cn_unconfirmed_at(bj), bj
+
+
+def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
+    if bj_now is None:
+        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    else:
+        cn_unconfirmed = _is_cn_unconfirmed_at(bj_now)
+    if data_date is None:
+        return False
+    return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
+
+
+def _drop_cn_unconfirmed_today(df):
+    cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    if df is None or len(df) == 0 or not cn_unconfirmed:
+        return df
+    today = bj_now.date()
+    keep = [pd.Timestamp(idx).date() != today for idx in df.index]
+    return df.loc[keep]
+
+
+def _cn_record_close_confirmed(rec_date, bj_now, rec_time_text=None):
+    if rec_date is None:
+        return False
+    rec_day = pd.Timestamp(rec_date).date()
+    today = bj_now.date()
+    if rec_time_text and "09:30" in str(rec_time_text):
+        if rec_day < today:
+            return True
+        if rec_day > today:
+            return False
+        return bj_now.hour > 9 or (bj_now.hour == 9 and bj_now.minute >= 35)
+    if rec_day < today:
+        return True
+    if rec_day > today:
+        return False
+    return not _is_cn_unconfirmed_at(bj_now) and bj_now.hour >= 15
+
+
 def _is_edt(d):
     if hasattr(d, 'date'):
         d = d.date()
@@ -3737,13 +3802,23 @@ def _is_tentative_subb_date(date):
     return (rec_yr, rec_wk) == (now_yr, now_wk) and rec_date.dayofweek < 3
 
 
-def _filter_confirmed_records(records):
-    """非实时输出只保留已确认/已执行记录。"""
+def _filter_confirmed_records(records, bj_now=None, us_schedule=None):
+    """Non-realtime output keeps only confirmed CN records and executed US records."""
+    if bj_now is None:
+        bj_now = beijing_now()
     confirmed = []
     for rec in records:
-        strat = rec.get("策略", "")
-        if "Sub-B" in strat and _is_tentative_subb_date(rec["日期"]):
+        strat = rec.get("策略", rec.get("策略".encode("utf-8").decode("gbk", errors="ignore"), ""))
+        rec_date = rec.get("日期", rec.get("日期".encode("utf-8").decode("gbk", errors="ignore")))
+        rec_time = rec.get("北京时间", rec.get("北京时间".encode("utf-8").decode("gbk", errors="ignore"), ""))
+        if strat in {"Sub-A", "Sub-A-DK"} and not _cn_record_close_confirmed(rec_date, bj_now, rec_time):
             continue
+        if "Sub-B" in strat:
+            if "_has_execution_happened" in globals():
+                if not _has_execution_happened(rec_date, "US", bj_now, us_schedule):
+                    continue
+            elif _is_tentative_subb_date(rec_date):
+                continue
         confirmed.append(rec)
     return confirmed
 
@@ -5042,7 +5117,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
 class CombinedStrategyBase:
     """共享基类: 数据获取、策略执行、信号计算、资金管理"""
 
-    def _fetch_data(self, msg, include_us_live_snapshot=False):
+    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False):
         msg.write("⏳ 正在获取A股数据...\n")
         cn_raw, cn_sources = {}, {}
         for secid in CN_STOCK_CODES:
@@ -5052,8 +5127,12 @@ class CombinedStrategyBase:
             time.sleep(0.2)
         # 实时补充：纯指数代码的日K线可能缺少当天数据
         _bj_today_cn = beijing_now().date()
-        for secid in CN_STOCK_CODES:
-            cn_raw[secid] = _supplement_today_close(cn_raw[secid], secid, _bj_today_cn, msg)
+        if include_cn_live_snapshot:
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _supplement_today_close(cn_raw[secid], secid, _bj_today_cn, msg)
+        else:
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _drop_cn_unconfirmed_today(cn_raw[secid])
         # ZZHL: H20955已通过CN_STOCK_CODES获取, 尝试用H00922扩展更早历史
         try:
             zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID)
@@ -5217,7 +5296,10 @@ class CombinedStrategyBase:
                 if idx_df is None:
                     raise ValueError(f"A-DK {col_name} 数据源均失败")
                 # 日K线缺少今天数据时，用实时行情补充
-                idx_df = _supplement_today_close(idx_df, secid, _bj_today, msg)
+                if include_cn_live_snapshot:
+                    idx_df = _supplement_today_close(idx_df, secid, _bj_today, msg)
+                else:
+                    idx_df = _drop_cn_unconfirmed_today(idx_df)
                 dk_dfs[col_name] = idx_df.rename(columns={"close": col_name})
                 msg.write(f"  {CN_DK_NAMES[col_name]}: {idx_df.index[0].strftime('%Y-%m-%d')}~{idx_df.index[-1].strftime('%Y-%m-%d')} [{src}]\n")
                 time.sleep(0.2)
@@ -6072,7 +6154,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_us_live_snapshot=False)
+                msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
             w("⏳ 正在计算信号...\n")
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
@@ -6098,9 +6180,10 @@ class CombinedStrategyV70(CombinedStrategyBase):
         hypo_dk = d.get("hypo_dk", dk_current)
         now_str = beijing_now().strftime("%Y%m%d")
         signal_info = {}
-        cn_open, bj_now = is_cn_market_open()
+        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
         us_open, _ = is_us_market_open()
         cn_data_is_today = (cn_date.date() == bj_now.date())
+        dk_data_is_today = (dk_date.date() == bj_now.date())
         us_data_is_today = (us_date.date() == bj_now.date()) or \
             (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
         bj_time_str_val = bj_now.strftime('%H:%M')
@@ -6114,10 +6197,10 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("### Sub-A: A股乖离动量轮动\n")
             cn_close_bj = beijing_time_str(cn_date, "CN", "close")
             w(f"数据: 东财K线 | 收盘: {cn_close_bj}")
-            if cn_open and cn_data_is_today:
+            if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            _cn_intraday = cn_open and cn_data_is_today and len(cn_result) >= 2
+            _cn_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _cn_display_idx = -2 if _cn_intraday else -1
             _cn_display_date = cn_result.index[_cn_display_idx]
             _cn_display_holding = cn_result["holding"].iloc[_cn_display_idx]
@@ -6223,10 +6306,10 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1\n")
             dk_close_bj = beijing_time_str(dk_date, "CN", "close")
             w(f"数据来源: 中证指数+东财K线 | 5指数10配对Top-1 | 收盘: {dk_close_bj}")
-            if cn_open and cn_data_is_today:
+            if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            _dk_intraday = cn_open and cn_data_is_today and len(cn_dk_result) >= 2
+            _dk_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
             dk_current_name = _dk_pos_str(dk_current)
             hypo_dk_name = _dk_pos_str(hypo_dk)
             _dk_effective_issue_date = cn_dk_result.index[-2] if _dk_intraday else dk_date
@@ -6562,7 +6645,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_us_live_snapshot=True)
+                msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
             w("⏳ 正在计算实时信号...\n")
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
@@ -6598,12 +6681,14 @@ class CombinedStrategyV70(CombinedStrategyBase):
         dk_hypo_top_pair = d.get("dk_hypo_top_pair", dk_top_pair)
         dk_hypo_direction = d.get("dk_hypo_direction", dk_direction)
         hypo_dk = d["hypo_dk"]
-        cn_open, bj_now = is_cn_market_open()
+        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
         us_open, _ = is_us_market_open()
         cn_data_is_today = (cn_date.date() == bj_now.date())
+        dk_data_is_today = (dk_date.date() == bj_now.date())
         us_data_is_today = (us_date.date() == bj_now.date()) or \
             (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
-        any_market_live = (cn_open and cn_data_is_today) or (us_open and us_data_is_today)
+        any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today)
+        any_market_live = any_cn_live or (us_open and us_data_is_today)
         bj_time_str_val = bj_now.strftime('%H:%M')
         bj_date_str = bj_now.strftime('%Y-%m-%d')
         with _sm() as msg:
@@ -6611,7 +6696,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("## 📡 实时信号\n\n")
             if any_market_live:
                 live_markets = []
-                if cn_open and cn_data_is_today:
+                if any_cn_live:
                     live_markets.append("A股")
                 if us_open and us_data_is_today:
                     live_markets.append("美股")
@@ -6622,7 +6707,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("### Sub-A: A股轮动\n")
             cn_close_bj = beijing_time_str(cn_date, "CN", "close")
             w(f"数据: 东财K线 | 收盘: {cn_close_bj}")
-            if cn_open and cn_data_is_today:
+            if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
             hypo_cn_name = CN_NAMES.get(hypo_cn, hypo_cn)
@@ -6730,7 +6815,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1\n")
             dk_close_bj3 = beijing_time_str(dk_date, "CN", "close")
             w(f"数据来源: 中证指数+东财K线 | 5指数10配对Top-1 | 收盘: {dk_close_bj3}")
-            if cn_open and cn_data_is_today:
+            if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
             dk_current_name3 = _dk_pos_str(dk_current)
@@ -7027,27 +7112,30 @@ class CombinedStrategyV70(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_us_live_snapshot=True)
+                msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
             w("⏳ 正在计算实时参数...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         with _sm() as msg:
             w = msg.write
             cn_date = cn_close.index[-1]
+            dk_date = cn_dk_close.index[-1]
             us_date = us_rot_close.index[-1]
             cn_close_bj = beijing_time_str(cn_date, "CN", "close")
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            cn_open, bj_now = is_cn_market_open()
+            cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
             us_open, _ = is_us_market_open()
             cn_data_is_today = (cn_date.date() == bj_now.date())
+            dk_data_is_today = (dk_date.date() == bj_now.date())
             us_data_is_today = (us_date.date() == bj_now.date()) or \
                 (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
-            any_live = (cn_open and cn_data_is_today) or (us_open and us_data_is_today)
+            any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today)
+            any_live = any_cn_live or (us_open and us_data_is_today)
             bj_ts = bj_now.strftime('%Y-%m-%d %H:%M')
             w(f"## 📐 实时参数值\n\n")
             if any_live:
                 live_mkts = []
-                if cn_open and cn_data_is_today:
+                if any_cn_live:
                     live_mkts.append("A股")
                 if us_open and us_data_is_today:
                     live_mkts.append("美股")
@@ -7268,6 +7356,8 @@ class CombinedStrategyV70(CombinedStrategyBase):
             us_start_idx_p = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
+            if is_us_signal_p and _should_suppress_early_week_us_signal(us_date):
+                is_us_signal_p = False
             if is_us_signal_p:
                 w(f"✅ **今日是信号日** (美东 {us_date.strftime('%m-%d')})\n")
             else:
@@ -7300,9 +7390,8 @@ class CombinedStrategyV70(CombinedStrategyBase):
             us_start_idx_p = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
-            if is_us_signal_p:
-                if _should_suppress_early_week_us_signal(us_date):
-                    is_us_signal_p = False
+            if is_us_signal_p and _should_suppress_early_week_us_signal(us_date):
+                is_us_signal_p = False
             rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
             current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
             if not is_us_signal_p:
