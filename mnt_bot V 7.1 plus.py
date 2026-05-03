@@ -1015,6 +1015,13 @@ def _fetch_cn_realtime_close(secid):
     except _DATA_FETCH_ERRORS:
         return None
 
+
+def _short_error(exc, max_len=120):
+    text = str(exc).replace("\n", " ").strip()
+    if len(text) > max_len:
+        text = text[:max_len - 3] + "..."
+    return text or exc.__class__.__name__
+
 def _supplement_today_close(df, secid, bj_today, msg=None):
     """当日K线缺少今天数据时，用实时行情API补充今天的收盘价。
     df: 已有的K线DataFrame (index=date, columns含'close')
@@ -1042,7 +1049,7 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
             pass
     # 与最后一行收盘价对比，完全相同说明可能是非交易日(节假日)
     last_close = float(df.iloc[-1]["close"]) if "close" in df.columns else None
-    if last_close is not None and abs(realtime_close - last_close) < 0.001:
+    if last_close is not None and last_close > 0 and abs(realtime_close - last_close) / last_close < 1e-6:
         return df
     # 补充今天的数据行
     today_ts = pd.Timestamp(bj_today)
@@ -1050,7 +1057,7 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     # 保留原有列名
     for col in df.columns:
         if col != "close" and col not in new_row.columns:
-            new_row[col] = realtime_close  # 对于仅有close的df，不影响
+            new_row[col] = np.nan
     # P2-1修复: 标记实时补价行，便于下游区分strict/live数据
     new_row['is_live_bar'] = True
     df = pd.concat([df, new_row])
@@ -1060,6 +1067,22 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if msg:
         msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
     return df
+
+
+def _add_cn_bond_column(cn_close, msg=None, context="Sub-A"):
+    cn_close_with_bond = cn_close.copy()
+    if CN_BOND_CODE in cn_close_with_bond.columns:
+        return cn_close_with_bond
+    try:
+        bond_df, source = fetch_cn_kline(CN_BOND_CODE)
+        cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
+        cn_close_with_bond = cn_close_with_bond.ffill()
+        if msg is not None:
+            msg.write(f"  {CN_BOND_NAME}: {bond_df.index[-1].strftime('%Y-%m-%d')} [{source}]" + chr(10))
+    except Exception as exc:
+        if msg is not None:
+            msg.write(f"  WARNING {context}: {CN_BOND_NAME}({CN_BOND_CODE}) unavailable; Sub-A lacks bond defensive channel: {_short_error(exc)}" + chr(10))
+    return cn_close_with_bond
 
 def _cn_cache_path(secid):
     base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
@@ -1310,7 +1333,11 @@ def _fetch_us_realtime_close(ticker):
         mkt_ts = meta.get("regularMarketTime")
         if price is None or mkt_ts is None:
             return None, None
-        trade_date = pd.Timestamp.fromtimestamp(mkt_ts).strftime("%Y-%m-%d")
+        trade_date = (
+            pd.Timestamp.fromtimestamp(mkt_ts, tz="UTC")
+            .tz_convert("America/New_York")
+            .strftime("%Y-%m-%d")
+        )
         return float(price), trade_date
     except _DATA_FETCH_ERRORS:
         return None, None
@@ -1353,7 +1380,7 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
             continue
         # 与最后收盘价对比，完全相同可能是非交易日
         last_close = float(df.iloc[-1]["close"])
-        if abs(rt_price - last_close) < 0.0001:
+        if last_close > 0 and abs(rt_price - last_close) / last_close < 1e-6:
             continue
         # 补充新行
         new_ts = pd.Timestamp(rt_date)
@@ -1550,7 +1577,6 @@ def run_cn_strategy(close_df, equity_codes):
     pending_entry_target = None
     pending_entry_since = None
     pending_entry_days = 0
-    await_fresh_entry_signal = False
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -1587,10 +1613,7 @@ def run_cn_strategy(close_df, equity_codes):
         is_signal = False
 
         if holding == "cash":
-            if await_fresh_entry_signal:
-                if ideal == "cash":
-                    await_fresh_entry_signal = False
-            elif ideal != "cash":
+            if ideal != "cash":
                 initial_fraction = float(np.clip(CN_ENTRY_INITIAL_FRACTION, 0.0, 1.0))
                 trade_target = ideal
                 trade_fraction = initial_fraction
@@ -1617,7 +1640,6 @@ def run_cn_strategy(close_df, equity_codes):
                     pending_entry_target = None
                     pending_entry_since = None
                     pending_entry_days = 0
-                    await_fresh_entry_signal = False
                 else:
                     prev_close = close_df.iloc[i - 1][pending_entry_target] if i > 0 else np.nan
                     curr_close = close_df.iloc[i][pending_entry_target]
@@ -1652,7 +1674,6 @@ def run_cn_strategy(close_df, equity_codes):
                 pending_entry_target = None
                 pending_entry_since = None
                 pending_entry_days = 0
-                await_fresh_entry_signal = False
 
         old_h = holding
         old_fraction = holding_fraction
@@ -1686,7 +1707,6 @@ def run_cn_strategy(close_df, equity_codes):
             "pending_entry_target": pending_entry_target,
             "pending_entry_since": pending_entry_since,
             "pending_entry_days": pending_entry_days,
-            "await_fresh_entry_signal": await_fresh_entry_signal,
         })
     df = pd.DataFrame(rows).set_index("date")
     # 波动率缩放 (v6.1): cash日scale=1.0, 权益日scale=target_vol/realized_vol
@@ -2109,6 +2129,7 @@ def apply_suba_same_side_overheat_overlay(
     overheat_state = False
     prev_effective_h = "cash"
     prev_effective_f = 0.0
+    prev_pre_holding = None
     eff_h, eff_f, signals = [], [], []
     bias_vals, mom_vals, same_side_vals = [], [], []
     state_vals, trigger_vals, recover_vals = [], [], []
@@ -2116,6 +2137,9 @@ def apply_suba_same_side_overheat_overlay(
     for i, dt in enumerate(out.index):
         holding = str(pre_h.iloc[i])
         fraction = float(pre_f.iloc[i])
+        if prev_pre_holding is not None and holding != prev_pre_holding:
+            overheat_state = False
+        prev_pre_holding = holding
         eligible = holding in CN_STOCK_CODES and fraction > 1e-12
 
         bias = np.nan
@@ -3036,6 +3060,19 @@ def _us_signal_days(close_df, start_idx):
             week_best[key] = (i, dow)
     return {v[0] for v in week_best.values()}
 
+
+def _should_suppress_early_week_us_signal(us_date, now=None):
+    now = beijing_now() if now is None else now
+    us_date = pd.Timestamp(us_date)
+    current_us_data_date = (now - timedelta(days=1)).date() if now.hour < 6 else now.date()
+    last_yr, last_wk, _ = us_date.isocalendar()
+    now_yr, now_wk, _ = pd.Timestamp(current_us_data_date).isocalendar()
+    return (
+        (last_yr, last_wk) == (now_yr, now_wk)
+        and us_date.dayofweek < 3
+        and us_date.date() == current_us_data_date
+    )
+
 def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
                     prev_risky=None, threshold=1.0):
     """Top-N selection with optional threshold.
@@ -3662,7 +3699,7 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         assets.append("BIL")
     if "CASH" not in assets:
         assets.append("CASH")
-    prev_effective = {"CASH": 1.0}
+    prev_effective = None
     turnovers = []
     costs = []
     final_returns = []
@@ -3680,12 +3717,16 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
             effective_w = {asset: float(model_w.get(asset, 0.0) or 0.0) for asset in assets}
             effective_w["CASH"] = 0.0
             gross_ret = float(base_ret.loc[dt])
-        turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH",))
+        if prev_effective is None:
+            turnover = 0.0
+            prev_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
+        else:
+            turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH",))
+            prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
         cost = turnover * US_ROT_COMMISSION
         final_returns.append((1.0 + gross_ret) * (1.0 - cost) - 1.0)
         turnovers.append(turnover)
         costs.append(cost)
-        prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
         cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
         if cur_cash and not prev_cash:
             volreg_actions.append("enter_cash")
@@ -3910,9 +3951,11 @@ def is_cn_market_open():
     weekday = bj.weekday()
     if weekday >= 5:
         return False, bj
-    market_open = bj.replace(hour=9, minute=30, second=0)
-    market_close = bj.replace(hour=15, minute=0, second=0)
-    return market_open <= bj <= market_close, bj
+    morning_open = bj.replace(hour=9, minute=30, second=0)
+    morning_close = bj.replace(hour=11, minute=30, second=0)
+    afternoon_open = bj.replace(hour=13, minute=0, second=0)
+    afternoon_close = bj.replace(hour=15, minute=0, second=0)
+    return (morning_open <= bj <= morning_close) or (afternoon_open <= bj <= afternoon_close), bj
 
 def _is_edt(d):
     if hasattr(d, 'date'):
@@ -4774,6 +4817,8 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None):
         sells, buys = [], []
         sell_prices, buy_prices = [], []
         for a in sorted(set(list(weights.keys()) + list(prev_weights.keys()))):
+            if a in ("BIL", "CASH"):
+                continue
             cur = weights.get(a, 0)
             prev = prev_weights.get(a, 0)
             diff = cur - prev
@@ -4789,11 +4834,11 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None):
                         _p = us_rot_close.loc[date, a]
                     _p_label = "收"
                 _p_str = f"${_p:.2f}{_p_label}" if _p and not pd.isna(_p) else ""
-                if diff < 0 and a != "BIL":
+                if diff < 0 and a != "BIL" and a != "CASH":
                     sells.append(f"{live} {prev:.1%}->{cur:.1%}")
                     if _p_str:
                         sell_prices.append(f"{live} {_p_str}")
-                elif diff > 0 and a != "BIL":
+                elif diff > 0 and a != "BIL" and a != "CASH":
                     buys.append(f"{live} {prev:.1%}->{cur:.1%}")
                     if _p_str:
                         buy_prices.append(f"{live} {_p_str}")
@@ -4812,6 +4857,8 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None):
 
 def extract_prod_rebalances(prod_details, prod_monthly, include_no_change=False, us_prod_daily=None, us_open=None):
     records = []
+    if prod_details is None or prod_monthly is None:
+        return records
     sig_cols = [c for c in prod_details.columns if c.startswith("sig_") and not c.startswith("sig_am_") and not c.startswith("sig_sma_")]
     us_schedule = _coerce_session_index(us_open)
     if us_schedule is None and us_prod_daily is not None:
@@ -4880,6 +4927,8 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
     """提取Sub-C Vol-Scaling杠杆调整记录。"""
     if not PROD_VS_ENABLED:
         return []
+    if us_prod_daily is None or prod_sig_a is None:
+        return []
     try:
         us_schedule = _coerce_session_index(us_open)
         if us_schedule is None and us_prod_daily is not None:
@@ -4923,7 +4972,7 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                 })
             prev_s = s
         return records
-    except Exception:
+    except (KeyError, ValueError, AttributeError):
         return []
 
 def _compute_daily_subc(us_prod_daily, prod_sig_a, portfolio, cash_ticker,
@@ -5353,6 +5402,7 @@ class CombinedStrategyBase:
         for secid in CN_STOCK_CODES:
             name = CN_NAMES.get(secid, secid)
             msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{cn_sources[secid]}]\n")
+        cn_close = _add_cn_bond_column(cn_close, msg, context="Sub-A bond")
         # 数据新鲜度检查: 收盘后如果部分指数缺少当天数据，发出警告
         _cn_open_now, _bj_now_check = is_cn_market_open()
         _is_cn_trading_day = _bj_today_cn.weekday() < 5  # 简单判断工作日
@@ -5499,14 +5549,7 @@ class CombinedStrategyBase:
         return cn_close, cn_dk_close, us_rot_close, us_prod_daily
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
         # v6.1: Sub-A uses bias momentum + R² + bond ETF
-        cn_close_with_bond = cn_close.copy()
-        if CN_BOND_CODE not in cn_close_with_bond.columns:
-            try:
-                bond_df, _ = fetch_cn_kline(CN_BOND_CODE)
-                cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
-                cn_close_with_bond = cn_close_with_bond.ffill()
-            except Exception:
-                pass  # If bond data fails, strategy will just not include bond
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A bond")
         cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
         if CN_SA_CASH_OVERLAY_ENABLED:
             cn_result = apply_suba_cash_peak_decay_overlay(
@@ -5584,14 +5627,7 @@ class CombinedStrategyBase:
         cn_current = cn_result["holding"].iloc[-1]
         is_cn_signal = bool(cn_result["is_signal"].iloc[-1]) if "is_signal" in cn_result.columns else False
         # v6.1: compute bias momentum and R² for display
-        cn_close_with_bond = cn_close.copy()
-        if CN_BOND_CODE not in cn_close_with_bond.columns:
-            try:
-                bond_df, _ = fetch_cn_kline(CN_BOND_CODE)
-                cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
-                cn_close_with_bond = cn_close_with_bond.ffill()
-            except Exception:
-                pass
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A bond")
         all_codes_display = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
         bias_mom_cn = {}
         r2_cn = {}
@@ -5621,10 +5657,7 @@ class CombinedStrategyBase:
         us_signal_set = _us_signal_days(us_rot_close, us_start_idx)
         is_us_signal = (len(us_rot_close) - 1) in us_signal_set
         if is_us_signal:
-            last_dow_us = us_date.dayofweek
-            last_yr_us, last_wk_us, _ = us_date.isocalendar()
-            now_yr_us, now_wk_us, _ = beijing_now().isocalendar()
-            if (last_yr_us, last_wk_us) == (now_yr_us, now_wk_us) and last_dow_us < 3:
+            if _should_suppress_early_week_us_signal(us_date):
                 is_us_signal = False
         rot_w_cols = [c for c in us_rot_result.columns if c.startswith("w_")]
         current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols}
@@ -6383,7 +6416,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
         dk_hypo_top_pair = d.get("dk_hypo_top_pair", dk_top_pair)
         dk_hypo_direction = d.get("dk_hypo_direction", dk_direction)
         hypo_dk = d.get("hypo_dk", dk_current)
-        now_str = datetime.now().strftime("%Y%m%d")
+        now_str = beijing_now().strftime("%Y%m%d")
         signal_info = {}
         cn_open, bj_now = is_cn_market_open()
         us_open, _ = is_us_market_open()
@@ -7433,14 +7466,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")
             # v6.1: Compute bias momentum and R² for display
-            cn_close_with_bond = cn_close.copy()
-            if CN_BOND_CODE not in cn_close_with_bond.columns:
-                try:
-                    bond_df_lp, _ = fetch_cn_kline(CN_BOND_CODE)
-                    cn_close_with_bond[CN_BOND_CODE] = bond_df_lp["close"].reindex(cn_close_with_bond.index)
-                    cn_close_with_bond = cn_close_with_bond.ffill()
-                except Exception:
-                    pass
+            cn_close_with_bond = _add_cn_bond_column(cn_close, msg, context="Sub-A params")
             all_codes_lp = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
             bias_mom_lp = {}
             r2_lp = {}
@@ -7715,10 +7741,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
             if is_us_signal_p:
-                last_dow_us_p = us_date.dayofweek
-                last_yr_us_p, last_wk_us_p, _ = us_date.isocalendar()
-                now_yr_us_p, now_wk_us_p, _ = beijing_now().isocalendar()
-                if (last_yr_us_p, last_wk_us_p) == (now_yr_us_p, now_wk_us_p) and last_dow_us_p < 3:
+                if _should_suppress_early_week_us_signal(us_date):
                     is_us_signal_p = False
             rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
             current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
@@ -8513,7 +8536,7 @@ class CombinedStrategyV71(CombinedStrategyBase):
                     w(f"\n（仅显示最近20条，完整记录见Excel）\n")
             else:
                 w("该时段无调仓记录\n")
-        now_str = datetime.now().strftime("%Y%m%d")
+        now_str = beijing_now().strftime("%Y%m%d")
         excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period)
         filename = f"performance_{now_str}.xlsx"
         with _sm() as msg:

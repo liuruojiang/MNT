@@ -420,8 +420,8 @@ US_ALL_TICKERS = sorted(set(
 # 组合权重
 # ─────────────────────────────────────────────
 COMBINED_WEIGHTS = {
-    "Sub-A": 0.15,
-    "Sub-A-DK": 0.10,
+    "Sub-A": 0.10,
+    "Sub-A-DK": 0.15,
     "Microcap": 0.15,
     "Sub-B": 0.60,
     "Sub-C": 0.00,  # V7.5主组合不再分配Sub-C；用户展示层不再显示Sub-C。
@@ -448,7 +448,7 @@ def _performance_combo_weight_label():
     return "/".join(
         str(int(round(COMBINED_WEIGHTS[name] * 100)))
         for name in PERFORMANCE_COMBO_ORDER
-    ) + "归一"
+    ) + "归一(不含微盘)"
 
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
 
@@ -1662,7 +1662,7 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
             pass
     # 与最后一行收盘价对比，完全相同说明可能是非交易日(节假日)
     last_close = float(df.iloc[-1]["close"]) if "close" in df.columns else None
-    if last_close is not None and abs(realtime_close - last_close) < 0.001:
+    if last_close is not None and last_close > 0 and abs(realtime_close - last_close) / last_close < 1e-6:
         return df
     # 补充今天的数据行
     today_ts = pd.Timestamp(bj_today)
@@ -1670,16 +1670,38 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     # 保留原有列名
     for col in df.columns:
         if col != "close" and col not in new_row.columns:
-            new_row[col] = realtime_close  # 对于仅有close的df，不影响
+            new_row[col] = np.nan
     # P2-1修复: 标记实时补价行，便于下游区分strict/live数据
     new_row['is_live_bar'] = True
     df = pd.concat([df, new_row])
     if 'is_live_bar' not in df.columns:
         df['is_live_bar'] = False
-    df['is_live_bar'] = df['is_live_bar'].fillna(False)
+    df['is_live_bar'] = df['is_live_bar'].where(df['is_live_bar'].notna(), False).astype(bool)
     if msg:
         msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
     return df
+
+
+def _add_cn_bond_column(cn_close, msg=None, context="Sub-A"):
+    cn_close_with_bond = cn_close.copy()
+    if CN_BOND_CODE in cn_close_with_bond.columns:
+        return cn_close_with_bond
+    try:
+        bond_df, source = fetch_cn_kline(CN_BOND_CODE)
+        cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
+        cn_close_with_bond = cn_close_with_bond.ffill()
+        if msg is not None:
+            msg.write(
+                f"  {CN_BOND_NAME}: {bond_df.index[-1].strftime('%Y-%m-%d')} [{source}]\n"
+            )
+    except Exception as exc:
+        if msg is not None:
+            msg.write(
+                f"  ⚠️ {context}: {CN_BOND_NAME}({CN_BOND_CODE})数据获取失败，"
+                f"Sub-A本次将缺少国债避险通道: {_short_error(exc)}\n"
+            )
+    return cn_close_with_bond
+
 
 def _cn_cache_path(secid):
     base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
@@ -2473,7 +2495,11 @@ def _fetch_us_realtime_close(ticker):
         mkt_ts = meta.get("regularMarketTime")
         if price is None or mkt_ts is None:
             return None, None
-        trade_date = pd.Timestamp.fromtimestamp(mkt_ts).strftime("%Y-%m-%d")
+        trade_date = (
+            pd.Timestamp.fromtimestamp(mkt_ts, tz="UTC")
+            .tz_convert("America/New_York")
+            .strftime("%Y-%m-%d")
+        )
         return float(price), trade_date
     except _DATA_FETCH_ERRORS:
         return None, None
@@ -2516,7 +2542,7 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
             continue
         # 与最后收盘价对比，完全相同可能是非交易日
         last_close = float(df.iloc[-1]["close"])
-        if abs(rt_price - last_close) < 0.0001:
+        if last_close > 0 and abs(rt_price - last_close) / last_close < 1e-6:
             continue
         # 补充新行
         new_ts = pd.Timestamp(rt_date)
@@ -2713,7 +2739,6 @@ def run_cn_strategy(close_df, equity_codes):
     pending_entry_target = None
     pending_entry_since = None
     pending_entry_days = 0
-    await_fresh_entry_signal = False
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -2750,10 +2775,7 @@ def run_cn_strategy(close_df, equity_codes):
         is_signal = False
 
         if holding == "cash":
-            if await_fresh_entry_signal:
-                if ideal == "cash":
-                    await_fresh_entry_signal = False
-            elif ideal != "cash":
+            if ideal != "cash":
                 initial_fraction = float(np.clip(CN_ENTRY_INITIAL_FRACTION, 0.0, 1.0))
                 trade_target = ideal
                 trade_fraction = initial_fraction
@@ -2780,7 +2802,6 @@ def run_cn_strategy(close_df, equity_codes):
                     pending_entry_target = None
                     pending_entry_since = None
                     pending_entry_days = 0
-                    await_fresh_entry_signal = False
                 else:
                     prev_close = close_df.iloc[i - 1][pending_entry_target] if i > 0 else np.nan
                     curr_close = close_df.iloc[i][pending_entry_target]
@@ -2815,7 +2836,6 @@ def run_cn_strategy(close_df, equity_codes):
                 pending_entry_target = None
                 pending_entry_since = None
                 pending_entry_days = 0
-                await_fresh_entry_signal = False
 
         old_h = holding
         old_fraction = holding_fraction
@@ -2849,7 +2869,6 @@ def run_cn_strategy(close_df, equity_codes):
             "pending_entry_target": pending_entry_target,
             "pending_entry_since": pending_entry_since,
             "pending_entry_days": pending_entry_days,
-            "await_fresh_entry_signal": await_fresh_entry_signal,
         })
     df = pd.DataFrame(rows).set_index("date")
     # 波动率缩放 (v6.1): cash日scale=1.0, 权益日scale=target_vol/realized_vol
@@ -3365,6 +3384,7 @@ def apply_suba_same_side_overheat_overlay(
     overheat_state = False
     prev_effective_h = "cash"
     prev_effective_f = 0.0
+    prev_pre_holding = None
     eff_h, eff_f, signals = [], [], []
     bias_vals, mom_vals, same_side_vals = [], [], []
     state_vals, trigger_vals, recover_vals = [], [], []
@@ -3372,6 +3392,9 @@ def apply_suba_same_side_overheat_overlay(
     for i, dt in enumerate(out.index):
         holding = str(pre_h.iloc[i])
         fraction = float(pre_f.iloc[i])
+        if prev_pre_holding is not None and holding != prev_pre_holding:
+            overheat_state = False
+        prev_pre_holding = holding
         eligible = holding in CN_STOCK_CODES and fraction > 1e-12
 
         bias = np.nan
@@ -4292,6 +4315,21 @@ def _us_signal_days(close_df, start_idx):
             week_best[key] = (i, dow)
     return {v[0] for v in week_best.values()}
 
+
+def _should_suppress_early_week_us_signal(us_date, now=None):
+    """Avoid showing an unfinalized early-week US signal only for the current US data day."""
+    now = beijing_now() if now is None else now
+    us_date = pd.Timestamp(us_date)
+    current_us_data_date = (now - timedelta(days=1)).date() if now.hour < 6 else now.date()
+    last_yr, last_wk, _ = us_date.isocalendar()
+    now_yr, now_wk, _ = pd.Timestamp(current_us_data_date).isocalendar()
+    return (
+        (last_yr, last_wk) == (now_yr, now_wk)
+        and us_date.dayofweek < 3
+        and us_date.date() == current_us_data_date
+    )
+
+
 def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
                     prev_risky=None, threshold=1.0):
     """Top-N selection with optional threshold.
@@ -4483,6 +4521,89 @@ def _us_mix_snapshot(close_df, row_idx, ranking_codes, scale,
         threshold=threshold,
     )
     return mix_act, per_lb, vol_df.iloc[row_idx]
+
+
+def _subb_v75_ema_prev_risky_from_result(result_df, signal_date=None, include_current=False):
+    if result_df is None or len(result_df) == 0:
+        return None
+    rows = result_df
+    if signal_date is not None:
+        signal_date = pd.Timestamp(signal_date)
+        rows = rows.loc[rows.index <= signal_date] if include_current else rows.loc[rows.index < signal_date]
+    if rows.empty:
+        return None
+    row = rows.iloc[-1]
+    prefixes = ("ema_w_", "ema_actual_w_")
+    for prefix in prefixes:
+        weights = {
+            c[len(prefix):]: float(row.get(c, 0.0) or 0.0)
+            for c in row.index
+            if isinstance(c, str) and c.startswith(prefix)
+        }
+        risky = {asset for asset, weight in weights.items() if asset != "BIL" and weight > 0.001}
+        if risky:
+            return risky
+    return None
+
+
+def _subb_v75_ema_scale_from_result(result_df, include_current=False):
+    if result_df is not None and "ema_scale" in result_df.columns and len(result_df) > 0:
+        value = pd.to_numeric(result_df["ema_scale"], errors="coerce").dropna()
+        if len(value) > 0:
+            return float(value.iloc[-1])
+    if result_df is not None and "ema_return" in result_df.columns:
+        hist = pd.to_numeric(result_df["ema_return"], errors="coerce").dropna()
+        if not include_current:
+            hist = hist.iloc[:-1]
+        if len(hist) > 0:
+            return _subb_v75_ema_scale_from_hist(hist.values)
+    return 1.0
+
+
+def _subb_official_scale_from_result(result_df, end_loc=None, include_current=False):
+    if result_df is None or len(result_df) == 0:
+        return 1.0
+    source = result_df["official_return"] if "official_return" in result_df.columns else result_df["return"]
+    source = pd.to_numeric(source, errors="coerce")
+    if end_loc is not None:
+        source = source.iloc[:end_loc]
+    elif not include_current:
+        source = source.iloc[:-1]
+    hist = source.dropna().values
+    if len(hist) >= US_ROT_VOL_WINDOW:
+        rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+        return min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
+    return 1.0
+
+
+def _subb_v75_ema_snapshot(close_df, row_idx, scale, ranking_codes=None, prev_risky=None,
+                           threshold=US_ROT_REBALANCE_THRESHOLD):
+    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_BASE_POOL)
+    score_row = _subb_v75_ema_score(close_df, SUBB_V75_EMA_HALF_LIFE).iloc[row_idx]
+    vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
+    raw_w = _us_raw_weights(
+        score_row,
+        vol_row,
+        ranking_codes,
+        top_n=3,
+        abs_threshold=SUBB_V75_EMA_ABS_THRESHOLD,
+        prev_risky=prev_risky,
+        threshold=threshold,
+    )
+    return _us_model_b(raw_w, scale), raw_w, vol_row
+
+
+def _blend_subb_v75_weight_dicts(official_weights, ema_weights,
+                                 official_weight=SUBB_V75_OFFICIAL_WEIGHT,
+                                 ema_weight=SUBB_V75_EMA_WEIGHT):
+    official_weights = dict(official_weights or {})
+    ema_weights = dict(ema_weights or {})
+    assets = set(official_weights) | set(ema_weights)
+    return {
+        asset: float(official_weight) * float(official_weights.get(asset, 0.0) or 0.0)
+             + float(ema_weight) * float(ema_weights.get(asset, 0.0) or 0.0)
+        for asset in assets
+    }
 
 
 def _us_mix_display_context(close_df, row_idx, ranking_codes, scale, prev_risky_by_lb=None,
@@ -5161,11 +5282,13 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         assets.append("BIL")
     if "CASH" not in assets:
         assets.append("CASH")
-    prev_effective = {"CASH": 1.0}
+    prev_effective = None
     turnovers = []
     costs = []
     final_returns = []
     volreg_actions = []
+    model_records = []
+    effective_records = []
     for dt in result.index:
         row = result.loc[dt]
         model_w = _prefixed_weight_dict(row, "actual_w_", assets)
@@ -5179,12 +5302,16 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
             effective_w = {asset: float(model_w.get(asset, 0.0) or 0.0) for asset in assets}
             effective_w["CASH"] = 0.0
             gross_ret = float(base_ret.loc[dt])
-        turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH",))
+        if prev_effective is None:
+            turnover = 0.0
+            prev_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
+        else:
+            turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH",))
+            prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
         cost = turnover * US_ROT_COMMISSION
         final_returns.append((1.0 + gross_ret) * (1.0 - cost) - 1.0)
         turnovers.append(turnover)
         costs.append(cost)
-        prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
         cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
         if cur_cash and not prev_cash:
             volreg_actions.append("enter_cash")
@@ -5192,13 +5319,15 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
             volreg_actions.append("exit_cash")
         else:
             volreg_actions.append("")
-        for asset in assets:
-            if f"model_w_{asset}" not in result.columns:
-                result.loc[:, f"model_w_{asset}"] = 0.0
-            result.loc[dt, f"model_w_{asset}"] = model_w.get(asset, 0.0)
-            result.loc[dt, f"effective_w_{asset}"] = effective_w.get(asset, 0.0)
-            result.loc[dt, f"w_{asset}"] = effective_w.get(asset, 0.0)
+        model_records.append({asset: model_w.get(asset, 0.0) for asset in assets})
+        effective_records.append({asset: effective_w.get(asset, 0.0) for asset in assets})
         prev_effective = effective_w
+    model_df = pd.DataFrame.from_records(model_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_df = pd.DataFrame.from_records(effective_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    for asset in assets:
+        result[f"model_w_{asset}"] = model_df[asset]
+        result[f"effective_w_{asset}"] = effective_df[asset]
+        result[f"w_{asset}"] = effective_df[asset]
     result["return_before_volreg"] = base_ret
     result["volreg_action"] = pd.Series(volreg_actions, index=result.index, dtype=object)
     result["subb_effective_turnover"] = pd.Series(turnovers, index=result.index, dtype=float)
@@ -5409,9 +5538,11 @@ def is_cn_market_open():
     weekday = bj.weekday()
     if weekday >= 5:
         return False, bj
-    market_open = bj.replace(hour=9, minute=30, second=0)
-    market_close = bj.replace(hour=15, minute=0, second=0)
-    return market_open <= bj <= market_close, bj
+    morning_open = bj.replace(hour=9, minute=30, second=0)
+    morning_close = bj.replace(hour=11, minute=30, second=0)
+    afternoon_open = bj.replace(hour=13, minute=0, second=0)
+    afternoon_close = bj.replace(hour=15, minute=0, second=0)
+    return (morning_open <= bj <= morning_close) or (afternoon_open <= bj <= afternoon_close), bj
 
 def _is_edt(d):
     if hasattr(d, 'date'):
@@ -6275,6 +6406,8 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None):
         sells, buys = [], []
         sell_prices, buy_prices = [], []
         for a in sorted(set(list(weights.keys()) + list(prev_weights.keys()))):
+            if a in ("BIL", "CASH"):
+                continue
             cur = weights.get(a, 0)
             prev = prev_weights.get(a, 0)
             diff = cur - prev
@@ -6313,6 +6446,8 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None):
 
 def extract_prod_rebalances(prod_details, prod_monthly, include_no_change=False, us_prod_daily=None, us_open=None):
     records = []
+    if prod_details is None or prod_monthly is None:
+        return records
     sig_cols = [c for c in prod_details.columns if c.startswith("sig_") and not c.startswith("sig_am_") and not c.startswith("sig_sma_")]
     us_schedule = _coerce_session_index(us_open)
     if us_schedule is None and us_prod_daily is not None:
@@ -6377,9 +6512,16 @@ def extract_prod_rebalances(prod_details, prod_monthly, include_no_change=False,
         prev_sigs = sigs
     return records
 
-def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=None):
+_LAST_SUBC_VS_REBALANCE_WARNING = None
+
+
+def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=None, msg=None):
     """提取Sub-C Vol-Scaling杠杆调整记录。"""
+    global _LAST_SUBC_VS_REBALANCE_WARNING
+    _LAST_SUBC_VS_REBALANCE_WARNING = None
     if not PROD_VS_ENABLED:
+        return []
+    if us_prod_daily is None or prod_sig_a is None:
         return []
     try:
         us_schedule = _coerce_session_index(us_open)
@@ -6424,7 +6566,10 @@ def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=No
                 })
             prev_s = s
         return records
-    except Exception:
+    except (KeyError, ValueError, AttributeError) as exc:
+        _LAST_SUBC_VS_REBALANCE_WARNING = f"extract_subc_vs_rebalances skipped: {_short_error(exc)}"
+        if msg is not None:
+            msg.write(f"  ⚠️ Sub-C杠杆调仓记录跳过: {_short_error(exc)}\n")
         return []
 
 def _compute_daily_subc(us_prod_daily, prod_sig_a, portfolio, cash_ticker,
@@ -6652,6 +6797,12 @@ def _compute_next_vol_scale(rv_latest, cur_post_thr, tgt_vol, min_l, max_l, thr)
     return raw, final, abs(final - cur_post_thr) > 0.001
 
 
+def _base_fraction_from_weight_and_scale(weight, raw_scale):
+    if pd.notna(raw_scale) and abs(float(raw_scale)) > 1e-12:
+        return float(weight) / float(raw_scale)
+    return 0.0
+
+
 def _dk_get_vol_scale(dk_result, idx):
     """从 DK 结果中提取纯 vol-scale (不含 pair_decay / risk_gate overlay).
 
@@ -6746,7 +6897,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
         ws = wb.add_worksheet("绩效概览")
         ws.set_column("A:A", 14)
         ws.set_column("B:E", 14)
-        metric_headers = ["指标", "Sub-A", "A-DK", "Sub-B", "PV三策略组合"]
+        metric_headers = ["指标", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘)"]
         for j, h in enumerate(metric_headers):
             ws.write(0, j, h, header_fmt)
         pct2_fmt = wb.add_format({"border": 1, "num_format": "0.00%"})
@@ -6776,7 +6927,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
             ws2 = wb.add_worksheet("月度收益")
             ws2.set_column("A:A", 10)
             ws2.set_column("B:E", 14)
-            mr_headers = ["月份", "Sub-A", "A-DK", "Sub-B", "PV三策略组合"]
+            mr_headers = ["月份", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘)"]
             for j, h in enumerate(mr_headers):
                 ws2.write(0, j, h, header_fmt)
             for i in range(len(monthly_returns)):
@@ -6856,6 +7007,7 @@ class CombinedStrategyBase:
         for secid in CN_STOCK_CODES:
             name = CN_NAMES.get(secid, secid)
             msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{cn_sources[secid]}]\n")
+        cn_close = _add_cn_bond_column(cn_close, msg, context="Sub-A国债避险")
         # 数据新鲜度检查: 收盘后如果部分指数缺少当天数据，发出警告
         _cn_open_now, _bj_now_check = is_cn_market_open()
         _is_cn_trading_day = _bj_today_cn.weekday() < 5  # 简单判断工作日
@@ -7003,14 +7155,7 @@ class CombinedStrategyBase:
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily,
                         allow_unresolved_suba_volume=False):
         # v6.1: Sub-A uses bias momentum + R² + bond ETF
-        cn_close_with_bond = cn_close.copy()
-        if CN_BOND_CODE not in cn_close_with_bond.columns:
-            try:
-                bond_df, _ = fetch_cn_kline(CN_BOND_CODE)
-                cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
-                cn_close_with_bond = cn_close_with_bond.ffill()
-            except Exception:
-                pass  # If bond data fails, strategy will just not include bond
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A国债避险")
         cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
         if CN_SA_CASH_OVERLAY_ENABLED:
             cn_result = apply_suba_cash_peak_decay_overlay(
@@ -7125,14 +7270,7 @@ class CombinedStrategyBase:
         cn_current = cn_result["holding"].iloc[-1]
         is_cn_signal = bool(cn_result["is_signal"].iloc[-1]) if "is_signal" in cn_result.columns else False
         # v6.1: compute bias momentum and R² for display
-        cn_close_with_bond = cn_close.copy()
-        if CN_BOND_CODE not in cn_close_with_bond.columns:
-            try:
-                bond_df, _ = fetch_cn_kline(CN_BOND_CODE)
-                cn_close_with_bond[CN_BOND_CODE] = bond_df["close"].reindex(cn_close_with_bond.index)
-                cn_close_with_bond = cn_close_with_bond.ffill()
-            except Exception:
-                pass
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A展示")
         all_codes_display = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
         bias_mom_cn = {}
         r2_cn = {}
@@ -7162,10 +7300,7 @@ class CombinedStrategyBase:
         us_signal_set = _us_signal_days(us_rot_close, us_start_idx)
         is_us_signal = (len(us_rot_close) - 1) in us_signal_set
         if is_us_signal:
-            last_dow_us = us_date.dayofweek
-            last_yr_us, last_wk_us, _ = us_date.isocalendar()
-            now_yr_us, now_wk_us, _ = beijing_now().isocalendar()
-            if (last_yr_us, last_wk_us) == (now_yr_us, now_wk_us) and last_dow_us < 3:
+            if _should_suppress_early_week_us_signal(us_date):
                 is_us_signal = False
         rot_w_cols = [c for c in us_rot_result.columns if c.startswith("w_")]
         current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols}
@@ -7177,16 +7312,8 @@ class CombinedStrategyBase:
                 if last_conf_date_us in us_rot_result.index:
                     current_us_w = {c.replace("w_", ""): us_rot_result.loc[last_conf_date_us, c] for c in rot_w_cols}
                     last_conf_loc_us = us_rot_result.index.get_loc(last_conf_date_us)
-                    _hist_before_conf = us_rot_result["return"].iloc[:last_conf_loc_us].values
-                    if len(_hist_before_conf) >= US_ROT_VOL_WINDOW:
-                        _rv_conf = np.std(_hist_before_conf[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-                        last_confirmed_us_scale = min(max(US_ROT_TARGET_VOL / _rv_conf, 0.05), US_ROT_MAX_LEV) if _rv_conf > 0.001 else US_ROT_MAX_LEV
-        hist = us_rot_result["return"].values
-        if len(hist) >= US_ROT_VOL_WINDOW:
-            rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-            us_scale = min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
-        else:
-            us_scale = 1.0
+                    last_confirmed_us_scale = _subb_official_scale_from_result(us_rot_result, end_loc=last_conf_loc_us)
+        us_scale = _subb_official_scale_from_result(us_rot_result)
         if last_confirmed_us_scale is None:
             last_confirmed_us_scale = us_scale
         prev_us_w = None
@@ -7194,6 +7321,11 @@ class CombinedStrategyBase:
         would_rebalance = None
         turnover_b = 0.0
         hypo_prev_mix_risky_by_lb = _us_mix_prev_risky_by_lb_from_result(
+            us_rot_result,
+            us_date,
+            include_current=False,
+        )
+        hypo_prev_ema_risky = _subb_v75_ema_prev_risky_from_result(
             us_rot_result,
             us_date,
             include_current=False,
@@ -7207,14 +7339,23 @@ class CombinedStrategyBase:
             prev_risky_by_lb=hypo_prev_mix_risky_by_lb,
             threshold=US_ROT_REBALANCE_THRESHOLD,
         )
+        ema_hypo_us_w, _, _ = _subb_v75_ema_snapshot(
+            us_rot_close,
+            -1,
+            _subb_v75_ema_scale_from_result(us_rot_result),
+            ranking_codes=US_ROT_BASE_POOL,
+            prev_risky=hypo_prev_ema_risky,
+            threshold=US_ROT_REBALANCE_THRESHOLD,
+        )
+        blended_hypo_us_w = _blend_subb_v75_weight_dicts(model_hypo_us_w, ema_hypo_us_w)
         volreg_cash_today = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
         volreg_ratio_today = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
         volreg_cash_next = _volreg_next_cash_state(volreg_cash_today, volreg_ratio_today) if US_ROT_VOLREG_ENABLED else False
         if US_ROT_VOLREG_ENABLED and volreg_cash_next:
-            hypo_us_w = {asset: 0.0 for asset in set(model_hypo_us_w) | set(current_us_w) | {"CASH"}}
+            hypo_us_w = {asset: 0.0 for asset in set(blended_hypo_us_w) | set(current_us_w) | {"CASH"}}
             hypo_us_w["CASH"] = 1.0
         else:
-            hypo_us_w = dict(model_hypo_us_w)
+            hypo_us_w = dict(blended_hypo_us_w)
         if is_us_signal:
             rebalanced_b = bool(us_rot_result.iloc[-1].get("rebalanced", False))
             rloc = len(us_rot_result) - 1
@@ -7277,7 +7418,9 @@ class CombinedStrategyBase:
             "us_scale": us_scale, "last_confirmed_us_scale": last_confirmed_us_scale,
             "prev_us_w": prev_us_w, "hypo_us_w": hypo_us_w,
             "model_hypo_us_w": model_hypo_us_w, "effective_hypo_us_w": hypo_us_w,
+            "ema_hypo_us_w": ema_hypo_us_w, "blended_hypo_us_w": blended_hypo_us_w,
             "hypo_prev_mix_risky_by_lb": hypo_prev_mix_risky_by_lb,
+            "hypo_prev_ema_risky": hypo_prev_ema_risky,
             "rebalanced_b": rebalanced_b, "would_rebalance": would_rebalance,
             "turnover_b": turnover_b, "all_a": all_a,
             "rot_w_cols": rot_w_cols,
@@ -7301,7 +7444,7 @@ class CombinedStrategyBase:
         prompt = f"""解析资金设置。
 
 资金设置支持: Sub-A, Sub-A-DK, Sub-B
-V7.5主组合权重: Sub-A 15%, Sub-A-DK 10%, 微盘 15%(v1.6 target-vol), Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
+V7.5主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
 注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；V7.5不再设置Sub-C
 
 当前已设置:
@@ -7321,9 +7464,9 @@ V7.5主组合权重: Sub-A 15%, Sub-A-DK 10%, 微盘 15%(v1.6 target-vol), Sub-B
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:10拆分, 美元金额默认给Sub-B
-   例: "人民币300万, 美元100万" -> Sub-A: 1800000, Sub-A-DK: 1200000, Sub-B: 1000000, Sub-C: null
-3. 用户说"总共100万, 按V7.5比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 100000, Sub-B: 600000, Sub-C: null（微盘15%由独立脚本处理）
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=10:15拆分, 美元金额默认给Sub-B
+   例: "人民币300万, 美元100万" -> Sub-A: 1200000, Sub-A-DK: 1800000, Sub-B: 1000000, Sub-C: null
+3. 用户说"总共100万, 按V7.5比例" (未区分币种) -> Sub-A: 100000, Sub-A-DK: 150000, Sub-B: 600000, Sub-C: null（微盘15%由独立脚本处理）
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -7585,7 +7728,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.5 — 策略信号查询**\n\n"
-        "V7.5组合: Sub-A 15% + Sub-A-DK 10% + 微盘 15%(v1.6 target-vol) + Sub-B 60%（Sub-B内部50/50混合）\n\n"
+        "V7.5组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.6 target-vol) + Sub-B 60%（Sub-B内部50/50混合）\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
@@ -7920,7 +8063,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
         dk_hypo_top_pair = d.get("dk_hypo_top_pair", dk_top_pair)
         dk_hypo_direction = d.get("dk_hypo_direction", dk_direction)
         hypo_dk = d.get("hypo_dk", dk_current)
-        now_str = datetime.now().strftime("%Y%m%d")
+        now_str = beijing_now().strftime("%Y%m%d")
         signal_info = {}
         cn_open, bj_now = is_cn_market_open()
         us_open, _ = is_us_market_open()
@@ -7965,11 +8108,16 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w(f"⏸️ 今日无换仓 | 上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
                 w(f"持仓: **{_cn_display_name}**\n")
                 w("今日收盘信号: 无变化（已确认）\n\n")
+            signal_info["Sub-A"] = {
+                "is_signal": bool(_cn_display_is_signal),
+                "signal_text": _cn_display_name,
+                "note": f"{_cn_display_date.strftime('%Y-%m-%d')}收盘确认; 上次{last_cn_sig_date.strftime('%Y-%m-%d')}",
+            }
             # ── Sub-A vol-scaling 杠杆显示 ──
             if "weight" in cn_result.columns:
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 _cn_sc_raw_rt = cn_result["scale_raw"].iloc[_cn_display_idx] if "scale_raw" in cn_result.columns else _cn_sc_rt
-                _cn_base_frac_rt = cn_result["base_weight"].iloc[_cn_display_idx] if "base_weight" in cn_result.columns else (_cn_sc_rt / _cn_sc_raw_rt if _cn_sc_raw_rt else 0.0)
+                _cn_base_frac_rt = cn_result["base_weight"].iloc[_cn_display_idx] if "base_weight" in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_rt, _cn_sc_raw_rt)
                 _cn_rv_rt = cn_result["realized_vol"].iloc[_cn_display_idx] if "realized_vol" in cn_result.columns else None
                 # 前瞻: 用最新 realized_vol 计算下一交易日杠杆
                 _cn_next_raw, _cn_next_scale, _cn_pending = _compute_next_vol_scale(
@@ -8091,9 +8239,15 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w(f"**今日Top-1配对/方向:** **{_dk_pair_display(_dk_latest_pair)}** | 方向 {_dk_latest_direction:+d}\n")
             if _dk_intraday:
                 w("盘中是否要按今日收盘价执行，请看“实时信号”里的实时Top-3。\n")
+            _dk_display_idx = -2 if _dk_intraday else -1
+            _dk_display_is_signal = bool(cn_dk_result["is_signal"].iloc[_dk_display_idx]) if "is_signal" in cn_dk_result.columns else False
+            signal_info["Sub-A-DK"] = {
+                "is_signal": bool(_dk_display_is_signal),
+                "signal_text": _dk_latest_name,
+                "note": f"{_dk_latest_issue_date.strftime('%Y-%m-%d')}收盘确认; {_dk_pair_display(_dk_latest_pair)} {int(_dk_latest_direction):+d}",
+            }
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
-                _dk_display_idx = -2 if _dk_intraday else -1
                 _dk_sc_rt = cn_dk_result["weight"].iloc[_dk_display_idx]
                 _dk_base_w_rt = cn_dk_result["base_weight"].iloc[_dk_display_idx] if "base_weight" in cn_dk_result.columns else _dk_sc_rt
                 _dk_gate_scale_rt = cn_dk_result["risk_gate_scale"].iloc[_dk_display_idx] if "risk_gate_scale" in cn_dk_result.columns else 1.0
@@ -8181,10 +8335,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _us_rebalanced = bool(us_rot_result.loc[_last_us_sig_date, "rebalanced"])
                 if _us_rloc > 0:
                     _us_prev_w = {c.replace("w_", ""): us_rot_result.iloc[_us_rloc - 1][c] for c in rot_w_cols}
-                _hist_before = us_rot_result["return"].iloc[:_us_rloc].values
-                if len(_hist_before) >= US_ROT_VOL_WINDOW:
-                    _us_rv_sig = np.std(_hist_before[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-                    _us_sig_scale = min(max(US_ROT_TARGET_VOL / _us_rv_sig, 0.05), US_ROT_MAX_LEV) if _us_rv_sig > 0.001 else US_ROT_MAX_LEV
+                _us_sig_scale = _subb_official_scale_from_result(us_rot_result, end_loc=_us_rloc)
             _force_volreg_cash_display = bool(US_ROT_VOLREG_ENABLED and _vr_cash_next and not _vr_cash)
             _us_display_w, _us_all_etfs = _subb_effective_display_weights(
                 _us_sig_w,
@@ -8418,6 +8569,8 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
             w(f"📎 Excel调仓记录: **{filename}**\n")
+            if _LAST_SUBC_VS_REBALANCE_WARNING:
+                w(f"⚠️ Sub-C杠杆调仓记录跳过: {_LAST_SUBC_VS_REBALANCE_WARNING}\n")
             if all_rebalances:
                 w(f"含最近60天 {len(all_rebalances)} 条调仓记录（北京时间）")
             else:
@@ -8516,7 +8669,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
                 _cn_sc_raw_rt3 = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_rt3
-                _cn_base_frac_rt3 = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else (_cn_sc_rt3 / _cn_sc_raw_rt3 if _cn_sc_raw_rt3 else 0.0)
+                _cn_base_frac_rt3 = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_rt3, _cn_sc_raw_rt3)
                 _cn_rv_rt3 = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
                 _cn_next_raw3, _cn_next_scale3, _cn_pending3 = _compute_next_vol_scale(
                     _cn_rv_rt3, float(_cn_sc_raw_rt3),
@@ -8997,14 +9150,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")
             # v6.1: Compute bias momentum and R² for display
-            cn_close_with_bond = cn_close.copy()
-            if CN_BOND_CODE not in cn_close_with_bond.columns:
-                try:
-                    bond_df_lp, _ = fetch_cn_kline(CN_BOND_CODE)
-                    cn_close_with_bond[CN_BOND_CODE] = bond_df_lp["close"].reindex(cn_close_with_bond.index)
-                    cn_close_with_bond = cn_close_with_bond.ffill()
-                except Exception:
-                    pass
+            cn_close_with_bond = _add_cn_bond_column(cn_close, msg, context="Sub-A参数展示")
             all_codes_lp = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
             bias_mom_lp = {}
             r2_lp = {}
@@ -9091,7 +9237,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _write_suba_volume_overlay_status(msg, cn_result, -1, prefix="⑥ ")
                 _cn_sc_p = cn_result["weight"].iloc[-1]
                 _cn_sc_raw_p = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_p
-                _cn_base_frac_p = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else (_cn_sc_p / _cn_sc_raw_p if _cn_sc_raw_p else 0.0)
+                _cn_base_frac_p = cn_result["base_weight"].iloc[-1] if "base_weight" in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_p, _cn_sc_raw_p)
                 _cn_rv_p = cn_result["realized_vol"].iloc[-1] if "realized_vol" in cn_result.columns else None
                 _cn_next_raw_p, _cn_next_scale_p, _cn_pending_p = _compute_next_vol_scale(
                     _cn_rv_p, float(_cn_sc_raw_p),
@@ -9245,13 +9391,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     _last_bj_p = beijing_time_str(_last_us_sig_date_p, "US", "close")
                     w(f"⏸️ 非信号日（上次: {_last_bj_p}）\n")
             w("\n")
-            hist_us_pre = us_rot_result["return"].values
-            if len(hist_us_pre) >= US_ROT_VOL_WINDOW:
-                _us_rv_pre = np.std(hist_us_pre[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-                us_scale = min(max(US_ROT_TARGET_VOL / _us_rv_pre, 0.05), US_ROT_MAX_LEV) if _us_rv_pre > 0.001 else US_ROT_MAX_LEV
-            else:
-                us_scale = 1.0
+            us_scale = _subb_official_scale_from_result(us_rot_result)
             _hypo_prev_mix_risky_by_lb_p = _us_mix_prev_risky_by_lb_from_result(
+                us_rot_result, us_date, include_current=False,
+            )
+            _hypo_prev_ema_risky_p = _subb_v75_ema_prev_risky_from_result(
                 us_rot_result, us_date, include_current=False,
             )
             _us_params_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
@@ -9310,10 +9454,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
             if is_us_signal_p:
-                last_dow_us_p = us_date.dayofweek
-                last_yr_us_p, last_wk_us_p, _ = us_date.isocalendar()
-                now_yr_us_p, now_wk_us_p, _ = beijing_now().isocalendar()
-                if (last_yr_us_p, last_wk_us_p) == (now_yr_us_p, now_wk_us_p) and last_dow_us_p < 3:
+                if _should_suppress_early_week_us_signal(us_date):
                     is_us_signal_p = False
             rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
             current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
@@ -9352,10 +9493,13 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
-            hist_us = us_rot_result["return"].values
+            hist_us = pd.to_numeric(
+                us_rot_result["official_return"] if "official_return" in us_rot_result.columns else us_rot_result["return"],
+                errors="coerce",
+            ).dropna().iloc[:-1].values
             if len(hist_us) >= US_ROT_VOL_WINDOW:
                 us_rv = np.std(hist_us[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-                us_scale = min(max(US_ROT_TARGET_VOL / us_rv, 0.05), US_ROT_MAX_LEV) if us_rv > 0.001 else US_ROT_MAX_LEV
+                us_scale = _subb_official_scale_from_result(us_rot_result)
             else:
                 us_rv = 0.0
                 us_scale = 1.0
@@ -9366,7 +9510,15 @@ class CombinedStrategyV75(CombinedStrategyBase):
             elif us_scale < 1.0:
                 w(" (<1: 所有资产等比缩减)")
             w("\n")
-            hypo_w = dict(_us_mix_params["mix_act"])
+            _ema_hypo_w_p, _, _ = _subb_v75_ema_snapshot(
+                us_rot_close,
+                -1,
+                _subb_v75_ema_scale_from_result(us_rot_result),
+                ranking_codes=US_ROT_BASE_POOL,
+                prev_risky=_hypo_prev_ema_risky_p,
+                threshold=US_ROT_REBALANCE_THRESHOLD,
+            )
+            hypo_w = _blend_subb_v75_weight_dicts(_us_mix_params["mix_act"], _ema_hypo_w_p)
             _display_current_us_w = current_us_w
             if is_us_signal_p:
                 _prev_us_w_p = {}
@@ -9699,7 +9851,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
         all_periods = cn_monthly.index.intersection(dk_monthly.index).intersection(
             us_rot_monthly.index)
         if len(all_periods) == 0:
-            raise poe.BotError("PV三策略组合没有重叠的月度数据")
+            raise poe.BotError("PV三策略组合(不含微盘)没有重叠的月度数据")
         aligned = pd.DataFrame({
             "Sub-A": cn_monthly.reindex(all_periods),
             "Sub-A-DK": dk_monthly.reindex(all_periods),
@@ -9933,7 +10085,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w(f"- {name}: {s} ~ {e}\n")
                 w("\n")
             w(f"说明: PV/收益查询不合并微盘独立脚本，只展示 Sub-A、Sub-A-DK、Sub-B 及三策略组合（{_performance_combo_weight_label()}）。\n\n")
-            w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合 |\n|:-|------:|------:|------:|-----:|\n")
+            w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘) |\n|:-|------:|------:|------:|-----:|\n")
             metric_labels = [
                 ("年化收益", "annual", "%"), ("波动率", "vol", "%"),
                 ("夏普比率", "sharpe", ""), ("最大回撤", "max_dd", "%"),
@@ -9960,7 +10112,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     years_available.update(m["yearly"].keys())
             if years_available:
                 w(f"\n### 年度收益\n")
-                w("| 年份 | Sub-A | A-DK | Sub-B | PV三策略组合 |\n|:-|------:|------:|------:|-----:|\n")
+                w("| 年份 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘) |\n|:-|------:|------:|------:|-----:|\n")
                 for yr in sorted(years_available):
                     row = f"| {yr} |"
                     for col in PERFORMANCE_COLUMNS:
@@ -10001,7 +10153,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     w(f"\n（仅显示最近20条，完整记录见Excel）\n")
             else:
                 w("该时段无调仓记录\n")
-        now_str = datetime.now().strftime("%Y%m%d")
+        now_str = beijing_now().strftime("%Y%m%d")
         excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period)
         filename = f"performance_{now_str}.xlsx"
         with _sm() as msg:
