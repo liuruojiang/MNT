@@ -1,0 +1,102 @@
+{
+  "classification": "formal per-branch result; summary rebuilt from branch daily files after batch wrapper exited nonzero without traceback",
+  "generated_at": "2026-05-06T02:07:26.686400",
+  "common_end": "2026-05-05",
+  "windows": [
+    10,
+    8,
+    6,
+    4,
+    2
+  ],
+  "entrypoints": {
+    "V7.5+Microcap_v1.6": "mnt_bot V 7.5 plus.py: CombinedStrategyV75._fetch_data + _run_strategies + _load_microcap_daily_ret(v1.6 costed_nav return_net)",
+    "V7.6+Microcap_v1.7": "mnt_bot V 7.6 plus.py: CombinedStrategyV75._fetch_data + _run_strategies + _load_microcap_daily_ret(v1.7 costed_nav return_net)"
+  },
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.15,
+    "Sub-B": 0.6
+  },
+  "daily_files": {
+    "V7.5+Microcap_v1.6": {
+      "daily_file": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\v75_v76_with_microcap_window_compare_20260506\\daily_V75_Microcap_v16.csv",
+      "start": "2010-11-22",
+      "end": "2026-05-05",
+      "rows": 4014,
+      "duplicate_dates": 0,
+      "columns": [
+        "Combined_NAV",
+        "Sub-A_return",
+        "Sub-A-DK_return",
+        "Microcap_return",
+        "Sub-B_return"
+      ],
+      "na_counts": {
+        "Combined_NAV": 0,
+        "Sub-A_return": 262,
+        "Sub-A-DK_return": 263,
+        "Microcap_return": 262,
+        "Sub-B_return": 129
+      }
+    },
+    "V7.6+Microcap_v1.7": {
+      "daily_file": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\v75_v76_with_microcap_window_compare_20260506\\daily_V76_Microcap_v17.csv",
+      "start": "2010-11-22",
+      "end": "2026-05-05",
+      "rows": 4014,
+      "duplicate_dates": 0,
+      "columns": [
+        "Combined_NAV",
+        "Sub-A_return",
+        "Sub-A-DK_return",
+        "Microcap_return",
+        "Sub-B_return"
+      ],
+      "na_counts": {
+        "Combined_NAV": 0,
+        "Sub-A_return": 262,
+        "Sub-A-DK_return": 263,
+        "Microcap_return": 262,
+        "Sub-B_return": 129
+      }
+    }
+  },
+  "microcap_files": {
+    "V7.5+Microcap_v1.6": {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+      "start": "2010-03-04",
+      "end": "2026-04-30",
+      "rows": 3926,
+      "duplicate_dates": 0,
+      "has_return_net": true,
+      "version_values": [
+        "1.6"
+      ]
+    },
+    "V7.6+Microcap_v1.7": {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol20_max1p5_v1_7_costed_nav.csv",
+      "start": "2010-02-26",
+      "end": "2026-04-30",
+      "rows": 3930,
+      "duplicate_dates": 0,
+      "has_return_net": true,
+      "version_values": [
+        "1.7"
+      ]
+    }
+  },
+  "subb_execution_verified_in_branch_run": {
+    "V7.6+Microcap_v1.7": {
+      "uses_us_open": true,
+      "us_open_ticker_count": 21,
+      "t_close_signal_to_t1_open_execution": true
+    },
+    "V7.5+Microcap_v1.6": {
+      "uses_us_open": true,
+      "t_close_signal_to_t1_open_execution": true,
+      "source": "same official path as no-microcap audit plus generated daily file"
+    }
+  }
+}

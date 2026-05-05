@@ -1,0 +1,3 @@
+version,start,end,rows,volume_policy,volume_clear_scale,volume_active_days,risk_gate_enabled,risk_gate_days,target_vol,scale_threshold
+V7.5,2010-11-22,2026-04-30,3751,warning_only,,0,False,0,0.2,0.1
+V7.6,2010-11-22,2026-04-30,3751,formal_clear,0.0,336,True,511,0.2,0.1

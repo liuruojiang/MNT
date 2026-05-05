@@ -1,5 +1,33 @@
 # AGENT Rules
 
+## Hard gate before any backtest
+
+Every backtest or performance comparison must start by reading this `AGENT.md`.
+This is not optional. If the file has not been read in the current turn, do not
+publish CAGR, max drawdown, yearly returns, NAV curves, allocation advice, or
+version comparisons.
+
+Before publishing any result, create and keep an audit trail in the output
+folder that records:
+
+1. exact target script path and version;
+2. official entrypoint used, preferably that script's own `_fetch_data` plus
+   `_run_strategies`;
+3. data sources and whether required `open` and `close` fields were present;
+4. market calendar used by each sleeve;
+5. return column used for each sleeve;
+6. start date, end date, row count, monthly count, and duplicate-date count;
+7. whether Sub-B used `T close signal -> T+1 open execution`, `us_open`,
+   VolReg, costs, `EMXC/EEM` splice, and `IBIT/BTC-USD` splice;
+8. whether all metric tables, daily returns, yearly returns, charts, and HTML
+   report came from the same run.
+
+If any audit item is missing, the result must be labeled "invalid / not formal"
+and must not be used for strategy ranking or allocation decisions. If a user
+points out that a result does not match Poe or an Excel export, stop publishing
+new conclusions and reconcile the external file against the official script
+path first.
+
 ## 回测铁律
 
 1. 先确认目标版本脚本的正式入口，再做任何回测。
@@ -110,6 +138,18 @@
 回测准确性优先于速度。宁可先说“这轮结果无效，需要重跑”，也不能为了继续讨论而输出未经核验的绩效结论。
 
 ## 作图发布铁律
+
+## Codex 可见图片输出硬规则
+
+给用户看的图，第一展示方式必须采用已经验证可见的格式：
+
+1. 先把 PNG 复制到纯英文、无空格、无中文的路径，例如：
+   `C:/Users/Administrator.DESKTOP-95I7VVU/Desktop/codex_nav_charts/<name>.png`
+2. 回复里必须直接用 Markdown 图片标签嵌入这个英文路径：
+   `![chart](C:/Users/Administrator.DESKTOP-95I7VVU/Desktop/codex_nav_charts/<name>.png)`
+3. 路径必须使用正斜杠 `/`，不能使用中文路径、空格路径或反斜杠 Windows 路径。
+4. 自包含 HTML 和 `http://127.0.0.1:<port>/...` 链接只能作为补充，不能替代上面的可见 Markdown 图片。
+5. 如果用户明确说某种图片输出方式“可以看了”，以后同类图优先沿用该方式。
 
 以后凡是给用户看净值曲线、回撤曲线、指标对比图或任何研究图表，必须遵守：
 

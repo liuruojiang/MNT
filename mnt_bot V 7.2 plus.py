@@ -133,6 +133,7 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
 CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
     ("1.563300", "中证2000ETF"),
@@ -1193,7 +1194,7 @@ def _fetch_cn_eastmoney(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_eastmoney_amount(secid, beg="20050101", lmt=10000):
+def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
            f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
@@ -1260,7 +1261,7 @@ def _fetch_cn_sina_amount_proxy(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="Sohu amount"):
+def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, source_name="Sohu amount"):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://q.stock.sohu.com/hisHq"
            f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
@@ -1289,16 +1290,16 @@ def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="S
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index().tail(int(lmt))
 
-def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     symbol = _secid_to_sohu_index(secid)
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu amount")
 
-def _fetch_cn_sohu_fund_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     _market, code = secid.split(".")
     symbol = "cn_" + code
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu fund amount")
 
-def _fetch_zz2000_etf_amount_proxy(beg="20240101", lmt=300):
+def _fetch_zz2000_etf_amount_proxy(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     candidates = []
     errors = []
     for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
@@ -1468,7 +1469,7 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     _csindex_consecutive_fails += 1
     raise last_err or ValueError(f"csindex failed after {effective_retries} retries for {index_code}")
 
-def _fetch_cn_csindex_amount(secid, beg="20050101", lmt=10000, _max_retries=2):
+def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _max_retries=2):
     index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
     if not index_code:
         raise ValueError(f"no csindex amount mapping for {secid}")
@@ -1912,7 +1913,7 @@ def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma
     feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
     return signal.astype(bool), feature
 
-def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     errors = []
     primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
@@ -1967,8 +1968,8 @@ def _load_suba_volume_signal():
             df, source = _fetch_cn_amount_with_fallback(
                 secid,
                 label,
-                beg="20240101",
-                lmt=max(180, int(ma) + int(days) + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
             sources[name] = source
@@ -1991,8 +1992,8 @@ def _load_suba_volume_signal():
                 numerator_df, numerator_source = _fetch_cn_amount_with_fallback(
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID,
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL,
-                    beg="20240101",
-                    lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                    beg=CN_SA_VOLUME_HISTORY_BEG,
+                    lmt=10000,
                 )
                 numerator = numerator_df["amount"]
                 severe_sources["numerator"] = numerator_source
@@ -2001,8 +2002,8 @@ def _load_suba_volume_signal():
             denominator_df, denominator_source = _fetch_cn_amount_with_fallback(
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID,
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL,
-                beg="20240101",
-                lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             severe_sources["denominator"] = denominator_source
             severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(
@@ -8926,7 +8927,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 if code in cn_close_with_bond.columns:
                     bias_mom_lp[code] = calc_bias_momentum(cn_close_with_bond[code])
                     r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
-            _cn_params_intraday = cn_open and cn_data_is_today and len(cn_result) >= 2
+            _cn_params_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _effective_cutoff_idx = -2 if _cn_params_intraday else -1
             _suba_rows, _suba_meta = _build_suba_momentum_rank_rows(
                 cn_result, bias_mom_lp, r2_lp, all_codes_lp,

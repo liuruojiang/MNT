@@ -133,6 +133,7 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
 CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
     ("1.563300", "中证2000ETF"),
@@ -1180,7 +1181,7 @@ def _fetch_cn_eastmoney(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_eastmoney_amount(secid, beg="20050101", lmt=10000):
+def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
            f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
@@ -1247,7 +1248,7 @@ def _fetch_cn_sina_amount_proxy(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="Sohu amount"):
+def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, source_name="Sohu amount"):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://q.stock.sohu.com/hisHq"
            f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
@@ -1276,16 +1277,16 @@ def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="S
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index().tail(int(lmt))
 
-def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     symbol = _secid_to_sohu_index(secid)
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu amount")
 
-def _fetch_cn_sohu_fund_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     _market, code = secid.split(".")
     symbol = "cn_" + code
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu fund amount")
 
-def _fetch_zz2000_etf_amount_proxy(beg="20240101", lmt=300):
+def _fetch_zz2000_etf_amount_proxy(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     candidates = []
     errors = []
     for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
@@ -1455,7 +1456,7 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     _csindex_consecutive_fails += 1
     raise last_err or ValueError(f"csindex failed after {effective_retries} retries for {index_code}")
 
-def _fetch_cn_csindex_amount(secid, beg="20050101", lmt=10000, _max_retries=2):
+def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _max_retries=2):
     index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
     if not index_code:
         raise ValueError(f"no csindex amount mapping for {secid}")
@@ -1905,7 +1906,7 @@ def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma
     feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
     return signal.astype(bool), feature
 
-def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     errors = []
     primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
@@ -1960,8 +1961,8 @@ def _load_suba_volume_signal():
             df, source = _fetch_cn_amount_with_fallback(
                 secid,
                 label,
-                beg="20240101",
-                lmt=max(180, int(ma) + int(days) + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
             sources[name] = source
@@ -1984,8 +1985,8 @@ def _load_suba_volume_signal():
                 numerator_df, numerator_source = _fetch_cn_amount_with_fallback(
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID,
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL,
-                    beg="20240101",
-                    lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                    beg=CN_SA_VOLUME_HISTORY_BEG,
+                    lmt=10000,
                 )
                 numerator = numerator_df["amount"]
                 severe_sources["numerator"] = numerator_source
@@ -1994,8 +1995,8 @@ def _load_suba_volume_signal():
             denominator_df, denominator_source = _fetch_cn_amount_with_fallback(
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID,
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL,
-                beg="20240101",
-                lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             severe_sources["denominator"] = denominator_source
             severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(
@@ -5232,6 +5233,66 @@ def _prefixed_weight_dict(row, prefix, assets):
         if pd.notna(value):
             out[asset] = float(value)
     return out
+
+def _subb_v75_leg_weight_rows(result_df, row_key, min_weight=0.001):
+    if result_df is None or len(result_df) == 0:
+        return []
+    try:
+        row = result_df.loc[row_key] if row_key in result_df.index else result_df.iloc[row_key]
+    except Exception:
+        return []
+    assets = sorted({
+        col[len("target_w_"):]
+        for col in result_df.columns
+        if col.startswith("target_w_")
+    } | {
+        col[len("official_w_"):]
+        for col in result_df.columns
+        if col.startswith("official_w_")
+    } | {
+        col[len("ema_w_"):]
+        for col in result_df.columns
+        if col.startswith("ema_w_")
+    } | {
+        col[len("w_"):]
+        for col in result_df.columns
+        if col.startswith("w_")
+    })
+    rows = []
+    for asset in assets:
+        official_raw = float(row.get(f"official_w_{asset}", 0.0) or 0.0)
+        ema_raw = float(row.get(f"ema_w_{asset}", 0.0) or 0.0)
+        official_contrib = float(row.get(f"official_contrib_w_{asset}", SUBB_V75_OFFICIAL_WEIGHT * official_raw) or 0.0)
+        ema_contrib = float(row.get(f"ema_contrib_w_{asset}", SUBB_V75_EMA_WEIGHT * ema_raw) or 0.0)
+        final_w = float(row.get(f"target_w_{asset}", official_contrib + ema_contrib) or 0.0)
+        if max(abs(final_w), abs(official_raw), abs(ema_raw), abs(official_contrib), abs(ema_contrib)) < min_weight:
+            continue
+        rows.append({
+            "asset": asset,
+            "live_name": _ROT_PROXY_TO_LIVE.get(asset, asset),
+            "official_raw": official_raw,
+            "ema_raw": ema_raw,
+            "official_contrib": official_contrib,
+            "ema_contrib": ema_contrib,
+            "final_weight": final_w,
+        })
+    rows.sort(key=lambda item: item["final_weight"], reverse=True)
+    return rows
+
+
+def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
+    rows = _subb_v75_leg_weight_rows(result_df, row_key)
+    if not rows:
+        return
+    write(f"**{title}:**\n\n")
+    write("| ETF | 官方腿(原始→贡献) | EMA腿(原始→贡献) | 最终目标权重 |\n")
+    write("|:-|------:|------:|------:|\n")
+    for row in rows:
+        write(
+            f"| {row['live_name']} | {row['official_raw']:.1%}→{row['official_contrib']:.1%} | "
+            f"{row['ema_raw']:.1%}→{row['ema_contrib']:.1%} | {row['final_weight']:.1%} |\n"
+        )
+    write("\n")
 
 def _weight_columns_assets(df, prefixes=("w_", "actual_w_", "target_w_")):
     assets = set()
@@ -8592,6 +8653,12 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w(f"| 参考. {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
                     if _us_sig_mix_ctx["reference_rows"]:
                         w("\n注: 通胀开关off时，UUP/DBMF/KMLM只显示参考，不参与Sub-B仓位计算。\n")
+                    _write_subb_v75_leg_weight_table(
+                        w,
+                        us_rot_result,
+                        _last_us_sig_date,
+                        "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+                    )
                     w(
                         f"\n**通胀开关:** {'🟢 ON' if _us_sig_gate['pressure_on'] else 'OFF'} "
                         f"(DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, "
@@ -8963,6 +9030,12 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
+            _write_subb_v75_leg_weight_table(
+                w,
+                us_rot_result,
+                -1,
+                "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+            )
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
                 w("假设收盘信号:\n\n| ETF | 持仓 | 信号 | 变动 |\n|:-|--------:|--------:|-----:|\n")
@@ -9569,6 +9642,12 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
+            _write_subb_v75_leg_weight_table(
+                w,
+                us_rot_result,
+                -1,
+                "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+            )
             hist_us = pd.to_numeric(
                 us_rot_result["official_return"] if "official_return" in us_rot_result.columns else us_rot_result["return"],
                 errors="coerce",
