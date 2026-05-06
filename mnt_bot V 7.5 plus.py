@@ -132,7 +132,7 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 # Sub-A 成交额缩量规则（正式参与 Sub-A 仓位计算）
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
-CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_SCALE = 0.25
 CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
@@ -2358,7 +2358,7 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"本次无法确认旧半仓规则和新清仓规则，当前执行仓位暂按100%。\n"
+            f"本次无法确认旧缩仓规则和新清仓规则，当前执行仓位暂按100%。\n"
         )
         return
     on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -2372,11 +2372,11 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     zz_text = _streak_status("中证2000", zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
     cyb_text = _streak_status("创业板", cyb_streak, CN_SA_VOLUME_CYB_DAYS)
     ratio_text = _streak_status("中证2000/上证50成交额比值", ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
-    old_status = "已触发半仓" if old_on else "未触发半仓"
+    old_status = f"已触发{CN_SA_VOLUME_SCALE:.0%}" if old_on else "未触发缩仓"
     clear_status = "已触发清仓" if clear_on else "未触发清仓"
     data_note_parts = []
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
-        data_note_parts.append("部分数据不可用，旧半仓规则按可用腿判断")
+        data_note_parts.append("部分数据不可用，旧缩仓规则按可用腿判断")
     if clear_unavailable:
         data_note_parts.append("新清仓规则本次不可确认")
     data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
@@ -2384,14 +2384,14 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if unresolved and not on:
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"旧半仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
+            f"旧缩仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
             f"新清仓规则: {ratio_text}；当前执行仓位暂按100%{data_note}\n"
         )
         return
-    status = "清仓触发" if clear_on else ("半仓触发" if old_on else "未触发")
+    status = "清仓触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
     w(
         f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
-        f"旧半仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天）"
+        f"旧缩仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）"
         f"{old_status}：{zz_text}；{cyb_text} | "
         f"新清仓规则（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
         f"{clear_status}：{ratio_text}{data_note}\n"
@@ -6332,12 +6332,14 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
         cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
 
-    effective_pos = cutoff_pos
-    if "is_signal" in cn_result.columns:
-        signal_flags = cn_result["is_signal"].iloc[:cutoff_pos + 1].fillna(False).astype(bool).to_numpy()
-        signal_positions = np.flatnonzero(signal_flags)
-        if len(signal_positions) > 0:
-            effective_pos = int(signal_positions[-1])
+    if "holding" in cn_result.columns:
+        holding_s = cn_result["holding"].fillna("cash").astype(str)
+        effective_holding = holding_s.iloc[cutoff_pos]
+        effective_pos = cutoff_pos
+        while effective_pos > 0 and holding_s.iloc[effective_pos - 1] == effective_holding:
+            effective_pos -= 1
+    else:
+        effective_pos = cutoff_pos
 
     current_date = cn_result.index[current_pos]
     effective_date = cn_result.index[effective_pos]
@@ -7440,7 +7442,6 @@ class CombinedStrategyBase:
             if sigs_confirmed_us:
                 last_conf_date_us = us_rot_close.index[sigs_confirmed_us[-1]]
                 if last_conf_date_us in us_rot_result.index:
-                    current_us_w = {c.replace("w_", ""): us_rot_result.loc[last_conf_date_us, c] for c in rot_w_cols}
                     last_conf_loc_us = us_rot_result.index.get_loc(last_conf_date_us)
                     last_confirmed_us_scale = _subb_official_scale_from_result(us_rot_result, end_loc=last_conf_loc_us)
         us_scale = _subb_official_scale_from_result(us_rot_result)
@@ -8740,6 +8741,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
         scores_today = d["scores_today"]
         cn_result = d["cn_result"]
         cn_dk_result = d["cn_dk_result"]
+        us_rot_result = d["us_rot_result"]
         dk_date = d["dk_date"]
         is_dk_signal = d["is_dk_signal"]
         dk_current = d["dk_current"]
@@ -9154,7 +9156,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后半仓；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%}；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
             w(f"| 成交额触发后仓位 | **旧规则{CN_SA_VOLUME_SCALE:.0%} / 新规则{CN_SA_VOLUME_CLEAR_RATIO_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
@@ -9317,7 +9319,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
             _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
             w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
-            w("生效列 = 最近一次Sub-A确认信号；当前列 = 最新实时/收盘快照，用来看动量衰减。\n\n")
+            w("生效列 = 当前已生效持仓开始确认日；当前列 = 最新实时/收盘快照，用来看持仓动量变化。\n\n")
             if _cn_params_intraday:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
             else:
@@ -9542,6 +9544,8 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     w(f"⏸️ 非信号日（上次: {_last_bj_p}）\n")
             w("\n")
             us_scale = _subb_official_scale_from_result(us_rot_result)
+            rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
+            current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
             _hypo_prev_mix_risky_by_lb_p = _us_mix_prev_risky_by_lb_from_result(
                 us_rot_result, us_date, include_current=False,
             )
@@ -9600,19 +9604,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         f"{_is_top3} | {_abs_pass} | 0.0%（不参与） |\n"
                     )
                 w("\n")
-            us_start_idx_p = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
-            us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
-            is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
-            if is_us_signal_p and _should_suppress_early_week_us_signal(us_date):
-                is_us_signal_p = False
-            rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
-            current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
-            if not is_us_signal_p:
-                _confirmed_sigs_p = sorted([i for i in us_signal_set_p if i < len(us_rot_close) - 1])
-                if _confirmed_sigs_p:
-                    _last_conf_date_p = us_rot_close.index[_confirmed_sigs_p[-1]]
-                    if _last_conf_date_p in us_rot_result.index:
-                        current_us_w = {c.replace("w_", ""): us_rot_result.loc[_last_conf_date_p, c] for c in rot_w_cols_p}
             w("**② 混合结果（130/260/390 等权混合）:**\n\n")
             w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 平均动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
             w("|:-|:-|------:|------:|------:|------:|------:|:-:|:-:|\n")

@@ -6012,12 +6012,14 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
         cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
 
-    effective_pos = cutoff_pos
-    if "is_signal" in cn_result.columns:
-        signal_flags = cn_result["is_signal"].iloc[:cutoff_pos + 1].fillna(False).astype(bool).to_numpy()
-        signal_positions = np.flatnonzero(signal_flags)
-        if len(signal_positions) > 0:
-            effective_pos = int(signal_positions[-1])
+    if "holding" in cn_result.columns:
+        holding_s = cn_result["holding"].fillna("cash").astype(str)
+        effective_holding = holding_s.iloc[cutoff_pos]
+        effective_pos = cutoff_pos
+        while effective_pos > 0 and holding_s.iloc[effective_pos - 1] == effective_holding:
+            effective_pos -= 1
+    else:
+        effective_pos = cutoff_pos
 
     current_date = cn_result.index[current_pos]
     effective_date = cn_result.index[effective_pos]
@@ -8938,7 +8940,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
             _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
             w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
-            w("生效列 = 最近一次Sub-A确认信号；当前列 = 最新实时/收盘快照，用来看动量衰减。\n\n")
+            w("生效列 = 当前已生效持仓开始确认日；当前列 = 最新实时/收盘快照，用来看持仓动量变化。\n\n")
             if _cn_params_intraday:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
             else:
