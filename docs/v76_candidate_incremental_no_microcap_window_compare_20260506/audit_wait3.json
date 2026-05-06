@@ -1,0 +1,99 @@
+{
+  "case": "wait3",
+  "description": "only execution wait candidate",
+  "updates": {
+    "CN_ENTRY_WAIT_DAYS": 3
+  },
+  "effective_params": {
+    "CN_ENTRY_WAIT_DAYS": 3,
+    "CN_SWITCH_BUFFER": 1.03,
+    "CN_ENTRY_INITIAL_FRACTION": 0.5,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_SCALE_THRESHOLD": 0.0,
+    "CN_SA_CASH_OVERLAY_ENABLED": true,
+    "CN_SA_CASH_OVERLAY_DECAY_RATIO": 0.55,
+    "CN_SA_CASH_OVERLAY_RECOVERY_RATIO": 0.9,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENTER": 0.36,
+    "CN_SA_SAME_SIDE_OVERHEAT_EXIT": 0.34,
+    "CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE": 0.0,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true,
+    "CN_SA_VOLUME_SCALE": 0.25,
+    "CN_SA_VOLUME_ZZ2000_MA": 15,
+    "CN_SA_VOLUME_ZZ2000_DAYS": 3,
+    "CN_SA_VOLUME_CYB_MA": 10,
+    "CN_SA_VOLUME_CYB_DAYS": 3,
+    "CN_SA_VOLUME_CLEAR_RATIO_MA": 30,
+    "CN_SA_VOLUME_CLEAR_RATIO_DAYS": 15,
+    "CN_SA_VOLUME_CLEAR_RATIO_SCALE": 0.0
+  },
+  "entrypoint": "CombinedStrategyV75._fetch_data(include_cn_live_snapshot=False, include_us_live_snapshot=False) once + _run_strategies() per runtime override case",
+  "excluded_sleeves": [
+    "Microcap",
+    "Sub-C"
+  ],
+  "performance_combo_order": [
+    "Sub-A",
+    "Sub-A-DK",
+    "Sub-B"
+  ],
+  "performance_weights_normalized": {
+    "Sub-A": 0.11764705882352942,
+    "Sub-A-DK": 0.17647058823529413,
+    "Sub-B": 0.7058823529411765
+  },
+  "raw_combined_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.15,
+    "Sub-B": 0.6,
+    "Sub-C": 0.0
+  },
+  "return_columns": {
+    "Sub-A": "cn_result['return']",
+    "Sub-A-DK": "cn_dk_result['return']",
+    "Sub-B": "us_rot_result['return']",
+    "Combined": "daily NAV pct changes from no-microcap normalized sleeve NAVs"
+  },
+  "outputs": {
+    "Sub-A": {
+      "start": "2010-09-29",
+      "end": "2026-05-06",
+      "rows": 3786,
+      "monthly_count": 189,
+      "duplicate_dates": 0
+    },
+    "Sub-A-DK": {
+      "start": "2015-04-03",
+      "end": "2026-05-06",
+      "rows": 2693,
+      "monthly_count": 134,
+      "duplicate_dates": 0
+    },
+    "Sub-B": {
+      "start": "2008-12-15",
+      "end": "2026-05-05",
+      "rows": 4373,
+      "monthly_count": 210,
+      "duplicate_dates": 0
+    }
+  },
+  "combined_daily": {
+    "start": "2015-04-03",
+    "end": "2026-05-06",
+    "rows": 2880,
+    "monthly_common_count": 134,
+    "duplicate_dates": 0
+  },
+  "subb_execution": {
+    "uses_us_open": true,
+    "us_open_ticker_count": 21,
+    "t_close_signal_to_t1_open_execution": true,
+    "volreg_enabled": true,
+    "costs": "run_us_rotation_mix / run_subb_v75_ema_base7_rotation / blend_subb_v75_results strategy cost columns, plus VolReg if enabled",
+    "emxc_eem_splice": true,
+    "ibit_btc_splice": true
+  },
+  "log_tail": []
+}

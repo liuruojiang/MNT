@@ -1,0 +1,46 @@
+{
+  "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_stability_A_volume_after_scale25_20260506",
+  "case_count": 33,
+  "fixed_params": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.2,
+    "CN_SWITCH_BUFFER": 1.03,
+    "CN_ENTRY_INITIAL_FRACTION": 0.5,
+    "CN_ENTRY_WAIT_DAYS": null,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_SCALE_THRESHOLD": 0.0,
+    "CN_SA_CASH_OVERLAY_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true
+  },
+  "data": {
+    "start": "2010-06-01",
+    "end": "2026-04-30",
+    "rows": 3865,
+    "duplicate_dates": 0,
+    "columns": [
+      "1.H20955",
+      "0.399606",
+      "1.H00016",
+      "1.H00852",
+      "1.H00905",
+      "1.H11077"
+    ],
+    "sources": {
+      "1.H20955": "csindex+Sina-proxy:1.000827",
+      "0.399606": "EastMoney",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905",
+      "1.H11077": "fetch_cn_kline via _add_cn_bond_column"
+    },
+    "amount_sources": {
+      "zz2000": "EastMoney amount",
+      "cyb": "EastMoney amount",
+      "sz50": "EastMoney amount"
+    }
+  }
+}

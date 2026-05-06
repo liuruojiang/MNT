@@ -132,7 +132,7 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 # Sub-A 成交额缩量规则（正式参与 Sub-A 仓位计算）
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
-CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_SCALE = 0.25
 CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
@@ -147,8 +147,8 @@ CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
 CN_SA_VOLUME_ZZ2000_MA = 15
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = "0.399006"
-CN_SA_VOLUME_CYB_MA = 10
-CN_SA_VOLUME_CYB_DAYS = 3
+CN_SA_VOLUME_CYB_MA = 15
+CN_SA_VOLUME_CYB_DAYS = 5
 CN_SA_VOLUME_CLEAR_RATIO_ENABLED = True
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID = CN_SA_VOLUME_ZZ2000_SECID
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL = "ZZ2000"
@@ -2441,7 +2441,7 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"本次无法确认旧半仓规则和新清仓规则，当前执行仓位暂按100%。\n"
+            f"本次无法确认旧缩仓规则和新清仓规则，当前执行仓位暂按100%。\n"
         )
         return
     on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -2455,11 +2455,11 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     zz_text = _streak_status("中证2000", zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
     cyb_text = _streak_status("创业板", cyb_streak, CN_SA_VOLUME_CYB_DAYS)
     ratio_text = _streak_status("中证2000/上证50成交额比值", ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
-    old_status = "已触发半仓" if old_on else "未触发半仓"
+    old_status = f"已触发{CN_SA_VOLUME_SCALE:.0%}" if old_on else "未触发缩仓"
     clear_status = "已触发清仓" if clear_on else "未触发清仓"
     data_note_parts = []
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
-        data_note_parts.append("部分数据不可用，旧半仓规则按可用腿判断")
+        data_note_parts.append("部分数据不可用，旧缩仓规则按可用腿判断")
     if clear_unavailable:
         data_note_parts.append("新清仓规则本次不可确认")
     data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
@@ -2467,14 +2467,14 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if unresolved and not on:
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"旧半仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
+            f"旧缩仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
             f"新清仓规则: {ratio_text}；当前执行仓位暂按100%{data_note}\n"
         )
         return
-    status = "清仓触发" if clear_on else ("半仓触发" if old_on else "未触发")
+    status = "清仓触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
     w(
         f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
-        f"旧半仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天）"
+        f"旧缩仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）"
         f"{old_status}：{zz_text}；{cyb_text} | "
         f"新清仓规则（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
         f"{clear_status}：{ratio_text}{data_note}\n"
@@ -7836,7 +7836,7 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
-Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF轮动 - EMA腿VolScale使用6个月EWMA波动率；基础ETF如 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT；通胀开关ON时加入 UUP, DBMF, KMLM
+Sub-B: V7.6收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；基础ETF如 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT；通胀开关ON时加入 UUP, DBMF, KMLM
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
@@ -7959,7 +7959,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.6 — 策略信号查询**\n\n"
-        "V7.6组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.7 target-vol) + Sub-B 60%（Sub-B沿用V7.5内部50/50混合）\n\n"
+        f"V7.6组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.7 target-vol) + Sub-B 60%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
@@ -8764,7 +8764,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w,
                         us_rot_result,
                         _last_us_sig_date,
-                        "V7.6 Sub-B 50/50腿拆分（沿用V7.5官方腿+EMA腿=最终目标）",
+                        f"V7.6 Sub-B收益型腿拆分（官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA腿{SUBB_V75_EMA_WEIGHT:.0%}=最终目标）",
                     )
                     w(
                         f"\n**通胀开关:** {'🟢 ON' if _us_sig_gate['pressure_on'] else 'OFF'} "
@@ -9079,7 +9079,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             _write_volume_warning_panel(msg, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            w("### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n")
+            w(f"### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA半衰期7ETF{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
             if us_open and us_data_is_today:
                 w(" ⚡盘中实时")
@@ -9119,7 +9119,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _ctx_row["mix_weight"] = float(hypo_us_w.get(_ctx_row["proxy"], current_us_w.get(_ctx_row["proxy"], 0.0)))
                 _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w(
-                "说明: V7.6 沿用 V7.5 的 Sub-B：**50%官方130/260/390宏观门控 + 50% EMA hl100/16%七ETF(6M EWMA VolScale)**；"
+                f"说明: V7.6 Sub-B收益型默认：**官方130/260/390宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/{SUBB_V75_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V75_EMA_WEIGHT:.0%}({SUBB_V75_EMA_VOL_MODE})**；"
                 "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名。\n\n"
             )
             w(
@@ -9157,7 +9157,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w,
                 us_rot_result,
                 -1,
-                "V7.6 Sub-B 50/50腿拆分（沿用V7.5官方腿+EMA腿=最终目标）",
+                f"V7.6 Sub-B收益型腿拆分（官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA腿{SUBB_V75_EMA_WEIGHT:.0%}=最终目标）",
             )
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
@@ -9277,7 +9277,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后半仓；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%}；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
             w(f"| 成交额触发后仓位 | **旧规则{CN_SA_VOLUME_SCALE:.0%} / 新规则{CN_SA_VOLUME_CLEAR_RATIO_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
@@ -9632,7 +9632,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
-            w("\n---\n\n### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n\n")
+            w(f"\n---\n\n### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA半衰期7ETF{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed_p:
@@ -9696,7 +9696,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w("**① 分窗口动量排名（130/260/390）:**\n\n")
             w(
-                "V7.6 沿用 V7.5 的 Sub-B：先分别计算 130/260/390 日窗口，再把三个窗口生成的目标仓位等权混合。"
+                f"V7.6 Sub-B收益型默认：官方130/260/390宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/{SUBB_V75_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V75_EMA_WEIGHT:.0%}，再按两条腿权重混合为最终目标。"
                 "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名；历史段以 BTC-USD 拼接。\n\n"
             )
             w(
@@ -9778,7 +9778,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w,
                 us_rot_result,
                 -1,
-                "V7.6 Sub-B 50/50腿拆分（沿用V7.5官方腿+EMA腿=最终目标）",
+                f"V7.6 Sub-B收益型腿拆分（官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA腿{SUBB_V75_EMA_WEIGHT:.0%}=最终目标）",
             )
             hist_us = pd.to_numeric(
                 us_rot_result["official_return"] if "official_return" in us_rot_result.columns else us_rot_result["return"],

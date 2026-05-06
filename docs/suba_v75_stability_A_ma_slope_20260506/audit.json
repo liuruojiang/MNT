@@ -1,0 +1,74 @@
+{
+  "script": "mnt_bot V 7.5 plus.py",
+  "out_dir": "docs\\suba_v75_stability_A_ma_slope_20260506",
+  "ma_values": [
+    40,
+    50,
+    60,
+    70,
+    80
+  ],
+  "slope_values": [
+    10,
+    15,
+    20,
+    25,
+    30
+  ],
+  "ma_step": 10,
+  "slope_step": 5,
+  "constraint": "slope_window <= ma_window",
+  "variant_count": 25,
+  "baseline": {
+    "ma_window": 60,
+    "slope_window": 20
+  },
+  "mode": "formal",
+  "mode_updates": null,
+  "fixed_params": {
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.3,
+    "CN_COMMISSION": 0.001,
+    "CN_TARGET_VOL": 0.2,
+    "CN_MIN_LEV": 0.1,
+    "CN_MAX_LEV": 1.5,
+    "CN_SWITCH_BUFFER": 1.06,
+    "CN_ENTRY_INITIAL_FRACTION": 0.5,
+    "CN_SCALE_THRESHOLD": 0.15,
+    "CN_SA_CASH_OVERLAY_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true
+  },
+  "data": {
+    "start": "2010-06-01",
+    "end": "2026-04-30",
+    "rows": 3865,
+    "duplicate_dates": 0,
+    "columns": [
+      "1.H20955",
+      "0.399606",
+      "1.H00016",
+      "1.H00852",
+      "1.H00905",
+      "1.H11077"
+    ],
+    "sources": {
+      "1.H20955": "csindex+Sina-proxy:1.000827",
+      "0.399606": "EastMoney",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905",
+      "1.H11077": "fetch_cn_kline via _add_cn_bond_column"
+    }
+  },
+  "elapsed_sec": 121.90210359999946,
+  "fast_indicator_parity": {
+    "same_index": true,
+    "rows": 3785,
+    "max_abs_return_diff": 0.0,
+    "max_abs_nav_diff": 0.0,
+    "max_abs_weight_diff": 0.0,
+    "max_abs_holding_fraction_diff": 0.0,
+    "max_abs_effective_turnover_diff": 0.0
+  }
+}

@@ -1,0 +1,521 @@
+{
+  "script": "mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_stability_A_position_scaling_20260506",
+  "combos": [
+    {
+      "ma_window": 60,
+      "slope_window": 20,
+      "r2_window": 20,
+      "r2_threshold": 0.2,
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    }
+  ],
+  "scale_variants": [
+    {
+      "target_vol": 0.2,
+      "vol_window": 40,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 40,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 40,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 40,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 60,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 80,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 100,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 120,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 120,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 120,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.2,
+      "vol_window": 120,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 40,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 40,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 40,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 40,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 60,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 80,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 100,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 120,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 120,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 120,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.25,
+      "vol_window": 120,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 40,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 40,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 40,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 40,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 120,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 120,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 120,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 120,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 40,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 40,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 40,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 40,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 60,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 80,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 100,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 120,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 120,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 120,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.35,
+      "vol_window": 120,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 40,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 40,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 40,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 40,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 60,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 80,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 100,
+      "scale_threshold": 0.15
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 120,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 120,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 120,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.4,
+      "vol_window": 120,
+      "scale_threshold": 0.15
+    }
+  ],
+  "modes": [
+    "formal"
+  ],
+  "elapsed_sec": 481.9672354000004
+}
