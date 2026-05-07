@@ -194,6 +194,14 @@ CN_DK_MIN_LEV = 0.1
 CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
+
+ADK_PRIMARY_PROFIT_PAIRS = {
+    "HS300/CYB",
+    "HS300/ZZ500",
+    "ZZ500/CYB",
+    "SZ50/CYB",
+    "SZ50/ZZ1000",
+}
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
 CN_DK_RISK_GATE_EXIT = 0.08
@@ -3634,6 +3642,36 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
             "calmar": calmar, "win_rate": win_rate, "years": years,
             "total_return": total_return, "yearly": yearly}
 
+
+def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
+    period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
+    if len(period) == 0:
+        return pd.Series(dtype=float)
+    return period.groupby(period.index.to_period("M")).apply(lambda x: (1 + x).prod() - 1)
+
+
+
+def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
+    values = []
+    for nav in nav_series.values():
+        s = pd.to_numeric(pd.Series(nav), errors="coerce").dropna()
+        s = s[s > 0]
+        if len(s) > 0:
+            values.append(s)
+    if not values:
+        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        return False
+    all_values = pd.concat(values)
+    min_nav = float(all_values.min())
+    max_nav = float(all_values.max())
+    spread = max_nav / min_nav if min_nav > 0 else 1.0
+    if spread >= spread_threshold:
+        ax.set_yscale("log")
+        ax.set_ylabel("NAV (start=1.0, log scale)", fontsize=11)
+        return True
+    ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+    return False
+
 def beijing_now():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc)
@@ -4330,6 +4368,19 @@ def _dk_leg_name(short_name):
 
 def _dk_pair_display(pair):
     return "/".join(_dk_leg_name(p) for p in str(pair).split("/")) if pair != "none" else "none"
+
+
+def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
+    pair = "none" if pair is None else str(pair)
+    if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
+        return ""
+    allowed = "、".join(_dk_pair_display(p) for p in sorted(ADK_PRIMARY_PROFIT_PAIRS))
+    return (
+        f"⚠️ **ADK配对警示:** {label} **{_dk_pair_display(pair)}** 不在近10年主要盈利来源5对内；"
+        f"5对为 {allowed}。白名单外Top-1在近期回撤测试中可能拖累表现，请谨慎执行。"
+        + chr(10)
+    )
+
 
 def _dk_pos_str(holding_str):
     """将DK持仓编码转为可读描述。"""
@@ -5916,7 +5967,6 @@ class CombinedStrategyV70(CombinedStrategyBase):
         elif re.search(r'表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
             ranges = self._parse_all_dates_with_llm_fallback(query)
             if len(ranges) <= 1:
-                self._handle_nav_chart(query, chart_only=True)
                 self._handle_performance(query)
             else:
                 for r in ranges:
@@ -6326,6 +6376,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w(f"**当前已生效Top-1持仓:** **{_dk_effective_name}**（对应 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
             if _dk_intraday:
                 w(f"**当前已确认Top-1配对/方向:** **{_dk_pair_display(_dk_effective_pair)}** | 方向 {_dk_effective_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_effective_pair, "今日Top-1"))
                 w("今日盘中，今日收盘信号未确认；盘中假设信号仅在“实时信号”中显示\n")
             else:
                 if dk_rank_today and hypo_dk == dk_current:
@@ -6333,6 +6384,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
                 else:
                     w(f"**今日收盘信号:** **切换为 {_dk_latest_name}**（{_dk_latest_issue_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**今日Top-1配对/方向:** **{_dk_pair_display(_dk_latest_pair)}** | 方向 {_dk_latest_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_latest_pair, "今日Top-1"))
             if _dk_intraday:
                 w("盘中是否要按今日收盘价执行，请看“实时信号”里的实时Top-3。\n")
             # ── DK vol-scaling 杠杆显示 ──
@@ -6836,6 +6888,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
                 else:
                     w(f"**若现在收盘:** **切换为 {_dk_pos_str(hypo_dk)}**（今日 {dk_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**若现在收盘的Top-1配对/方向:** **{_dk_pair_display(dk_hypo_top_pair)}** | 方向 {dk_hypo_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, "今日Top-1"))
             # ── DK vol-scaling 杠杆显示 (实时) ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
@@ -7296,6 +7349,9 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w(f"| 实际杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
             w(f"| 配对切换 | {'是' if dk_pair_changed_lp else '否'} |\n")
             w(f"| 方向切换 | {'是' if dk_direction_changed_lp else '否'} |\n")
+            _dk_lp_warning = _dk_top_pair_whitelist_warning(dk_top_pair_lp, "今日Top-1")
+            if _dk_lp_warning:
+                w("\n" + _dk_lp_warning)
             if dk_rank_current_lp:
                 w("\n**① 当前已生效Top-3配对:**\n\n")
                 w(f"| 排名 | 配对 | 生效分数 | 今日分数 | 方向/持仓 |\n")
@@ -7312,6 +7368,9 @@ class CombinedStrategyV70(CombinedStrategyBase):
                 w(f"| 今日Top-1配对 | **{dk_hypo_pair_lp}** |\n")
                 w(f"| 今日方向 | **{dk_hypo_dir_lp:+d}** |\n")
                 w(f"| 今日假设持仓 | **{_dk_pos_str(dk_hypo_holding_lp)}** |\n")
+                _dk_hypo_warning = _dk_top_pair_whitelist_warning(dk_hypo_pair_lp, "今日Top-1")
+                if _dk_hypo_warning:
+                    w("\n" + _dk_hypo_warning)
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[-1]
@@ -7779,7 +7838,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
         ax.set_title(
             f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
             fontsize=14, fontweight='bold')
-        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        _apply_nav_axis_scale(ax, nav_series)
         ax.legend(loc='best', fontsize=10, framealpha=0.9)
         ax.grid(True, alpha=0.3)
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -7836,51 +7895,37 @@ class CombinedStrategyV70(CombinedStrategyBase):
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
-        cn_monthly = cn_result["return"].groupby(cn_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        dk_monthly = cn_dk_result["return"].groupby(cn_dk_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        us_rot_monthly = us_rot_result["return"].groupby(us_rot_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        if PROD_VS_ENABLED:
-            # Vol-scaling 启用时，从日度缩放后收益推导月度收益
-            _subc_vs_daily = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=prod_sig_b)
-            prod_monthly_ret = _subc_vs_daily.groupby(_subc_vs_daily.index.to_period("M")).apply(
-                lambda x: (1+x).prod()-1)
+        cn_daily_period = cn_result["return"][
+            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
+        dk_daily_period = cn_dk_result["return"][
+            (cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
+        us_daily_period = us_rot_result["return"][
+            (us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
+        cn_monthly_period = _monthly_returns_from_daily_window(cn_result["return"], start_date, end_date)
+        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result["return"], start_date, end_date)
+        us_monthly_period = _monthly_returns_from_daily_window(us_rot_result["return"], start_date, end_date)
+        prod_monthly_period = _monthly_returns_from_daily_window(subc_daily, start_date, end_date)
+        all_periods = cn_monthly_period.index.intersection(dk_monthly_period.index).intersection(
+            us_monthly_period.index).intersection(prod_monthly_period.index)
+        if len(all_periods) > 0:
+            aligned = pd.DataFrame({
+                "Sub-A": cn_monthly_period.reindex(all_periods),
+                "Sub-A-DK": dk_monthly_period.reindex(all_periods),
+                "Sub-B": us_monthly_period.reindex(all_periods),
+                "Sub-C": prod_monthly_period.reindex(all_periods),
+            }).dropna()
+            w = COMBINED_WEIGHTS
+            _strat_cols = ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]
+            _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
+            _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
+            _nav_comb = _nav_comb / _nav_comb.iloc[0]
+            aligned["Combined"] = _nav_comb.pct_change()
+            aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
         else:
-            prod_monthly_ret = prod_nav.pct_change().dropna()
-            prod_monthly_ret.index = prod_monthly_ret.index.to_period("M")
-        all_periods = cn_monthly.index.intersection(dk_monthly.index).intersection(
-            us_rot_monthly.index).intersection(prod_monthly_ret.index)
-        if len(all_periods) == 0:
-            raise poe.BotError("四个策略没有重叠的月度数据")
-        aligned = pd.DataFrame({
-            "Sub-A": cn_monthly.reindex(all_periods),
-            "Sub-A-DK": dk_monthly.reindex(all_periods),
-            "Sub-B": us_rot_monthly.reindex(all_periods),
-            "Sub-C": prod_monthly_ret.reindex(all_periods),
-        }).dropna()
-        w = COMBINED_WEIGHTS
-        _strat_cols = ["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C"]
-        _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
-        _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
-        _nav_comb = _nav_comb / _nav_comb.iloc[0]
-        aligned["Combined"] = _nav_comb.pct_change()
-        aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
-        start_period = start_date.to_period("M")
-        end_period = end_date.to_period("M")
-        mask = (aligned.index >= start_period) & (aligned.index <= end_period)
-        filtered = aligned[mask]
-        cn_monthly_period = cn_monthly[
-            (cn_monthly.index >= start_period) & (cn_monthly.index <= end_period)]
-        dk_monthly_period = dk_monthly[
-            (dk_monthly.index >= start_period) & (dk_monthly.index <= end_period)]
-        us_monthly_period = us_rot_monthly[
-            (us_rot_monthly.index >= start_period) & (us_rot_monthly.index <= end_period)]
-        prod_monthly_period = prod_monthly_ret[
-            (prod_monthly_ret.index >= start_period) & (prod_monthly_ret.index <= end_period)]
+            aligned = pd.DataFrame(columns=["Sub-A", "Sub-A-DK", "Sub-B", "Sub-C", "Combined"])
+        filtered = aligned
         if len(cn_monthly_period) < 1 and len(us_monthly_period) < 1:
-            raise poe.BotError(f"在 {start_date.strftime('%Y-%m')} 到 {end_date.strftime('%Y-%m')} 期间没有数据")
+            raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间没有数据")
         metrics = {}
         if len(cn_monthly_period) >= 1:
             metrics["Sub-A"] = calc_monthly_metrics(cn_monthly_period)
@@ -7892,8 +7937,6 @@ class CombinedStrategyV70(CombinedStrategyBase):
             metrics["Sub-C"] = calc_monthly_metrics(prod_monthly_period)
         if len(filtered) >= 1:
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
-        cn_daily_period = cn_result["return"][
-            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
         if len(cn_daily_period) > 1 and "Sub-A" in metrics:
             nav_a = (1 + cn_daily_period).cumprod()
             metrics["Sub-A"]["max_dd"] = ((nav_a - nav_a.cummax()) / nav_a.cummax()).min() * 100
@@ -8066,7 +8109,7 @@ class CombinedStrategyV70(CombinedStrategyBase):
             ax.set_title(
                 f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
                 fontsize=14, fontweight='bold')
-            ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+            _apply_nav_axis_scale(ax, nav_series)
             ax.legend(loc='best', fontsize=10, framealpha=0.9)
             ax.grid(True, alpha=0.3)
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))

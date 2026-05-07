@@ -1,0 +1,35 @@
+{
+  "created_at": "2026-05-07T19:43:36",
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "source": "CombinedStrategyBase._fetch_data(False,False) + run_dk_strategy all-pair Top-1",
+  "definition": "Cash-filter: original all-10-pair Top-1 trades only when in allowed five pairs; otherwise top_pair=none and weight=0. Then official V7.6 score-decay, same-side-overheat, optional RiskGate, and final effective execution-cost rebuild.",
+  "allowed_pairs": [
+    "HS300/CYB",
+    "HS300/ZZ500",
+    "SZ50/CYB",
+    "SZ50/ZZ1000",
+    "ZZ500/CYB"
+  ],
+  "data_end": "2026-05-07",
+  "windows": {
+    "10Y": "2016-05-07",
+    "5Y": "2021-05-07",
+    "3Y": "2023-05-07",
+    "1Y": "2025-05-07"
+  },
+  "commission": 0.0005,
+  "fetch_tail": [
+    "  中证500: 2026-05-07 [csindex+Sina-proxy:1.000905]\n",
+    "  10Y国债: 2026-05-07 [csindex+Sina-proxy:1.000012]\n",
+    "  合并截至: 2026-05-07\n",
+    "⏳ 正在获取美股数据...\n",
+    "  美股: 21个ETF | 收盘: 2026-05-07 04:00 北京时间\n",
+    "⏳ 正在获取A-DK多空数据(5个价格指数)...\n",
+    "  中证1000: 2005-01-04~2026-05-07 [EastMoney]\n",
+    "  上证50: 2005-01-04~2026-05-07 [EastMoney]\n",
+    "  沪深300: 2005-01-04~2026-05-07 [EastMoney]\n",
+    "  中证500: 2005-01-04~2026-05-07 [EastMoney]\n",
+    "  创业板: 2010-06-01~2026-05-07 [EastMoney]\n",
+    "  A-DK合并截至: 2026-05-07\n"
+  ]
+}

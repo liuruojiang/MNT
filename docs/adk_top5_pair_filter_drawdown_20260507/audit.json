@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-05-07T17:18:06",
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint": "fetch data through CombinedStrategyBase._fetch_data(False, False); rebuild ADK through run_dk_strategy and official overlays",
+  "filter_definition": "Original official ADK Top-1 is kept only when top_pair is in allowed list; otherwise cash. No re-selection among the remaining five pairs.",
+  "allowed_pairs": {
+    "HS300/CYB": "??300/???",
+    "HS300/ZZ500": "??300/??500",
+    "SZ50/CYB": "??50/???",
+    "SZ50/ZZ1000": "??50/??1000",
+    "ZZ500/CYB": "??500/???"
+  },
+  "window_end": "2026-05-07",
+  "window_start": {
+    "10Y": "2016-05-09",
+    "3Y": "2023-05-08"
+  },
+  "data_end": {
+    "cn_close": "2026-05-07",
+    "cn_dk_close": "2026-05-07"
+  },
+  "parity_vs_engine": {
+    "common_rows": 2694,
+    "max_abs_return_diff": 0.0,
+    "max_abs_nav_diff": 0.0
+  },
+  "fetch_log_tail": [
+    "⏳ 正在获取A股数据...",
+    "  中证红利: 2026-05-07 [csindex+Sina-proxy:1.000827]",
+    "  创业板: 2026-05-07 [Sina]",
+    "  上证50: 2026-05-07 [csindex+Sina-proxy:1.000016]",
+    "  中证1000: 2026-05-07 [csindex+Sina-proxy:1.000852]",
+    "  中证500: 2026-05-07 [csindex+Sina-proxy:1.000905]",
+    "  10Y国债: 2026-05-07 [csindex+Sina-proxy:1.000012]",
+    "  合并截至: 2026-05-07",
+    "⏳ 正在获取美股数据...",
+    "  美股: 21个ETF | 收盘: 2026-05-07 04:00 北京时间",
+    "⏳ 正在获取A-DK多空数据(5个价格指数)...",
+    "  中证1000: 2014-10-17~2026-05-07 [Sina]",
+    "  上证50: 2004-01-02~2026-05-07 [Sina]",
+    "  沪深300: 2002-01-04~2026-05-07 [Sina]",
+    "  中证500: 2005-01-04~2026-05-07 [Sina]",
+    "  创业板: 2010-06-01~2026-05-07 [Sina]",
+    "  A-DK合并截至: 2026-05-07"
+  ]
+}
