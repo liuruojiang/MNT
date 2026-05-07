@@ -1,0 +1,43 @@
+[V7.5] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.5 plus.py
+[V7.5] 1/15 abs0_rb1
+[V7.5] caching EMA leg (100, 0.16, 1.0, 0.0, 0.25, 40, 2.0)
+[V7.5] 2/15 abs0_rb1.03
+[V7.5] caching EMA leg (100, 0.16, 1.03, 0.0, 0.25, 40, 2.0)
+[V7.5] 3/15 abs0_rb1.05
+[V7.5] caching EMA leg (100, 0.16, 1.05, 0.0, 0.25, 40, 2.0)
+[V7.5] 4/15 abs0_rb1.08
+[V7.5] caching EMA leg (100, 0.16, 1.08, 0.0, 0.25, 40, 2.0)
+[V7.5] 5/15 abs0_rb1.1
+[V7.5] caching EMA leg (100, 0.16, 1.1, 0.0, 0.25, 40, 2.0)
+[V7.5] 6/15 abs0.04_rb1
+[V7.5] 7/15 abs0.04_rb1.03
+[V7.5] 8/15 abs0.04_rb1.05
+[V7.5] 9/15 abs0.04_rb1.08
+[V7.5] 10/15 abs0.04_rb1.1
+[V7.5] 11/15 abs0.08_rb1
+[V7.5] 12/15 abs0.08_rb1.03
+[V7.5] 13/15 abs0.08_rb1.05
+[V7.5] 14/15 abs0.08_rb1.08
+[V7.5] 15/15 abs0.08_rb1.1
+[V7.6] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.6 plus.py
+[V7.6] 1/15 abs0_rb1
+[V7.6] caching EMA leg (100, 0.16, 1.0, 0.0, 0.25, 40, 2.0)
+[V7.6] 2/15 abs0_rb1.03
+[V7.6] caching EMA leg (100, 0.16, 1.03, 0.0, 0.25, 40, 2.0)
+[V7.6] 3/15 abs0_rb1.05
+[V7.6] caching EMA leg (100, 0.16, 1.05, 0.0, 0.25, 40, 2.0)
+[V7.6] 4/15 abs0_rb1.08
+[V7.6] caching EMA leg (100, 0.16, 1.08, 0.0, 0.25, 40, 2.0)
+[V7.6] 5/15 abs0_rb1.1
+[V7.6] caching EMA leg (100, 0.16, 1.1, 0.0, 0.25, 40, 2.0)
+[V7.6] 6/15 abs0.04_rb1
+[V7.6] 7/15 abs0.04_rb1.03
+[V7.6] 8/15 abs0.04_rb1.05
+[V7.6] 9/15 abs0.04_rb1.08
+[V7.6] 10/15 abs0.04_rb1.1
+[V7.6] 11/15 abs0.08_rb1
+[V7.6] 12/15 abs0.08_rb1.03
+[V7.6] 13/15 abs0.08_rb1.05
+[V7.6] 14/15 abs0.08_rb1.08
+[V7.6] 15/15 abs0.08_rb1.1
+done: docs\subb_v75_v76_parameter_stability_thresholds_20260506

@@ -1,0 +1,36 @@
+[resume] loaded 14 completed candidates from partial outputs
+[V7.5] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.5 plus.py
+[V7.5] 1/8 vrwin10_250
+[V7.5] caching base stream ((130, 260, 390), 0.04, 1.05, 0.0, 0.001, 0.5, 0.5, 100, 0.16, 0.25, 40, 20, 2.0, 126)
+[V7.5] 2/8 vrwin15_90
+[V7.5] skipping completed vrwin15_90
+[V7.5] 3/8 vrwin20_120
+[V7.5] skipping completed vrwin20_120
+[V7.5] 4/8 vrwin20_180
+[V7.5] skipping completed vrwin20_180
+[V7.5] 5/8 vrwin30_120
+[V7.5] skipping completed vrwin30_120
+[V7.5] 6/8 vrwin30_180
+[V7.5] skipping completed vrwin30_180
+[V7.5] 7/8 vrwin40_180
+[V7.5] skipping completed vrwin40_180
+[V7.5] 8/8 vrwin40_252
+[V7.5] skipping completed vrwin40_252
+[V7.6] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.6 plus.py
+[V7.6] 1/8 vrwin10_250
+[V7.6] caching base stream ((160, 260, 390), 0.04, 1.05, 0.0, 0.001, 0.25, 0.75, 100, 0.16, 0.25, 40, 20, 2.0, 126)
+[V7.6] 2/8 vrwin15_90
+[V7.6] skipping completed vrwin15_90
+[V7.6] 3/8 vrwin20_120
+[V7.6] skipping completed vrwin20_120
+[V7.6] 4/8 vrwin20_180
+[V7.6] skipping completed vrwin20_180
+[V7.6] 5/8 vrwin30_120
+[V7.6] skipping completed vrwin30_120
+[V7.6] 6/8 vrwin30_180
+[V7.6] skipping completed vrwin30_180
+[V7.6] 7/8 vrwin40_180
+[V7.6] skipping completed vrwin40_180
+[V7.6] 8/8 vrwin40_252
+[V7.6] skipping completed vrwin40_252
+done: docs\subb_v75_v76_parameter_stability_volreg_windows_20260507

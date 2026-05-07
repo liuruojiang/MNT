@@ -606,7 +606,7 @@ def candidate_group(default: Candidate, group: str) -> tuple[list[Candidate], li
 
     if group == "volreg_windows":
         candidates = []
-        window_grid = [(15, 90), (20, 120), (20, 180), (30, 120), (30, 180), (40, 180), (40, 252)]
+        window_grid = [(10, 250), (15, 90), (20, 120), (20, 180), (30, 120), (30, 180), (40, 180), (40, 252)]
         for short_window, long_window in window_grid:
             candidates.append(
                 replace(

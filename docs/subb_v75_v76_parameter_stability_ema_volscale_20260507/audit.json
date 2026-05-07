@@ -1,0 +1,390 @@
+{
+  "group": "ema_volscale",
+  "recent_weighted_sharpe": {
+    "1Y": 0.15,
+    "3Y": 0.35,
+    "5Y": 0.35,
+    "10Y": 0.15
+  },
+  "versions": {
+    "V7.5": {
+      "constants": {
+        "US_ROT_POOL": [
+          "QQQ",
+          "EMXC",
+          "EFA",
+          "GLD",
+          "TLT",
+          "DBC",
+          "BTC-USD",
+          "UUP",
+          "DBMF",
+          "KMLM"
+        ],
+        "US_ROT_BASE_POOL": [
+          "QQQ",
+          "EMXC",
+          "EFA",
+          "GLD",
+          "TLT",
+          "DBC",
+          "BTC-USD"
+        ],
+        "US_ROT_LBS": [
+          130,
+          260,
+          390
+        ],
+        "US_ROT_LB": 260,
+        "US_ROT_ABS_THRESHOLD": 0.04,
+        "US_ROT_REBALANCE_THRESHOLD": 1.05,
+        "US_ROT_MIN_TURNOVER": 0.0,
+        "SUBB_V75_OFFICIAL_WEIGHT": 0.5,
+        "SUBB_V75_EMA_WEIGHT": 0.5,
+        "SUBB_V75_EMA_HALF_LIFE": 100,
+        "SUBB_V75_EMA_ABS_THRESHOLD": 0.16,
+        "SUBB_V75_EMA_VOL_MODE": "ewma6m_1vol",
+        "SUBB_V75_EMA_VOL_HALFLIFE_DAYS": 126,
+        "US_ROT_TARGET_VOL": 0.25,
+        "US_ROT_VOL_WINDOW": 40,
+        "US_ROT_VOL_LB": 20,
+        "US_ROT_MAX_LEV": 2.0,
+        "US_ROT_VOLREG_ENABLED": true,
+        "US_ROT_VOLREG_SHORT_W": 10,
+        "US_ROT_VOLREG_LONG_W": 250,
+        "US_ROT_VOLREG_THRESHOLD": 2.0,
+        "US_ROT_VOLREG_EXIT_THRESHOLD": 1.6,
+        "US_ROT_COMMISSION": 0.001,
+        "US_ROT_EMXC_BT_START": "2017-08-01T00:00:00",
+        "US_ROT_EMXC_BT_PROXY": "EEM"
+      },
+      "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.5 plus.py",
+      "entrypoint": "Sub-B formal path: production US rotation data construction -> run_us_rotation_mix() official macro-gated leg -> run_subb_v75_ema_base7_rotation() EMA leg -> blend_subb_v75_results() -> optional apply_vol_regime_overlay()",
+      "data_source": "fetch_yahoo() production path with Yahoo/Stooq fallback",
+      "sources": {
+        "BIL": "Yahoo",
+        "BTC-USD": "Yahoo",
+        "DBC": "Yahoo",
+        "DBMF": "Yahoo",
+        "EEM": "Yahoo",
+        "EFA": "Yahoo",
+        "EMXC": "Yahoo",
+        "GLD": "Yahoo",
+        "IBIT": "Yahoo",
+        "KMLM": "Yahoo",
+        "QQQ": "Yahoo",
+        "SPY": "Yahoo",
+        "TLT": "Yahoo",
+        "UUP": "Yahoo"
+      },
+      "raw_ranges": {
+        "BIL": {
+          "start": "2007-05-30",
+          "end": "2026-05-06",
+          "rows": 4765,
+          "has_open": true
+        },
+        "BTC-USD": {
+          "start": "2014-09-17",
+          "end": "2026-05-07",
+          "rows": 4250,
+          "has_open": true
+        },
+        "DBC": {
+          "start": "2006-02-06",
+          "end": "2026-05-06",
+          "rows": 5094,
+          "has_open": true
+        },
+        "DBMF": {
+          "start": "2019-05-08",
+          "end": "2026-05-06",
+          "rows": 1759,
+          "has_open": true
+        },
+        "EEM": {
+          "start": "2003-04-14",
+          "end": "2026-05-06",
+          "rows": 5803,
+          "has_open": true
+        },
+        "EFA": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "EMXC": {
+          "start": "2017-07-26",
+          "end": "2026-05-06",
+          "rows": 2207,
+          "has_open": true
+        },
+        "GLD": {
+          "start": "2004-11-18",
+          "end": "2026-05-06",
+          "rows": 5399,
+          "has_open": true
+        },
+        "IBIT": {
+          "start": "2024-01-11",
+          "end": "2026-05-06",
+          "rows": 581,
+          "has_open": true
+        },
+        "KMLM": {
+          "start": "2020-12-02",
+          "end": "2026-05-06",
+          "rows": 1362,
+          "has_open": true
+        },
+        "QQQ": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "SPY": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "TLT": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "UUP": {
+          "start": "2007-03-01",
+          "end": "2026-05-06",
+          "rows": 4827,
+          "has_open": true
+        }
+      },
+      "merged_start": "2007-05-30",
+      "merged_end": "2026-05-06",
+      "merged_rows": 4765,
+      "duplicate_dates": 0,
+      "weekend_rows": 0,
+      "columns": [
+        "QQQ",
+        "EFA",
+        "GLD",
+        "TLT",
+        "DBC",
+        "BIL",
+        "EMXC",
+        "DBMF",
+        "UUP",
+        "KMLM",
+        "BTC-USD",
+        "SPY"
+      ],
+      "open_map_count": 14,
+      "missing_open": [],
+      "return_column": "return",
+      "cost_model": "US_ROT_COMMISSION applied to leg execution, blend execution, and VolReg transition turnover",
+      "timing": "T close signal, pending target executed at T+1 adjusted open when us_open is available",
+      "emxc_splice": "EEM proxy before scaled EMXC from 2017-08-01",
+      "btc_splice": "BTC-USD replaced by IBIT-spliced series where IBIT exists; BTC joined on US ETF calendar only"
+    },
+    "V7.6": {
+      "constants": {
+        "US_ROT_POOL": [
+          "QQQ",
+          "EMXC",
+          "EFA",
+          "GLD",
+          "TLT",
+          "DBC",
+          "BTC-USD",
+          "UUP",
+          "DBMF",
+          "KMLM"
+        ],
+        "US_ROT_BASE_POOL": [
+          "QQQ",
+          "EMXC",
+          "EFA",
+          "GLD",
+          "TLT",
+          "DBC",
+          "BTC-USD"
+        ],
+        "US_ROT_LBS": [
+          160,
+          260,
+          390
+        ],
+        "US_ROT_LB": 260,
+        "US_ROT_ABS_THRESHOLD": 0.04,
+        "US_ROT_REBALANCE_THRESHOLD": 1.05,
+        "US_ROT_MIN_TURNOVER": 0.0,
+        "SUBB_V75_OFFICIAL_WEIGHT": 0.25,
+        "SUBB_V75_EMA_WEIGHT": 0.75,
+        "SUBB_V75_EMA_HALF_LIFE": 100,
+        "SUBB_V75_EMA_ABS_THRESHOLD": 0.16,
+        "SUBB_V75_EMA_VOL_MODE": "ewma6m_1vol",
+        "SUBB_V75_EMA_VOL_HALFLIFE_DAYS": 126,
+        "US_ROT_TARGET_VOL": 0.25,
+        "US_ROT_VOL_WINDOW": 40,
+        "US_ROT_VOL_LB": 20,
+        "US_ROT_MAX_LEV": 2.0,
+        "US_ROT_VOLREG_ENABLED": true,
+        "US_ROT_VOLREG_SHORT_W": 10,
+        "US_ROT_VOLREG_LONG_W": 250,
+        "US_ROT_VOLREG_THRESHOLD": 2.0,
+        "US_ROT_VOLREG_EXIT_THRESHOLD": 1.6,
+        "US_ROT_COMMISSION": 0.001,
+        "US_ROT_EMXC_BT_START": "2017-08-01T00:00:00",
+        "US_ROT_EMXC_BT_PROXY": "EEM"
+      },
+      "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+      "entrypoint": "Sub-B formal path: production US rotation data construction -> run_us_rotation_mix() official macro-gated leg -> run_subb_v75_ema_base7_rotation() EMA leg -> blend_subb_v75_results() -> optional apply_vol_regime_overlay()",
+      "data_source": "fetch_yahoo() production path with Yahoo/Stooq fallback",
+      "sources": {
+        "BIL": "Yahoo",
+        "BTC-USD": "Yahoo",
+        "DBC": "Yahoo",
+        "DBMF": "Yahoo",
+        "EEM": "Yahoo",
+        "EFA": "Yahoo",
+        "EMXC": "Yahoo",
+        "GLD": "Yahoo",
+        "IBIT": "Yahoo",
+        "KMLM": "Yahoo",
+        "QQQ": "Yahoo",
+        "SPY": "Yahoo",
+        "TLT": "Yahoo",
+        "UUP": "Yahoo"
+      },
+      "raw_ranges": {
+        "BIL": {
+          "start": "2007-05-30",
+          "end": "2026-05-06",
+          "rows": 4765,
+          "has_open": true
+        },
+        "BTC-USD": {
+          "start": "2014-09-17",
+          "end": "2026-05-07",
+          "rows": 4250,
+          "has_open": true
+        },
+        "DBC": {
+          "start": "2006-02-06",
+          "end": "2026-05-06",
+          "rows": 5094,
+          "has_open": true
+        },
+        "DBMF": {
+          "start": "2019-05-08",
+          "end": "2026-05-06",
+          "rows": 1759,
+          "has_open": true
+        },
+        "EEM": {
+          "start": "2003-04-14",
+          "end": "2026-05-06",
+          "rows": 5803,
+          "has_open": true
+        },
+        "EFA": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "EMXC": {
+          "start": "2017-07-26",
+          "end": "2026-05-06",
+          "rows": 2207,
+          "has_open": true
+        },
+        "GLD": {
+          "start": "2004-11-18",
+          "end": "2026-05-06",
+          "rows": 5399,
+          "has_open": true
+        },
+        "IBIT": {
+          "start": "2024-01-11",
+          "end": "2026-05-06",
+          "rows": 581,
+          "has_open": true
+        },
+        "KMLM": {
+          "start": "2020-12-02",
+          "end": "2026-05-06",
+          "rows": 1362,
+          "has_open": true
+        },
+        "QQQ": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "SPY": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "TLT": {
+          "start": "2003-01-02",
+          "end": "2026-05-06",
+          "rows": 5873,
+          "has_open": true
+        },
+        "UUP": {
+          "start": "2007-03-01",
+          "end": "2026-05-06",
+          "rows": 4827,
+          "has_open": true
+        }
+      },
+      "merged_start": "2007-05-30",
+      "merged_end": "2026-05-06",
+      "merged_rows": 4765,
+      "duplicate_dates": 0,
+      "weekend_rows": 0,
+      "columns": [
+        "QQQ",
+        "EFA",
+        "GLD",
+        "TLT",
+        "DBC",
+        "BIL",
+        "EMXC",
+        "DBMF",
+        "UUP",
+        "KMLM",
+        "BTC-USD",
+        "SPY"
+      ],
+      "open_map_count": 14,
+      "missing_open": [],
+      "return_column": "return",
+      "cost_model": "US_ROT_COMMISSION applied to leg execution, blend execution, and VolReg transition turnover",
+      "timing": "T close signal, pending target executed at T+1 adjusted open when us_open is available",
+      "emxc_splice": "EEM proxy before scaled EMXC from 2017-08-01",
+      "btc_splice": "BTC-USD replaced by IBIT-spliced series where IBIT exists; BTC joined on US ETF calendar only"
+    }
+  },
+  "resumed_completed_candidates": 0,
+  "param_cols": [
+    "ema_vol_halflife_days"
+  ],
+  "grid_values": {
+    "ema_vol_halflife_days_grid": [
+      63,
+      126,
+      189,
+      252
+    ]
+  },
+  "variants_per_version": 4
+}
