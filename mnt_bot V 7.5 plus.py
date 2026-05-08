@@ -132,7 +132,8 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 # Sub-A 成交额缩量规则（正式参与 Sub-A 仓位计算）
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
-CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_SCALE = 0.25
+CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
     ("1.563300", "中证2000ETF"),
@@ -176,7 +177,7 @@ CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
 
-MICROCAP_VOLUME_POLICY = "warning_manual_clear"
+MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
 MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
@@ -260,6 +261,26 @@ CN_DK_MIN_LEV = 0.1
 CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
+
+ADK_PRIMARY_PROFIT_PAIR_ORDER = (
+    "HS300/ZZ500",
+    "ZZ500/CYB",
+    "SZ50/CYB",
+    "SZ50/ZZ1000",
+)
+ADK_PRIMARY_PROFIT_PAIRS = set(ADK_PRIMARY_PROFIT_PAIR_ORDER)
+ADK_WEAK_PAIR_ORDER = (
+    "HS300/CYB",
+)
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = (
+    "SZ50/HS300",
+    "SZ50/ZZ500",
+    "HS300/ZZ1000",
+    "ZZ500/ZZ1000",
+    "ZZ1000/CYB",
+)
+ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
 CN_DK_RISK_GATE_EXIT = 0.08
@@ -329,8 +350,8 @@ US_ROT_ABS_THRESHOLD = 0.04
 # 调仓阈值（参与交易决策）
 US_ROT_REBALANCE_THRESHOLD = 1.05  # V7.5沿用混合窗口1.05x挑战者保护，降低边界资产周度来回切换
 
-# V7.5 Sub-B: 50% official macro-gated leg + 50% EMA-ret base-7 leg.
-# The EMA leg intentionally excludes UUP/DBMF/KMLM even when the inflation gate is ON.
+# V7.5 Sub-B: 50% official macro-gated leg + 50% EMA-ret US_ROT_POOL leg.
+# The EMA leg ranks the same full pool, including UUP/DBMF/KMLM.
 # Its target-vol scale uses 6-month EWMA realized volatility; the official leg remains rolling 40d.
 SUBB_V75_OFFICIAL_WEIGHT = 0.50
 SUBB_V75_EMA_WEIGHT = 0.50
@@ -1049,7 +1070,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
     try:
         inflation = _load_inflation_pressure_snapshot()
         infl_state = "🟢 ON" if inflation["pressure_on"] else "OFF"
-        macro_action = "UUP/DBMF/KMLM 参与 Sub-B 候选池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不参与 Sub-B，只作参考"
+        macro_action = "UUP/DBMF/KMLM 参与 Sub-B 官方腿候选池；EMA腿始终参与全池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不进官方腿；EMA腿仍参与全池"
         w(
             f"通胀开关: **{infl_state}** | {macro_action} | "
             f"DBC {inflation['lookback']}日 {inflation['dbc_mom']:+.2%}, "
@@ -1180,7 +1201,7 @@ def _fetch_cn_eastmoney(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_eastmoney_amount(secid, beg="20050101", lmt=10000):
+def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
            f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
@@ -1247,7 +1268,7 @@ def _fetch_cn_sina_amount_proxy(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="Sohu amount"):
+def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, source_name="Sohu amount"):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://q.stock.sohu.com/hisHq"
            f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
@@ -1276,16 +1297,16 @@ def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="S
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index().tail(int(lmt))
 
-def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     symbol = _secid_to_sohu_index(secid)
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu amount")
 
-def _fetch_cn_sohu_fund_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     _market, code = secid.split(".")
     symbol = "cn_" + code
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu fund amount")
 
-def _fetch_zz2000_etf_amount_proxy(beg="20240101", lmt=300):
+def _fetch_zz2000_etf_amount_proxy(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     candidates = []
     errors = []
     for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
@@ -1455,7 +1476,7 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     _csindex_consecutive_fails += 1
     raise last_err or ValueError(f"csindex failed after {effective_retries} retries for {index_code}")
 
-def _fetch_cn_csindex_amount(secid, beg="20050101", lmt=10000, _max_retries=2):
+def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _max_retries=2):
     index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
     if not index_code:
         raise ValueError(f"no csindex amount mapping for {secid}")
@@ -1651,6 +1672,9 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if bj_today.weekday() >= 5:
         return df
     # 尝试获取实时价格
+    bj_now = beijing_now()
+    if bj_today == bj_now.date() and not _can_use_cn_realtime_snapshot_at(bj_now):
+        return df
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
@@ -1905,7 +1929,7 @@ def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma
     feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
     return signal.astype(bool), feature
 
-def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     errors = []
     primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
@@ -1960,8 +1984,8 @@ def _load_suba_volume_signal():
             df, source = _fetch_cn_amount_with_fallback(
                 secid,
                 label,
-                beg="20240101",
-                lmt=max(180, int(ma) + int(days) + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
             sources[name] = source
@@ -1984,8 +2008,8 @@ def _load_suba_volume_signal():
                 numerator_df, numerator_source = _fetch_cn_amount_with_fallback(
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID,
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL,
-                    beg="20240101",
-                    lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                    beg=CN_SA_VOLUME_HISTORY_BEG,
+                    lmt=10000,
                 )
                 numerator = numerator_df["amount"]
                 severe_sources["numerator"] = numerator_source
@@ -1994,8 +2018,8 @@ def _load_suba_volume_signal():
             denominator_df, denominator_source = _fetch_cn_amount_with_fallback(
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID,
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL,
-                beg="20240101",
-                lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             severe_sources["denominator"] = denominator_source
             severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(
@@ -2281,7 +2305,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK和微盘成交额规则只做清仓警示，不参与仓位计算、不触发自动降仓；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v1.6/v1.8未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2324,18 +2348,18 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🔴 清仓触发" if micro_on else "未触发"
+        micro_mark = "🔴 警示触发" if micro_on else "未触发"
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径清仓提醒: **{micro_mark}** | "
+            f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；触发后微盘策略清仓。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v1.6/v1.8未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径清仓提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认清仓条件。{suffix}\n")
+        w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
@@ -2357,7 +2381,7 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"本次无法确认旧半仓规则和新清仓规则，当前执行仓位暂按100%。\n"
+            f"本次无法确认旧缩仓规则和新清仓规则，当前执行仓位暂按100%。\n"
         )
         return
     on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -2371,11 +2395,11 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     zz_text = _streak_status("中证2000", zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
     cyb_text = _streak_status("创业板", cyb_streak, CN_SA_VOLUME_CYB_DAYS)
     ratio_text = _streak_status("中证2000/上证50成交额比值", ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
-    old_status = "已触发半仓" if old_on else "未触发半仓"
+    old_status = f"已触发{CN_SA_VOLUME_SCALE:.0%}" if old_on else "未触发缩仓"
     clear_status = "已触发清仓" if clear_on else "未触发清仓"
     data_note_parts = []
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
-        data_note_parts.append("部分数据不可用，旧半仓规则按可用腿判断")
+        data_note_parts.append("部分数据不可用，旧缩仓规则按可用腿判断")
     if clear_unavailable:
         data_note_parts.append("新清仓规则本次不可确认")
     data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
@@ -2383,14 +2407,14 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if unresolved and not on:
         w(
             f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"旧半仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
+            f"旧缩仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
             f"新清仓规则: {ratio_text}；当前执行仓位暂按100%{data_note}\n"
         )
         return
-    status = "清仓触发" if clear_on else ("半仓触发" if old_on else "未触发")
+    status = "清仓触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
     w(
         f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
-        f"旧半仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天）"
+        f"旧缩仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）"
         f"{old_status}：{zz_text}；{cyb_text} | "
         f"新清仓规则（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
         f"{clear_status}：{ratio_text}{data_note}\n"
@@ -4591,7 +4615,7 @@ def _subb_official_scale_from_result(result_df, end_loc=None, include_current=Fa
 
 def _subb_v75_ema_snapshot(close_df, row_idx, scale, ranking_codes=None, prev_risky=None,
                            threshold=US_ROT_REBALANCE_THRESHOLD):
-    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_BASE_POOL)
+    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_POOL)
     score_row = _subb_v75_ema_score(close_df, SUBB_V75_EMA_HALF_LIFE).iloc[row_idx]
     vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
     raw_w = _us_raw_weights(
@@ -4883,8 +4907,8 @@ def run_subb_v75_ema_base7_rotation(
         threshold=US_ROT_REBALANCE_THRESHOLD,
         us_open=None,
         weight_assets=None):
-    """V7.5 EMA leg: base 7ETF only, with EWMA target-vol scaling."""
-    ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_BASE_POOL)
+    """V7.5 EMA leg: full US_ROT_POOL ranking with EWMA target-vol scaling."""
+    ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_POOL)
     score_df = _subb_v75_ema_score(close_df, half_life)
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     start_idx = max(half_life, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
@@ -5233,6 +5257,98 @@ def _prefixed_weight_dict(row, prefix, assets):
             out[asset] = float(value)
     return out
 
+def _subb_v75_leg_weight_rows(result_df, row_key, min_weight=0.001):
+    if result_df is None or len(result_df) == 0:
+        return []
+    try:
+        row = result_df.loc[row_key] if row_key in result_df.index else result_df.iloc[row_key]
+    except Exception:
+        return []
+    assets = sorted({
+        col[len("target_w_"):]
+        for col in result_df.columns
+        if col.startswith("target_w_")
+    } | {
+        col[len("official_w_"):]
+        for col in result_df.columns
+        if col.startswith("official_w_")
+    } | {
+        col[len("ema_w_"):]
+        for col in result_df.columns
+        if col.startswith("ema_w_")
+    } | {
+        col[len("w_"):]
+        for col in result_df.columns
+        if col.startswith("w_")
+    })
+    rows = []
+    for asset in assets:
+        official_raw = float(row.get(f"official_w_{asset}", 0.0) or 0.0)
+        ema_raw = float(row.get(f"ema_w_{asset}", 0.0) or 0.0)
+        official_contrib = float(row.get(f"official_contrib_w_{asset}", SUBB_V75_OFFICIAL_WEIGHT * official_raw) or 0.0)
+        ema_contrib = float(row.get(f"ema_contrib_w_{asset}", SUBB_V75_EMA_WEIGHT * ema_raw) or 0.0)
+        final_w = float(row.get(f"target_w_{asset}", official_contrib + ema_contrib) or 0.0)
+        if max(abs(final_w), abs(official_raw), abs(ema_raw), abs(official_contrib), abs(ema_contrib)) < min_weight:
+            continue
+        rows.append({
+            "asset": asset,
+            "live_name": _ROT_PROXY_TO_LIVE.get(asset, asset),
+            "official_raw": official_raw,
+            "ema_raw": ema_raw,
+            "official_contrib": official_contrib,
+            "ema_contrib": ema_contrib,
+            "final_weight": final_w,
+        })
+    rows.sort(key=lambda item: item["final_weight"], reverse=True)
+    return rows
+
+
+def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
+    rows = _subb_v75_leg_weight_rows(result_df, row_key)
+    if not rows:
+        return
+    write(f"**{title}:**\n\n")
+    write("| ETF | 官方腿(原始→贡献) | EMA腿(原始→贡献) | 最终目标权重 |\n")
+    write("|:-|------:|------:|------:|\n")
+    for row in rows:
+        write(
+            f"| {row['live_name']} | {row['official_raw']:.1%}→{row['official_contrib']:.1%} | "
+            f"{row['ema_raw']:.1%}→{row['ema_contrib']:.1%} | {row['final_weight']:.1%} |\n"
+        )
+    write("\n")
+
+
+def _write_subb_official_leg_window_breakdown(write, mix_ctx, scale, title="官方腿窗口拆分"):
+    rows = [
+        row for row in (mix_ctx or {}).get("mix_rows", [])
+        if row.get("mix_selected") or abs(float(row.get("mix_weight", 0.0) or 0.0)) >= 0.001
+    ]
+    if not rows:
+        return
+    lb_labels = [f"{lb}日" for lb in US_ROT_LBS]
+    boosted_live = sorted(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_FUTURES)
+    write(f"**{title}（官方腿目标 = {' + '.join(lb_labels)}窗口权重 / {len(US_ROT_LBS)}）:**\n\n")
+    write(
+        f"Model B scale = **{scale:.2f}x**；scale>1时仅放大"
+        f" **{', '.join(boosted_live)}** 自身窗口权重，EMXC/PDBC等非杠杆资产不承接放大缺口。\n\n"
+    )
+    write(
+        f"| ETF | {US_ROT_LBS[0]}日窗口 | {US_ROT_LBS[1]}日窗口 | {US_ROT_LBS[2]}日窗口 | "
+        "平均=官方腿目标 | 入选窗口 |\n"
+    )
+    write("|:-|------:|------:|------:|------:|:-|\n")
+    for row in rows:
+        per_lb_act = row.get("per_lb_act", {})
+        window_weights = [float(per_lb_act.get(lb, 0.0) or 0.0) for lb in US_ROT_LBS]
+        selected_lbs = [str(lb) for lb, weight in zip(US_ROT_LBS, window_weights) if abs(weight) >= 0.001]
+        selected_text = "/".join(selected_lbs) if selected_lbs else "—"
+        write(
+            f"| {row['live_name']} | {window_weights[0]:.1%} | {window_weights[1]:.1%} | "
+            f"{window_weights[2]:.1%} | {float(row.get('mix_weight', 0.0) or 0.0):.1%} | {selected_text} |\n"
+        )
+    write("\n")
+
+
 def _weight_columns_assets(df, prefixes=("w_", "actual_w_", "target_w_")):
     assets = set()
     for col in df.columns:
@@ -5250,6 +5366,22 @@ def _volreg_next_cash_state(current_cash, ratio):
     if current_cash and ratio < US_ROT_VOLREG_EXIT_THRESHOLD:
         return False
     return bool(current_cash)
+
+
+def _subb_signal_display_source_weights(result_df, signal_date, rot_w_cols):
+    row = result_df.loc[signal_date]
+    use_target = bool(row.get("rebalanced", False))
+    weights = {}
+    for col in rot_w_cols:
+        if not col.startswith("w_"):
+            continue
+        asset = col[len("w_"):]
+        target_col = f"target_w_{asset}"
+        source_col = target_col if use_target and target_col in row.index else col
+        value = row.get(source_col, 0.0)
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
 
 def _subb_effective_display_weights(signal_weights, prev_weights=None, force_cash=False):
     signal_weights = dict(signal_weights or {})
@@ -5540,6 +5672,36 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
             "calmar": calmar, "win_rate": win_rate, "years": years,
             "total_return": total_return, "yearly": yearly}
 
+
+def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
+    period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
+    if len(period) == 0:
+        return pd.Series(dtype=float)
+    return period.groupby(period.index.to_period("M")).apply(lambda x: (1 + x).prod() - 1)
+
+
+
+def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
+    values = []
+    for nav in nav_series.values():
+        s = pd.to_numeric(pd.Series(nav), errors="coerce").dropna()
+        s = s[s > 0]
+        if len(s) > 0:
+            values.append(s)
+    if not values:
+        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        return False
+    all_values = pd.concat(values)
+    min_nav = float(all_values.min())
+    max_nav = float(all_values.max())
+    spread = max_nav / min_nav if min_nav > 0 else 1.0
+    if spread >= spread_threshold:
+        ax.set_yscale("log")
+        ax.set_ylabel("NAV (start=1.0, log scale)", fontsize=11)
+        return True
+    ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+    return False
+
 def beijing_now():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc)
@@ -5564,21 +5726,33 @@ def _is_cn_unconfirmed_at(bj):
     session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
     return session_start <= bj < session_close
 
+def _is_cn_today_preclose_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return bj < session_close
+
+def _can_use_cn_realtime_snapshot_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    return bj >= session_start
+
 def is_cn_unconfirmed_intraday_snapshot():
     bj = beijing_now()
     return _is_cn_unconfirmed_at(bj), bj
 
 def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
     if bj_now is None:
-        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
-    else:
-        cn_unconfirmed = _is_cn_unconfirmed_at(bj_now)
+        bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if data_date is None:
         return False
     return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
 
 def _drop_cn_unconfirmed_today(df):
-    cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if df is None or len(df) == 0 or not cn_unconfirmed:
         return df
     today = bj_now.date()
@@ -6228,6 +6402,26 @@ def _dk_leg_name(short_name):
 def _dk_pair_display(pair):
     return "/".join(_dk_leg_name(p) for p in str(pair).split("/")) if pair != "none" else "none"
 
+
+def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
+    pair = "none" if pair is None else str(pair)
+    if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
+        return ""
+    allowed = "、".join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)
+    if pair in ADK_WEAK_PAIRS:
+        return (
+            f"⚠️ **ADK弱配对警示:** {label} **{_dk_pair_display(pair)}** 属于弱配对，不在4队白名单内；"
+            f"4队白名单为 {allowed}。仅警示，不自动过滤或改仓。"
+            + chr(10)
+        )
+    invalid = "、".join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)
+    return (
+        f"⛔ **ADK无效配对警示:** {label} **{_dk_pair_display(pair)}** 属于无效配对，不在4队白名单内；"
+        f"4队白名单为 {allowed}。无效配对为 {invalid}。仅警示，不自动过滤或改仓。"
+        + chr(10)
+    )
+
+
 def _dk_pos_str(holding_str):
     """将DK持仓编码转为可读描述。"""
     info = parse_dk_holding(holding_str)
@@ -6271,12 +6465,14 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
         cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
 
-    effective_pos = cutoff_pos
-    if "is_signal" in cn_result.columns:
-        signal_flags = cn_result["is_signal"].iloc[:cutoff_pos + 1].fillna(False).astype(bool).to_numpy()
-        signal_positions = np.flatnonzero(signal_flags)
-        if len(signal_positions) > 0:
-            effective_pos = int(signal_positions[-1])
+    if "holding" in cn_result.columns:
+        holding_s = cn_result["holding"].fillna("cash").astype(str)
+        effective_holding = holding_s.iloc[cutoff_pos]
+        effective_pos = cutoff_pos
+        while effective_pos > 0 and holding_s.iloc[effective_pos - 1] == effective_holding:
+            effective_pos -= 1
+    else:
+        effective_pos = cutoff_pos
 
     current_date = cn_result.index[current_pos]
     effective_date = cn_result.index[effective_pos]
@@ -7300,9 +7496,9 @@ class CombinedStrategyBase:
         )
         us_rot_ema = run_subb_v75_ema_base7_rotation(
             us_rot_close,
-            base_codes=US_ROT_BASE_POOL,
+            base_codes=US_ROT_POOL,
             us_open=getattr(self, "_us_open", None),
-            weight_assets=US_ROT_BASE_POOL,
+            weight_assets=US_ROT_POOL,
         )
         us_rot_result = blend_subb_v75_results(us_rot_official, us_rot_ema)
         if US_ROT_VOLREG_ENABLED and "SPY" in us_rot_close.columns:
@@ -7379,7 +7575,6 @@ class CombinedStrategyBase:
             if sigs_confirmed_us:
                 last_conf_date_us = us_rot_close.index[sigs_confirmed_us[-1]]
                 if last_conf_date_us in us_rot_result.index:
-                    current_us_w = {c.replace("w_", ""): us_rot_result.loc[last_conf_date_us, c] for c in rot_w_cols}
                     last_conf_loc_us = us_rot_result.index.get_loc(last_conf_date_us)
                     last_confirmed_us_scale = _subb_official_scale_from_result(us_rot_result, end_loc=last_conf_loc_us)
         us_scale = _subb_official_scale_from_result(us_rot_result)
@@ -7412,7 +7607,7 @@ class CombinedStrategyBase:
             us_rot_close,
             -1,
             _subb_v75_ema_scale_from_result(us_rot_result),
-            ranking_codes=US_ROT_BASE_POOL,
+            ranking_codes=US_ROT_POOL,
             prev_risky=hypo_prev_ema_risky,
             threshold=US_ROT_REBALANCE_THRESHOLD,
         )
@@ -7674,7 +7869,7 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
-Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF轮动 - EMA腿VolScale使用6个月EWMA波动率；基础ETF如 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT；通胀开关ON时加入 UUP, DBMF, KMLM
+Sub-B: 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选腿{SUBB_V75_EMA_WEIGHT:.0%} - EMA腿VolScale使用6个月EWMA波动率；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
@@ -7867,7 +8062,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
         elif re.search(r'表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
             ranges = self._parse_all_dates_with_llm_fallback(query)
             if len(ranges) <= 1:
-                self._handle_nav_chart(query, chart_only=True)
                 self._handle_performance(query)
             else:
                 for r in ranges:
@@ -8300,6 +8494,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"**当前已生效Top-1持仓:** **{_dk_effective_name}**（对应 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
             if _dk_intraday:
                 w(f"**当前已确认Top-1配对/方向:** **{_dk_pair_display(_dk_effective_pair)}** | 方向 {_dk_effective_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_effective_pair, "今日Top-1"))
                 w("今日盘中，今日收盘信号未确认；盘中假设信号仅在“实时信号”中显示\n")
             else:
                 if dk_rank_today and hypo_dk == dk_current:
@@ -8307,6 +8502,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 else:
                     w(f"**今日收盘信号:** **切换为 {_dk_latest_name}**（{_dk_latest_issue_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**今日Top-1配对/方向:** **{_dk_pair_display(_dk_latest_pair)}** | 方向 {_dk_latest_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_latest_pair, "今日Top-1"))
             if _dk_intraday:
                 w("盘中是否要按今日收盘价执行，请看“实时信号”里的实时Top-3。\n")
             _dk_display_idx = -2 if _dk_intraday else -1
@@ -8348,11 +8544,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
                 if "risk_gate_scale" in cn_dk_result.columns:
                     if _dk_gate_on_rt:
-                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        _dd_text = f" | 当前DD {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}" if not np.isnan(_dk_gate_dd_rt) else ""
                         w(f"🛡️ **风险闸门生效中:** 回撤触发后按 **{_dk_gate_scale_rt:.2f}x** 防守{_dd_text}\n")
                     else:
-                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
-                        w(f"🟢 **风险闸门关闭:** 触发阈值 {CN_DK_RISK_GATE_ENTER:.0%} / 恢复阈值 {CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
+                        _dd_text = f" | 当前DD {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        w(f"🟢 **风险闸门关闭:** 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
                 if "same_side_overheat_scale" in cn_dk_result.columns:
                     _oh_text = f" | 当前同向乖离: {_dk_oh_abs_rt:.1%}" if not np.isnan(_dk_oh_abs_rt) else ""
                     if _dk_oh_on_rt:
@@ -8365,16 +8561,16 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             _write_volume_warning_panel(msg, compact=True)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            w("### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n")
+            w(f"### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
-            w(f"V7.5混合: 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；下表权重为混合后的最终目标权重。\n")
+            w(f"V7.5混合: 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿使用US_ROT_POOL全池；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；下表权重为混合后的最终目标权重。\n")
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
             _vr_cash = d.get("volreg_cash_today", False)
@@ -8401,7 +8597,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             _us_sig_scale = us_scale
             if _last_us_sig_date and _last_us_sig_date in us_rot_result.index:
                 _us_rloc = us_rot_result.index.get_loc(_last_us_sig_date)
-                _us_sig_w = {c.replace("w_", ""): us_rot_result.loc[_last_us_sig_date, c] for c in rot_w_cols}
+                _us_sig_w = _subb_signal_display_source_weights(us_rot_result, _last_us_sig_date, rot_w_cols)
                 _us_rebalanced = bool(us_rot_result.loc[_last_us_sig_date, "rebalanced"])
                 if _us_rloc > 0:
                     _us_prev_w = {c.replace("w_", ""): us_rot_result.iloc[_us_rloc - 1][c] for c in rot_w_cols}
@@ -8560,12 +8756,9 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         threshold=US_ROT_REBALANCE_THRESHOLD,
                         reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
                     )
-                    for _ctx_row in _us_sig_mix_ctx["mix_rows"] + _us_sig_mix_ctx["reference_rows"]:
-                        _ctx_row["mix_weight"] = float(_us_sig_w.get(_ctx_row["proxy"], 0.0))
-                        _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
                     # IBIT(参考) 行仅在未纳入排名池时显示；当前 V7.5 实盘口径中 IBIT 参与 Sub-B。
-                    w(f"\n**信号日混合结果** ({_last_us_sig_date.strftime('%m-%d')} 收盘数据；130/260/390日等权混合):\n\n")
-                    w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
+                    w(f"\n**信号日官方腿结果** ({_last_us_sig_date.strftime('%m-%d')} 收盘数据；130/260/390日等权混合):\n\n")
+                    w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n")
                     w("|:-|:-|------:|------:|------:|------:|:-:|:-:|\n")
                     for row in _us_sig_mix_ctx["mix_rows"]:
                         _marker = " \U0001f3c6" if row["mix_selected"] else ""
@@ -8591,7 +8784,14 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                         w(f"| 参考. {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
                     if _us_sig_mix_ctx["reference_rows"]:
-                        w("\n注: 通胀开关off时，UUP/DBMF/KMLM只显示参考，不参与Sub-B仓位计算。\n")
+                        w("\n注: 通胀开关off时，UUP/DBMF/KMLM不进入官方腿；EMA腿仍按US_ROT_POOL全池参与候选。\n")
+                    _write_subb_official_leg_window_breakdown(w, _us_sig_mix_ctx, _us_sig_scale)
+                    _write_subb_v75_leg_weight_table(
+                        w,
+                        us_rot_result,
+                        _last_us_sig_date,
+                        "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+                    )
                     w(
                         f"\n**通胀开关:** {'🟢 ON' if _us_sig_gate['pressure_on'] else 'OFF'} "
                         f"(DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, "
@@ -8673,6 +8873,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
         scores_today = d["scores_today"]
         cn_result = d["cn_result"]
         cn_dk_result = d["cn_dk_result"]
+        us_rot_result = d["us_rot_result"]
         dk_date = d["dk_date"]
         is_dk_signal = d["is_dk_signal"]
         dk_current = d["dk_current"]
@@ -8855,6 +9056,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 else:
                     w(f"**若现在收盘:** **切换为 {_dk_pos_str(hypo_dk)}**（今日 {dk_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**若现在收盘的Top-1配对/方向:** **{_dk_pair_display(dk_hypo_top_pair)}** | 方向 {dk_hypo_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, "今日Top-1"))
             # ── DK vol-scaling 杠杆显示 (实时) ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
@@ -8886,10 +9088,10 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             _write_volume_warning_panel(msg, compact=False)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            w("### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n")
+            w(f"### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
             if us_open and us_data_is_today:
                 w(" ⚡盘中实时")
@@ -8900,7 +9102,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
-            w(f"V7.5混合: 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；持仓表权重为混合后的最终目标权重。\n")
+            w(f"V7.5混合: 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿使用US_ROT_POOL全池；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；持仓表权重为混合后的最终目标权重。\n")
             # VolReg风控 (详细视图)
             _vr_detail = d.get("volreg_ratio")
             _vr_cash_detail = d.get("volreg_cash_today", False)
@@ -8925,20 +9127,17 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 threshold=US_ROT_REBALANCE_THRESHOLD,
                 reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
             )
-            for _ctx_row in _us_mix_live["mix_rows"] + _us_mix_live["reference_rows"]:
-                _ctx_row["mix_weight"] = float(hypo_us_w.get(_ctx_row["proxy"], current_us_w.get(_ctx_row["proxy"], 0.0)))
-                _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w(
-                "说明: V7.5 的 Sub-B 为 **50%官方130/260/390宏观门控 + 50% EMA hl100/16%七ETF(6M EWMA VolScale)**；"
-                "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名。\n\n"
+                "说明: V7.5 的 Sub-B 为 **官方130/260/390宏观门控腿 + EMA hl100/16%同池候选腿(6M EWMA VolScale)**；"
+                "UUP/DBMF/KMLM 在官方腿受通胀开关控制，EMA腿始终按US_ROT_POOL全池参与排名。\n\n"
             )
             w(
                 f"**通胀开关:** {'🟢 ON' if _us_live_gate['pressure_on'] else 'OFF'} "
                 f"(DBC {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('dbc_mom', np.nan):+.2%}, "
                 f"TLT {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('tlt_mom', np.nan):+.2%})\n\n"
             )
-            w("**实时混合结果（130/260/390 等权混合）:**\n\n")
-            w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
+            w("**官方腿实时结果（130/260/390 等权混合）:**\n\n")
+            w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n")
             w("|:-|:-|------:|------:|------:|------:|:-:|:-:|\n")
             for row in _us_mix_live["mix_rows"]:
                 _m130 = row["per_lb_momentum"][US_ROT_LBS[0]]
@@ -8963,6 +9162,13 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_live, us_scale)
+            _write_subb_v75_leg_weight_table(
+                w,
+                us_rot_result,
+                -1,
+                "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+            )
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
                 w("假设收盘信号:\n\n| ETF | 持仓 | 信号 | 变动 |\n|:-|--------:|--------:|-----:|\n")
@@ -9081,7 +9287,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
             w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后半仓；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
+            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%}；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
             w(f"| 成交额触发后仓位 | **旧规则{CN_SA_VOLUME_SCALE:.0%} / 新规则{CN_SA_VOLUME_CLEAR_RATIO_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
@@ -9101,6 +9307,9 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
+            w(f"| ADK四对白名单 | **{len(ADK_PRIMARY_PROFIT_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}；弱/无效Top-1仅触发警示，不自动过滤 |\n")
+            w(f"| ADK弱配对 | **{len(ADK_WEAK_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)} |\n")
+            w(f"| ADK无效配对 | **{len(ADK_INVALID_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)} |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
             w(f"| 斜率拟合窗口 | **{CN_DK_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 波动率缩放目标 | **{CN_DK_TARGET_VOL:.0%}** | 目标年化波动率 |\n")
@@ -9124,10 +9333,10 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
             w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
-            w("6. 数据: csindex\n\n---\n\n### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w(f"6. 数据: csindex\n\n---\n\n### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| V7.5混合方式 | **官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}** | Sub-B日收益和目标权重按两条腿等权混合 |\n")
             w("| 官方腿 | **7ETF+通胀宏观3ETF** | 沿用官方生产逻辑；UUP/DBMF/KMLM只在通胀开关ON时进入候选池 |\n")
-            w(f"| EMA腿 | **hl{SUBB_V75_EMA_HALF_LIFE} / 阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%} / 仅7ETF / {SUBB_V75_EMA_VOL_MODE}** | 使用年化EWM日收益；目标波动率scale用6个月EWMA已实现波动率；不纳入UUP/DBMF/KMLM |\n")
+            w(f"| EMA腿 | **hl{SUBB_V75_EMA_HALF_LIFE} / 阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%} / US_ROT_POOL全池 / {SUBB_V75_EMA_VOL_MODE}** | 使用年化EWM日收益；目标波动率scale用6个月EWMA已实现波动率；包含UUP/DBMF/KMLM |\n")
             w(f"| 动量窗口 | **{' / '.join(str(lb) for lb in US_ROT_LBS)}日** | 130/260/390日分别生成目标仓位后等权平均 |\n")
             w(f"| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 各窗口内均使用20日反波动率加权 |\n")
             w(f"| Top N | **3** | 选动量最高的3只ETF |\n")
@@ -9166,11 +9375,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量清仓提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
             w(f"| 微盘接入版本 | **v1.6 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，宽口径中证2000+创业板同时触发后应清仓；当前V7.5面板提示，不自动改写微盘独立脚本仓位 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v1.6由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
@@ -9244,7 +9453,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
             _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
             w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
-            w("生效列 = 最近一次Sub-A确认信号；当前列 = 最新实时/收盘快照，用来看动量衰减。\n\n")
+            w("生效列 = 当前已生效持仓开始确认日；当前列 = 最新实时/收盘快照，用来看持仓动量变化。\n\n")
             if _cn_params_intraday:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
             else:
@@ -9339,6 +9548,10 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| ADK四对白名单 | **{'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}** |\n")
+            w(f"| ADK弱配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)}** |\n")
+            w(f"| ADK无效配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)}** |\n")
+            w(f"| 弱/无效Top-1 | **仅警示，不自动过滤** |\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
@@ -9376,14 +9589,22 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _dk_gate_on_lp = bool(cn_dk_result["risk_gate_on"].iloc[-1])
                 _dk_gate_dd_lp = cn_dk_result["risk_gate_base_dd"].iloc[-1]
                 _dk_base_w_lp = cn_dk_result["base_weight"].iloc[-1] if "base_weight" in cn_dk_result.columns else cn_dk_result["weight"].iloc[-1]
-                w(f"| VolScale杠杆 | **{_dk_base_w_lp:.2f}x** |\n")
+                _dk_final_w_lp = cn_dk_result["weight"].iloc[-1]
                 _dk_gate_status_lp = "开启" if _dk_gate_on_lp else "关闭"
-                w(f"| RiskGate | **{_dk_gate_status_lp}** ({_dk_gate_scale_lp:.2f}x) |\n")
+                w(f"| RiskGate状态 | **{_dk_gate_status_lp}**（乘数 {_dk_gate_scale_lp:.2f}x） |\n")
+                w(f"| 触发阈值 | **ADK原始净值DD <= -{CN_DK_RISK_GATE_ENTER:.0%}** |\n")
+                w(f"| 恢复阈值 | **ADK原始净值DD >= -{CN_DK_RISK_GATE_EXIT:.0%}** |\n")
                 if not np.isnan(_dk_gate_dd_lp):
-                    w(f"| 原始策略DD | **{_dk_gate_dd_lp:.1%}** |\n")
-            w(f"| 实际杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
+                    w(f"| 当前判断DD | **{_dk_gate_dd_lp:.1%}** |\n")
+                w(f"| RiskGate前杠杆 | **{_dk_base_w_lp:.2f}x** |\n")
+                w(f"| 最终杠杆 | **{_dk_final_w_lp:.2f}x**（= {_dk_base_w_lp:.2f}x × {_dk_gate_scale_lp:.2f}） |\n")
+            else:
+                w(f"| 最终杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
             w(f"| 配对切换 | {'是' if dk_pair_changed_lp else '否'} |\n")
             w(f"| 方向切换 | {'是' if dk_direction_changed_lp else '否'} |\n")
+            _dk_lp_warning = _dk_top_pair_whitelist_warning(dk_top_pair_lp, "今日Top-1")
+            if _dk_lp_warning:
+                w("\n" + _dk_lp_warning)
             if dk_rank_current_lp:
                 w("\n**① 当前已生效Top-3配对:**\n\n")
                 w(f"| 排名 | 配对 | 生效分数 | 今日分数 | 方向/持仓 |\n")
@@ -9400,6 +9621,9 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w(f"| 今日Top-1配对 | **{dk_hypo_pair_lp}** |\n")
                 w(f"| 今日方向 | **{dk_hypo_dir_lp:+d}** |\n")
                 w(f"| 今日假设持仓 | **{_dk_pos_str(dk_hypo_holding_lp)}** |\n")
+                _dk_hypo_warning = _dk_top_pair_whitelist_warning(dk_hypo_pair_lp, "今日Top-1")
+                if _dk_hypo_warning:
+                    w("\n" + _dk_hypo_warning)
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[-1]
@@ -9427,7 +9651,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
-            w("\n---\n\n### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n\n")
+            w(f"\n---\n\n### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed_p:
@@ -9469,6 +9693,8 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     w(f"⏸️ 非信号日（上次: {_last_bj_p}）\n")
             w("\n")
             us_scale = _subb_official_scale_from_result(us_rot_result)
+            rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
+            current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
             _hypo_prev_mix_risky_by_lb_p = _us_mix_prev_risky_by_lb_from_result(
                 us_rot_result, us_date, include_current=False,
             )
@@ -9486,13 +9712,10 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 threshold=US_ROT_REBALANCE_THRESHOLD,
                 reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
             )
-            for _ctx_row in _us_mix_params["mix_rows"] + _us_mix_params["reference_rows"]:
-                _ctx_row["mix_weight"] = float(current_us_w.get(_ctx_row["proxy"], 0.0))
-                _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w("**① 分窗口动量排名（130/260/390）:**\n\n")
             w(
                 "V7.5 的 Sub-B 先分别计算 130/260/390 日窗口，再把三个窗口生成的目标仓位等权混合。"
-                "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名；历史段以 BTC-USD 拼接。\n\n"
+                "UUP/DBMF/KMLM 在官方腿受通胀开关控制，EMA腿始终按US_ROT_POOL全池参与排名；历史段以 BTC-USD 拼接。\n\n"
             )
             w(
                 f"**通胀开关:** {'🟢 ON' if _us_params_gate['pressure_on'] else 'OFF'} "
@@ -9527,21 +9750,8 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         f"{_is_top3} | {_abs_pass} | 0.0%（不参与） |\n"
                     )
                 w("\n")
-            us_start_idx_p = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
-            us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
-            is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
-            if is_us_signal_p and _should_suppress_early_week_us_signal(us_date):
-                is_us_signal_p = False
-            rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith("w_")]
-            current_us_w = {c.replace("w_", ""): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
-            if not is_us_signal_p:
-                _confirmed_sigs_p = sorted([i for i in us_signal_set_p if i < len(us_rot_close) - 1])
-                if _confirmed_sigs_p:
-                    _last_conf_date_p = us_rot_close.index[_confirmed_sigs_p[-1]]
-                    if _last_conf_date_p in us_rot_result.index:
-                        current_us_w = {c.replace("w_", ""): us_rot_result.loc[_last_conf_date_p, c] for c in rot_w_cols_p}
-            w("**② 混合结果（130/260/390 等权混合）:**\n\n")
-            w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 平均动量 | 混合目标权重 | 混合入选? | 参与Sub-B? |\n")
+            w("**② 官方腿结果（130/260/390 等权混合）:**\n\n")
+            w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 平均动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n")
             w("|:-|:-|------:|------:|------:|------:|------:|:-:|:-:|\n")
             for row in _us_mix_params["mix_rows"]:
                 _m130 = row["per_lb_momentum"][US_ROT_LBS[0]]
@@ -9569,6 +9779,13 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_params, us_scale)
+            _write_subb_v75_leg_weight_table(
+                w,
+                us_rot_result,
+                -1,
+                "V7.5 Sub-B 50/50腿拆分（官方腿+EMA腿=最终目标）",
+            )
             hist_us = pd.to_numeric(
                 us_rot_result["official_return"] if "official_return" in us_rot_result.columns else us_rot_result["return"],
                 errors="coerce",
@@ -9590,7 +9807,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 us_rot_close,
                 -1,
                 _subb_v75_ema_scale_from_result(us_rot_result),
-                ranking_codes=US_ROT_BASE_POOL,
+                ranking_codes=US_ROT_POOL,
                 prev_risky=_hypo_prev_ema_risky_p,
                 threshold=US_ROT_REBALANCE_THRESHOLD,
             )
@@ -9861,7 +10078,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
         ax.set_title(
             f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
             fontsize=14, fontweight='bold')
-        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        _apply_nav_axis_scale(ax, nav_series)
         ax.legend(loc='best', fontsize=10, framealpha=0.9)
         ax.grid(True, alpha=0.3)
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -9918,40 +10135,35 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
-        cn_monthly = cn_result["return"].groupby(cn_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        dk_monthly = cn_dk_result["return"].groupby(cn_dk_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        us_rot_monthly = us_rot_result["return"].groupby(us_rot_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        all_periods = cn_monthly.index.intersection(dk_monthly.index).intersection(
-            us_rot_monthly.index)
-        if len(all_periods) == 0:
-            raise poe.BotError("PV三策略组合(不含微盘)没有重叠的月度数据")
-        aligned = pd.DataFrame({
-            "Sub-A": cn_monthly.reindex(all_periods),
-            "Sub-A-DK": dk_monthly.reindex(all_periods),
-            "Sub-B": us_rot_monthly.reindex(all_periods),
-        }).dropna()
-        w = _performance_combo_weights()
-        _strat_cols = PERFORMANCE_COMBO_ORDER
-        _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
-        _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
-        _nav_comb = _nav_comb / _nav_comb.iloc[0]
-        aligned["Combined"] = _nav_comb.pct_change()
-        aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
-        start_period = start_date.to_period("M")
-        end_period = end_date.to_period("M")
-        mask = (aligned.index >= start_period) & (aligned.index <= end_period)
-        filtered = aligned[mask]
-        cn_monthly_period = cn_monthly[
-            (cn_monthly.index >= start_period) & (cn_monthly.index <= end_period)]
-        dk_monthly_period = dk_monthly[
-            (dk_monthly.index >= start_period) & (dk_monthly.index <= end_period)]
-        us_monthly_period = us_rot_monthly[
-            (us_rot_monthly.index >= start_period) & (us_rot_monthly.index <= end_period)]
+        cn_daily_period = cn_result["return"][
+            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
+        dk_daily_period = cn_dk_result["return"][
+            (cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
+        us_daily_period = us_rot_result["return"][
+            (us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
+        cn_monthly_period = _monthly_returns_from_daily_window(cn_result["return"], start_date, end_date)
+        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result["return"], start_date, end_date)
+        us_monthly_period = _monthly_returns_from_daily_window(us_rot_result["return"], start_date, end_date)
+        all_periods = cn_monthly_period.index.intersection(dk_monthly_period.index).intersection(
+            us_monthly_period.index)
+        if len(all_periods) > 0:
+            aligned = pd.DataFrame({
+                "Sub-A": cn_monthly_period.reindex(all_periods),
+                "Sub-A-DK": dk_monthly_period.reindex(all_periods),
+                "Sub-B": us_monthly_period.reindex(all_periods),
+            }).dropna()
+            w = _performance_combo_weights()
+            _strat_cols = PERFORMANCE_COMBO_ORDER
+            _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
+            _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
+            _nav_comb = _nav_comb / _nav_comb.iloc[0]
+            aligned["Combined"] = _nav_comb.pct_change()
+            aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
+        else:
+            aligned = pd.DataFrame(columns=["Sub-A", "Sub-A-DK", "Sub-B", "Combined"])
+        filtered = aligned
         if len(cn_monthly_period) < 1 and len(us_monthly_period) < 1:
-            raise poe.BotError(f"在 {start_date.strftime('%Y-%m')} 到 {end_date.strftime('%Y-%m')} 期间没有数据")
+            raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间没有数据")
         metrics = {}
         if len(cn_monthly_period) >= 1:
             metrics["Sub-A"] = calc_monthly_metrics(cn_monthly_period)
@@ -9961,8 +10173,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
             metrics["Sub-B"] = calc_monthly_metrics(us_monthly_period)
         if len(filtered) >= 1:
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
-        cn_daily_period = cn_result["return"][
-            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
         if len(cn_daily_period) > 1 and "Sub-A" in metrics:
             nav_a = (1 + cn_daily_period).cumprod()
             metrics["Sub-A"]["max_dd"] = ((nav_a - nav_a.cummax()) / nav_a.cummax()).min() * 100
@@ -10121,7 +10331,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             ax.set_title(
                 f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
                 fontsize=14, fontweight='bold')
-            ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+            _apply_nav_axis_scale(ax, nav_series)
             ax.legend(loc='best', fontsize=10, framealpha=0.9)
             ax.grid(True, alpha=0.3)
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))

@@ -1,0 +1,176 @@
+{
+  "selected_candidate": "formal_core_lb160_260_390_macro_gate_abs0.04_ow0.25",
+  "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "baseline_daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\subb_full_parameter_optimization_20260505\\finalist_daily_returns.csv",
+  "data_start": "2007-05-30",
+  "data_end": "2026-05-05",
+  "data_rows": 4764,
+  "duplicate_dates": 0,
+  "weekend_rows": 0,
+  "common_rows": 4373,
+  "common_start": "2008-12-15",
+  "common_end": "2026-05-05",
+  "actual_extra_dates": 0,
+  "expected_extra_dates": 0,
+  "same_run_common_rows": 4373,
+  "same_run_max_abs_return_diff": 0.0,
+  "same_run_nonzero_gt_1e_12": 0,
+  "stored_baseline_max_abs_return_diff": 6.645349149313022e-05,
+  "stored_baseline_mean_abs_return_diff": 1.7226550787276202e-07,
+  "stored_baseline_nonzero_gt_1e_12": 4206,
+  "actual_defaults": {
+    "lbs": [
+      160,
+      260,
+      390
+    ],
+    "official_pool_mode": "macro_gate",
+    "top_n": 3,
+    "abs_threshold": 0.04,
+    "rebalance_threshold": 1.05,
+    "min_turnover": 0.0,
+    "official_weight": 0.25,
+    "ema_weight": 0.75,
+    "ema_half_life": 100,
+    "ema_abs_threshold": 0.16,
+    "target_vol": 0.25,
+    "vol_window": 40,
+    "max_lev": 2.0,
+    "volreg_enabled": true,
+    "volreg_enter": 2.0,
+    "volreg_exit": 1.6
+  },
+  "audit": {
+    "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+    "entrypoint": "Sub-B formal path: production US rotation data construction -> run_us_rotation_mix() official macro-gated leg -> run_subb_v75_ema_base7_rotation() EMA leg -> blend_subb_v75_results() -> optional apply_vol_regime_overlay()",
+    "data_source": "fetch_yahoo() production path with Yahoo/Stooq fallback",
+    "sources": {
+      "BIL": "Yahoo",
+      "BTC-USD": "Yahoo",
+      "DBC": "Yahoo",
+      "DBMF": "Yahoo",
+      "EEM": "Yahoo",
+      "EFA": "Yahoo",
+      "EMXC": "Yahoo",
+      "GLD": "Yahoo",
+      "IBIT": "Yahoo",
+      "KMLM": "Yahoo",
+      "QQQ": "Yahoo",
+      "SPY": "Yahoo",
+      "TLT": "Yahoo",
+      "UUP": "Yahoo"
+    },
+    "raw_ranges": {
+      "BIL": {
+        "start": "2007-05-30",
+        "end": "2026-05-05",
+        "rows": 4764,
+        "has_open": true
+      },
+      "BTC-USD": {
+        "start": "2014-09-17",
+        "end": "2026-05-05",
+        "rows": 4249,
+        "has_open": true
+      },
+      "DBC": {
+        "start": "2006-02-06",
+        "end": "2026-05-05",
+        "rows": 5093,
+        "has_open": true
+      },
+      "DBMF": {
+        "start": "2019-05-08",
+        "end": "2026-05-05",
+        "rows": 1758,
+        "has_open": true
+      },
+      "EEM": {
+        "start": "2003-04-14",
+        "end": "2026-05-05",
+        "rows": 5802,
+        "has_open": true
+      },
+      "EFA": {
+        "start": "2003-01-02",
+        "end": "2026-05-05",
+        "rows": 5872,
+        "has_open": true
+      },
+      "EMXC": {
+        "start": "2017-07-26",
+        "end": "2026-05-05",
+        "rows": 2206,
+        "has_open": true
+      },
+      "GLD": {
+        "start": "2004-11-18",
+        "end": "2026-05-05",
+        "rows": 5398,
+        "has_open": true
+      },
+      "IBIT": {
+        "start": "2024-01-11",
+        "end": "2026-05-05",
+        "rows": 580,
+        "has_open": true
+      },
+      "KMLM": {
+        "start": "2020-12-02",
+        "end": "2026-05-05",
+        "rows": 1361,
+        "has_open": true
+      },
+      "QQQ": {
+        "start": "2003-01-02",
+        "end": "2026-05-05",
+        "rows": 5872,
+        "has_open": true
+      },
+      "SPY": {
+        "start": "2003-01-02",
+        "end": "2026-05-05",
+        "rows": 5872,
+        "has_open": true
+      },
+      "TLT": {
+        "start": "2003-01-02",
+        "end": "2026-05-05",
+        "rows": 5872,
+        "has_open": true
+      },
+      "UUP": {
+        "start": "2007-03-01",
+        "end": "2026-05-05",
+        "rows": 4826,
+        "has_open": true
+      }
+    },
+    "merged_start": "2007-05-30",
+    "merged_end": "2026-05-05",
+    "merged_rows": 4764,
+    "duplicate_dates": 0,
+    "weekend_rows": 0,
+    "columns": [
+      "QQQ",
+      "EFA",
+      "GLD",
+      "TLT",
+      "DBC",
+      "BIL",
+      "EMXC",
+      "UUP",
+      "BTC-USD",
+      "KMLM",
+      "DBMF",
+      "SPY"
+    ],
+    "open_map_count": 14,
+    "missing_open": [],
+    "return_column": "return",
+    "cost_model": "US_ROT_COMMISSION applied to leg execution, blend execution, and VolReg transition turnover",
+    "timing": "T close signal, pending target executed at T+1 adjusted open when us_open is available",
+    "emxc_splice": "EEM proxy before scaled EMXC from 2017-08-01",
+    "btc_splice": "BTC-USD replaced by IBIT-spliced series where IBIT exists; BTC joined on US ETF calendar only"
+  }
+}

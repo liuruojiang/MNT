@@ -1,0 +1,138 @@
+{
+  "script": "mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_stability_A_execution_20260506",
+  "combos": [
+    {
+      "ma_window": 60,
+      "slope_window": 20,
+      "r2_window": 20,
+      "r2_threshold": 0.2
+    }
+  ],
+  "execution_variants": [
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 0
+    },
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 3
+    },
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 5
+    },
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 10
+    },
+    {
+      "switch_buffer": 1.0,
+      "entry_fraction": 1.0,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 0
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 3
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 5
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 10
+    },
+    {
+      "switch_buffer": 1.03,
+      "entry_fraction": 1.0,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 0
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 3
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 5
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 10
+    },
+    {
+      "switch_buffer": 1.06,
+      "entry_fraction": 1.0,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 0
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 3
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 5
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 0.5,
+      "entry_wait_days": 10
+    },
+    {
+      "switch_buffer": 1.1,
+      "entry_fraction": 1.0,
+      "entry_wait_days": null
+    }
+  ],
+  "modes": [
+    "formal"
+  ],
+  "elapsed_sec": 142.89941509999971
+}

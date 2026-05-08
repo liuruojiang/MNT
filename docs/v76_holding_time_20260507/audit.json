@@ -1,0 +1,85 @@
+{
+  "created_at_bj": "2026-05-07T15:38:36",
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint": "CombinedStrategyBase._fetch_data(include_cn_live_snapshot=False, include_us_live_snapshot=False) + _run_strategies(..., allow_unresolved_suba_volume=False)",
+  "data_end": {
+    "cn_close": "2026-05-06",
+    "cn_dk_close": "2026-05-06",
+    "us_rot_close": "2026-05-06",
+    "us_prod_daily": "2026-05-06"
+  },
+  "frame_audit": [
+    {
+      "strategy": "Sub-A",
+      "start": "2010-09-29",
+      "end": "2026-05-06",
+      "rows": 3786,
+      "duplicate_dates": 0,
+      "active_days": 2430,
+      "active_pct": 0.6418383518225039,
+      "trades": 314,
+      "avg_trade_days": 7.738853503184713,
+      "median_trade_days": 6.0,
+      "max_trade_days": 40
+    },
+    {
+      "strategy": "Sub-A-DK",
+      "start": "2010-11-22",
+      "end": "2026-05-06",
+      "rows": 3753,
+      "duplicate_dates": 0,
+      "active_days": 3589,
+      "active_pct": 0.9563016253663735,
+      "trades": 620,
+      "avg_trade_days": 5.788709677419355,
+      "median_trade_days": 4.0,
+      "max_trade_days": 39
+    },
+    {
+      "strategy": "Sub-B",
+      "start": "2008-12-15",
+      "end": "2026-05-06",
+      "rows": 4374,
+      "duplicate_dates": 0,
+      "active_days": 4204,
+      "active_pct": 0.9611339734796525,
+      "trades": 871,
+      "avg_trade_days": 4.8266360505166475,
+      "median_trade_days": 5.0,
+      "max_trade_days": 28
+    }
+  ],
+  "definitions": {
+    "annual_holding_time": "strategy-calendar trading days where effective non-cash exposure is positive",
+    "average_trade_holding_time": "mean length in strategy-calendar trading days of consecutive active holding segments; open final segment included",
+    "Sub-A_active": "effective_holding not cash/none and effective_fraction positive after overlays",
+    "Sub-A-DK_active": "actual_position/holding not none and final weight positive after overlays",
+    "Sub-B_active": "sum of post-VolReg effective_w_* excluding BIL/CASH is positive"
+  },
+  "fetch_log_tail": [
+    "⏳ 正在获取A股数据...",
+    "  中证红利: 2026-05-06 [csindex+Sina-proxy:1.000827]",
+    "  创业板: 2026-05-06 [Sina]",
+    "  上证50: 2026-05-06 [csindex+Sina-proxy:1.000016]",
+    "  中证1000: 2026-05-06 [csindex+Sina-proxy:1.000852]",
+    "  中证500: 2026-05-06 [csindex+Sina-proxy:1.000905]",
+    "  10Y国债: 2026-05-06 [csindex+Sina-proxy:1.000012]",
+    "  ⚠️ **数据延迟:** 中证红利、创业板、上证50、中证1000、中证500 尚未更新到今天(2026-05-07)，信号可能不准确，请稍后重新查询",
+    "  合并截至: 2026-05-06",
+    "⏳ 正在获取美股数据...",
+    "  美股: 21个ETF | 收盘: 2026-05-07 04:00 北京时间",
+    "⏳ 正在获取A-DK多空数据(5个价格指数)...",
+    "  中证1000: 2005-01-01~2026-05-06 [csindex]",
+    "  上证50: 2005-01-01~2026-05-06 [csindex]",
+    "  沪深300: 2005-01-01~2026-05-06 [csindex]",
+    "  中证500: 2005-01-01~2026-05-06 [csindex]",
+    "  创业板: 2010-06-01~2026-05-06 [Sina]",
+    "  A-DK合并截至: 2026-05-06"
+  ],
+  "output_files": [
+    "annual_holding_time.csv",
+    "holding_segments.csv",
+    "summary.csv",
+    "audit.json"
+  ]
+}

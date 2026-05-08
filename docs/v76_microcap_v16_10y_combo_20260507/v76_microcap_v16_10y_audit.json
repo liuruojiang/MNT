@@ -1,0 +1,122 @@
+﻿{
+  "mnt_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "microcap_nav": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+  "cn_data": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+  "us_data": "Yahoo via V7.6 fetch_yahoo for Sub-B; repo mnt_strategy_data_us.csv is not used for Sub-B",
+  "subb_data": {
+    "source": "V7.6 official Yahoo fetch_yahoo path with T+1 open execution",
+    "close_start": "2007-05-30",
+    "close_end": "2026-05-06",
+    "open_tickers": [
+      "BIL",
+      "BTC-USD",
+      "DBC",
+      "DBMF",
+      "EEM",
+      "EFA",
+      "EMXC",
+      "GLD",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQ",
+      "QQQM",
+      "SPY",
+      "TLT",
+      "UUP",
+      "VEA",
+      "VGIT",
+      "VGLT",
+      "VTI"
+    ],
+    "sources": {
+      "BIL": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "BTC-USD": {
+        "last_date": "2026-05-07",
+        "source": "Yahoo"
+      },
+      "DBC": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "DBMF": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "EFA": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "EMXC": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "GLD": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "KMLM": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "QQQ": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "SPY": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "TLT": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      },
+      "UUP": {
+        "last_date": "2026-05-06",
+        "source": "Yahoo"
+      }
+    }
+  },
+  "output_dir": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\v76_microcap_v16_10y_combo_20260507",
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap_v1_6": 0.15,
+    "Sub-B": 0.6
+  },
+  "v76_no_microcap_normalized_weights": {
+    "Sub-A": 0.11764705882352942,
+    "Sub-A-DK": 0.17647058823529413,
+    "Sub-B": 0.7058823529411765
+  },
+  "component_ranges": {
+    "Sub-A": {
+      "start": "2010-09-29",
+      "end": "2026-04-30",
+      "rows": 3785
+    },
+    "Sub-A-DK": {
+      "start": "2010-11-22",
+      "end": "2026-04-30",
+      "rows": 3752
+    },
+    "Sub-B": {
+      "start": "2008-12-15",
+      "end": "2026-05-06",
+      "rows": 4374
+    },
+    "Microcap_v1_6": {
+      "start": "2010-03-04",
+      "end": "2026-05-06",
+      "rows": 3925
+    }
+  },
+  "requested_start": "2016-04-30",
+  "common_start": "2016-05-03",
+  "common_end": "2026-04-30",
+  "method": "daily NAV merge; sleeve NAVs normalized at window start; max drawdown computed from merged daily NAV"
+}

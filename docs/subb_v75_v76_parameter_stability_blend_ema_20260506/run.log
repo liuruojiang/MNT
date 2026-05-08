@@ -1,0 +1,45 @@
+[V7.5] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.5 plus.py
+[V7.5] caching official leg once for blend_ema group
+[V7.5] 1/15 ow0.75_ema60_0.16
+[V7.5] caching EMA leg (60, 0.16)
+[V7.5] 2/15 ow0.75_ema100_0.08
+[V7.5] caching EMA leg (100, 0.08)
+[V7.5] 3/15 ow0.75_ema100_0.16
+[V7.5] caching EMA leg (100, 0.16)
+[V7.5] 4/15 ow0.75_ema100_0.24
+[V7.5] caching EMA leg (100, 0.24)
+[V7.5] 5/15 ow0.75_ema150_0.16
+[V7.5] caching EMA leg (150, 0.16)
+[V7.5] 6/15 ow0.5_ema60_0.16
+[V7.5] 7/15 ow0.5_ema100_0.08
+[V7.5] 8/15 ow0.5_ema100_0.16
+[V7.5] 9/15 ow0.5_ema100_0.24
+[V7.5] 10/15 ow0.5_ema150_0.16
+[V7.5] 11/15 ow0.25_ema60_0.16
+[V7.5] 12/15 ow0.25_ema100_0.08
+[V7.5] 13/15 ow0.25_ema100_0.16
+[V7.5] 14/15 ow0.25_ema100_0.24
+[V7.5] 15/15 ow0.25_ema150_0.16
+[V7.6] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.6 plus.py
+[V7.6] caching official leg once for blend_ema group
+[V7.6] 1/15 ow0.75_ema60_0.16
+[V7.6] caching EMA leg (60, 0.16)
+[V7.6] 2/15 ow0.75_ema100_0.08
+[V7.6] caching EMA leg (100, 0.08)
+[V7.6] 3/15 ow0.75_ema100_0.16
+[V7.6] caching EMA leg (100, 0.16)
+[V7.6] 4/15 ow0.75_ema100_0.24
+[V7.6] caching EMA leg (100, 0.24)
+[V7.6] 5/15 ow0.75_ema150_0.16
+[V7.6] caching EMA leg (150, 0.16)
+[V7.6] 6/15 ow0.5_ema60_0.16
+[V7.6] 7/15 ow0.5_ema100_0.08
+[V7.6] 8/15 ow0.5_ema100_0.16
+[V7.6] 9/15 ow0.5_ema100_0.24
+[V7.6] 10/15 ow0.5_ema150_0.16
+[V7.6] 11/15 ow0.25_ema60_0.16
+[V7.6] 12/15 ow0.25_ema100_0.08
+[V7.6] 13/15 ow0.25_ema100_0.16
+[V7.6] 14/15 ow0.25_ema100_0.24
+[V7.6] 15/15 ow0.25_ema150_0.16
+done: docs\subb_v75_v76_parameter_stability_blend_ema_20260506

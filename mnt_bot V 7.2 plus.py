@@ -133,6 +133,7 @@ CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
 CN_SA_VOLUME_SCALE = 0.50
+CN_SA_VOLUME_HISTORY_BEG = "20000101"
 CN_SA_VOLUME_ZZ2000_SECID = "2.932000"
 CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
     ("1.563300", "中证2000ETF"),
@@ -176,7 +177,7 @@ CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
 
-MICROCAP_VOLUME_POLICY = "warning_manual_clear"
+MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
 MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
@@ -260,6 +261,26 @@ CN_DK_MIN_LEV = 0.1
 CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
+
+ADK_PRIMARY_PROFIT_PAIR_ORDER = (
+    "HS300/ZZ500",
+    "ZZ500/CYB",
+    "SZ50/CYB",
+    "SZ50/ZZ1000",
+)
+ADK_PRIMARY_PROFIT_PAIRS = set(ADK_PRIMARY_PROFIT_PAIR_ORDER)
+ADK_WEAK_PAIR_ORDER = (
+    "HS300/CYB",
+)
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = (
+    "SZ50/HS300",
+    "SZ50/ZZ500",
+    "HS300/ZZ1000",
+    "ZZ500/ZZ1000",
+    "ZZ1000/CYB",
+)
+ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
 CN_DK_RISK_GATE_EXIT = 0.08
@@ -1193,7 +1214,7 @@ def _fetch_cn_eastmoney(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_eastmoney_amount(secid, beg="20050101", lmt=10000):
+def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
            f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
@@ -1260,7 +1281,7 @@ def _fetch_cn_sina_amount_proxy(secid):
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index()
 
-def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="Sohu amount"):
+def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, source_name="Sohu amount"):
     end_date = (datetime.now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (f"https://q.stock.sohu.com/hisHq"
            f"?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json")
@@ -1289,16 +1310,16 @@ def _fetch_cn_sohu_amount_symbol(symbol, beg="20240101", lmt=300, source_name="S
     df["date"] = pd.to_datetime(df["date"])
     return df.set_index("date").sort_index().tail(int(lmt))
 
-def _fetch_cn_sohu_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     symbol = _secid_to_sohu_index(secid)
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu amount")
 
-def _fetch_cn_sohu_fund_amount(secid, beg="20240101", lmt=300):
+def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     _market, code = secid.split(".")
     symbol = "cn_" + code
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name="Sohu fund amount")
 
-def _fetch_zz2000_etf_amount_proxy(beg="20240101", lmt=300):
+def _fetch_zz2000_etf_amount_proxy(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     candidates = []
     errors = []
     for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
@@ -1468,7 +1489,7 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     _csindex_consecutive_fails += 1
     raise last_err or ValueError(f"csindex failed after {effective_retries} retries for {index_code}")
 
-def _fetch_cn_csindex_amount(secid, beg="20050101", lmt=10000, _max_retries=2):
+def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _max_retries=2):
     index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
     if not index_code:
         raise ValueError(f"no csindex amount mapping for {secid}")
@@ -1664,6 +1685,9 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if bj_today.weekday() >= 5:
         return df
     # 尝试获取实时价格
+    bj_now = beijing_now()
+    if bj_today == bj_now.date() and not _can_use_cn_realtime_snapshot_at(bj_now):
+        return df
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
@@ -1912,7 +1936,7 @@ def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma
     feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
     return signal.astype(bool), feature
 
-def _fetch_cn_amount_with_fallback(secid, label, beg="20050101", lmt=10000):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     errors = []
     primary_sources = [
         ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
@@ -1967,8 +1991,8 @@ def _load_suba_volume_signal():
             df, source = _fetch_cn_amount_with_fallback(
                 secid,
                 label,
-                beg="20240101",
-                lmt=max(180, int(ma) + int(days) + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             specs[name] = {"amount": df["amount"], "ma": ma, "days": days}
             sources[name] = source
@@ -1991,8 +2015,8 @@ def _load_suba_volume_signal():
                 numerator_df, numerator_source = _fetch_cn_amount_with_fallback(
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID,
                     CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL,
-                    beg="20240101",
-                    lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                    beg=CN_SA_VOLUME_HISTORY_BEG,
+                    lmt=10000,
                 )
                 numerator = numerator_df["amount"]
                 severe_sources["numerator"] = numerator_source
@@ -2001,8 +2025,8 @@ def _load_suba_volume_signal():
             denominator_df, denominator_source = _fetch_cn_amount_with_fallback(
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID,
                 CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL,
-                beg="20240101",
-                lmt=max(180, CN_SA_VOLUME_CLEAR_RATIO_MA + CN_SA_VOLUME_CLEAR_RATIO_DAYS + 80),
+                beg=CN_SA_VOLUME_HISTORY_BEG,
+                lmt=10000,
             )
             severe_sources["denominator"] = denominator_source
             severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(
@@ -2288,7 +2312,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK和微盘成交额规则只做清仓警示，不参与仓位计算、不触发自动降仓；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v1.6/v1.8未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2331,18 +2355,18 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🔴 清仓触发" if micro_on else "未触发"
+        micro_mark = "🔴 警示触发" if micro_on else "未触发"
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径清仓提醒: **{micro_mark}** | "
+            f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；触发后微盘策略清仓。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v1.6/v1.8未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径清仓提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认清仓条件。{suffix}\n")
+        w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
@@ -4686,6 +4710,37 @@ def _us_mix_display_context(close_df, row_idx, ranking_codes, scale, prev_risky_
     }
 
 
+def _write_subb_official_leg_window_breakdown(write, mix_ctx, scale, title="官方腿窗口拆分"):
+    rows = [
+        row for row in (mix_ctx or {}).get("mix_rows", [])
+        if row.get("mix_selected") or abs(float(row.get("mix_weight", 0.0) or 0.0)) >= 0.001
+    ]
+    if not rows:
+        return
+    lb_labels = [f"{lb}日" for lb in US_ROT_LBS]
+    boosted_live = sorted(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_FUTURES)
+    write(f"**{title}（官方腿目标 = {' + '.join(lb_labels)}窗口权重 / {len(US_ROT_LBS)}）:**\n\n")
+    write(
+        f"Model B scale = **{scale:.2f}x**；scale>1时仅放大"
+        f" **{', '.join(boosted_live)}** 自身窗口权重，EMXC/PDBC等非杠杆资产不承接放大缺口。\n\n"
+    )
+    write(
+        f"| ETF | {US_ROT_LBS[0]}日窗口 | {US_ROT_LBS[1]}日窗口 | {US_ROT_LBS[2]}日窗口 | "
+        "平均=官方腿目标 | 入选窗口 |\n"
+    )
+    write("|:-|------:|------:|------:|------:|:-|\n")
+    for row in rows:
+        per_lb_act = row.get("per_lb_act", {})
+        window_weights = [float(per_lb_act.get(lb, 0.0) or 0.0) for lb in US_ROT_LBS]
+        selected_lbs = [str(lb) for lb, weight in zip(US_ROT_LBS, window_weights) if abs(weight) >= 0.001]
+        selected_text = "/".join(selected_lbs) if selected_lbs else "—"
+        write(
+            f"| {row['live_name']} | {window_weights[0]:.1%} | {window_weights[1]:.1%} | "
+            f"{window_weights[2]:.1%} | {float(row.get('mix_weight', 0.0) or 0.0):.1%} | {selected_text} |\n"
+        )
+    write("\n")
+
+
 def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_THRESHOLD,
                         min_turnover=US_ROT_MIN_TURNOVER,
                         threshold=US_ROT_REBALANCE_THRESHOLD,
@@ -5271,6 +5326,36 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
             "calmar": calmar, "win_rate": win_rate, "years": years,
             "total_return": total_return, "yearly": yearly}
 
+
+def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
+    period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
+    if len(period) == 0:
+        return pd.Series(dtype=float)
+    return period.groupby(period.index.to_period("M")).apply(lambda x: (1 + x).prod() - 1)
+
+
+
+def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
+    values = []
+    for nav in nav_series.values():
+        s = pd.to_numeric(pd.Series(nav), errors="coerce").dropna()
+        s = s[s > 0]
+        if len(s) > 0:
+            values.append(s)
+    if not values:
+        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        return False
+    all_values = pd.concat(values)
+    min_nav = float(all_values.min())
+    max_nav = float(all_values.max())
+    spread = max_nav / min_nav if min_nav > 0 else 1.0
+    if spread >= spread_threshold:
+        ax.set_yscale("log")
+        ax.set_ylabel("NAV (start=1.0, log scale)", fontsize=11)
+        return True
+    ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+    return False
+
 def beijing_now():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc)
@@ -5296,6 +5381,18 @@ def _is_cn_unconfirmed_at(bj):
     return session_start <= bj < session_close
 
 
+def _is_cn_today_preclose_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return bj < session_close
+
+def _can_use_cn_realtime_snapshot_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    return bj >= session_start
+
 def is_cn_unconfirmed_intraday_snapshot():
     bj = beijing_now()
     return _is_cn_unconfirmed_at(bj), bj
@@ -5303,16 +5400,16 @@ def is_cn_unconfirmed_intraday_snapshot():
 
 def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
     if bj_now is None:
-        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
-    else:
-        cn_unconfirmed = _is_cn_unconfirmed_at(bj_now)
+        bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if data_date is None:
         return False
     return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
 
 
 def _drop_cn_unconfirmed_today(df):
-    cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if df is None or len(df) == 0 or not cn_unconfirmed:
         return df
     today = bj_now.date()
@@ -5968,6 +6065,26 @@ def _dk_leg_name(short_name):
 def _dk_pair_display(pair):
     return "/".join(_dk_leg_name(p) for p in str(pair).split("/")) if pair != "none" else "none"
 
+
+def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
+    pair = "none" if pair is None else str(pair)
+    if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
+        return ""
+    allowed = "、".join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)
+    if pair in ADK_WEAK_PAIRS:
+        return (
+            f"⚠️ **ADK弱配对警示:** {label} **{_dk_pair_display(pair)}** 属于弱配对，不在4队白名单内；"
+            f"4队白名单为 {allowed}。仅警示，不自动过滤或改仓。"
+            + chr(10)
+        )
+    invalid = "、".join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)
+    return (
+        f"⛔ **ADK无效配对警示:** {label} **{_dk_pair_display(pair)}** 属于无效配对，不在4队白名单内；"
+        f"4队白名单为 {allowed}。无效配对为 {invalid}。仅警示，不自动过滤或改仓。"
+        + chr(10)
+    )
+
+
 def _dk_pos_str(holding_str):
     """将DK持仓编码转为可读描述。"""
     info = parse_dk_holding(holding_str)
@@ -6011,12 +6128,14 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
         cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
 
-    effective_pos = cutoff_pos
-    if "is_signal" in cn_result.columns:
-        signal_flags = cn_result["is_signal"].iloc[:cutoff_pos + 1].fillna(False).astype(bool).to_numpy()
-        signal_positions = np.flatnonzero(signal_flags)
-        if len(signal_positions) > 0:
-            effective_pos = int(signal_positions[-1])
+    if "holding" in cn_result.columns:
+        holding_s = cn_result["holding"].fillna("cash").astype(str)
+        effective_holding = holding_s.iloc[cutoff_pos]
+        effective_pos = cutoff_pos
+        while effective_pos > 0 and holding_s.iloc[effective_pos - 1] == effective_holding:
+            effective_pos -= 1
+    else:
+        effective_pos = cutoff_pos
 
     current_date = cn_result.index[current_pos]
     effective_date = cn_result.index[effective_pos]
@@ -7582,7 +7701,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
         elif re.search(r'表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
             ranges = self._parse_all_dates_with_llm_fallback(query)
             if len(ranges) <= 1:
-                self._handle_nav_chart(query, chart_only=True)
                 self._handle_performance(query)
             else:
                 for r in ranges:
@@ -8010,6 +8128,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"**当前已生效Top-1持仓:** **{_dk_effective_name}**（对应 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
             if _dk_intraday:
                 w(f"**当前已确认Top-1配对/方向:** **{_dk_pair_display(_dk_effective_pair)}** | 方向 {_dk_effective_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_effective_pair, "今日Top-1"))
                 w("今日盘中，今日收盘信号未确认；盘中假设信号仅在“实时信号”中显示\n")
             else:
                 if dk_rank_today and hypo_dk == dk_current:
@@ -8017,6 +8136,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 else:
                     w(f"**今日收盘信号:** **切换为 {_dk_latest_name}**（{_dk_latest_issue_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**今日Top-1配对/方向:** **{_dk_pair_display(_dk_latest_pair)}** | 方向 {_dk_latest_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(_dk_latest_pair, "今日Top-1"))
             if _dk_intraday:
                 w("盘中是否要按今日收盘价执行，请看“实时信号”里的实时Top-3。\n")
             # ── DK vol-scaling 杠杆显示 ──
@@ -8069,8 +8189,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             _write_volume_warning_panel(msg, compact=True)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
@@ -8300,6 +8420,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         f"(DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, "
                         f"TLT {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('tlt_mom', np.nan):+.2%})\n"
                     )
+                    _write_subb_official_leg_window_breakdown(w, _us_sig_mix_ctx, _us_sig_scale)
                     w(f"\n**\u6ce2\u52a8\u7387\u7f29\u653e** {_us_sig_scale:.2f}x | \u4e0a\u6b21\u786e\u8ba4: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
                         w(f" (>1: \u4ec5\u653e\u5927US_ROT_FUTURES(QQQM/GLDM)\u81ea\u8eab\u6743\u91cd\uff0c\u4e0a\u9650{US_ROT_MAX_LEV:.1f}x)\n")
@@ -8556,6 +8677,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 else:
                     w(f"**若现在收盘:** **切换为 {_dk_pos_str(hypo_dk)}**（今日 {dk_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**若现在收盘的Top-1配对/方向:** **{_dk_pair_display(dk_hypo_top_pair)}** | 方向 {dk_hypo_direction:+d}\n")
+                w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, "今日Top-1"))
             # ── DK vol-scaling 杠杆显示 (实时) ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
@@ -8587,8 +8709,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             _write_volume_warning_panel(msg, compact=False)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
@@ -8660,6 +8782,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_live, us_scale)
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
                 w("假设收盘信号:\n\n| ETF | 持仓 | 信号 | 变动 |\n|:-|--------:|--------:|-----:|\n")
@@ -8798,6 +8921,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
+            w(f"| ADK四对白名单 | **{len(ADK_PRIMARY_PROFIT_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}；弱/无效Top-1仅触发警示，不自动过滤 |\n")
+            w(f"| ADK弱配对 | **{len(ADK_WEAK_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)} |\n")
+            w(f"| ADK无效配对 | **{len(ADK_INVALID_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)} |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
             w(f"| 斜率拟合窗口 | **{CN_DK_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 波动率缩放目标 | **{CN_DK_TARGET_VOL:.0%}** | 目标年化波动率 |\n")
@@ -8860,10 +8986,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量清仓提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，宽口径中证2000+创业板同时触发后应清仓；当前V7.2面板提示，不自动改写微盘独立脚本仓位 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
@@ -8926,7 +9052,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 if code in cn_close_with_bond.columns:
                     bias_mom_lp[code] = calc_bias_momentum(cn_close_with_bond[code])
                     r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
-            _cn_params_intraday = cn_open and cn_data_is_today and len(cn_result) >= 2
+            _cn_params_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _effective_cutoff_idx = -2 if _cn_params_intraday else -1
             _suba_rows, _suba_meta = _build_suba_momentum_rank_rows(
                 cn_result, bias_mom_lp, r2_lp, all_codes_lp,
@@ -8937,7 +9063,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
             _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
             w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
-            w("生效列 = 最近一次Sub-A确认信号；当前列 = 最新实时/收盘快照，用来看动量衰减。\n\n")
+            w("生效列 = 当前已生效持仓开始确认日；当前列 = 最新实时/收盘快照，用来看持仓动量变化。\n\n")
             if _cn_params_intraday:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
             else:
@@ -9032,6 +9158,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| ADK四对白名单 | **{'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}** |\n")
+            w(f"| ADK弱配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)}** |\n")
+            w(f"| ADK无效配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)}** |\n")
+            w(f"| 弱/无效Top-1 | **仅警示，不自动过滤** |\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
@@ -9077,6 +9207,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w(f"| 实际杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
             w(f"| 配对切换 | {'是' if dk_pair_changed_lp else '否'} |\n")
             w(f"| 方向切换 | {'是' if dk_direction_changed_lp else '否'} |\n")
+            _dk_lp_warning = _dk_top_pair_whitelist_warning(dk_top_pair_lp, "今日Top-1")
+            if _dk_lp_warning:
+                w("\n" + _dk_lp_warning)
             if dk_rank_current_lp:
                 w("\n**① 当前已生效Top-3配对:**\n\n")
                 w(f"| 排名 | 配对 | 生效分数 | 今日分数 | 方向/持仓 |\n")
@@ -9093,6 +9226,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 w(f"| 今日Top-1配对 | **{dk_hypo_pair_lp}** |\n")
                 w(f"| 今日方向 | **{dk_hypo_dir_lp:+d}** |\n")
                 w(f"| 今日假设持仓 | **{_dk_pos_str(dk_hypo_holding_lp)}** |\n")
+                _dk_hypo_warning = _dk_top_pair_whitelist_warning(dk_hypo_pair_lp, "今日Top-1")
+                if _dk_hypo_warning:
+                    w("\n" + _dk_hypo_warning)
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[-1]
@@ -9260,6 +9396,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_params, us_scale)
             hist_us = us_rot_result["return"].values
             if len(hist_us) >= US_ROT_VOL_WINDOW:
                 us_rv = np.std(hist_us[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
@@ -9541,7 +9678,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
         ax.set_title(
             f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
             fontsize=14, fontweight='bold')
-        ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+        _apply_nav_axis_scale(ax, nav_series)
         ax.legend(loc='best', fontsize=10, framealpha=0.9)
         ax.grid(True, alpha=0.3)
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -9598,40 +9735,35 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
-        cn_monthly = cn_result["return"].groupby(cn_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        dk_monthly = cn_dk_result["return"].groupby(cn_dk_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        us_rot_monthly = us_rot_result["return"].groupby(us_rot_result.index.to_period("M")).apply(
-            lambda x: (1+x).prod()-1)
-        all_periods = cn_monthly.index.intersection(dk_monthly.index).intersection(
-            us_rot_monthly.index)
-        if len(all_periods) == 0:
-            raise poe.BotError("PV三策略组合(不含微盘)没有重叠的月度数据")
-        aligned = pd.DataFrame({
-            "Sub-A": cn_monthly.reindex(all_periods),
-            "Sub-A-DK": dk_monthly.reindex(all_periods),
-            "Sub-B": us_rot_monthly.reindex(all_periods),
-        }).dropna()
-        w = _performance_combo_weights()
-        _strat_cols = PERFORMANCE_COMBO_ORDER
-        _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
-        _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
-        _nav_comb = _nav_comb / _nav_comb.iloc[0]
-        aligned["Combined"] = _nav_comb.pct_change()
-        aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
-        start_period = start_date.to_period("M")
-        end_period = end_date.to_period("M")
-        mask = (aligned.index >= start_period) & (aligned.index <= end_period)
-        filtered = aligned[mask]
-        cn_monthly_period = cn_monthly[
-            (cn_monthly.index >= start_period) & (cn_monthly.index <= end_period)]
-        dk_monthly_period = dk_monthly[
-            (dk_monthly.index >= start_period) & (dk_monthly.index <= end_period)]
-        us_monthly_period = us_rot_monthly[
-            (us_rot_monthly.index >= start_period) & (us_rot_monthly.index <= end_period)]
+        cn_daily_period = cn_result["return"][
+            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
+        dk_daily_period = cn_dk_result["return"][
+            (cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
+        us_daily_period = us_rot_result["return"][
+            (us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
+        cn_monthly_period = _monthly_returns_from_daily_window(cn_result["return"], start_date, end_date)
+        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result["return"], start_date, end_date)
+        us_monthly_period = _monthly_returns_from_daily_window(us_rot_result["return"], start_date, end_date)
+        all_periods = cn_monthly_period.index.intersection(dk_monthly_period.index).intersection(
+            us_monthly_period.index)
+        if len(all_periods) > 0:
+            aligned = pd.DataFrame({
+                "Sub-A": cn_monthly_period.reindex(all_periods),
+                "Sub-A-DK": dk_monthly_period.reindex(all_periods),
+                "Sub-B": us_monthly_period.reindex(all_periods),
+            }).dropna()
+            w = _performance_combo_weights()
+            _strat_cols = PERFORMANCE_COMBO_ORDER
+            _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
+            _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
+            _nav_comb = _nav_comb / _nav_comb.iloc[0]
+            aligned["Combined"] = _nav_comb.pct_change()
+            aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
+        else:
+            aligned = pd.DataFrame(columns=["Sub-A", "Sub-A-DK", "Sub-B", "Combined"])
+        filtered = aligned
         if len(cn_monthly_period) < 1 and len(us_monthly_period) < 1:
-            raise poe.BotError(f"在 {start_date.strftime('%Y-%m')} 到 {end_date.strftime('%Y-%m')} 期间没有数据")
+            raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间没有数据")
         metrics = {}
         if len(cn_monthly_period) >= 1:
             metrics["Sub-A"] = calc_monthly_metrics(cn_monthly_period)
@@ -9641,8 +9773,6 @@ class CombinedStrategyV72(CombinedStrategyBase):
             metrics["Sub-B"] = calc_monthly_metrics(us_monthly_period)
         if len(filtered) >= 1:
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
-        cn_daily_period = cn_result["return"][
-            (cn_result.index >= start_date) & (cn_result.index <= end_date)]
         if len(cn_daily_period) > 1 and "Sub-A" in metrics:
             nav_a = (1 + cn_daily_period).cumprod()
             metrics["Sub-A"]["max_dd"] = ((nav_a - nav_a.cummax()) / nav_a.cummax()).min() * 100
@@ -9801,7 +9931,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
             ax.set_title(
                 f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
                 fontsize=14, fontweight='bold')
-            ax.set_ylabel("NAV (start=1.0)", fontsize=11)
+            _apply_nav_axis_scale(ax, nav_series)
             ax.legend(loc='best', fontsize=10, framealpha=0.9)
             ax.grid(True, alpha=0.3)
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))

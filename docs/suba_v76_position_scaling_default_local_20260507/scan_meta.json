@@ -1,0 +1,156 @@
+{
+  "script": "mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_position_scaling_default_local_20260507",
+  "combos": [
+    {
+      "ma_window": 60,
+      "slope_window": 20,
+      "r2_window": 20,
+      "r2_threshold": 0.2,
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    }
+  ],
+  "scale_variants": [
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    }
+  ],
+  "modes": [
+    "formal"
+  ],
+  "elapsed_sec": 238.11975249999523
+}

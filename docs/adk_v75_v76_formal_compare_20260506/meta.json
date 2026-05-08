@@ -1,0 +1,216 @@
+{
+  "V7.5": {
+    "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.5 plus.py",
+    "audit": {
+      "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.5 plus.py",
+      "entrypoint": "formal DK path: DK fetchers -> run_dk_strategy() -> DK overlays -> _rebuild_dk_effective_execution_costs()",
+      "data_kind": "A-share price indexes for Sub-A-DK",
+      "source_priority": [
+        "EastMoney",
+        "csindex",
+        "Sina"
+      ],
+      "sources": {
+        "ZZ1000": {
+          "idx_code": "000852",
+          "secid": "1.000852",
+          "source": "EastMoney",
+          "column": "DK_ZZ1000"
+        },
+        "SZ50": {
+          "idx_code": "000016",
+          "secid": "1.000016",
+          "source": "EastMoney",
+          "column": "DK_SZ50"
+        },
+        "HS300": {
+          "idx_code": "000300",
+          "secid": "1.000300",
+          "source": "EastMoney",
+          "column": "DK_HS300"
+        },
+        "ZZ500": {
+          "idx_code": "000905",
+          "secid": "1.000905",
+          "source": "EastMoney",
+          "column": "DK_ZZ500"
+        },
+        "CYB": {
+          "idx_code": "399006",
+          "secid": "0.399006",
+          "source": "EastMoney",
+          "column": "DK_CYB"
+        }
+      },
+      "raw_date_ranges": {
+        "ZZ1000": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "SZ50": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "HS300": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "ZZ500": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "CYB": {
+          "start": "2010-06-01",
+          "end": "2026-04-30",
+          "rows": 3864
+        }
+      },
+      "merged_start": "2010-06-01",
+      "merged_end": "2026-04-30",
+      "merged_rows": 3864,
+      "duplicate_dates": 0,
+      "columns": [
+        "DK_ZZ1000",
+        "DK_SZ50",
+        "DK_HS300",
+        "DK_ZZ500",
+        "DK_CYB"
+      ],
+      "official_launch_dates": {
+        "SZ50": "2004-01-02",
+        "HS300": "2005-04-08",
+        "ZZ500": "2007-01-15",
+        "ZZ1000": "2014-10-17",
+        "CYB": "2010-06-01"
+      },
+      "formal_full5_valid_start": "2014-10-17",
+      "return_column": "return",
+      "cost_model": "CN_DK_COMMISSION two-leg execution cost, then effective long/short turnover rebuild after overlays",
+      "timing": "pair score uses prior close through shifted signals; returns are close-to-close spread returns with next-day position"
+    },
+    "constants": {
+      "version": "V7.5",
+      "start": "2010-11-22",
+      "end": "2026-04-30",
+      "rows": 3751,
+      "volume_policy": "warning_only",
+      "volume_clear_scale": null,
+      "volume_active_days": 0,
+      "risk_gate_enabled": false,
+      "risk_gate_days": 0,
+      "target_vol": 0.2,
+      "scale_threshold": 0.1
+    }
+  },
+  "V7.6": {
+    "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+    "audit": {
+      "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+      "entrypoint": "formal DK path: DK fetchers -> run_dk_strategy() -> DK overlays -> _rebuild_dk_effective_execution_costs()",
+      "data_kind": "A-share price indexes for Sub-A-DK",
+      "source_priority": [
+        "EastMoney",
+        "csindex",
+        "Sina"
+      ],
+      "sources": {
+        "ZZ1000": {
+          "idx_code": "000852",
+          "secid": "1.000852",
+          "source": "EastMoney",
+          "column": "DK_ZZ1000"
+        },
+        "SZ50": {
+          "idx_code": "000016",
+          "secid": "1.000016",
+          "source": "EastMoney",
+          "column": "DK_SZ50"
+        },
+        "HS300": {
+          "idx_code": "000300",
+          "secid": "1.000300",
+          "source": "EastMoney",
+          "column": "DK_HS300"
+        },
+        "ZZ500": {
+          "idx_code": "000905",
+          "secid": "1.000905",
+          "source": "EastMoney",
+          "column": "DK_ZZ500"
+        },
+        "CYB": {
+          "idx_code": "399006",
+          "secid": "0.399006",
+          "source": "EastMoney",
+          "column": "DK_CYB"
+        }
+      },
+      "raw_date_ranges": {
+        "ZZ1000": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "SZ50": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "HS300": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "ZZ500": {
+          "start": "2005-01-04",
+          "end": "2026-04-30",
+          "rows": 5178
+        },
+        "CYB": {
+          "start": "2010-06-01",
+          "end": "2026-04-30",
+          "rows": 3864
+        }
+      },
+      "merged_start": "2010-06-01",
+      "merged_end": "2026-04-30",
+      "merged_rows": 3864,
+      "duplicate_dates": 0,
+      "columns": [
+        "DK_ZZ1000",
+        "DK_SZ50",
+        "DK_HS300",
+        "DK_ZZ500",
+        "DK_CYB"
+      ],
+      "official_launch_dates": {
+        "SZ50": "2004-01-02",
+        "HS300": "2005-04-08",
+        "ZZ500": "2007-01-15",
+        "ZZ1000": "2014-10-17",
+        "CYB": "2010-06-01"
+      },
+      "formal_full5_valid_start": "2014-10-17",
+      "return_column": "return",
+      "cost_model": "CN_DK_COMMISSION two-leg execution cost, then effective long/short turnover rebuild after overlays",
+      "timing": "pair score uses prior close through shifted signals; returns are close-to-close spread returns with next-day position"
+    },
+    "constants": {
+      "version": "V7.6",
+      "start": "2010-11-22",
+      "end": "2026-04-30",
+      "rows": 3751,
+      "volume_policy": "formal_clear",
+      "volume_clear_scale": 0.0,
+      "volume_active_days": 336,
+      "risk_gate_enabled": true,
+      "risk_gate_days": 511,
+      "target_vol": 0.2,
+      "scale_threshold": 0.1
+    }
+  }
+}

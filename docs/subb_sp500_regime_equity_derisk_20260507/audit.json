@@ -1,0 +1,237 @@
+{
+  "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\subb_sp500_regime_equity_derisk_20260507",
+  "classification": "research overlay replay on formal Sub-B baseline stream",
+  "equity_assets_derisked": [
+    "QQQ",
+    "EMXC",
+    "EFA"
+  ],
+  "cash_destination": "BIL",
+  "baseline_audit": {
+    "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+    "entrypoint": "Sub-B formal path: production US rotation data construction -> run_us_rotation_mix() official macro-gated leg -> run_subb_v75_ema_base7_rotation() EMA leg -> blend_subb_v75_results() -> optional apply_vol_regime_overlay()",
+    "data_source": "fetch_yahoo() production path with Yahoo/Stooq fallback",
+    "sources": {
+      "BIL": "Yahoo",
+      "BTC-USD": "Yahoo",
+      "DBC": "Yahoo",
+      "DBMF": "Yahoo",
+      "EEM": "Yahoo",
+      "EFA": "Yahoo",
+      "EMXC": "Yahoo",
+      "GLD": "Yahoo",
+      "IBIT": "Yahoo",
+      "KMLM": "Yahoo",
+      "QQQ": "Yahoo",
+      "SPY": "Yahoo",
+      "TLT": "Yahoo",
+      "UUP": "Yahoo"
+    },
+    "raw_ranges": {
+      "BIL": {
+        "start": "2007-05-30",
+        "end": "2026-05-06",
+        "rows": 4765,
+        "has_open": true
+      },
+      "BTC-USD": {
+        "start": "2014-09-17",
+        "end": "2026-05-07",
+        "rows": 4251,
+        "has_open": true
+      },
+      "DBC": {
+        "start": "2006-02-06",
+        "end": "2026-05-06",
+        "rows": 5094,
+        "has_open": true
+      },
+      "DBMF": {
+        "start": "2019-05-08",
+        "end": "2026-05-06",
+        "rows": 1759,
+        "has_open": true
+      },
+      "EEM": {
+        "start": "2003-04-14",
+        "end": "2026-05-06",
+        "rows": 5803,
+        "has_open": true
+      },
+      "EFA": {
+        "start": "2003-01-02",
+        "end": "2026-05-06",
+        "rows": 5873,
+        "has_open": true
+      },
+      "EMXC": {
+        "start": "2017-07-26",
+        "end": "2026-05-06",
+        "rows": 2207,
+        "has_open": true
+      },
+      "GLD": {
+        "start": "2004-11-18",
+        "end": "2026-05-06",
+        "rows": 5399,
+        "has_open": true
+      },
+      "IBIT": {
+        "start": "2024-01-11",
+        "end": "2026-05-06",
+        "rows": 581,
+        "has_open": true
+      },
+      "KMLM": {
+        "start": "2020-12-02",
+        "end": "2026-05-06",
+        "rows": 1362,
+        "has_open": true
+      },
+      "QQQ": {
+        "start": "2003-01-02",
+        "end": "2026-05-06",
+        "rows": 5873,
+        "has_open": true
+      },
+      "SPY": {
+        "start": "2003-01-02",
+        "end": "2026-05-06",
+        "rows": 5873,
+        "has_open": true
+      },
+      "TLT": {
+        "start": "2003-01-02",
+        "end": "2026-05-06",
+        "rows": 5873,
+        "has_open": true
+      },
+      "UUP": {
+        "start": "2007-03-01",
+        "end": "2026-05-06",
+        "rows": 4827,
+        "has_open": true
+      }
+    },
+    "merged_start": "2007-05-30",
+    "merged_end": "2026-05-06",
+    "merged_rows": 4765,
+    "duplicate_dates": 0,
+    "weekend_rows": 0,
+    "columns": [
+      "QQQ",
+      "EFA",
+      "GLD",
+      "TLT",
+      "DBC",
+      "BIL",
+      "EMXC",
+      "KMLM",
+      "DBMF",
+      "BTC-USD",
+      "UUP",
+      "SPY"
+    ],
+    "open_map_count": 14,
+    "missing_open": [],
+    "return_column": "return",
+    "cost_model": "US_ROT_COMMISSION applied to leg execution, blend execution, and VolReg transition turnover",
+    "timing": "T close signal, pending target executed at T+1 adjusted open when us_open is available",
+    "emxc_splice": "EEM proxy before scaled EMXC from 2017-08-01",
+    "btc_splice": "BTC-USD replaced by IBIT-spliced series where IBIT exists; BTC joined on US ETF calendar only"
+  },
+  "constants": {
+    "US_ROT_POOL": [
+      "QQQ",
+      "EMXC",
+      "EFA",
+      "GLD",
+      "TLT",
+      "DBC",
+      "BTC-USD",
+      "UUP",
+      "DBMF",
+      "KMLM"
+    ],
+    "US_ROT_BASE_POOL": [
+      "QQQ",
+      "EMXC",
+      "EFA",
+      "GLD",
+      "TLT",
+      "DBC",
+      "BTC-USD"
+    ],
+    "US_ROT_LBS": [
+      160,
+      260,
+      390
+    ],
+    "US_ROT_LB": 260,
+    "US_ROT_ABS_THRESHOLD": 0.04,
+    "US_ROT_REBALANCE_THRESHOLD": 1.05,
+    "US_ROT_MIN_TURNOVER": 0.0,
+    "SUBB_V75_OFFICIAL_WEIGHT": 0.25,
+    "SUBB_V75_EMA_WEIGHT": 0.75,
+    "SUBB_V75_EMA_HALF_LIFE": 100,
+    "SUBB_V75_EMA_ABS_THRESHOLD": 0.16,
+    "SUBB_V75_EMA_VOL_MODE": "ewma6m_1vol",
+    "SUBB_V75_EMA_VOL_HALFLIFE_DAYS": 126,
+    "US_ROT_TARGET_VOL": 0.25,
+    "US_ROT_VOL_WINDOW": 40,
+    "US_ROT_VOL_LB": 20,
+    "US_ROT_MAX_LEV": 2.0,
+    "US_ROT_VOLREG_ENABLED": true,
+    "US_ROT_VOLREG_SHORT_W": 10,
+    "US_ROT_VOLREG_LONG_W": 250,
+    "US_ROT_VOLREG_THRESHOLD": 2.0,
+    "US_ROT_VOLREG_EXIT_THRESHOLD": 1.6,
+    "US_ROT_COMMISSION": 0.001,
+    "US_ROT_EMXC_BT_START": "2017-08-01T00:00:00",
+    "US_ROT_EMXC_BT_PROXY": "EEM"
+  },
+  "overlay_cost_model": "Baseline Sub-B costs are preserved. Additional overlay cost is max(overlay turnover - baseline effective turnover, 0) * US_ROT_COMMISSION.",
+  "risk_sources": {
+    "baa10y_long_proxy": {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\新策略学习\\sp500_risk_regime_video_aligned_baa10y_output.csv",
+      "rows": 1793,
+      "start": "1991-12-20",
+      "end": "2026-04-24",
+      "sample_start": "2008-12-15",
+      "regime_counts": {
+        "1-简单模式": 1,
+        "2-普通模式": 318,
+        "3-困难模式": 818,
+        "4-噩梦模式": 454,
+        "5-地狱模式": 131,
+        "6-炼狱模式": 71
+      },
+      "credit_proxy": [
+        "baa10y"
+      ],
+      "credit_series": [
+        "BAA10Y"
+      ]
+    },
+    "hyoas_live_window": {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\新策略学习\\sp500_risk_regime_video_aligned_hyoas_output.csv",
+      "rows": 51,
+      "start": "2025-05-09",
+      "end": "2026-04-24",
+      "sample_start": "2025-05-12",
+      "regime_counts": {
+        "2-普通模式": 1,
+        "3-困难模式": 38,
+        "4-噩梦模式": 11,
+        "5-地狱模式": 1
+      },
+      "credit_proxy": [
+        "hy_oas"
+      ],
+      "credit_series": [
+        "BAMLH0A0HYM2"
+      ]
+    }
+  }
+}

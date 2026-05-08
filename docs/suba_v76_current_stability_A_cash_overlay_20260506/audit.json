@@ -1,0 +1,63 @@
+{
+  "script": "mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_current_stability_A_cash_overlay_20260506",
+  "decays": [
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7
+  ],
+  "recoveries": [
+    0.7,
+    0.75,
+    0.8,
+    0.85,
+    0.9,
+    0.95,
+    1.0
+  ],
+  "include_off": true,
+  "fixed_params": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.2,
+    "CN_SWITCH_BUFFER": 1.03,
+    "CN_ENTRY_INITIAL_FRACTION": 0.5,
+    "CN_ENTRY_WAIT_DAYS": null,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_SCALE_THRESHOLD": 0.0,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENTER": 0.36,
+    "CN_SA_SAME_SIDE_OVERHEAT_EXIT": 0.34,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true
+  },
+  "data": {
+    "start": "2010-06-01",
+    "end": "2026-04-30",
+    "rows": 3865,
+    "duplicate_dates": 0,
+    "columns": [
+      "1.H20955",
+      "0.399606",
+      "1.H00016",
+      "1.H00852",
+      "1.H00905",
+      "1.H11077"
+    ],
+    "sources": {
+      "1.H20955": "csindex+Sina-proxy:1.000827",
+      "0.399606": "Sina",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905",
+      "1.H11077": "fetch_cn_kline via _add_cn_bond_column"
+    },
+    "volume_signal_start": "2000-01-01",
+    "volume_signal_end": "2026-04-30"
+  },
+  "elapsed_sec": 478.94195969999964
+}

@@ -1,0 +1,19 @@
+[V7.5] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.5 plus.py
+[V7.5] 1/4 emavolhl63
+[V7.5] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 63)
+[V7.5] 2/4 emavolhl126
+[V7.5] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 126)
+[V7.5] 3/4 emavolhl189
+[V7.5] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 189)
+[V7.5] 4/4 emavolhl252
+[V7.5] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 252)
+[V7.6] loading C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略\mnt_bot V 7.6 plus.py
+[V7.6] 1/4 emavolhl63
+[V7.6] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 63)
+[V7.6] 2/4 emavolhl126
+[V7.6] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 126)
+[V7.6] 3/4 emavolhl189
+[V7.6] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 189)
+[V7.6] 4/4 emavolhl252
+[V7.6] caching EMA leg (100, 0.16, 1.05, 0.0, 0.001, 0.25, 40, 20, 2.0, 252)
+done: docs\subb_v75_v76_parameter_stability_ema_volscale_20260507

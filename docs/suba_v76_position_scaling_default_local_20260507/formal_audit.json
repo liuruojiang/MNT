@@ -1,0 +1,189 @@
+{
+  "mode": "formal",
+  "script": "mnt_bot V 7.6 plus.py",
+  "combos": [
+    {
+      "ma_window": 60,
+      "slope_window": 20,
+      "r2_window": 20,
+      "r2_threshold": 0.2,
+      "switch_buffer": 1.03,
+      "entry_fraction": 0.5,
+      "entry_wait_days": null
+    }
+  ],
+  "scale_variants": [
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.275,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.3,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 60,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "scale_threshold": 0.1
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.0
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.05
+    },
+    {
+      "target_vol": 0.325,
+      "vol_window": 100,
+      "scale_threshold": 0.1
+    }
+  ],
+  "variant_count": 27,
+  "segments_per_variant": 5,
+  "mode_updates": null,
+  "fixed_params_after_mode": {
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MIN_LEV": 0.1,
+    "CN_MAX_LEV": 1.5,
+    "CN_SCALE_THRESHOLD": 0.0,
+    "CN_SA_CASH_OVERLAY_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true,
+    "CN_COMMISSION": 0.001
+  },
+  "data": {
+    "start": "2010-06-01",
+    "end": "2026-05-06",
+    "rows": 3866,
+    "duplicate_dates": 0,
+    "columns": [
+      "1.H20955",
+      "0.399606",
+      "1.H00016",
+      "1.H00852",
+      "1.H00905",
+      "1.H11077"
+    ],
+    "sources": {
+      "1.H20955": "csindex+Sina-proxy:1.000827",
+      "0.399606": "Sina",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905",
+      "1.H11077": "fetch_cn_kline via _add_cn_bond_column"
+    }
+  },
+  "elapsed_sec": 136.91063429999485
+}

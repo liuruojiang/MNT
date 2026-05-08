@@ -1,0 +1,28 @@
+{
+  "script": "mnt_bot V 7.6 plus.py",
+  "out_dir": "docs\\suba_v76_stability_A_r2_20260506",
+  "pairs": [
+    {
+      "ma_window": 60,
+      "slope_window": 20
+    }
+  ],
+  "r2_windows": [
+    10,
+    15,
+    20,
+    30
+  ],
+  "r2_thresholds": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "modes": [
+    "formal"
+  ],
+  "elapsed_sec": 140.28256109999984
+}
