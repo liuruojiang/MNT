@@ -177,7 +177,7 @@ CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
 
-MICROCAP_VOLUME_POLICY = "warning_manual_clear"
+MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
 MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
@@ -262,13 +262,25 @@ CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
 
-ADK_PRIMARY_PROFIT_PAIRS = {
-    "HS300/CYB",
+ADK_PRIMARY_PROFIT_PAIR_ORDER = (
     "HS300/ZZ500",
     "ZZ500/CYB",
     "SZ50/CYB",
     "SZ50/ZZ1000",
-}
+)
+ADK_PRIMARY_PROFIT_PAIRS = set(ADK_PRIMARY_PROFIT_PAIR_ORDER)
+ADK_WEAK_PAIR_ORDER = (
+    "HS300/CYB",
+)
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = (
+    "SZ50/HS300",
+    "SZ50/ZZ500",
+    "HS300/ZZ1000",
+    "ZZ500/ZZ1000",
+    "ZZ1000/CYB",
+)
+ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
 CN_DK_RISK_GATE_EXIT = 0.08
@@ -2297,7 +2309,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK和微盘成交额规则只做清仓警示，不参与仓位计算、不触发自动降仓；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v1.6/v1.8未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2340,18 +2352,18 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🔴 清仓触发" if micro_on else "未触发"
+        micro_mark = "🔴 警示触发" if micro_on else "未触发"
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径清仓提醒: **{micro_mark}** | "
+            f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；触发后微盘策略清仓。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v1.6/v1.8未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径清仓提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认清仓条件。{suffix}\n")
+        w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
@@ -4695,6 +4707,37 @@ def _us_mix_display_context(close_df, row_idx, ranking_codes, scale, prev_risky_
     }
 
 
+def _write_subb_official_leg_window_breakdown(write, mix_ctx, scale, title="官方腿窗口拆分"):
+    rows = [
+        row for row in (mix_ctx or {}).get("mix_rows", [])
+        if row.get("mix_selected") or abs(float(row.get("mix_weight", 0.0) or 0.0)) >= 0.001
+    ]
+    if not rows:
+        return
+    lb_labels = [f"{lb}日" for lb in US_ROT_LBS]
+    boosted_live = sorted(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_FUTURES)
+    write(f"**{title}（官方腿目标 = {' + '.join(lb_labels)}窗口权重 / {len(US_ROT_LBS)}）:**\n\n")
+    write(
+        f"Model B scale = **{scale:.2f}x**；scale>1时仅放大"
+        f" **{', '.join(boosted_live)}** 自身窗口权重，EMXC/PDBC等非杠杆资产不承接放大缺口。\n\n"
+    )
+    write(
+        f"| ETF | {US_ROT_LBS[0]}日窗口 | {US_ROT_LBS[1]}日窗口 | {US_ROT_LBS[2]}日窗口 | "
+        "平均=官方腿目标 | 入选窗口 |\n"
+    )
+    write("|:-|------:|------:|------:|------:|:-|\n")
+    for row in rows:
+        per_lb_act = row.get("per_lb_act", {})
+        window_weights = [float(per_lb_act.get(lb, 0.0) or 0.0) for lb in US_ROT_LBS]
+        selected_lbs = [str(lb) for lb, weight in zip(US_ROT_LBS, window_weights) if abs(weight) >= 0.001]
+        selected_text = "/".join(selected_lbs) if selected_lbs else "—"
+        write(
+            f"| {row['live_name']} | {window_weights[0]:.1%} | {window_weights[1]:.1%} | "
+            f"{window_weights[2]:.1%} | {float(row.get('mix_weight', 0.0) or 0.0):.1%} | {selected_text} |\n"
+        )
+    write("\n")
+
+
 def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_THRESHOLD,
                         min_turnover=US_ROT_MIN_TURNOVER,
                         threshold=US_ROT_REBALANCE_THRESHOLD,
@@ -6012,10 +6055,17 @@ def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
     pair = "none" if pair is None else str(pair)
     if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
         return ""
-    allowed = "、".join(_dk_pair_display(p) for p in sorted(ADK_PRIMARY_PROFIT_PAIRS))
+    allowed = "、".join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)
+    if pair in ADK_WEAK_PAIRS:
+        return (
+            f"⚠️ **ADK弱配对警示:** {label} **{_dk_pair_display(pair)}** 属于弱配对，不在4队白名单内；"
+            f"4队白名单为 {allowed}。仅警示，不自动过滤或改仓。"
+            + chr(10)
+        )
+    invalid = "、".join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)
     return (
-        f"⚠️ **ADK配对警示:** {label} **{_dk_pair_display(pair)}** 不在近10年主要盈利来源5对内；"
-        f"5对为 {allowed}。白名单外Top-1在近期回撤测试中可能拖累表现，请谨慎执行。"
+        f"⛔ **ADK无效配对警示:** {label} **{_dk_pair_display(pair)}** 属于无效配对，不在4队白名单内；"
+        f"4队白名单为 {allowed}。无效配对为 {invalid}。仅警示，不自动过滤或改仓。"
         + chr(10)
     )
 
@@ -8124,8 +8174,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             _write_volume_warning_panel(msg, compact=True)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
@@ -8355,6 +8405,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         f"(DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, "
                         f"TLT {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('tlt_mom', np.nan):+.2%})\n"
                     )
+                    _write_subb_official_leg_window_breakdown(w, _us_sig_mix_ctx, _us_sig_scale)
                     w(f"\n**\u6ce2\u52a8\u7387\u7f29\u653e** {_us_sig_scale:.2f}x | \u4e0a\u6b21\u786e\u8ba4: {last_confirmed_us_scale:.2f}x")
                     if _us_sig_scale > 1.0:
                         w(f" (>1: \u4ec5\u653e\u5927US_ROT_FUTURES(QQQM/GLDM)\u81ea\u8eab\u6743\u91cd\uff0c\u4e0a\u9650{US_ROT_MAX_LEV:.1f}x)\n")
@@ -8643,8 +8694,8 @@ class CombinedStrategyV72(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             _write_volume_warning_panel(msg, compact=False)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w("### Sub-B: 美股7ETF+通胀宏观3ETF\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
@@ -8716,6 +8767,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_live, us_scale)
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
                 w("假设收盘信号:\n\n| ETF | 持仓 | 信号 | 变动 |\n|:-|--------:|--------:|-----:|\n")
@@ -8854,6 +8906,9 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
+            w(f"| ADK四对白名单 | **{len(ADK_PRIMARY_PROFIT_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}；弱/无效Top-1仅触发警示，不自动过滤 |\n")
+            w(f"| ADK弱配对 | **{len(ADK_WEAK_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)} |\n")
+            w(f"| ADK无效配对 | **{len(ADK_INVALID_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)} |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
             w(f"| 斜率拟合窗口 | **{CN_DK_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 波动率缩放目标 | **{CN_DK_TARGET_VOL:.0%}** | 目标年化波动率 |\n")
@@ -8916,10 +8971,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量清仓提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，宽口径中证2000+创业板同时触发后应清仓；当前V7.2面板提示，不自动改写微盘独立脚本仓位 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
@@ -9088,6 +9143,10 @@ class CombinedStrategyV72(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| ADK四对白名单 | **{'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}** |\n")
+            w(f"| ADK弱配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)}** |\n")
+            w(f"| ADK无效配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)}** |\n")
+            w(f"| 弱/无效Top-1 | **仅警示，不自动过滤** |\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
@@ -9322,6 +9381,7 @@ class CombinedStrategyV72(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_params, us_scale)
             hist_us = us_rot_result["return"].values
             if len(hist_us) >= US_ROT_VOL_WINDOW:
                 us_rv = np.std(hist_us[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)

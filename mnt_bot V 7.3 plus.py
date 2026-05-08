@@ -177,7 +177,7 @@ CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
 
-MICROCAP_VOLUME_POLICY = "warning_manual_clear"
+MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
 MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
@@ -262,13 +262,25 @@ CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.10     # scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
 
-ADK_PRIMARY_PROFIT_PAIRS = {
-    "HS300/CYB",
+ADK_PRIMARY_PROFIT_PAIR_ORDER = (
     "HS300/ZZ500",
     "ZZ500/CYB",
     "SZ50/CYB",
     "SZ50/ZZ1000",
-}
+)
+ADK_PRIMARY_PROFIT_PAIRS = set(ADK_PRIMARY_PROFIT_PAIR_ORDER)
+ADK_WEAK_PAIR_ORDER = (
+    "HS300/CYB",
+)
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = (
+    "SZ50/HS300",
+    "SZ50/ZZ500",
+    "HS300/ZZ1000",
+    "ZZ500/ZZ1000",
+    "ZZ1000/CYB",
+)
+ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
 CN_DK_RISK_GATE_EXIT = 0.08
@@ -338,8 +350,8 @@ US_ROT_ABS_THRESHOLD = 0.04
 # 调仓阈值（参与交易决策）
 US_ROT_REBALANCE_THRESHOLD = 1.05  # V7.3沿用混合窗口1.05x挑战者保护，降低边界资产周度来回切换
 
-# V7.3 Sub-B: 50% official macro-gated leg + 50% EMA-ret base-7 leg.
-# The EMA leg intentionally excludes UUP/DBMF/KMLM even when the inflation gate is ON.
+# V7.3 Sub-B: 50% official macro-gated leg + 50% EMA-ret US_ROT_POOL leg.
+# The EMA leg ranks the same full pool, including UUP/DBMF/KMLM.
 # Its target-vol scale uses 6-month EWMA realized volatility; the official leg remains rolling 40d.
 SUBB_V73_OFFICIAL_WEIGHT = 0.50
 SUBB_V73_EMA_WEIGHT = 0.50
@@ -1058,7 +1070,7 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
     try:
         inflation = _load_inflation_pressure_snapshot()
         infl_state = "🟢 ON" if inflation["pressure_on"] else "OFF"
-        macro_action = "UUP/DBMF/KMLM 参与 Sub-B 候选池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不参与 Sub-B，只作参考"
+        macro_action = "UUP/DBMF/KMLM 参与 Sub-B 官方腿候选池；EMA腿始终参与全池" if inflation["pressure_on"] else "UUP/DBMF/KMLM 不进官方腿；EMA腿仍参与全池"
         w(
             f"通胀开关: **{infl_state}** | {macro_action} | "
             f"DBC {inflation['lookback']}日 {inflation['dbc_mom']:+.2%}, "
@@ -2299,7 +2311,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK和微盘成交额规则只做清仓警示，不参与仓位计算、不触发自动降仓；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v1.6/v1.8未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2342,18 +2354,18 @@ def _write_volume_warning_panel(msg, compact=False):
             "创业板",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
-        micro_mark = "🔴 清仓触发" if micro_on else "未触发"
+        micro_mark = "🔴 警示触发" if micro_on else "未触发"
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径清仓提醒: **{micro_mark}** | "
+            f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；触发后微盘策略清仓。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v1.6/v1.8未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径清仓提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认清仓条件。{suffix}\n")
+        w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
@@ -4617,7 +4629,7 @@ def _subb_official_scale_from_result(result_df, end_loc=None, include_current=Fa
 
 def _subb_v73_ema_snapshot(close_df, row_idx, scale, ranking_codes=None, prev_risky=None,
                            threshold=US_ROT_REBALANCE_THRESHOLD):
-    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_BASE_POOL)
+    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_POOL)
     score_row = _subb_v73_ema_score(close_df, SUBB_V73_EMA_HALF_LIFE).iloc[row_idx]
     vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
     raw_w = _us_raw_weights(
@@ -4909,8 +4921,8 @@ def run_subb_v73_ema_base7_rotation(
         threshold=US_ROT_REBALANCE_THRESHOLD,
         us_open=None,
         weight_assets=None):
-    """V7.3 EMA leg: base 7ETF only, with EWMA target-vol scaling."""
-    ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_BASE_POOL)
+    """V7.3 EMA leg: full US_ROT_POOL ranking with EWMA target-vol scaling."""
+    ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_POOL)
     score_df = _subb_v73_ema_score(close_df, half_life)
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     start_idx = max(half_life, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
@@ -5112,6 +5124,38 @@ def _write_subb_v73_leg_weight_table(write, result_df, row_key, title):
             f"{row['ema_raw']:.1%}→{row['ema_contrib']:.1%} | {row['final_weight']:.1%} |\n"
         )
     write("\n")
+
+
+def _write_subb_official_leg_window_breakdown(write, mix_ctx, scale, title="官方腿窗口拆分"):
+    rows = [
+        row for row in (mix_ctx or {}).get("mix_rows", [])
+        if row.get("mix_selected") or abs(float(row.get("mix_weight", 0.0) or 0.0)) >= 0.001
+    ]
+    if not rows:
+        return
+    lb_labels = [f"{lb}日" for lb in US_ROT_LBS]
+    boosted_live = sorted(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_FUTURES)
+    write(f"**{title}（官方腿目标 = {' + '.join(lb_labels)}窗口权重 / {len(US_ROT_LBS)}）:**\n\n")
+    write(
+        f"Model B scale = **{scale:.2f}x**；scale>1时仅放大"
+        f" **{', '.join(boosted_live)}** 自身窗口权重，EMXC/PDBC等非杠杆资产不承接放大缺口。\n\n"
+    )
+    write(
+        f"| ETF | {US_ROT_LBS[0]}日窗口 | {US_ROT_LBS[1]}日窗口 | {US_ROT_LBS[2]}日窗口 | "
+        "平均=官方腿目标 | 入选窗口 |\n"
+    )
+    write("|:-|------:|------:|------:|------:|:-|\n")
+    for row in rows:
+        per_lb_act = row.get("per_lb_act", {})
+        window_weights = [float(per_lb_act.get(lb, 0.0) or 0.0) for lb in US_ROT_LBS]
+        selected_lbs = [str(lb) for lb, weight in zip(US_ROT_LBS, window_weights) if abs(weight) >= 0.001]
+        selected_text = "/".join(selected_lbs) if selected_lbs else "—"
+        write(
+            f"| {row['live_name']} | {window_weights[0]:.1%} | {window_weights[1]:.1%} | "
+            f"{window_weights[2]:.1%} | {float(row.get('mix_weight', 0.0) or 0.0):.1%} | {selected_text} |\n"
+        )
+    write("\n")
+
 
 def _us_threshold_check(available_scores, prev_w, threshold):
     """Compare pure Top-3 vs threshold-filtered selection for display only."""
@@ -6360,10 +6404,17 @@ def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
     pair = "none" if pair is None else str(pair)
     if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
         return ""
-    allowed = "、".join(_dk_pair_display(p) for p in sorted(ADK_PRIMARY_PROFIT_PAIRS))
+    allowed = "、".join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)
+    if pair in ADK_WEAK_PAIRS:
+        return (
+            f"⚠️ **ADK弱配对警示:** {label} **{_dk_pair_display(pair)}** 属于弱配对，不在4队白名单内；"
+            f"4队白名单为 {allowed}。仅警示，不自动过滤或改仓。"
+            + chr(10)
+        )
+    invalid = "、".join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)
     return (
-        f"⚠️ **ADK配对警示:** {label} **{_dk_pair_display(pair)}** 不在近10年主要盈利来源5对内；"
-        f"5对为 {allowed}。白名单外Top-1在近期回撤测试中可能拖累表现，请谨慎执行。"
+        f"⛔ **ADK无效配对警示:** {label} **{_dk_pair_display(pair)}** 属于无效配对，不在4队白名单内；"
+        f"4队白名单为 {allowed}。无效配对为 {invalid}。仅警示，不自动过滤或改仓。"
         + chr(10)
     )
 
@@ -7444,9 +7495,9 @@ class CombinedStrategyBase:
         )
         us_rot_ema = run_subb_v73_ema_base7_rotation(
             us_rot_close,
-            base_codes=US_ROT_BASE_POOL,
+            base_codes=US_ROT_POOL,
             us_open=getattr(self, "_us_open", None),
-            weight_assets=US_ROT_BASE_POOL,
+            weight_assets=US_ROT_POOL,
         )
         us_rot_result = blend_subb_v73_results(us_rot_official, us_rot_ema)
         if US_ROT_VOLREG_ENABLED and "SPY" in us_rot_close.columns:
@@ -7555,7 +7606,7 @@ class CombinedStrategyBase:
             us_rot_close,
             -1,
             _subb_v73_ema_scale_from_result(us_rot_result),
-            ranking_codes=US_ROT_BASE_POOL,
+            ranking_codes=US_ROT_POOL,
             prev_risky=hypo_prev_ema_risky,
             threshold=US_ROT_REBALANCE_THRESHOLD,
         )
@@ -7818,7 +7869,7 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
-Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF轮动 - EMA腿VolScale使用6个月EWMA波动率；基础ETF如 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT；通胀开关ON时加入 UUP, DBMF, KMLM
+Sub-B: 官方宏观门控腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA同池候选腿{SUBB_V73_EMA_WEIGHT:.0%} - EMA腿VolScale使用6个月EWMA波动率；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
@@ -8481,11 +8532,11 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 w(f" | 目标: {CN_DK_TARGET_VOL:.0%}\n")
                 if "risk_gate_scale" in cn_dk_result.columns:
                     if _dk_gate_on_rt:
-                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        _dd_text = f" | 当前DD {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}" if not np.isnan(_dk_gate_dd_rt) else ""
                         w(f"🛡️ **风险闸门生效中:** 回撤触发后按 **{_dk_gate_scale_rt:.2f}x** 防守{_dd_text}\n")
                     else:
-                        _dd_text = f" | 原始策略DD: {_dk_gate_dd_rt:.1%}" if not np.isnan(_dk_gate_dd_rt) else ""
-                        w(f"🟢 **风险闸门关闭:** 触发阈值 {CN_DK_RISK_GATE_ENTER:.0%} / 恢复阈值 {CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
+                        _dd_text = f" | 当前DD {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}" if not np.isnan(_dk_gate_dd_rt) else ""
+                        w(f"🟢 **风险闸门关闭:** 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
                 if "same_side_overheat_scale" in cn_dk_result.columns:
                     _oh_text = f" | 当前同向乖离: {_dk_oh_abs_rt:.1%}" if not np.isnan(_dk_oh_abs_rt) else ""
                     if _dk_oh_on_rt:
@@ -8498,16 +8549,16 @@ class CombinedStrategyV73(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             _write_volume_warning_panel(msg, compact=True)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            w("### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n")
+            w(f"### Sub-B: 官方宏观门控{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V73_EMA_WEIGHT:.0%}(EWMA波动率)\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
-            w(f"V7.3混合: 官方宏观门控腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V73_EMA_HALF_LIFE}/阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V73_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V73_EMA_VOL_MODE}；下表权重为混合后的最终目标权重。\n")
+            w(f"V7.3混合: 官方宏观门控腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V73_EMA_HALF_LIFE}/阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V73_EMA_WEIGHT:.0%}；EMA腿使用US_ROT_POOL全池；EMA腿VolScale={SUBB_V73_EMA_VOL_MODE}；下表权重为混合后的最终目标权重。\n")
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
             _vr_cash = d.get("volreg_cash_today", False)
@@ -8693,9 +8744,6 @@ class CombinedStrategyV73(CombinedStrategyBase):
                         threshold=US_ROT_REBALANCE_THRESHOLD,
                         reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
                     )
-                    for _ctx_row in _us_sig_mix_ctx["mix_rows"] + _us_sig_mix_ctx["reference_rows"]:
-                        _ctx_row["mix_weight"] = float(_us_sig_w.get(_ctx_row["proxy"], 0.0))
-                        _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
                     # IBIT(参考) 行仅在未纳入排名池时显示；当前 V7.3 实盘口径中 IBIT 参与 Sub-B。
                     w(f"\n**信号日官方腿结果** ({_last_us_sig_date.strftime('%m-%d')} 收盘数据；130/260/390日等权混合，占Sub-B 50%):\n\n")
                     w("| ETF | 实际排名 | 130日动量 | 260日动量 | 390日动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n")
@@ -8724,7 +8772,8 @@ class CombinedStrategyV73(CombinedStrategyBase):
                         _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                         w(f"| 参考. {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
                     if _us_sig_mix_ctx["reference_rows"]:
-                        w("\n注: 通胀开关off时，UUP/DBMF/KMLM只显示参考，不参与Sub-B仓位计算。\n")
+                        w("\n注: 通胀开关off时，UUP/DBMF/KMLM不进入官方腿；EMA腿仍按US_ROT_POOL全池参与候选。\n")
+                    _write_subb_official_leg_window_breakdown(w, _us_sig_mix_ctx, _us_sig_scale)
                     _write_subb_v73_leg_weight_table(
                         w,
                         us_rot_result,
@@ -9025,10 +9074,10 @@ class CombinedStrategyV73(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             _write_volume_warning_panel(msg, compact=False)
+            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
-            w("### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n")
+            w(f"### Sub-B: 官方宏观门控{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V73_EMA_WEIGHT:.0%}(EWMA波动率)\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}")
             if us_open and us_data_is_today:
                 w(" ⚡盘中实时")
@@ -9039,7 +9088,7 @@ class CombinedStrategyV73(CombinedStrategyBase):
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
-            w(f"V7.3混合: 官方宏观门控腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V73_EMA_HALF_LIFE}/阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%}七ETF腿{SUBB_V73_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V73_EMA_VOL_MODE}；持仓表权重为混合后的最终目标权重。\n")
+            w(f"V7.3混合: 官方宏观门控腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA hl{SUBB_V73_EMA_HALF_LIFE}/阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V73_EMA_WEIGHT:.0%}；EMA腿使用US_ROT_POOL全池；EMA腿VolScale={SUBB_V73_EMA_VOL_MODE}；持仓表权重为混合后的最终目标权重。\n")
             # VolReg风控 (详细视图)
             _vr_detail = d.get("volreg_ratio")
             _vr_cash_detail = d.get("volreg_cash_today", False)
@@ -9064,12 +9113,9 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 threshold=US_ROT_REBALANCE_THRESHOLD,
                 reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
             )
-            for _ctx_row in _us_mix_live["mix_rows"] + _us_mix_live["reference_rows"]:
-                _ctx_row["mix_weight"] = float(hypo_us_w.get(_ctx_row["proxy"], current_us_w.get(_ctx_row["proxy"], 0.0)))
-                _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w(
-                "说明: V7.3 的 Sub-B 为 **50%官方130/260/390宏观门控 + 50% EMA hl100/16%七ETF(6M EWMA VolScale)**；"
-                "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名。\n\n"
+                "说明: V7.3 的 Sub-B 为 **官方130/260/390宏观门控腿 + EMA hl100/16%同池候选腿(6M EWMA VolScale)**；"
+                "UUP/DBMF/KMLM 在官方腿受通胀开关控制，EMA腿始终按US_ROT_POOL全池参与排名。\n\n"
             )
             w(
                 f"**通胀开关:** {'🟢 ON' if _us_live_gate['pressure_on'] else 'OFF'} "
@@ -9102,6 +9148,7 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_live, us_scale)
             _write_subb_v73_leg_weight_table(
                 w,
                 us_rot_result,
@@ -9246,6 +9293,9 @@ class CombinedStrategyV73(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
             w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
+            w(f"| ADK四对白名单 | **{len(ADK_PRIMARY_PROFIT_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}；弱/无效Top-1仅触发警示，不自动过滤 |\n")
+            w(f"| ADK弱配对 | **{len(ADK_WEAK_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)} |\n")
+            w(f"| ADK无效配对 | **{len(ADK_INVALID_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)} |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
             w(f"| 斜率拟合窗口 | **{CN_DK_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 波动率缩放目标 | **{CN_DK_TARGET_VOL:.0%}** | 目标年化波动率 |\n")
@@ -9269,10 +9319,10 @@ class CombinedStrategyV73(CombinedStrategyBase):
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
             w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
-            w("6. 数据: csindex\n\n---\n\n### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w(f"6. 数据: csindex\n\n---\n\n### Sub-B: 官方宏观门控{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V73_EMA_WEIGHT:.0%}(EWMA波动率)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| V7.3混合方式 | **官方腿{SUBB_V73_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V73_EMA_WEIGHT:.0%}** | Sub-B日收益和目标权重按两条腿等权混合 |\n")
             w("| 官方腿 | **7ETF+通胀宏观3ETF** | 沿用官方生产逻辑；UUP/DBMF/KMLM只在通胀开关ON时进入候选池 |\n")
-            w(f"| EMA腿 | **hl{SUBB_V73_EMA_HALF_LIFE} / 阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%} / 仅7ETF / {SUBB_V73_EMA_VOL_MODE}** | 使用年化EWM日收益；目标波动率scale用6个月EWMA已实现波动率；不纳入UUP/DBMF/KMLM |\n")
+            w(f"| EMA腿 | **hl{SUBB_V73_EMA_HALF_LIFE} / 阈值{SUBB_V73_EMA_ABS_THRESHOLD:.0%} / US_ROT_POOL全池 / {SUBB_V73_EMA_VOL_MODE}** | 使用年化EWM日收益；目标波动率scale用6个月EWMA已实现波动率；包含UUP/DBMF/KMLM |\n")
             w(f"| 动量窗口 | **{' / '.join(str(lb) for lb in US_ROT_LBS)}日** | 130/260/390日分别生成目标仓位后等权平均 |\n")
             w(f"| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 各窗口内均使用20日反波动率加权 |\n")
             w(f"| Top N | **3** | 选动量最高的3只ETF |\n")
@@ -9311,11 +9361,11 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量清仓提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
             w(f"| 微盘接入版本 | **v1.4 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，宽口径中证2000+创业板同时触发后应清仓；当前V7.3面板提示，不自动改写微盘独立脚本仓位 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v1.4由独立脚本查看 |\n")
     def _handle_live_params(self):
         with _sm() as msg:
@@ -9484,6 +9534,10 @@ class CombinedStrategyV73(CombinedStrategyBase):
             w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
+            w(f"| ADK四对白名单 | **{'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}** |\n")
+            w(f"| ADK弱配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)}** |\n")
+            w(f"| ADK无效配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)}** |\n")
+            w(f"| 弱/无效Top-1 | **仅警示，不自动过滤** |\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
             w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
@@ -9521,12 +9575,17 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 _dk_gate_on_lp = bool(cn_dk_result["risk_gate_on"].iloc[-1])
                 _dk_gate_dd_lp = cn_dk_result["risk_gate_base_dd"].iloc[-1]
                 _dk_base_w_lp = cn_dk_result["base_weight"].iloc[-1] if "base_weight" in cn_dk_result.columns else cn_dk_result["weight"].iloc[-1]
-                w(f"| VolScale杠杆 | **{_dk_base_w_lp:.2f}x** |\n")
+                _dk_final_w_lp = cn_dk_result["weight"].iloc[-1]
                 _dk_gate_status_lp = "开启" if _dk_gate_on_lp else "关闭"
-                w(f"| RiskGate | **{_dk_gate_status_lp}** ({_dk_gate_scale_lp:.2f}x) |\n")
+                w(f"| RiskGate状态 | **{_dk_gate_status_lp}**（乘数 {_dk_gate_scale_lp:.2f}x） |\n")
+                w(f"| 触发阈值 | **ADK原始净值DD <= -{CN_DK_RISK_GATE_ENTER:.0%}** |\n")
+                w(f"| 恢复阈值 | **ADK原始净值DD >= -{CN_DK_RISK_GATE_EXIT:.0%}** |\n")
                 if not np.isnan(_dk_gate_dd_lp):
-                    w(f"| 原始策略DD | **{_dk_gate_dd_lp:.1%}** |\n")
-            w(f"| 实际杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
+                    w(f"| 当前判断DD | **{_dk_gate_dd_lp:.1%}** |\n")
+                w(f"| RiskGate前杠杆 | **{_dk_base_w_lp:.2f}x** |\n")
+                w(f"| 最终杠杆 | **{_dk_final_w_lp:.2f}x**（= {_dk_base_w_lp:.2f}x × {_dk_gate_scale_lp:.2f}） |\n")
+            else:
+                w(f"| 最终杠杆 | **{cn_dk_result['weight'].iloc[-1]:.2f}x** |\n")
             w(f"| 配对切换 | {'是' if dk_pair_changed_lp else '否'} |\n")
             w(f"| 方向切换 | {'是' if dk_direction_changed_lp else '否'} |\n")
             _dk_lp_warning = _dk_top_pair_whitelist_warning(dk_top_pair_lp, "今日Top-1")
@@ -9577,7 +9636,7 @@ class CombinedStrategyV73(CombinedStrategyBase):
                     w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
-            w("\n---\n\n### Sub-B: 50%官方宏观门控 + 50% EMA半衰期7ETF(EWMA波动率)\n\n")
+            w(f"\n---\n\n### Sub-B: 官方宏观门控{SUBB_V73_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V73_EMA_WEIGHT:.0%}(EWMA波动率)\n\n")
             w(f"数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n")
             changed_p = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed_p:
@@ -9641,13 +9700,10 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 threshold=US_ROT_REBALANCE_THRESHOLD,
                 reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
             )
-            for _ctx_row in _us_mix_params["mix_rows"] + _us_mix_params["reference_rows"]:
-                _ctx_row["mix_weight"] = float(current_us_w.get(_ctx_row["proxy"], 0.0))
-                _ctx_row["mix_selected"] = _ctx_row["mix_weight"] > 1e-6
             w("**① 分窗口动量排名（130/260/390）:**\n\n")
             w(
                 "V7.3 的 Sub-B 先分别计算 130/260/390 日窗口，再把三个窗口生成的目标仓位等权混合。"
-                "UUP/DBMF/KMLM 仅在通胀开关ON时参与排名；历史段以 BTC-USD 拼接。\n\n"
+                "UUP/DBMF/KMLM 在官方腿受通胀开关控制，EMA腿始终按US_ROT_POOL全池参与排名；历史段以 BTC-USD 拼接。\n\n"
             )
             w(
                 f"**通胀开关:** {'🟢 ON' if _us_params_gate['pressure_on'] else 'OFF'} "
@@ -9711,6 +9767,7 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
+            _write_subb_official_leg_window_breakdown(w, _us_mix_params, us_scale)
             _write_subb_v73_leg_weight_table(
                 w,
                 us_rot_result,
@@ -9738,7 +9795,7 @@ class CombinedStrategyV73(CombinedStrategyBase):
                 us_rot_close,
                 -1,
                 _subb_v73_ema_scale_from_result(us_rot_result),
-                ranking_codes=US_ROT_BASE_POOL,
+                ranking_codes=US_ROT_POOL,
                 prev_risky=_hypo_prev_ema_risky_p,
                 threshold=US_ROT_REBALANCE_THRESHOLD,
             )
