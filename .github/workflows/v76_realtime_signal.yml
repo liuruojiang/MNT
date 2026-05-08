@@ -49,6 +49,9 @@ jobs:
           set +e
           python "mnt_bot V 7.6 plus.py" "实时信号" 2>&1 | tee v76_realtime_signal_result.txt
           status=${PIPESTATUS[0]}
+          if grep -E "查询入口失败|查询失败" v76_realtime_signal_result.txt; then
+            status=1
+          fi
           echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
           exit 0
 

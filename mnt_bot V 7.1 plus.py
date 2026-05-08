@@ -1748,7 +1748,7 @@ def run_cn_strategy(close_df, equity_codes):
             elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-9: _last = _sa[_i]
             else: _sa[_i] = _last
         raw_scale = pd.Series(_sa, index=df.index)
-    scale_arr = raw_scale.fillna(1.0).values
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
     df["scale_raw"] = raw_scale
     scale_arr[is_cash] = 1.0
     effective_weight = scale_arr * base_weight
@@ -1966,7 +1966,7 @@ def apply_suba_cash_peak_decay_overlay(
                 _sa[_i] = _last
         raw_scale = pd.Series(_sa, index=out.index)
 
-    scale_arr = raw_scale.fillna(1.0).values
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
     is_cash = eff_f.values <= 1e-12
     scale_arr[is_cash] = 1.0
     effective_weight = scale_arr * eff_f.values
@@ -2083,7 +2083,7 @@ def _rebuild_suba_from_effective(base_result, close_df, eff_h, eff_f, signal_fla
                 _sa[_i] = _last
         raw_scale = pd.Series(_sa, index=out.index)
 
-    scale_arr = raw_scale.fillna(1.0).values
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
     is_cash = eff_f.values <= 1e-12
     scale_arr[is_cash] = 1.0
     effective_weight = scale_arr * eff_f.values

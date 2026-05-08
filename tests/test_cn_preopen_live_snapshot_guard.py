@@ -79,6 +79,15 @@ class CnPreopenLiveSnapshotGuardTest(unittest.TestCase):
                 finally:
                     bot.beijing_now = original_now
 
+    def test_vol_scale_assignment_arrays_are_explicit_writable_copies(self):
+        for filename in VERSION_FILES:
+            with self.subTest(filename=filename):
+                with open(filename, "r", encoding="utf-8") as fh:
+                    source = fh.read()
+
+                self.assertNotIn("scale_arr = raw_scale.fillna(1.0).values", source)
+                self.assertIn("scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
