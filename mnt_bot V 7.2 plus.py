@@ -1685,6 +1685,9 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if bj_today.weekday() >= 5:
         return df
     # 尝试获取实时价格
+    bj_now = beijing_now()
+    if bj_today == bj_now.date() and not _can_use_cn_realtime_snapshot_at(bj_now):
+        return df
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
@@ -5378,6 +5381,18 @@ def _is_cn_unconfirmed_at(bj):
     return session_start <= bj < session_close
 
 
+def _is_cn_today_preclose_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return bj < session_close
+
+def _can_use_cn_realtime_snapshot_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    return bj >= session_start
+
 def is_cn_unconfirmed_intraday_snapshot():
     bj = beijing_now()
     return _is_cn_unconfirmed_at(bj), bj
@@ -5385,16 +5400,16 @@ def is_cn_unconfirmed_intraday_snapshot():
 
 def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
     if bj_now is None:
-        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
-    else:
-        cn_unconfirmed = _is_cn_unconfirmed_at(bj_now)
+        bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if data_date is None:
         return False
     return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
 
 
 def _drop_cn_unconfirmed_today(df):
-    cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if df is None or len(df) == 0 or not cn_unconfirmed:
         return df
     today = bj_now.date()

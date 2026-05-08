@@ -1672,6 +1672,9 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     # 非工作日不补充 (周末)
     if bj_today.weekday() >= 5:
         return df
+    bj_now = beijing_now()
+    if bj_today == bj_now.date() and not _can_use_cn_realtime_snapshot_at(bj_now):
+        return df
     # 尝试获取实时价格
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
@@ -5397,37 +5400,6 @@ def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
         )
     write("\n")
 
-
-def _write_subb_official_leg_window_breakdown(write, mix_ctx, scale, title="官方腿窗口拆分"):
-    rows = [
-        row for row in (mix_ctx or {}).get("mix_rows", [])
-        if row.get("mix_selected") or abs(float(row.get("mix_weight", 0.0) or 0.0)) >= 0.001
-    ]
-    if not rows:
-        return
-    lb_labels = [f"{lb}日" for lb in US_ROT_LBS]
-    boosted_live = sorted(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_FUTURES)
-    write(f"**{title}（官方腿目标 = {' + '.join(lb_labels)}窗口权重 / {len(US_ROT_LBS)}）:**\n\n")
-    write(
-        f"Model B scale = **{scale:.2f}x**；scale>1时仅放大"
-        f" **{', '.join(boosted_live)}** 自身窗口权重，EMXC/PDBC等非杠杆资产不承接放大缺口。\n\n"
-    )
-    write(
-        f"| ETF | {US_ROT_LBS[0]}日窗口 | {US_ROT_LBS[1]}日窗口 | {US_ROT_LBS[2]}日窗口 | "
-        "平均=官方腿目标 | 入选窗口 |\n"
-    )
-    write("|:-|------:|------:|------:|------:|:-|\n")
-    for row in rows:
-        per_lb_act = row.get("per_lb_act", {})
-        window_weights = [float(per_lb_act.get(lb, 0.0) or 0.0) for lb in US_ROT_LBS]
-        selected_lbs = [str(lb) for lb, weight in zip(US_ROT_LBS, window_weights) if abs(weight) >= 0.001]
-        selected_text = "/".join(selected_lbs) if selected_lbs else "—"
-        write(
-            f"| {row['live_name']} | {window_weights[0]:.1%} | {window_weights[1]:.1%} | "
-            f"{window_weights[2]:.1%} | {float(row.get('mix_weight', 0.0) or 0.0):.1%} | {selected_text} |\n"
-        )
-    write("\n")
-
 def _weight_columns_assets(df, prefixes=("w_", "actual_w_", "target_w_")):
     assets = set()
     for col in df.columns:
@@ -5804,21 +5776,33 @@ def _is_cn_unconfirmed_at(bj):
     session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
     return session_start <= bj < session_close
 
+def _is_cn_today_preclose_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return bj < session_close
+
+def _can_use_cn_realtime_snapshot_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    return bj >= session_start
+
 def is_cn_unconfirmed_intraday_snapshot():
     bj = beijing_now()
     return _is_cn_unconfirmed_at(bj), bj
 
 def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
     if bj_now is None:
-        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
-    else:
-        cn_unconfirmed = _is_cn_unconfirmed_at(bj_now)
+        bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if data_date is None:
         return False
     return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
 
 def _drop_cn_unconfirmed_today(df):
-    cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+    bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
     if df is None or len(df) == 0 or not cn_unconfirmed:
         return df
     today = bj_now.date()
@@ -5935,6 +5919,20 @@ def _has_execution_happened(signal_date, market, bj_now, schedule=None):
             open_h = 21 if _is_edt(exec_day) else 22
             return bj_now.hour > open_h or (bj_now.hour == open_h and bj_now.minute >= 35)
     return False
+
+def _subb_turnover_execution_status_text(
+    turnover,
+    rebalanced,
+    execution_happened,
+    min_turnover=US_ROT_MIN_TURNOVER,
+):
+    if rebalanced:
+        if execution_happened:
+            return f" 🟢 超{min_turnover:.0%}阈值，已调仓\n"
+        return f" 🟢 超{min_turnover:.0%}阈值，等待执行\n"
+    if turnover >= min_turnover:
+        return f" 🟢 超{min_turnover:.0%}阈值，**应调仓**\n"
+    return f" ❌ 低于{min_turnover:.0%}阈值，维持原仓位\n"
 
 def _is_tentative_subb_date(date):
     rec_date = pd.Timestamp(date)
@@ -8121,6 +8119,15 @@ class CombinedStrategyV75(CombinedStrategyBase):
             query))
 
     def run(self):
+        try:
+            self._run_impl()
+        except Exception as exc:
+            with _sm() as msg:
+                msg.write("## ⚠️ 查询入口失败\n\n")
+                msg.write(f"{_short_error(exc)}\n")
+                msg.write("请重新发送“信号”或“实时信号”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n")
+
+    def _run_impl(self):
         query = poe.query.text.strip()
         query_compact = re.sub(r"\s+", "", query)
         if "净值曲线" in query:
@@ -8367,9 +8374,16 @@ class CombinedStrategyV75(CombinedStrategyBase):
     def _handle_signal(self):
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
-            w("⏳ 正在计算信号...\n")
+            try:
+                w("⏳ 正在获取信号数据...\n")
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                    msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+                w("⏳ 正在计算信号...\n")
+            except Exception as exc:
+                w("## 📊 操作信号（收盘确认）\n\n")
+                w(f"⚠️ 信号查询失败: {_short_error(exc)}\n")
+                w("请稍后重试；如果持续为空，说明 Poe 运行环境在数据抓取阶段报错。\n")
+                return
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
         us_date = d["us_date"]
@@ -8684,9 +8698,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
             _us_schedule = _coerce_session_index(getattr(self, "_us_open", None))
             if _us_schedule is None:
                 _us_schedule = _coerce_session_index(us_rot_close)
+            _us_exec_happened_for_display = False
             if us_signal_confirmed:
                 us_exec_bj = us_exec_time_str(us_date, _us_schedule)
                 exec_happened_us = _has_execution_happened(us_date, "US", bj_now, _us_schedule)
+                _us_exec_happened_for_display = exec_happened_us
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')}) — 信号已确认\n")
                 if exec_happened_us:
                     w(f"✅ 已执行 ({us_exec_bj})\n")
@@ -8715,6 +8731,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 if _last_us_sig_date:
                     _sig_bj = beijing_time_str(_last_us_sig_date, "US", "close")
                     exec_happened_us = _has_execution_happened(_last_us_sig_date, "US", bj_now, _us_schedule)
+                    _us_exec_happened_for_display = exec_happened_us
                     w(f"上次: {_sig_bj}")
                     if exec_happened_us:
                         w(" ✅ 已执行\n")
@@ -8762,12 +8779,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 else:
                     w(f"| {live} | {cur:.1%} | {ds} |\n")
             w(f"\n调仓幅度: **{_us_display_turnover:.1%}**")
-            if _us_rebalanced:
-                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，已调仓\n")
-            elif _us_display_turnover >= US_ROT_MIN_TURNOVER:
-                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**应调仓**\n")
-            else:
-                w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，维持原仓位\n")
+            w(_subb_turnover_execution_status_text(
+                _us_display_turnover,
+                _us_rebalanced,
+                _us_exec_happened_for_display,
+            ))
             if _sub_b_capital:
                 w(f"\n💰 Sub-B资金: ${_sub_b_capital:,.0f} | 价格基于最新收盘\n")
             # Position adjustments
@@ -8857,7 +8873,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         w(f"| 参考. {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
                     if _us_sig_mix_ctx["reference_rows"]:
                         w("\n注: 通胀开关off时，UUP/DBMF/KMLM不进入官方腿；EMA腿仍按US_ROT_POOL全池参与候选。\n")
-                    _write_subb_official_leg_window_breakdown(w, _us_sig_mix_ctx, _us_sig_scale)
                     _write_subb_v75_leg_weight_table(
                         w,
                         us_rot_result,
@@ -8920,9 +8935,16 @@ class CombinedStrategyV75(CombinedStrategyBase):
     def _handle_live_signal(self):
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
-                msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
-            w("⏳ 正在计算实时信号...\n")
+            try:
+                w("⏳ 正在获取实时信号数据...\n")
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._fetch_data(
+                    msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+                w("⏳ 正在计算实时信号...\n")
+            except Exception as exc:
+                w("## 📡 实时信号\n\n")
+                w(f"⚠️ 实时信号查询失败: {_short_error(exc)}\n")
+                w("请稍后重试；如果持续为空，说明 Poe 运行环境在数据抓取阶段报错。\n")
+                return
         d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_date = d["cn_date"]
         us_date = d["us_date"]
@@ -9250,7 +9272,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | 0.0% | 实际排名参考 | 否 |\n")
             w("\n")
-            _write_subb_official_leg_window_breakdown(w, _us_mix_live, us_scale)
             _write_subb_v75_leg_weight_table(
                 w,
                 us_rot_result,
@@ -9876,7 +9897,6 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 _fmt_avg = f"{_avg:+.2%}" if not np.isnan(_avg) else "—"
                 _rank_text = f"均值#{row['actual_rank']}" if row.get("actual_rank") else "—"
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
-            _write_subb_official_leg_window_breakdown(w, _us_mix_params, us_scale)
             _write_subb_v75_leg_weight_table(
                 w,
                 us_rot_result,
