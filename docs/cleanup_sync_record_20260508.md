@@ -41,9 +41,15 @@ Result:
 - Delete manifest: `.codex_backups/cleanup_delete_paths_20260508.txt`
 - Because there were no delete targets, no file copy backup was required for this cleanup pass.
 
-## Verification plan
+## Verification
 
-- Run `python -m py_compile` on the six surviving V7.x strategy scripts.
-- Remove any regenerated `__pycache__/` after verification.
-- Run `git diff --check`.
-- Commit and push only the intended strategy-script changes plus this cleanup record.
+- `python -m py_compile "mnt_bot V 7.0 plus.py" "mnt_bot V 7.1 plus.py" "mnt_bot V 7.2 plus.py" "mnt_bot V 7.3 plus.py" "mnt_bot V 7.5 plus.py" "mnt_bot V 7.6 plus.py"` passed.
+- The regenerated root `__pycache__/` was removed after verification.
+- `git diff --check` and `git diff --cached --check` passed.
+- Staged scope was limited to the six V7.x strategy scripts plus this cleanup record.
+
+## Sync result
+
+- Push target: `origin/codex/subb-turnover-cost-cloud`
+- Existing draft PR: `https://github.com/liuruojiang/MNT/pull/2`
+- Post-push divergence check: `origin/codex/subb-turnover-cost-cloud...HEAD = 0 0`
