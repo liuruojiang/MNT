@@ -1,0 +1,7 @@
+﻿code,name,symbol,source,adjustment,first,last,rows
+159915.SZ,CYB100_ETF,159915.SZ,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2011-12-09,2026-05-08,3496
+159941.SZ,NASDAQ_ETF,159941.SZ,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2015-07-13,2026-05-08,2627
+513030.SH,GERMANY_ETF,513030.SH,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2014-09-05,2026-05-08,2832
+513520.SH,NIKKEI_ETF,513520.SH,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2019-06-25,2026-05-08,1665
+159985.SZ,SOYMEAL_ETF,159985.SZ,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2019-12-05,2026-05-08,1554
+518880.SH,GOLD_ETF,518880.SH,QVeris cn_financial_pro.history_quotation.v1,"cps=3, stock_common close",2013-07-29,2026-05-08,3104
