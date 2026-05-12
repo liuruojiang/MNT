@@ -1,7 +1,6 @@
 # poe: name=V76-Level8-Advisory
 # poe: privacy_shield=half
 """Single-file Poe bot for V7.6 Level-8 portfolio advisory display."""
-from __future__ import annotations
 
 try:
     from fastapi_poe.types import SettingsResponse
