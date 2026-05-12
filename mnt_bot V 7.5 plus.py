@@ -5308,12 +5308,14 @@ def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
     if not rows:
         return
     write(f"**{title}:**\n\n")
-    write("| ETF | 官方腿(原始→贡献) | EMA腿(原始→贡献) | 最终目标权重 |\n")
-    write("|:-|------:|------:|------:|\n")
+    write("说明: 官方腿/EMA腿权重均为乘以分腿比例后的最终贡献；UUP/DBMF/KMLM 只在官方腿受通胀开关控制，EMA腿始终按 US_ROT_POOL 全池排名。\n\n")
+    write("| ETF | 官方腿权重 | EMA腿权重 | 混合后权重 | 是否受通胀开关控制 |\n")
+    write("|:-|------:|------:|------:|:-|\n")
     for row in rows:
+        inflation_control = "官方腿受控；EMA腿否" if row["asset"] in US_ROT_MACRO_POOL else "否"
         write(
-            f"| {row['live_name']} | {row['official_raw']:.1%}→{row['official_contrib']:.1%} | "
-            f"{row['ema_raw']:.1%}→{row['ema_contrib']:.1%} | {row['final_weight']:.1%} |\n"
+            f"| {row['live_name']} | {row['official_contrib']:.1%} | "
+            f"{row['ema_contrib']:.1%} | {row['final_weight']:.1%} | {inflation_control} |\n"
         )
     write("\n")
 
