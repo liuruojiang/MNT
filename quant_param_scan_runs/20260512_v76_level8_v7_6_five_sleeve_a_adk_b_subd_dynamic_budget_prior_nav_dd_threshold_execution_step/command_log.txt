@@ -1,0 +1,6 @@
+python run_v76_adk_b_subd_dynamic_budget_optimization.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-12T14:20:33+08:00
+decision=A/ADK/B/Sub-D require sleeve-specific dynamic-budget tests. Current evidence: Sub-A is the cleaner broad-window candidate, Sub-D is the strongest recent-window candidate, Sub-B dynamic budget is weak under this proportional-absorber design, and ADK is only narrow-positive.
+stability_label=candidate evidence; Sub-A and Sub-D require follow-up stability validation

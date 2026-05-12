@@ -1,0 +1,98 @@
+{
+  "phase": "scanned",
+  "scan_type": "v76_five_sleeve_microcap_v16_rebalance_validation",
+  "created_at": "2026-05-12T11:02:08+08:00",
+  "git_branch": "main",
+  "git_commit": "885fbf4178d01cbd3aba11035e28ba172cc4221b",
+  "git_status_porcelain": "M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M \"V7.6\\345\\217\\230\\346\\233\\264\\350\\257\\264\\346\\230\\216_2026-05-05.md\"\n D analyze_subd_six_etf_v1_1_qveris_robustness.py\n M docs/suba_adk_v75_v76_return_dd_leverage_compare_20260507.md\n M docs/suba_v75_parameter_stability_notes_20260506.md\n M docs/suba_v76_parameter_stability_notes_20260506.md\n D \"docs/subd_six_etf_v1_1_20260509/SubD\\345\\205\\255ETF_V1.1\\345\\215\\207\\347\\272\\247\\346\\226\\207\\346\\241\\243_20260509.md\"\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_159941_data_source_check_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_data_source_validation_20260509.md\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_data_quality_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_sources_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_data_quality.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_sources.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_overheat_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_r2_targetvol_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/subd_six_etf_v1_1_qveris_robustness_20260509.md\n M \"mnt_bot V 7.5 plus.py\"\n M \"mnt_bot V 7.6 plus.py\"\n D research_subd_six_etf_weighted_slope.py\n D run_subd_six_etf_v1_1.py\n D tests/test_cn_preopen_live_snapshot_guard.py\n D tests/test_v76_signal_runtime_display.py\n M \"\\346\\255\\246\\345\\231\\250\\345\\272\\223\\346\\226\\207\\346\\241\\243.md\"\n?? AGENTS.md\n?? docs/suba_entry_switch_delay_20260509/\n?? docs/suba_v76_r2_threshold_confirm_20260511.md\n?? docs/v76_level8_combo_decision_record_20260512.md\n?? outputs/\n?? quant_param_scan_runs/\n?? tests/test_v75_v76_nav_drawdown_chart.py\n?? tests/test_v76_microcap_source_default.py\n?? tests/test_v76_suba_r2_threshold_default.py",
+  "official_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "baseline": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.15,
+    "Sub-D": 0.2,
+    "Sub-B": 0.4
+  },
+  "candidate_grid": {
+    "bands": {
+      "dd_5_10": {
+        "boost_dd": 0.05,
+        "cut_dd": 0.1
+      },
+      "dd_5_12": {
+        "boost_dd": 0.05,
+        "cut_dd": 0.12
+      },
+      "dd_3_10": {
+        "boost_dd": 0.03,
+        "cut_dd": 0.1
+      }
+    },
+    "executions": [
+      "daily",
+      "weekly",
+      "month_end"
+    ],
+    "cost_bps": [
+      0,
+      5,
+      10,
+      20
+    ]
+  },
+  "data_snapshot": {
+    "microcap_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+    "subd_source": "official V7.6 legacy Sub-C daily return mapped to Sub-D",
+    "fetch_log": "⏳ 正在获取A股数据...\n  中证红利: 2026-05-11 [csindex+Sina-proxy:1.000827]\n  创业板: 2026-05-11 [EastMoney]\n  上证50: 2026-05-11 [csindex+Sina-proxy:1.000016]\n  中证1000: 2026-05-11 [csindex+Sina-proxy:1.000852]\n  中证500: 2026-05-11 [csindex+Sina-proxy:1.000905]\n  10Y国债: 2026-05-11 [csindex+Sina-proxy:1.000012]\n  合并截至: 2026-05-11\n⏳ 正在获取美股数据...\n  美股: 21个ETF | 收盘: 2026-05-12 04:00 北京时间\n⏳ 正在获取A-DK多空数据(5个价格指数)...\n  中证1000: 2005-01-04~2026-05-11 [EastMoney]\n  上证50: 2005-01-04~2026-05-11 [EastMoney]\n  沪深300: 2005-01-04~2026-05-11 [EastMoney]\n  中证500: 2005-01-04~2026-05-11 [EastMoney]\n  创业板: 2010-06-01~2026-05-11 [EastMoney]\n  A-DK合并截至: 2026-05-11\n",
+    "series_ranges": {
+      "Sub-A": {
+        "start": "2010-09-29",
+        "end": "2026-05-11",
+        "rows": 3789
+      },
+      "Sub-A-DK": {
+        "start": "2010-11-22",
+        "end": "2026-05-11",
+        "rows": 3755
+      },
+      "Microcap": {
+        "start": "2010-03-04",
+        "end": "2026-05-08",
+        "rows": 3926
+      },
+      "Sub-D": {
+        "start": "2009-11-24",
+        "end": "2026-05-11",
+        "rows": 4137
+      },
+      "Sub-B": {
+        "start": "2008-12-15",
+        "end": "2026-05-11",
+        "rows": 4377
+      }
+    },
+    "common_start": "2010-11-22",
+    "common_end": "2026-05-08",
+    "aligned_rows": 4017
+  },
+  "cost_model": {
+    "inter_sleeve_allocation_turnover_bps": [
+      0,
+      5,
+      10,
+      20
+    ],
+    "formula": "daily_cost = sum(abs(delta_weights)) * cost_bps / 10000"
+  },
+  "outputs": {
+    "record": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\record.md",
+    "scan_summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\scan_summary.csv",
+    "window_metrics": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\window_metrics.csv",
+    "scan_meta": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\scan_meta.json",
+    "command_log": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\command_log.txt",
+    "weight_diagnostics": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\weight_diagnostics.csv",
+    "nav_outputs": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\nav_outputs.csv",
+    "aligned_returns": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_v16_rebalance_validation\\aligned_five_sleeve_returns.csv"
+  },
+  "decision": "five_sleeve_corrected_validation_completed"
+}

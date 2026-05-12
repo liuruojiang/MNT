@@ -1,0 +1,99 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint_used": "standalone naked top-positive rotation over formal Sub-A pool including 10Y bond",
+  "data_mode": "official_fetch_cn_kline_equity_plus_target_script_bond",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3868,
+  "duplicate_dates": 0,
+  "codes": {
+    "1.H20955": "中证红利",
+    "0.399606": "创业板",
+    "1.H00016": "上证50",
+    "1.H00852": "中证1000",
+    "1.H00905": "中证500",
+    "1.H11077": "10Y国债"
+  },
+  "sources": {
+    "1.H20955": {
+      "name": "中证红利",
+      "source": "csindex+Sina-proxy:1.000827",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 4942
+    },
+    "0.399606": {
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    },
+    "1.H00016": {
+      "name": "上证50",
+      "source": "csindex+Sina-proxy:1.000016",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00852": {
+      "name": "中证1000",
+      "source": "csindex+Sina-proxy:1.000852",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00905": {
+      "name": "中证500",
+      "source": "csindex+Sina-proxy:1.000905",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H11077": {
+      "name": "10Y国债",
+      "source": "target script _add_cn_bond_column",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3868
+    }
+  },
+  "baseline_signal": {
+    "definition": "target script calc_bias_momentum over equities plus bond",
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20
+  },
+  "replacement_signal": {
+    "definition": "25d weighted log slope times weighted R2 over equities plus bond",
+    "lookback": 25,
+    "weights": "1..25, recent observations carry larger weights",
+    "score": "(exp(weighted_log_slope * 252) - 1) * weighted_R2"
+  },
+  "replacement_signal_without_r2": {
+    "definition": "25d weighted log slope over equities plus bond",
+    "lookback": 25,
+    "weights": "1..25, recent observations carry larger weights",
+    "score": "exp(weighted_log_slope * 252) - 1"
+  },
+  "execution_assumptions": {
+    "asset_pool": "CN_EQUITY_CODES plus CN_BOND_CODE",
+    "removed_conditions": [
+      "formal R2 threshold filter",
+      "switch buffer",
+      "partial entry / first down-day completion",
+      "volatility scaling",
+      "cash peak decay overlay",
+      "same-side overheat overlay",
+      "amount/volume overlay"
+    ],
+    "positioning": "top positive score holds 100%; all non-positive scores hold cash",
+    "timing": "close-confirmed signal changes holding after that date return; new holding earns next close-to-close return",
+    "commission_one_way": 0.001,
+    "cash_daily_return": 0.0001211499702025165
+  },
+  "outputs": {
+    "summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_bond_naked_20260509\\summary.csv",
+    "yearly_returns": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_bond_naked_20260509\\yearly_returns.csv",
+    "daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_bond_naked_20260509\\daily_curves.csv"
+  }
+}

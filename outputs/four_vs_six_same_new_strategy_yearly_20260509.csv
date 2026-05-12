@@ -1,0 +1,15 @@
+﻿strategy,year,return
+four_new_strategy,2020,0.23908208174078216
+four_new_strategy,2021,0.15349191370669346
+four_new_strategy,2022,0.07153048546273189
+four_new_strategy,2023,0.05651100896721584
+four_new_strategy,2024,0.2963721877117671
+four_new_strategy,2025,0.6178618044617907
+four_new_strategy,2026,0.2427902015754555
+six_etf_same_new_strategy,2020,0.7435865719346779
+six_etf_same_new_strategy,2021,-0.10633321566174958
+six_etf_same_new_strategy,2022,0.3674774604078266
+six_etf_same_new_strategy,2023,0.3151768161637536
+six_etf_same_new_strategy,2024,0.7723401616486778
+six_etf_same_new_strategy,2025,0.5306824794136262
+six_etf_same_new_strategy,2026,0.18447925302403667

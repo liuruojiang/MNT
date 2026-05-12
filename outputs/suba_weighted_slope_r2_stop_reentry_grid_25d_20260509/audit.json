@@ -1,0 +1,566 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint_used": "standalone stop/reentry grid using target script fetch_cn_kline and 25d weighted slope R2 signal",
+  "data_mode": "official_fetch_cn_kline_equity_only",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3868,
+  "duplicate_dates": 0,
+  "codes": {
+    "1.H20955": "中证红利",
+    "0.399606": "创业板",
+    "1.H00016": "上证50",
+    "1.H00852": "中证1000",
+    "1.H00905": "中证500"
+  },
+  "sources": {
+    "1.H20955": {
+      "name": "中证红利",
+      "source": "csindex+Sina-proxy:1.000827",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 4942
+    },
+    "0.399606": {
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    },
+    "1.H00016": {
+      "name": "上证50",
+      "source": "csindex+Sina-proxy:1.000016",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00852": {
+      "name": "中证1000",
+      "source": "csindex+Sina-proxy:1.000852",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00905": {
+      "name": "中证500",
+      "source": "csindex+Sina-proxy:1.000905",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    }
+  },
+  "signal": "25d weighted log slope times weighted R2",
+  "score_formula": "(exp(weighted_log_slope * 252) - 1) * weighted_R2",
+  "stop_rules": {
+    "exit_grid_pct": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "reentry_grid_pct": "for each exit X, test X-step down to 0; values mean same-asset reentry allowed after recovery to -value percent from stopped HWM, 0 means new high",
+    "fixed_cooldown": "none",
+    "different_asset": "if signal switches to a different positive asset, enter normally"
+  },
+  "tested_pairs": [
+    {
+      "exit_pct": 3,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 3,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 3,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 4,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 4,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 4,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 4,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 5,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 5,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 5,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 5,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 5,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 6,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 7,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 8,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 9,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 10,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 10
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 11,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 11
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 10
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 12,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 12
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 11
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 10
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 13,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 13
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 12
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 11
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 10
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 14,
+      "reentry_pct": 0
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 14
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 13
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 12
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 11
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 10
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 9
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 8
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 7
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 6
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 5
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 4
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 3
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 2
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 1
+    },
+    {
+      "exit_pct": 15,
+      "reentry_pct": 0
+    }
+  ],
+  "execution_assumptions": {
+    "asset_pool": "Sub-A equity codes only",
+    "removed_conditions": [
+      "R2 threshold filter",
+      "bond rotation",
+      "switch buffer",
+      "partial entry / first down-day completion",
+      "volatility scaling",
+      "cash peak decay overlay",
+      "same-side overheat overlay",
+      "amount/volume overlay"
+    ],
+    "timing": "close-confirmed signal and stop state change holding after that date return; new holding earns next close-to-close return",
+    "commission_one_way": 0.001,
+    "cash_daily_return": 0.0001211499702025165
+  },
+  "outputs": {
+    "scan_summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_stop_reentry_grid_25d_20260509\\scan_summary.csv",
+    "scan_rankings": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_stop_reentry_grid_25d_20260509\\scan_rankings.csv",
+    "scan_daily_curves": null
+  }
+}

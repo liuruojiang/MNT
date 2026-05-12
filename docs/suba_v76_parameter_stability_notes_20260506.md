@@ -2,6 +2,8 @@
 
 ## Confirmed
 
+2026-05-11 follow-up: the original R2 section below is a coarse-grid historical scan. A finer fixed-window scan on `CN_R2_WINDOW=20` tested `CN_R2_THRESHOLD=0.20/0.225/0.25/0.275/0.30` through 2026-05-11, then added 0/5/10 bps incremental impact stress. The approved current V7.6 default is now `CN_R2_THRESHOLD=0.25`. See `docs/suba_v76_r2_threshold_confirm_20260511.md`.
+
 ### 1. `CN_BIAS_N / CN_MOM_DAY`
 
 - Checked values: `CN_BIAS_N` in `40,50,60,70,80`; `CN_MOM_DAY` in `10,15,20,25,30`.
@@ -25,7 +27,7 @@
 
 - Checked values: `CN_R2_WINDOW` in `10,15,20,30`; `CN_R2_THRESHOLD` in `0,0.1,0.2,0.3,0.4,0.5`.
 - Fixed parameters: `CN_BIAS_N=60`, `CN_MOM_DAY=20`; other V7.6 formal Sub-A defaults preserved.
-- Baseline/default: `CN_R2_WINDOW=20`, `CN_R2_THRESHOLD=0.20`.
+- Historical baseline/default at the time of this 2026-05-06 coarse scan: `CN_R2_WINDOW=20`, `CN_R2_THRESHOLD=0.20`. Current approved V7.6 default after the 2026-05-11 fine scan: `CN_R2_WINDOW=20`, `CN_R2_THRESHOLD=0.25`.
 - Evidence path: `docs/suba_v76_stability_A_r2_20260506/`.
 - Audit: target script `mnt_bot V 7.6 plus.py`; formal Sub-A path; data `2010-06-01` to `2026-04-30`; rows `3865`; duplicate dates `0`.
 - Decision: R2 窗口不宽，`window=20` 明显占优；阈值在 `0.1-0.3` 内可接受稳定，默认 `0.20` 为平衡最优点。

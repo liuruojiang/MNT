@@ -1,0 +1,16 @@
+init_quant_param_scan_run.py
+run_id=20260512_v76_five_sleeve_combo_dynamic_budget_suba_microcap_threshold_execution_cost
+project=v76
+strategy=five_sleeve
+subsystem=combo_dynamic_budget
+parameter_group=suba_microcap_threshold_execution_cost
+repo=C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略
+
+[2026-05-12T12:49:22] python run_v76_suba_microcap_dynamic_budget_validation.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-12T12:50:52+08:00
+decision=promote_stacked_month_end_to_advisory_watchlist_not_source_default
+stability_label=stacked_month_end_watchlist
+
+[2026-05-12T15:54:55] python run_v76_suba_microcap_dynamic_budget_validation.py

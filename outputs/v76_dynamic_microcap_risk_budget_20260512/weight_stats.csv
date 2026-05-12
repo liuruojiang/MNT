@@ -1,0 +1,7 @@
+﻿scenario,avg_microcap_weight,min_microcap_weight,max_microcap_weight,days_microcap_20,days_microcap_15,days_microcap_10,last_microcap_weight,weight_change_count
+fixed_rebalanced_10_15_15_60,0.14999999999999997,0.15,0.15,0,4017,0,0.15,0
+fixed_rebalanced_10_15_20_55,0.2,0.2,0.2,4017,0,0,0.2,0
+dyn_microcap_20_if_dd_le_5,0.18343291013193927,0.15,0.2,2686,1331,0,0.15,142
+dyn_microcap_20_if_above_ma126,0.19280557630072195,0.15,0.2,3439,578,0,0.15,90
+dyn_microcap_20_if_above_ma126_and_dd_le_10,0.19052775703261143,0.15,0.2,3256,761,0,0.15,108
+dyn_microcap_10_15_20_by_dd_5_10,0.1775205377147125,0.1,0.2,2686,856,475,0.1,198

@@ -1,4 +1,4 @@
-# poe: name=Strategy-Signal-V75
+# poe: name=Strategy-Signal-V76
 # poe: privacy_shield=half
 """V7.6"""
 import requests
@@ -110,7 +110,7 @@ CN_RF_DAILY = (1 + CN_RF_ANNUAL) ** (1 / CN_TRADING_DAYS) - 1
 CN_BIAS_N = 60           # 均线周期 (price / MA60)
 CN_MOM_DAY = 20          # 斜率拟合窗口
 CN_R2_WINDOW = 20        # R²滚动窗口
-CN_R2_THRESHOLD = 0.2    # R²最低门槛；V7.6 balanced 默认
+CN_R2_THRESHOLD = 0.25   # R²最低门槛；2026-05-11 fine scan + impact stress 默认
 CN_ENTRY_WAIT_DAYS = None   # 策略A剩余仓位只等首个日线阴线补齐，不做超时强制补仓
 CN_SWITCH_BUFFER = 1.03  # 策略A持仓切换buffer: 当前持仓仍合格时, 新候选score需超过当前持仓1.03x
 CN_BOND_CODE = "1.H11077"  # 上证10年期国债指数（全收益，避险资产）
@@ -351,11 +351,11 @@ US_ROT_ABS_THRESHOLD = 0.04
 # 调仓阈值（参与交易决策）
 US_ROT_REBALANCE_THRESHOLD = 1.05  # V7.6 Sub-B收益型默认: 混合窗口1.05x挑战者保护，降低边界资产周度来回切换
 
-# V7.6 Sub-B: 25% official macro-gated leg + 75% EMA-ret US_ROT_POOL leg.
+# V7.6 Sub-B: 50% official macro-gated leg + 50% EMA-ret US_ROT_POOL leg.
 # The EMA leg ranks the same full pool, including UUP/DBMF/KMLM.
 # Its target-vol scale uses 6-month EWMA realized volatility; the official leg remains rolling 40d.
-SUBB_V75_OFFICIAL_WEIGHT = 0.25
-SUBB_V75_EMA_WEIGHT = 0.75
+SUBB_V75_OFFICIAL_WEIGHT = 0.50
+SUBB_V75_EMA_WEIGHT = 0.50
 SUBB_V75_EMA_HALF_LIFE = 100
 SUBB_V75_EMA_ABS_THRESHOLD = 0.16
 SUBB_V75_EMA_VOL_MODE = "ewma6m_1vol"
@@ -445,10 +445,11 @@ COMBINED_WEIGHTS = {
     "Sub-A": 0.10,
     "Sub-A-DK": 0.15,
     "Microcap": 0.15,
-    "Sub-B": 0.60,
-    "Sub-C": 0.00,  # V7.6主组合不再分配Sub-C；用户展示层不再显示Sub-C。
+    "Sub-D": 0.20,  # Sub-D v1.1 six-ETF sleeve is tracked by its independent script.
+    "Sub-B": 0.40,
+    "Sub-C": 0.00,  # Legacy Sub-C engine remains available only for old standalone queries.
 }
-COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-B"]
+COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D", "Sub-B"]
 PERFORMANCE_COMBO_ORDER = ["Sub-A", "Sub-A-DK", "Sub-B"]
 PERFORMANCE_COLUMNS = PERFORMANCE_COMBO_ORDER + ["Combined"]
 
@@ -470,7 +471,170 @@ def _performance_combo_weight_label():
     return "/".join(
         str(int(round(COMBINED_WEIGHTS[name] * 100)))
         for name in PERFORMANCE_COMBO_ORDER
-    ) + "归一(不含微盘)"
+    ) + "归一(不含微盘/Sub-D)"
+
+
+PORTFOLIO_ADVISORY_SCENARIO = "advisory_dd_3_10_month_end"
+PORTFOLIO_SUBA_ADVISORY_SCENARIO = "advisory_suba_dd_5_8_weekly"
+PORTFOLIO_STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
+PORTFOLIO_ADVISORY_OUTPUT_DIR = os.path.join("outputs", "portfolio_v76_current")
+PORTFOLIO_ADVISORY_CURVE_FILE = "scenario_economic_curve.csv"
+PORTFOLIO_ADVISORY_RETURNS_FILE = "aligned_sleeve_returns.csv"
+PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE = os.path.join(
+    "quant_param_scan_runs",
+    "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation",
+    "aligned_five_sleeve_real_subd_returns.csv",
+)
+
+
+def _advisory_pct(value):
+    try:
+        if value is None or pd.isna(value):
+            return "n/a"
+        return f"{float(value):.2%}"
+    except Exception:
+        return "n/a"
+
+
+def _advisory_weight_pct(value):
+    try:
+        if value is None or pd.isna(value):
+            return "n/a"
+        return f"{float(value):.0%}"
+    except Exception:
+        return "n/a"
+
+
+def _advisory_target_weight(base_weight, prior_dd, boost_dd=0.03, cut_dd=0.10, step=0.05):
+    if prior_dd is None or pd.isna(prior_dd):
+        return base_weight
+    if prior_dd >= -boost_dd:
+        return base_weight + step
+    if prior_dd <= -cut_dd:
+        return max(base_weight - step, 0.0)
+    return base_weight
+
+
+def _latest_prior_nav_drawdown(ret_df, sleeve):
+    if sleeve not in ret_df.columns:
+        return None
+    nav = (1.0 + pd.to_numeric(ret_df[sleeve], errors="coerce").fillna(0.0)).cumprod()
+    prior_peak = nav.cummax().shift(1)
+    prior_dd = nav.shift(1) / prior_peak - 1.0
+    value = prior_dd.iloc[-1] if len(prior_dd) else np.nan
+    return float(value) if pd.notna(value) else None
+
+
+def _csv_latest_date(path):
+    if not os.path.exists(path):
+        return None
+    try:
+        df = pd.read_csv(path, usecols=["date"], parse_dates=["date"])
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    latest = pd.to_datetime(df["date"], errors="coerce").dropna()
+    if latest.empty:
+        return None
+    return latest.max().normalize()
+
+
+def _load_combo_advisory_snapshot():
+    out_dir = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_OUTPUT_DIR)
+    curve_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_CURVE_FILE)
+    returns_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_RETURNS_FILE)
+    source_returns_path = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE)
+    if not os.path.exists(curve_path):
+        return {"available": False, "error": f"missing {PORTFOLIO_ADVISORY_CURVE_FILE}"}
+    if not os.path.exists(returns_path):
+        return {"available": False, "error": f"missing {PORTFOLIO_ADVISORY_RETURNS_FILE}"}
+    try:
+        curve = pd.read_csv(curve_path, parse_dates=["date"]).set_index("date").sort_index()
+        returns = pd.read_csv(returns_path, parse_dates=["date"]).set_index("date").sort_index()
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+    if curve.empty or returns.empty:
+        return {"available": False, "error": "empty portfolio advisory output"}
+    latest = curve.iloc[-1]
+    latest_date = curve.index[-1]
+    source_latest_date = _csv_latest_date(source_returns_path)
+    if source_latest_date is not None and latest_date.normalize() < source_latest_date:
+        return {
+            "available": False,
+            "error": (
+                "stale portfolio advisory report: "
+                f"{PORTFOLIO_ADVISORY_CURVE_FILE} latest {latest_date.date().isoformat()} "
+                f"< source returns latest {source_latest_date.date().isoformat()}"
+            ),
+        }
+    suba_prior_dd = _latest_prior_nav_drawdown(returns, "Sub-A")
+    microcap_prior_dd = _latest_prior_nav_drawdown(returns, "Microcap")
+    suba_daily_target = _advisory_target_weight(
+        COMBINED_WEIGHTS["Sub-A"], suba_prior_dd, boost_dd=0.05, cut_dd=0.08
+    )
+    microcap_daily_target = _advisory_target_weight(COMBINED_WEIGHTS["Microcap"], microcap_prior_dd)
+    return {
+        "available": True,
+        "latest_date": latest_date,
+        "suba_prior_dd": suba_prior_dd,
+        "microcap_prior_dd": microcap_prior_dd,
+        "suba_daily_target": suba_daily_target,
+        "microcap_daily_target": microcap_daily_target,
+        "microcap_weight": float(latest.get("advisory_microcap_weight", np.nan)),
+        "microcap_subb_weight": float(latest.get("advisory_subb_weight", np.nan)),
+        "suba_advisory_suba_weight": float(latest.get("suba_advisory_suba_weight", np.nan)),
+        "suba_advisory_subb_weight": float(latest.get("suba_advisory_subb_weight", np.nan)),
+        "suba_advisory_excess_nav": float(latest.get("suba_advisory_excess_nav", np.nan)),
+        "stacked_suba_weight": float(latest.get("stacked_advisory_suba_weight", np.nan)),
+        "stacked_microcap_weight": float(latest.get("stacked_advisory_microcap_weight", np.nan)),
+        "stacked_subb_weight": float(latest.get("stacked_advisory_subb_weight", np.nan)),
+        "stacked_excess_nav": float(latest.get("stacked_advisory_excess_nav", np.nan)),
+    }
+
+
+def _write_combo_advisory_panel(w):
+    snapshot = _load_combo_advisory_snapshot()
+    w("\n### 组合层动态预算 (ACTIVE DYNAMIC BUDGET)\n\n")
+    w("说明: Stacked Sub-A 5/8 weekly + Microcap 3/10 month-end is the active portfolio-level budget; 固定10/15/15/20/40保留为基准和回滚线。\n\n")
+    if not snapshot.get("available"):
+        w(f"- 当前不可用: {snapshot.get('error', 'unknown error')}\n")
+        w(f"- 先运行 `python build_v76_portfolio_nav.py` 刷新 {PORTFOLIO_ADVISORY_OUTPUT_DIR}。\n")
+        return
+    latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
+    w(f"- 数据日期: **{latest_date}**\n")
+    w(
+        f"- 触发依据: Sub-A prior NAV DD **{_advisory_pct(snapshot['suba_prior_dd'])}** "
+        f"-> 日内理论目标 **{_advisory_weight_pct(snapshot['suba_daily_target'])}**; "
+        f"Microcap prior NAV DD **{_advisory_pct(snapshot['microcap_prior_dd'])}** "
+        f"-> 日内理论目标 **{_advisory_weight_pct(snapshot['microcap_daily_target'])}**\n"
+    )
+    w("- 执行口径: 确认月末才更新组合层建议; Sub-B 吸收 Sub-A/Microcap 的权重差。\n\n")
+    w("| 场景 | Sub-A | Microcap | Sub-B | 说明 |\n|:-|------:|------:|------:|:-|\n")
+    w(
+        f"| 固定默认 | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
+        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Microcap'])} | "
+        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Sub-B'])} | 执行默认 |\n"
+    )
+    w(
+        f"| Microcap advisory | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
+        f"{_advisory_weight_pct(snapshot['microcap_weight'])} | "
+        f"{_advisory_weight_pct(snapshot['microcap_subb_weight'])} | 微盘单独动态预算 |\n"
+    )
+    w(
+        f"| Sub-A 5/8 weekly reference | {_advisory_weight_pct(snapshot['suba_advisory_suba_weight'])} | "
+        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Microcap'])} | "
+        f"{_advisory_weight_pct(snapshot['suba_advisory_subb_weight'])} | "
+        f"reference {PORTFOLIO_SUBA_ADVISORY_SCENARIO}; excess NAV vs fixed "
+        f"{_advisory_pct(snapshot['suba_advisory_excess_nav'])} |\n"
+    )
+    w(
+        f"| Stacked Sub-A 5/8 + Microcap 3/10 | {_advisory_weight_pct(snapshot['stacked_suba_weight'])} | "
+        f"{_advisory_weight_pct(snapshot['stacked_microcap_weight'])} | "
+        f"{_advisory_weight_pct(snapshot['stacked_subb_weight'])} | "
+        f"active {PORTFOLIO_STACKED_ADVISORY_SCENARIO}; excess NAV vs fixed "
+        f"{_advisory_pct(snapshot['stacked_excess_nav'])} |\n"
+    )
 
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
 
@@ -545,29 +709,29 @@ def _check_microcap_cache_latest(ret, expected_latest_date=None, source_label="m
 
 def _load_microcap_daily_ret(msg=None, expected_latest_date=None):
     microcap_root = os.path.join(os.path.dirname(_repo_base_dir()), "微盘股对冲策略")
-    v18_nav_path = os.path.join(
+    v16_nav_path = os.path.join(
         microcap_root,
         "outputs",
-        "microcap_top100_mom11_targetvol30_max2_v1_8_costed_nav.csv",
+        "microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
     )
-    if not os.path.exists(v18_nav_path):
-        raise poe.BotError("V7.6微盘股 v1.8 target-vol 独立模块缓存缺失: " + v18_nav_path)
+    if not os.path.exists(v16_nav_path):
+        raise poe.BotError("V7.6微盘股 v1.6 target-vol 独立模块缓存缺失: " + v16_nav_path)
     try:
-        net = pd.read_csv(v18_nav_path, parse_dates=["date"]).sort_values("date").set_index("date")
+        net = pd.read_csv(v16_nav_path, parse_dates=["date"]).sort_values("date").set_index("date")
         ret = net["return_net"].dropna()
         if ret.empty:
             raise ValueError("empty microcap return series")
-        _check_microcap_cache_latest(ret, expected_latest_date, "v1.8 mom11_targetvol30_max2 costed_nav", msg)
+        _check_microcap_cache_latest(ret, expected_latest_date, "v1.6 mom16_targetvol25_max1p5 costed_nav", msg)
         if msg is not None:
             msg.write(
-                f"  微盘股独立脚本 v1.8 target-vol: {ret.index[0].strftime('%Y-%m-%d')}~"
-                f"{ret.index[-1].strftime('%Y-%m-%d')} [{os.path.basename(v18_nav_path)}]\n"
+                f"  微盘股独立脚本 v1.6 target-vol: {ret.index[0].strftime('%Y-%m-%d')}~"
+                f"{ret.index[-1].strftime('%Y-%m-%d')} [{os.path.basename(v16_nav_path)}]\n"
             )
         return ret
     except poe.BotError:
         raise
     except Exception as exc:
-        raise poe.BotError(f"加载微盘股 v1.8 target-vol 独立脚本收益失败: {exc}") from exc
+        raise poe.BotError(f"加载微盘股 v1.6 target-vol 独立脚本收益失败: {exc}") from exc
 
 
 def _sp500_risk_regime_search_paths():
@@ -5752,6 +5916,53 @@ def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
     ax.set_ylabel("NAV (start=1.0)", fontsize=11)
     return False
 
+
+def _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date):
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.ticker import PercentFormatter
+
+    fig, (nav_ax, dd_ax) = plt.subplots(
+        2, 1, figsize=(12, 8), sharex=True, height_ratios=[3, 1]
+    )
+    for name, nav in nav_series.items():
+        nav_ax.plot(
+            nav.index,
+            nav.values,
+            label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
+            color=colors[name],
+            linewidth=1.8,
+        )
+        drawdown = nav / nav.cummax() - 1.0
+        dd_ax.plot(
+            drawdown.index,
+            drawdown.values,
+            color=colors[name],
+            linewidth=1.2,
+            alpha=0.85,
+        )
+    nav_ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    nav_ax.set_title(
+        f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+        fontsize=14,
+        fontweight='bold',
+    )
+    _apply_nav_axis_scale(nav_ax, nav_series)
+    nav_ax.legend(loc='best', fontsize=10, framealpha=0.9)
+    nav_ax.grid(True, alpha=0.3)
+    dd_ax.axhline(y=0.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    dd_ax.set_ylabel("Drawdown", fontsize=11)
+    dd_ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+    dd_ax.grid(True, alpha=0.3)
+    dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    fig.autofmt_xdate(rotation=30)
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
 def beijing_now():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc)
@@ -7219,7 +7430,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
         ws = wb.add_worksheet("绩效概览")
         ws.set_column("A:A", 14)
         ws.set_column("B:E", 14)
-        metric_headers = ["指标", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘)"]
+        metric_headers = ["指标", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘/Sub-D)"]
         for j, h in enumerate(metric_headers):
             ws.write(0, j, h, header_fmt)
         pct2_fmt = wb.add_format({"border": 1, "num_format": "0.00%"})
@@ -7249,7 +7460,7 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
             ws2 = wb.add_worksheet("月度收益")
             ws2.set_column("A:A", 10)
             ws2.set_column("B:E", 14)
-            mr_headers = ["月份", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘)"]
+            mr_headers = ["月份", "Sub-A", "A-DK", "Sub-B", "PV三策略组合(不含微盘/Sub-D)"]
             for j, h in enumerate(mr_headers):
                 ws2.write(0, j, h, header_fmt)
             for i in range(len(monthly_returns)):
@@ -7772,8 +7983,8 @@ class CombinedStrategyBase:
         prompt = f"""解析资金设置。
 
 资金设置支持: Sub-A, Sub-A-DK, Sub-B
-V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.8 target-vol), Sub-B 60%（微盘由独立脚本回测，不在本资金配置里设置）
-注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；V7.6不再设置Sub-C
+V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-D 20%(v1.1 six-ETF), Sub-B 40%
+注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；微盘和Sub-D由独立脚本处理，不在本资金配置里设置
 
 当前已设置:
 {chr(10).join(ctx_parts)}
@@ -7786,6 +7997,7 @@ V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.8 target-vol), Sub-B
   "Sub-A": 数字或null,
   "Sub-A-DK": 数字或null,
   "Sub-B": 数字或null,
+  "Sub-D": null,
   "Sub-C": null
 }}
 ```
@@ -7793,14 +8005,14 @@ V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.8 target-vol), Sub-B
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
 2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=10:15拆分, 美元金额默认给Sub-B
-   例: "人民币300万, 美元100万" -> Sub-A: 1200000, Sub-A-DK: 1800000, Sub-B: 1000000, Sub-C: null
-3. 用户说"总共100万, 按V7.6比例" (未区分币种) -> Sub-A: 100000, Sub-A-DK: 150000, Sub-B: 600000, Sub-C: null（微盘15%由独立脚本处理）
+   例: "人民币300万, 美元100万" -> Sub-A: 1200000, Sub-A-DK: 1800000, Sub-B: 1000000, Sub-D: null, Sub-C: null
+3. 用户说"总共100万, 按V7.6比例" (未区分币种) -> Sub-A: 100000, Sub-A-DK: 150000, Sub-B: 400000, Sub-D: null, Sub-C: null（微盘15%和Sub-D 20%由独立脚本处理）
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
 7. 用户说"总共10万美元给美股" -> 默认全部给Sub-B
 8. 关键: 人民币/RMB/CNY -> 只分给Sub-A和Sub-A-DK; 美元/USD -> 只分给Sub-B
-9. V7.6没有Sub-C；即使用户提到Sub-C也输出null"""
+9. Sub-D和Sub-C不由本资金配置解析；即使用户提到也输出null"""
 
         with _sm() as msg:
             w = msg.write
@@ -7946,6 +8158,7 @@ Sub-B: V7.6收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}
   "Sub-A": {{"指数代码": 股数或{{"amount": 金额数字}}}} 或 null,
   "Sub-A-DK": {{"做多_中文名": {{"amount": 金额}}, "做空_中文名": {{"amount": 金额}}}} 或 null,
   "Sub-B": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null,
+  "Sub-D": null,
   "Sub-C": null
 }}
 ```
@@ -7964,7 +8177,7 @@ Sub-B: V7.6收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}
 9. 关键: 如果用户只指定策略的总金额, 不列出具体标的(如"Sub-B总共50万"), 输出 {{"_total_amount": 金额数字}}
    例: "Sub-B总共50万美元" -> "Sub-B": {{"_total_amount": 500000}}
    注意: _total_amount表示策略总金额, 和具体标的的amount不同
-10. V7.6没有Sub-C；即使用户提到Sub-C也输出null"""
+10. Sub-D和Sub-C不由本仓位配置解析；即使用户提到也输出null"""
 
             with _sm() as msg:
                 msg.write("⏳ 正在解析仓位设置...\n")
@@ -8056,7 +8269,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.6 — 策略信号查询**\n\n"
-        f"V7.6组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.8 target-vol) + Sub-B 60%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
+        f"V7.6组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.6 target-vol) + Sub-D 20%(v1.1 six-ETF) + Sub-B 40%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
@@ -8071,7 +8284,7 @@ _BOT_SETTINGS = SettingsResponse(
 )
 poe.update_settings(_BOT_SETTINGS)
 
-class CombinedStrategyV75(CombinedStrategyBase):
+class CombinedStrategyV76(CombinedStrategyBase):
 
     def _parse_date_with_llm_fallback(self, query):
         """先用正则解析日期范围，失败则用LLM解析自然语言。"""
@@ -8932,6 +9145,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 w(f"含最近60天 {len(all_rebalances)} 条调仓记录（北京时间）")
             else:
                 w("最近60天无调仓记录")
+            _write_combo_advisory_panel(w)
     def _handle_live_signal(self):
         with _sm() as msg:
             w = msg.write
@@ -9374,6 +9588,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                             cur_display = f"{cur_shares:,}"
                         w(f"| {etf_live} | {cur_display} | {target_shares:,} | {adj_str} |\n")
             w("\n---\n\n")
+            _write_combo_advisory_panel(w)
     def _handle_params(self):
         with _sm() as msg:
             w = msg.write
@@ -9491,9 +9706,10 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
-            w(f"| 微盘接入版本 | **v1.8 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
+            w(f"| 微盘接入版本 | **v1.6 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
             w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
-            w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v1.8由独立脚本查看 |\n")
+            w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v1.6和Sub-D由独立脚本查看 |\n")
+            _write_combo_advisory_panel(w)
     def _handle_live_params(self):
         with _sm() as msg:
             w = msg.write
@@ -9976,6 +10192,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
             for name in COMBINED_DISPLAY_ORDER:
                 cw = COMBINED_WEIGHTS[name]
                 w(f"| {name} | {cw:.0%} |\n")
+            _write_combo_advisory_panel(w)
     def _handle_signal_history(self, query):
         """显示指定日期范围内的所有交易信号（调仓记录）。"""
         start_date, end_date = self._parse_date_with_llm_fallback(query)
@@ -10178,34 +10395,17 @@ class CombinedStrategyV75(CombinedStrategyBase):
             "Sub-A": "Sub-A (CN Long)",
             "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
             "Sub-B": "Sub-B (US Rotation)",
-            "Combined": f"PV 3-sleeve ({_performance_combo_weight_label()})",
+            "Combined": f"PV 3-sleeve ex Microcap/Sub-D ({_performance_combo_weight_label()})",
         }
         labels = {
             "Sub-A": "Sub-A (A股做多)",
             "Sub-A-DK": "Sub-A-DK (多空)",
             "Sub-B": "Sub-B (美股轮动)",
-            "Combined": f"PV三策略组合 ({_performance_combo_weight_label()})",
+            "Combined": f"PV三策略组合不含微盘/Sub-D ({_performance_combo_weight_label()})",
         }
-        fig, ax = plt.subplots(figsize=(12, 6))
-        for name, nav in nav_series.items():
-            ax.plot(nav.index, nav.values,
-                    label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
-                    color=colors[name], linewidth=1.8)
-        ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
-        ax.set_title(
-            f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
-            fontsize=14, fontweight='bold')
-        _apply_nav_axis_scale(ax, nav_series)
-        ax.legend(loc='best', fontsize=10, framealpha=0.9)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        fig.autofmt_xdate(rotation=30)
-        fig.tight_layout()
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        buf.seek(0)
-        chart_bytes = buf.read()
+        chart_bytes = _render_nav_drawdown_chart(
+            nav_series, chart_labels, colors, start_date, end_date
+        )
         max_dd = {}
         for name, nav in nav_series.items():
             drawdown = (nav - nav.cummax()) / nav.cummax()
@@ -10433,28 +10633,11 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 "Sub-A": "Sub-A (CN Long)",
                 "Sub-A-DK": "Sub-A-DK (CN Long-Short)",
                 "Sub-B": "Sub-B (US Rotation)",
-                "Combined": f"PV 3-sleeve ({_performance_combo_weight_label()})",
+                "Combined": f"PV 3-sleeve ex Microcap/Sub-D ({_performance_combo_weight_label()})",
             }
-            fig, ax = plt.subplots(figsize=(12, 6))
-            for name, nav in nav_series.items():
-                ax.plot(nav.index, nav.values,
-                        label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
-                        color=colors[name], linewidth=1.8)
-            ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
-            ax.set_title(
-                f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
-                fontsize=14, fontweight='bold')
-            _apply_nav_axis_scale(ax, nav_series)
-            ax.legend(loc='best', fontsize=10, framealpha=0.9)
-            ax.grid(True, alpha=0.3)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-            fig.autofmt_xdate(rotation=30)
-            fig.tight_layout()
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-            plt.close(fig)
-            buf.seek(0)
-            chart_bytes = buf.read()
+            chart_bytes = _render_nav_drawdown_chart(
+                nav_series, chart_labels, colors, start_date, end_date
+            )
         with _sm() as msg:
             w = msg.write
             w(f"## 📈 策略表现: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}\n\n")
@@ -10483,8 +10666,8 @@ class CombinedStrategyV75(CombinedStrategyBase):
                         s, e = range_info[name]
                         w(f"- {name}: {s} ~ {e}\n")
                 w("\n")
-            w(f"说明: PV/收益查询不合并微盘独立脚本，只展示 Sub-A、Sub-A-DK、Sub-B 及三策略组合（{_performance_combo_weight_label()}）。\n\n")
-            w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘) |\n|:-|------:|------:|------:|-----:|\n")
+            w(f"说明: PV/收益查询不合并微盘和Sub-D独立脚本，只展示 Sub-A、Sub-A-DK、Sub-B 及三策略组合（{_performance_combo_weight_label()}）。\n\n")
+            w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘/Sub-D) |\n|:-|------:|------:|------:|-----:|\n")
             metric_labels = [
                 ("年化收益", "annual", "%"), ("波动率", "vol", "%"),
                 ("夏普比率", "sharpe", ""), ("最大回撤", "max_dd", "%"),
@@ -10511,7 +10694,7 @@ class CombinedStrategyV75(CombinedStrategyBase):
                     years_available.update(m["yearly"].keys())
             if years_available:
                 w(f"\n### 年度收益\n")
-                w("| 年份 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘) |\n|:-|------:|------:|------:|-----:|\n")
+                w("| 年份 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘/Sub-D) |\n|:-|------:|------:|------:|-----:|\n")
                 for yr in sorted(years_available):
                     row = f"| {yr} |"
                     for col in PERFORMANCE_COLUMNS:
@@ -10565,4 +10748,4 @@ class CombinedStrategyV75(CombinedStrategyBase):
             w(f"📎 绩效报告: **{filename}**")
 
 if __name__ == "__main__":
-    CombinedStrategyV75().run()
+    CombinedStrategyV76().run()

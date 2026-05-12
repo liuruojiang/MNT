@@ -1,0 +1,74 @@
+{
+  "portfolio_id": "v76_current",
+  "manifest": "portfolio_manifests/v76_current.json",
+  "returns_source": "quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv",
+  "start": "2011-12-09",
+  "end": "2026-05-08",
+  "rows": 3743,
+  "weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.15,
+    "Sub-D": 0.2,
+    "Sub-B": 0.4
+  },
+  "active_dynamic_budget_scenario": "advisory_suba_microcap_dd_3_10_month_end",
+  "internal_sleeves": [
+    "Sub-A",
+    "Sub-A-DK",
+    "Sub-B"
+  ],
+  "external_sleeves": [
+    "Microcap",
+    "Sub-D"
+  ],
+  "scenarios": {
+    "fixed_10_15_15_20_40": {
+      "description": "Static five-sleeve baseline from manifest weights."
+    },
+    "advisory_dd_3_10_month_end": {
+      "description": "Microcap advisory risk budget: 20% when prior Microcap NAV DD is within 3%, 10% when prior DD is at or below -10%, otherwise 15%; month-end execution; Sub-B absorbs the delta.",
+      "microcap_source": "Microcap v1.6 return_net from aligned returns",
+      "execution": "month_end",
+      "boost_dd": 0.03,
+      "cut_dd": 0.1
+    },
+    "advisory_suba_dd_5_8_weekly": {
+      "description": "Sub-A advisory risk budget: 15% when prior Sub-A NAV DD is within 5%, 5% when prior DD is at or below -8%, otherwise 10%; weekly execution; Sub-B absorbs the delta.",
+      "suba_source": "Sub-A return from aligned returns",
+      "execution": "weekly",
+      "boost_dd": 0.05,
+      "cut_dd": 0.08,
+      "active_dynamic_budget_default": false
+    },
+    "advisory_suba_microcap_dd_3_10_month_end": {
+      "description": "Stacked Sub-A + Microcap advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end; each sleeve moves +/-5pp from base; Sub-B absorbs both deltas.",
+      "suba_source": "Sub-A return from aligned returns",
+      "microcap_source": "Microcap v1.6 return_net from aligned returns",
+      "suba_execution": "weekly",
+      "suba_boost_dd": 0.05,
+      "suba_cut_dd": 0.08,
+      "microcap_execution": "month_end",
+      "microcap_boost_dd": 0.03,
+      "microcap_cut_dd": 0.1,
+      "active_dynamic_budget_default": true
+    }
+  },
+  "outputs": {
+    "aligned_sleeve_returns": "outputs/portfolio_v76_current/aligned_sleeve_returns.csv",
+    "portfolio_nav": "outputs/portfolio_v76_current/portfolio_nav.csv",
+    "window_metrics": "outputs/portfolio_v76_current/window_metrics.csv",
+    "scenario_nav": "outputs/portfolio_v76_current/scenario_nav.csv",
+    "scenario_window_metrics": "outputs/portfolio_v76_current/scenario_window_metrics.csv",
+    "scenario_economic_curve": "outputs/portfolio_v76_current/scenario_economic_curve.csv",
+    "scenario_decision_summary": "outputs/portfolio_v76_current/scenario_decision_summary.md",
+    "scenario_visual_report": "outputs/portfolio_v76_current/scenario_visual_report.html",
+    "dynamic_sleeve_budget_scan": "outputs/portfolio_v76_current/dynamic_sleeve_budget_scan.csv",
+    "dynamic_sleeve_budget_summary": "outputs/portfolio_v76_current/dynamic_sleeve_budget_summary.md",
+    "advisory_weights": "outputs/portfolio_v76_current/weights_advisory_dd_3_10_month_end.csv",
+    "suba_advisory_weights": "outputs/portfolio_v76_current/weights_advisory_suba_dd_5_8_weekly.csv",
+    "active_dynamic_budget_weights": "outputs/portfolio_v76_current/weights_active_dynamic_budget.csv",
+    "stacked_advisory_weights": "outputs/portfolio_v76_current/weights_advisory_suba_microcap_dd_3_10_month_end.csv",
+    "meta": "outputs/portfolio_v76_current/meta.json"
+  }
+}

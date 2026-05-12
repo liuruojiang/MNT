@@ -2,7 +2,9 @@
 
 ## Scope
 
-This report compares current local source files:
+2026-05-08 validity note: this report compares the local source files as rerun on 2026-05-07. It is now historical after the V7.5 follow-up sync of `CN_SA_VOLUME_CYB_MA=15` and `CN_SA_VOLUME_CYB_DAYS=5`.
+
+This report compared local source files:
 
 - `mnt_bot V 7.5 plus.py`
 - `mnt_bot V 7.6 plus.py`

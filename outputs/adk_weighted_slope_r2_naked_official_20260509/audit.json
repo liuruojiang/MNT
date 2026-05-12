@@ -1,0 +1,93 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "data_source": "target script fetch_cn_kline",
+  "data_mode": "official_fetch_cn_kline_dk_price_indices",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3867,
+  "duplicate_dates": 0,
+  "indices": {
+    "DK_ZZ1000": {
+      "secid": "1.000852",
+      "name": "中证1000",
+      "source": "EastMoney",
+      "first": "2005-01-04",
+      "last": "2026-05-08",
+      "rows": 5181
+    },
+    "DK_SZ50": {
+      "secid": "1.000016",
+      "name": "上证50",
+      "source": "EastMoney",
+      "first": "2005-01-04",
+      "last": "2026-05-08",
+      "rows": 5181
+    },
+    "DK_HS300": {
+      "secid": "1.000300",
+      "name": "沪深300",
+      "source": "EastMoney",
+      "first": "2005-01-04",
+      "last": "2026-05-08",
+      "rows": 5181
+    },
+    "DK_ZZ500": {
+      "secid": "1.000905",
+      "name": "中证500",
+      "source": "EastMoney",
+      "first": "2005-01-04",
+      "last": "2026-05-08",
+      "rows": 5181
+    },
+    "DK_CYB": {
+      "secid": "0.399006",
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    }
+  },
+  "pair_count": 10,
+  "original_signal": {
+    "definition": "V7.6 _dk_calc_bias_momentum on pair ratio: slope of normalized ratio/MA over CN_DK_MOM_DAY",
+    "CN_DK_BIAS_N": 60,
+    "CN_DK_MOM_DAY": 20
+  },
+  "replacement_signal": {
+    "definition": "weapon-library 25d weighted log slope on the same pair ratio",
+    "lookback": 25,
+    "weights": "1..25, recent observations carry larger weights",
+    "score": "exp(weighted_log_slope * 252) - 1"
+  },
+  "replacement_signal_r2_reference": {
+    "definition": "weapon-library 25d weighted log slope times weighted R2 on the same pair ratio",
+    "lookback": 25,
+    "weights": "1..25, recent observations carry larger weights",
+    "score": "(exp(weighted_log_slope * 252) - 1) * weighted_R2"
+  },
+  "execution_assumptions": {
+    "asset_pool": "all V7.6 ADK DK indices, C(5,2)=10 pairs",
+    "removed_conditions": [
+      "volatility scaling",
+      "scale change threshold",
+      "pair score peak-decay overlay",
+      "same-side overheat overlay",
+      "drawdown RiskGate",
+      "volume warning/clear rules",
+      "weekly signal day gating"
+    ],
+    "positioning": "daily Top-1 pair by prior-day absolute score; direction is prior-day score sign; notional +1/-1 long-short pair",
+    "timing": "close-confirmed score; next close-to-close spread return",
+    "commission_one_way": 0.0005,
+    "financing_or_cash_return": 0.0,
+    "trading_days_for_metrics": 242,
+    "signal_start_idx": 81
+  },
+  "outputs": {
+    "summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\adk_weighted_slope_r2_naked_official_20260509\\summary.csv",
+    "yearly_returns": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\adk_weighted_slope_r2_naked_official_20260509\\yearly_returns.csv",
+    "daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\adk_weighted_slope_r2_naked_official_20260509\\daily_curves.csv",
+    "score_tail": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\adk_weighted_slope_r2_naked_official_20260509\\score_tail.csv"
+  }
+}

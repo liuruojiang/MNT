@@ -1,0 +1,33 @@
+{
+  "rule": "dd_3_10_month_end",
+  "microcap_version": "v1.6",
+  "source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\微盘股对冲策略\\outputs\\microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+  "return_column": "return_net",
+  "latest_date": "2026-05-08",
+  "latest_microcap_nav": 161.9888765291577,
+  "latest_microcap_peak": 196.33167988601696,
+  "latest_microcap_drawdown": -0.17492237308211012,
+  "latest_prior_drawdown_for_signal": -0.18677527003717642,
+  "latest_daily_signal_microcap_weight": 0.1,
+  "last_month_end_execution_date": "2026-04-30",
+  "last_month_end_signal_microcap_weight": 0.1,
+  "current_executed_month_end_microcap_weight": 0.1,
+  "current_advisory_combo_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.1,
+    "Sub-B": 0.65
+  },
+  "latest_daily_recommendation_combo_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.1,
+    "Sub-B": 0.65
+  },
+  "implementation_fit": {
+    "existing_v76_loader_corrected_to_v1_6": true,
+    "should_use_v1_6_for_current_mainline": true,
+    "requires_microcap_internal_change": false,
+    "recommended_integration": "advisory display only; production COMBINED_WEIGHTS remains unchanged"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint_used": "standalone overlay research using target script fetch_cn_kline and naked execution helpers",
+  "data_mode": "official_fetch_cn_kline_equity_only",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3868,
+  "duplicate_dates": 0,
+  "codes": {
+    "1.H20955": "中证红利",
+    "0.399606": "创业板",
+    "1.H00016": "上证50",
+    "1.H00852": "中证1000",
+    "1.H00905": "中证500"
+  },
+  "sources": {
+    "1.H20955": {
+      "name": "中证红利",
+      "source": "csindex+Sina-proxy:1.000827",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 4942
+    },
+    "0.399606": {
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    },
+    "1.H00016": {
+      "name": "上证50",
+      "source": "csindex+Sina-proxy:1.000016",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00852": {
+      "name": "中证1000",
+      "source": "csindex+Sina-proxy:1.000852",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00905": {
+      "name": "中证500",
+      "source": "csindex+Sina-proxy:1.000905",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    }
+  },
+  "signals": {
+    "lb25_single": "weighted log slope times weighted R2, lookback 25",
+    "lb40_single": "weighted log slope times weighted R2, lookback 40",
+    "portfolio_25_40_ret_50_50": "50/50 daily return blend of lb25 and lb40 naked strategies",
+    "scheme1": "25d top asset is primary. If 40d top matches, weight=100%; if 40d score for 25d top is positive, weight=partial; otherwise cash.",
+    "scheme2": "Use 40d signal after at least 3 of 5 assets have positive 40d scores for N consecutive days; otherwise use 25d signal."
+  },
+  "regime_stats": {
+    "scheme2_use40_when_40breadth3_3d": {
+      "regime_on_days": 1950,
+      "regime_on_ratio": 0.5041365046535677
+    },
+    "scheme2_use40_when_40breadth3_5d": {
+      "regime_on_days": 1846,
+      "regime_on_ratio": 0.4772492244053775
+    },
+    "scheme2_use40_when_40breadth3_10d": {
+      "regime_on_days": 1600,
+      "regime_on_ratio": 0.4136504653567735
+    }
+  },
+  "score_formula": "(exp(weighted_log_slope * 252) - 1) * weighted_R2",
+  "execution_assumptions": {
+    "asset_pool": "Sub-A equity codes only",
+    "removed_conditions": [
+      "R2 threshold filter",
+      "bond rotation",
+      "switch buffer",
+      "partial entry / first down-day completion",
+      "volatility scaling",
+      "cash peak decay overlay",
+      "same-side overheat overlay",
+      "amount/volume overlay"
+    ],
+    "timing": "close-confirmed signal changes holding after that date return; new holding earns next close-to-close return",
+    "commission_one_way": 0.001,
+    "cash_daily_return": 0.0001211499702025165
+  },
+  "outputs": {
+    "summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_overlay_25_40_20260509\\summary.csv",
+    "daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_weighted_slope_r2_overlay_25_40_20260509\\daily_curves.csv"
+  }
+}

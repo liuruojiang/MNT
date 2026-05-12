@@ -2,7 +2,8 @@
 
 ## Current Validity Note
 
-- The V7.5 runs recorded in this document are valid for the current `mnt_bot V 7.5 plus.py` and the stated fixed-parameter scan designs.
+- 2026-05-08 follow-up: current `mnt_bot V 7.5 plus.py` now syncs the Sub-A volume-overlay CYB trigger to `CN_SA_VOLUME_CYB_MA=15`, `CN_SA_VOLUME_CYB_DAYS=5`, matching the V7.6 follow-up default.
+- The V7.5 runs recorded in this document predate that 2026-05-08 CYB trigger sync. Treat their numeric rows as historical scan evidence for the stated fixed-parameter designs, not as a fresh current-code rerun.
 - The V7.6 comparison rows copied from existing `docs/suba_v76_stability_A_*_20260506/` artifacts should be treated as historical-document comparisons, not final comparisons against the current `mnt_bot V 7.6 plus.py`.
 - Reason: the current root `mnt_bot V 7.6 plus.py` differs from those V7.6 artifacts in at least one formal-overlay parameter not recorded in the old V7.6 audits: `CN_SA_VOLUME_SCALE=0.25` currently, while the old full-grid artifacts behave like the earlier volume-overlay scale. A current-code spot-check under position scaling produced different results from the existing V7.6 document.
 - Therefore, cross-version stability conclusions for groups 1-4 below are superseded by the current-code rerun report: `docs/suba_v75_vs_v76_current_parameter_stability_compare_20260506.md`.

@@ -1,0 +1,6 @@
+python run_v76_suba_dynamic_budget_landing_validation.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-12T14:32:00+08:00
+decision=Sub-A 5/8 weekly step5 is promoted to the next implementation candidate. It is not yet production default; landing requires V7.6 scenario output plus signal/live-signal/params/live-params display updates and verification.
+stability_label=landing candidate; acceptable broad-window stability, but not yet production default

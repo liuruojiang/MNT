@@ -1,0 +1,6 @@
+python run_v76_adk_b_subd_dynamic_budget_optimization.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-12T14:05:04+08:00
+decision=ADK/B/Sub-D require sleeve-specific dynamic-budget tests. Current evidence: Sub-D has the strongest follow-up candidate, Sub-B dynamic budget is weak under this proportional-absorber design, ADK is narrow-positive but not broad enough for default promotion.
+stability_label=candidate evidence; requires follow-up stability validation

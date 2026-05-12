@@ -1,0 +1,85 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint_used": "standalone original Sub-A momentum over formal pool including bond; toggles original R2 and original target-vol parameters",
+  "data_mode": "official_fetch_cn_kline_equity_plus_target_script_bond",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3868,
+  "duplicate_dates": 0,
+  "codes": {
+    "1.H20955": "中证红利",
+    "0.399606": "创业板",
+    "1.H00016": "上证50",
+    "1.H00852": "中证1000",
+    "1.H00905": "中证500",
+    "1.H11077": "10Y国债"
+  },
+  "sources": {
+    "1.H20955": {
+      "name": "中证红利",
+      "source": "csindex+Sina-proxy:1.000827",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 4942
+    },
+    "0.399606": {
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    },
+    "1.H00016": {
+      "name": "上证50",
+      "source": "csindex+Sina-proxy:1.000016",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00852": {
+      "name": "中证1000",
+      "source": "csindex+Sina-proxy:1.000852",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00905": {
+      "name": "中证500",
+      "source": "csindex+Sina-proxy:1.000905",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H11077": {
+      "name": "10Y国债",
+      "source": "target script _add_cn_bond_column",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3868
+    }
+  },
+  "signal": "original Sub-A calc_bias_momentum over equities plus bond",
+  "signal_formula": "slope(price / MA(CN_BIAS_N), CN_MOM_DAY) * 10000",
+  "parameters": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.2,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MIN_LEV": 0.1,
+    "CN_MAX_LEV": 1.5,
+    "CN_SCALE_THRESHOLD": 0.0
+  },
+  "removed_conditions": [
+    "switch buffer",
+    "partial entry / first down-day completion",
+    "cash peak decay overlay",
+    "same-side overheat overlay",
+    "amount/volume overlay"
+  ],
+  "outputs": {
+    "summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_bond_r2_target_vol_20260509\\summary.csv",
+    "daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_bond_r2_target_vol_20260509\\daily_curves.csv"
+  }
+}
