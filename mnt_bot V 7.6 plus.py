@@ -23,10 +23,34 @@ try:
 except Exception:
     class SettingsResponse:
         def __init__(self, **kwargs):
-            self.kwargs = kwargs
+            self.__dict__.update(kwargs)
 
 if "poe" not in globals():
-    import fastapi_poe as poe
+    try:
+        import fastapi_poe as poe
+    except Exception:
+        class _LocalPoe:
+            class BotError(Exception):
+                pass
+
+            query = types.SimpleNamespace(text=" ".join(sys.argv[1:]), attachments=[])
+            default_chat = []
+
+            @staticmethod
+            def update_settings(settings):
+                return None
+
+            @staticmethod
+            def start_message():
+                return _CompatStartMessage()
+
+            @staticmethod
+            def call(*_args, **_kwargs):
+                raise _LocalPoe.BotError(
+                    "Local compatibility mode does not support poe.call; run LLM parsing paths in Poe."
+                )
+
+        poe = _LocalPoe()
 
 
 class _CompatStartMessage:
@@ -176,7 +200,6 @@ CN_DK_VOLUME_YELLOW_SECID = "1.000300"
 CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
 CN_DK_VOLUME_YELLOW_MA = 40
 CN_DK_VOLUME_YELLOW_DAYS = 16
-CN_DK_VOLUME_CLEAR_SCALE = 0.0
 
 MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
@@ -441,7 +464,15 @@ US_ALL_TICKERS = sorted(set(
 # ─────────────────────────────────────────────
 # 组合权重
 # ─────────────────────────────────────────────
-COMBINED_WEIGHTS = {
+ACTIVE_COMBINED_WEIGHTS = {
+    "Sub-A": 0.15,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.10,
+    "Sub-D": 0.20,  # Sub-D v1.1 six-ETF sleeve is tracked by its independent script.
+    "Sub-B": 0.40,
+    "Sub-C": 0.00,  # Legacy Sub-C engine remains available only for old standalone queries.
+}
+ROLLBACK_COMBINED_WEIGHTS = {
     "Sub-A": 0.10,
     "Sub-A-DK": 0.15,
     "Microcap": 0.15,
@@ -449,6 +480,7 @@ COMBINED_WEIGHTS = {
     "Sub-B": 0.40,
     "Sub-C": 0.00,  # Legacy Sub-C engine remains available only for old standalone queries.
 }
+COMBINED_WEIGHTS = ACTIVE_COMBINED_WEIGHTS
 COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D", "Sub-B"]
 PERFORMANCE_COMBO_ORDER = ["Sub-A", "Sub-A-DK", "Sub-B"]
 PERFORMANCE_COLUMNS = PERFORMANCE_COMBO_ORDER + ["Combined"]
@@ -459,6 +491,14 @@ def _combined_weight_label():
         str(int(round(COMBINED_WEIGHTS[name] * 100)))
         for name in COMBINED_DISPLAY_ORDER
         if COMBINED_WEIGHTS.get(name, 0) > 0
+    )
+
+
+def _rollback_weight_label():
+    return "/".join(
+        str(int(round(ROLLBACK_COMBINED_WEIGHTS[name] * 100)))
+        for name in COMBINED_DISPLAY_ORDER
+        if ROLLBACK_COMBINED_WEIGHTS.get(name, 0) > 0
     )
 
 
@@ -622,7 +662,10 @@ def _load_combo_advisory_snapshot():
 def _write_combo_advisory_panel(w):
     snapshot = _load_combo_advisory_snapshot()
     w("\n### 组合层动态预算 (ACTIVE DYNAMIC BUDGET)\n\n")
-    w("说明: Stacked Sub-A 5/8 weekly + Microcap 3/10 month-end is the active portfolio-level budget; 固定10/15/15/20/40保留为基准和回滚线。\n\n")
+    w(
+        f"说明: active execution weights are {_combined_weight_label()}; "
+        f"fixed {_rollback_weight_label()} is kept only as benchmark / rollback.\n\n"
+    )
     if not snapshot.get("available"):
         w(f"- 当前不可用: {snapshot.get('error', 'unknown error')}\n")
         w(f"- 先运行 `python build_v76_portfolio_nav.py` 刷新 {PORTFOLIO_ADVISORY_OUTPUT_DIR}。\n")
@@ -638,9 +681,14 @@ def _write_combo_advisory_panel(w):
     w("- 执行口径: 确认月末才更新组合层建议; Sub-B 吸收 Sub-A/Microcap 的权重差。\n\n")
     w("| 场景 | Sub-A | Microcap | Sub-B | 说明 |\n|:-|------:|------:|------:|:-|\n")
     w(
-        f"| 固定默认 | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
+        f"| Active execution default | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
         f"{_advisory_weight_pct(COMBINED_WEIGHTS['Microcap'])} | "
-        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Sub-B'])} | 执行默认 |\n"
+        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Sub-B'])} | active {_combined_weight_label()} |\n"
+    )
+    w(
+        f"| Fixed benchmark / rollback | {_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Sub-A'])} | "
+        f"{_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Microcap'])} | "
+        f"{_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Sub-B'])} | rollback {_rollback_weight_label()} |\n"
     )
     w(
         f"| Microcap advisory | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
@@ -1107,6 +1155,12 @@ def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_
     embedded["regime_changed_date"] = pd.Timestamp(embedded["regime_changed_date"])
     embedded["path"] = embedded["source_file"]
     embedded["live_error"] = live_error
+    today = pd.Timestamp(asof_date).normalize() if asof_date is not None else pd.Timestamp(beijing_now().date())
+    embedded_age_days = int((today - embedded["latest_date"].normalize()).days)
+    embedded["embedded_age_days"] = embedded_age_days
+    if embedded_age_days > 7:
+        embedded["source_type"] = "STALE_EMBEDDED_DO_NOT_TRADE"
+        embedded["stale_warning"] = "Embedded S&P risk snapshot is older than 7 days; historical reference only."
     return embedded
 
 
@@ -1118,6 +1172,8 @@ def _load_inflation_pressure_snapshot():
     price_sources = {}
     for ticker in ("DBC", "TLT", "UUP"):
         df, source = fetch_yahoo(ticker, start_date="2006-01-01")
+        if df is None or "close" not in df.columns:
+            raise ValueError(f"{ticker} price data unavailable from Yahoo/Stooq")
         close = df["close"].dropna().sort_index()
         if len(close) <= INFLATION_PRESSURE_LB:
             raise ValueError(f"{ticker} usable history is too short")
@@ -1255,6 +1311,8 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
             source_desc = f"新策略学习/{snapshot['source_file']}"
         else:
             source_desc = snapshot.get("source_file", "脚本内置快照")
+        if snapshot.get("source_type") == "STALE_EMBEDDED_DO_NOT_TRADE":
+            source_desc = f"{source_desc} (STALE_EMBEDDED_DO_NOT_TRADE)"
         _prev_regime = snapshot.get("previous_regime")
         if _prev_regime and _prev_regime != snapshot["regime"]:
             _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
@@ -1358,14 +1416,20 @@ _csindex_consecutive_fails = 0  # 连续完全失败次数, 用于动态减少�
 
 
 # 数据获取/解析相关的可恢复异常 — 真正的bug（AttributeError等）将正常传播
-_DATA_FETCH_ERRORS = (
-    requests.exceptions.RequestException,  # 网络: 连接、超时、HTTP错误
-    json.JSONDecodeError,                  # API返回非JSON
-    KeyError,                              # API JSON结构变化
-    ValueError,                            # 数据校验失败（空数据等）
-    TypeError,                             # 意外None/类型不匹配
-    IndexError,                            # 空数据访问（.iloc[0]等）
+class DataSchemaError(ValueError):
+    """Remote data payload shape changed in a known data-source parser."""
+
+
+NETWORK_ERRORS = (
+    requests.exceptions.RequestException,
+    json.JSONDecodeError,
 )
+DATA_VALIDATION_ERRORS = (
+    ValueError,
+    pd.errors.ParserError,
+    DataSchemaError,
+)
+_DATA_FETCH_ERRORS = NETWORK_ERRORS + DATA_VALIDATION_ERRORS
 # poe.BotError 在部分 Poe 导入上下文不可用，必须惰性获取。
 def _fetch_or_bot_errors():
     try:
@@ -2299,7 +2363,7 @@ def _mark_suba_volume_unavailable(cn_result, exc):
     out["suba_volume_error"] = str(exc)
     return out
 
-def _load_dk_volume_clear_signal():
+def _load_dk_volume_warning_feature():
     df, source = _fetch_cn_amount_with_fallback(
         CN_DK_VOLUME_YELLOW_SECID,
         CN_DK_VOLUME_YELLOW_LABEL,
@@ -2308,78 +2372,27 @@ def _load_dk_volume_clear_signal():
     amount = pd.to_numeric(df["amount"], errors="coerce").dropna().sort_index()
     if amount.empty:
         raise ValueError(f"{CN_DK_VOLUME_YELLOW_LABEL} amount has no usable rows")
-    ma = int(CN_DK_VOLUME_YELLOW_MA)
-    days = int(CN_DK_VOLUME_YELLOW_DAYS)
+    feature = _build_dk_volume_warning_feature(amount, source)
+    return feature["clear_signal"].astype(bool), feature
+
+def _build_dk_volume_warning_feature(amount, source, ma=None, days=None):
+    ma = int(CN_DK_VOLUME_YELLOW_MA if ma is None else ma)
+    days = int(CN_DK_VOLUME_YELLOW_DAYS if days is None else days)
+    amount = pd.to_numeric(pd.Series(amount), errors="coerce").dropna().sort_index()
     amount_ma = amount.rolling(ma).mean()
     streak = _consecutive_below_amount(amount, ma)
     signal = (streak >= days).astype(bool)
-    feature = pd.DataFrame(
+    return pd.DataFrame(
         {
             "amount": amount,
             "amount_ma": amount_ma,
             "below_ma_streak": streak,
             "clear_signal": signal,
-            "clear_scale": np.where(signal, CN_DK_VOLUME_CLEAR_SCALE, 1.0),
             "source": source,
+            "policy": CN_DK_VOLUME_POLICY,
         },
         index=amount.index,
     )
-    return signal, feature
-
-def apply_dk_volume_clear_overlay(
-    dk_result,
-    volume_signal,
-    volume_feature=None,
-    scale=CN_DK_VOLUME_CLEAR_SCALE,
-):
-    """Apply the formal ADK amount-contraction clear rule.
-
-    The amount signal is known after close, so today's trigger affects the
-    next DK trading day by shifting the signal one row forward.
-    """
-    if dk_result is None or len(dk_result) == 0:
-        return dk_result
-    if not 0 <= scale <= 1:
-        raise ValueError("scale must be in [0, 1].")
-
-    out = dk_result.copy()
-    signal = pd.Series(volume_signal, dtype="boolean").reindex(out.index).fillna(False).astype(bool)
-    active = signal.shift(1, fill_value=False).astype(bool)
-    pre_weight = pd.to_numeric(
-        out.get("weight", pd.Series(1.0, index=out.index)),
-        errors="coerce",
-    ).fillna(0.0)
-    clear_scale = pd.Series(np.where(active, float(scale), 1.0), index=out.index, dtype=float)
-
-    out["dk_volume_clear_signal"] = signal
-    out["dk_volume_clear_active"] = active
-    out["dk_volume_clear_scale"] = clear_scale
-    out["pre_dk_volume_weight"] = pre_weight
-    out["weight"] = pre_weight * clear_scale
-
-    if volume_feature is not None and len(volume_feature) > 0:
-        aligned_feature = volume_feature.reindex(out.index)
-        feature_map = {
-            "amount": "dk_volume_amount",
-            "amount_ma": "dk_volume_amount_ma",
-            "below_ma_streak": "dk_volume_below_ma_streak",
-            "clear_signal": "dk_volume_clear_signal_raw",
-            "source": "dk_volume_source",
-        }
-        for source_col, target_col in feature_map.items():
-            if source_col in aligned_feature.columns:
-                out[target_col] = aligned_feature[source_col]
-
-    out.attrs["dk_volume_clear_overlay"] = {
-        "policy": CN_DK_VOLUME_POLICY,
-        "secid": CN_DK_VOLUME_YELLOW_SECID,
-        "label": CN_DK_VOLUME_YELLOW_LABEL,
-        "ma": int(CN_DK_VOLUME_YELLOW_MA),
-        "days": int(CN_DK_VOLUME_YELLOW_DAYS),
-        "scale": float(scale),
-        "active_days": int(active.sum()),
-    }
-    return out
 
 def _volume_warning_status(secid, ma, days, label):
     df, source = _fetch_cn_amount_with_fallback(
@@ -2782,6 +2795,9 @@ def fetch_yahoo(ticker, start_date="2003-01-01"):
         except _DATA_FETCH_ERRORS as e:
             last_err = e
             time.sleep(1)
+        except (KeyError, TypeError, IndexError) as e:
+            last_err = DataSchemaError(f"{name} schema changed for {ticker}: {e}")
+            time.sleep(1)
     return None, "FAILED"
 
 
@@ -3032,6 +3048,37 @@ def _dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=("CA
     assets = (set(old_weights) | set(new_weights)) - skip
     return float(sum(abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets))
 
+def _cn_series_value_at(series, row_pos):
+    try:
+        if series is None or row_pos >= len(series):
+            return np.nan
+        return series.iloc[row_pos]
+    except Exception:
+        return np.nan
+
+def _select_cn_ideal_asset(scores, r2_dict, row_pos, holding="cash"):
+    if not scores:
+        return "cash"
+    best = max(scores, key=scores.get)
+    best_score = scores.get(best)
+    if pd.isna(best_score) or float(best_score) <= 0:
+        return "cash"
+    r2_val = _cn_series_value_at(r2_dict.get(best), row_pos) if r2_dict else np.nan
+    if pd.isna(r2_val) or float(r2_val) < CN_R2_THRESHOLD:
+        return "cash"
+    if holding != "cash" and holding != best and holding in scores:
+        hold_score = scores.get(holding)
+        hold_r2 = _cn_series_value_at(r2_dict.get(holding), row_pos) if r2_dict else np.nan
+        holding_ok = (
+            not pd.isna(hold_score)
+            and float(hold_score) > 0
+            and not pd.isna(hold_r2)
+            and float(hold_r2) >= CN_R2_THRESHOLD
+        )
+        if holding_ok and CN_SWITCH_BUFFER > 1.0:
+            return best if float(best_score) > float(hold_score) * CN_SWITCH_BUFFER else holding
+    return best
+
 def run_cn_strategy(close_df, equity_codes):
     """Sub-A V6.1: 乖离动量 + R²过滤 + 国债轮动 + 波动率缩放.
     v6.1变更: 乖离动量替代双动量排名, R²过滤替代MA拐头和冷却期, 国债加入轮动池, 波动率缩放控制风险.
@@ -3060,25 +3107,7 @@ def run_cn_strategy(close_df, equity_codes):
                     scores[code] = val
         ideal = "cash"
         if scores:
-            best = max(scores, key=scores.get)
-            if scores[best] <= 0:
-                ideal = "cash"  # 乖离动量全负 → 持现金
-            else:
-                r2_val = r2_dict.get(best, pd.Series(dtype=float)).iloc[i] \
-                    if best in r2_dict and i < len(r2_dict[best]) else np.nan
-                if not np.isnan(r2_val) and r2_val >= CN_R2_THRESHOLD:
-                    current_ok = False
-                    if holding != "cash" and holding != best and holding in scores and holding in r2_dict and i < len(r2_dict[holding]):
-                        cur_r2 = r2_dict[holding].iloc[i]
-                        current_ok = (
-                            scores[holding] > 0
-                            and not np.isnan(cur_r2)
-                            and cur_r2 >= CN_R2_THRESHOLD
-                        )
-                    if current_ok and CN_SWITCH_BUFFER > 1.0:
-                        ideal = best if scores[best] > scores[holding] * CN_SWITCH_BUFFER else holding
-                    else:
-                        ideal = best
+            ideal = _select_cn_ideal_asset(scores, r2_dict, i, holding=holding)
         signal_target = ideal if ideal != holding else None
         trade_target = None
         trade_fraction = holding_fraction
@@ -6504,6 +6533,116 @@ def _parse_json_from_response(text, required_fields=None):
             raise ValueError(f"Missing: {', '.join(missing)}")
     return parsed
 
+def _call_llm_text_or_raise(prompt, context):
+    try:
+        response = poe.call("Grok-4.1-Fast-Non-Reasoning", prompt)
+        return response.text
+    except Exception as exc:
+        raise poe.BotError(f"{context} LLM解析失败: {_short_error(exc)}") from exc
+
+def _parse_number_with_unit(text):
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(百万|萬|万|千|k|K)?", str(text))
+    if not m:
+        return None
+    value = float(m.group(1))
+    unit = m.group(2) or ""
+    if unit in ("百万",):
+        value *= 1_000_000
+    elif unit in ("萬", "万"):
+        value *= 10_000
+    elif unit in ("千", "k", "K"):
+        value *= 1_000
+    return value
+
+def _parse_simple_capital_config(text):
+    raw = str(text or "")
+    compact = raw.replace("：", ":")
+    parsed = {}
+    for strategy in ("Sub-A-DK", "Sub-A", "Sub-B"):
+        m = re.search(rf"{re.escape(strategy)}\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", compact, re.I)
+        if m:
+            amount = _parse_number_with_unit(m.group(1))
+            if amount and amount > 0:
+                parsed[strategy] = amount
+    if parsed:
+        return parsed
+
+    usd = None
+    cn = None
+    m = re.search(r"(?:美元|USD|\$)\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", compact, re.I)
+    if not m:
+        m = re.search(r"([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)\s*(?:美元|USD)", compact, re.I)
+    if m:
+        usd = _parse_number_with_unit(m.group(1))
+    m = re.search(r"(?:人民币|RMB|CNY|A股)\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", compact, re.I)
+    if not m:
+        m = re.search(r"([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)\s*(?:人民币|RMB|CNY)", compact, re.I)
+    if m:
+        cn = _parse_number_with_unit(m.group(1))
+    if cn and cn > 0:
+        parsed["Sub-A"] = cn * 0.5
+        parsed["Sub-A-DK"] = cn * 0.5
+    if usd and usd > 0:
+        parsed["Sub-B"] = usd
+    return parsed or None
+
+def _parse_simple_position_config(text):
+    raw = str(text or "")
+    compact = raw.replace("：", ":")
+    parsed = {}
+    strategy = next((s for s in ("Sub-A-DK", "Sub-A", "Sub-B") if re.search(re.escape(s), compact, re.I)), None)
+    if not strategy:
+        return None
+    body = compact[compact.lower().find(strategy.lower()) + len(strategy):]
+    if strategy == "Sub-B":
+        items = {}
+        for ticker, qty in re.findall(r"\b([A-Z]{2,6}(?:-[A-Z]+)?)\b\s*([0-9]+(?:\.[0-9]+)?)\s*(?:股|shares?)?", body, re.I):
+            if ticker.upper() not in {"SUB", "USD", "RMB", "CNY"}:
+                items[ticker.upper()] = int(float(qty))
+        if items:
+            parsed[strategy] = items
+    elif strategy == "Sub-A":
+        name_to_code = {
+            "红利低波100": "1.H20955",
+            "红利低波": "1.H20955",
+            "创业板": "0.399606",
+            "上证50": "1.H00016",
+            "中证1000": "1.H00852",
+            "中证500": "1.H00905",
+            "国债": "1.H11077",
+            "10Y": "1.H11077",
+        }
+        items = {}
+        for name, code in name_to_code.items():
+            m = re.search(rf"{re.escape(name)}\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", body, re.I)
+            if m:
+                amount = _parse_number_with_unit(m.group(1))
+                if amount and amount > 0:
+                    items[code] = {"amount": amount}
+        if items:
+            parsed[strategy] = items
+    elif strategy == "Sub-A-DK":
+        name_to_key = {
+            "创业板": "创业板",
+            "中证1000": "中证1000",
+            "上证50": "上证50",
+            "沪深300": "沪深300",
+            "中证500": "中证500",
+        }
+        items = {}
+        for side, prefix in (("做多", "做多_"), ("做空", "做空_")):
+            for name, key in name_to_key.items():
+                m = re.search(rf"{side}\s*{re.escape(name)}\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", body)
+                if not m:
+                    m = re.search(rf"{side}\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)\s*{re.escape(name)}", body)
+                if m:
+                    amount = _parse_number_with_unit(m.group(1))
+                    if amount and amount > 0:
+                        items[prefix + key] = {"amount": amount}
+        if items:
+            parsed[strategy] = items
+    return parsed or None
+
 def _scan_trade_logs(chat):
     all_recs = []
     for msg in chat:
@@ -7866,14 +8005,7 @@ class CombinedStrategyBase:
                     scores_today[code] = val
         hypo_cn = "cash"
         if scores_today:
-            best_cn = max(scores_today, key=scores_today.get)
-            if scores_today[best_cn] <= 0:
-                hypo_cn = "cash"  # 乖离动量全负 → 持现金
-            else:
-                r2_val = r2_cn.get(best_cn, pd.Series(dtype=float)).iloc[-1] \
-                    if best_cn in r2_cn else np.nan
-                if not np.isnan(r2_val) and r2_val >= CN_R2_THRESHOLD:
-                    hypo_cn = best_cn
+            hypo_cn = _select_cn_ideal_asset(scores_today, r2_cn, len(cn_close_with_bond) - 1, holding=cn_current)
         us_date = us_rot_close.index[-1]
         us_start_idx = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
         us_signal_set = _us_signal_days(us_rot_close, us_start_idx)
@@ -8022,7 +8154,7 @@ class CombinedStrategyBase:
         prompt = f"""解析资金设置。
 
 资金设置支持: Sub-A, Sub-A-DK, Sub-B
-V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-D 20%(v1.1 six-ETF), Sub-B 40%
+V7.6 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v1.6 target-vol), Sub-D 20%(v1.1 six-ETF), Sub-B 40%
 注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；微盘和Sub-D由独立脚本处理，不在本资金配置里设置
 
 当前已设置:
@@ -8043,9 +8175,9 @@ V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-D
 
 规则:
 1. 用户说"Sub-B 5万美元" -> Sub-B: 50000
-2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=10:15拆分, 美元金额默认给Sub-B
-   例: "人民币300万, 美元100万" -> Sub-A: 1200000, Sub-A-DK: 1800000, Sub-B: 1000000, Sub-D: null, Sub-C: null
-3. 用户说"总共100万, 按V7.6比例" (未区分币种) -> Sub-A: 100000, Sub-A-DK: 150000, Sub-B: 400000, Sub-D: null, Sub-C: null（微盘15%和Sub-D 20%由独立脚本处理）
+2. 用户分别指定人民币和美元金额 -> 人民币金额按Sub-A:Sub-A-DK=15:15拆分, 美元金额默认给Sub-B
+   例: "人民币300万, 美元100万" -> Sub-A: 1500000, Sub-A-DK: 1500000, Sub-B: 1000000, Sub-D: null, Sub-C: null
+3. 用户说"总共100万, 按V7.6比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 150000, Sub-B: 400000, Sub-D: null, Sub-C: null（微盘10%和Sub-D 20%由独立脚本处理）
 4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)
 5. "万"=10000, "百万"=1000000, "千"=1000
 6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)
@@ -8053,10 +8185,15 @@ V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-D
 8. 关键: 人民币/RMB/CNY -> 只分给Sub-A和Sub-A-DK; 美元/USD -> 只分给Sub-B
 9. Sub-D和Sub-C不由本资金配置解析；即使用户提到也输出null"""
 
+        parsed = _parse_simple_capital_config(poe.query.text)
         with _sm() as msg:
             w = msg.write
             w("⏳ 正在解析资金设置...\n")
-        response = poe.call("Grok-4.1-Fast-Non-Reasoning", prompt)
+        response = (
+            types.SimpleNamespace(text=json.dumps(parsed, ensure_ascii=False))
+            if parsed is not None
+            else types.SimpleNamespace(text=_call_llm_text_or_raise(prompt, "资金配置"))
+        )
         try:
             parsed = _parse_json_from_response(response.text, [])
         except (json.JSONDecodeError, ValueError):
@@ -8073,7 +8210,7 @@ V7.6主组合权重: Sub-A 10%, Sub-A-DK 15%, 微盘 15%(v1.6 target-vol), Sub-D
         currency = {"Sub-A": "¥", "Sub-A-DK": "¥", "Sub-B": "$"}
         with _sm() as msg:
             w = msg.write
-            w("## 💰 资金配置已更新\n\n| 策略 | 资金 | 默认权重 |\n|:-|-----:|:-|\n")
+            w("## 💰 资金配置已更新\n\n| 策略 | 资金 | active权重 |\n|:-|-----:|:-|\n")
             for s in ["Sub-A", "Sub-A-DK", "Sub-B"]:
                 v = config.get(s)
                 c = currency[s]
@@ -8218,9 +8355,14 @@ Sub-B: V7.6收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}
    注意: _total_amount表示策略总金额, 和具体标的的amount不同
 10. Sub-D和Sub-C不由本仓位配置解析；即使用户提到也输出null"""
 
+            parsed = _parse_simple_position_config(poe.query.text)
             with _sm() as msg:
                 msg.write("⏳ 正在解析仓位设置...\n")
-            response = poe.call("Grok-4.1-Fast-Non-Reasoning", prompt)
+            response = (
+                types.SimpleNamespace(text=json.dumps(parsed, ensure_ascii=False))
+                if parsed is not None
+                else types.SimpleNamespace(text=_call_llm_text_or_raise(prompt, "仓位配置"))
+            )
             try:
                 parsed = _parse_json_from_response(response.text, [])
             except (json.JSONDecodeError, ValueError):
@@ -8308,7 +8450,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.6 — 策略信号查询**\n\n"
-        f"V7.6组合: Sub-A 10% + Sub-A-DK 15% + 微盘 15%(v1.6 target-vol) + Sub-D 20%(v1.1 six-ETF) + Sub-B 40%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
+        f"V7.6 active组合: Sub-A 15% + Sub-A-DK 15% + 微盘 10%(v1.6 target-vol) + Sub-D 20%(v1.1 six-ETF) + Sub-B 40%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
