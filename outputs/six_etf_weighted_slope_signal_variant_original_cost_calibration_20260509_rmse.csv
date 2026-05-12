@@ -1,0 +1,7 @@
+﻿kind,yearly_rmse
+log_wls_ann,0.10813429914576625
+norm_wls_ann_slope,0.15170014009387878
+price_rel_wls_ann_slope,0.155919572636842
+log_wls_ann_r2,0.1685264899229007
+norm_wls_ann_slope_r2,0.20638849779301313
+log_ols_ann_r2,0.24103495923065688

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "portfolio_id": "v76_current",
+  "as_of": "2026-05-12",
+  "description": "V7.6 current five-sleeve portfolio manifest. External sleeves stay outside the V7.6 Poe script; portfolio-level NAV tools should read standardized outputs.",
+  "base_currency_note": "Sleeves are evaluated by return series for portfolio reporting. Currency-specific capital allocation remains handled by each sleeve's own execution process.",
+  "v76_script": "mnt_bot V 7.6 plus.py",
+  "sleeves": [
+    {
+      "name": "Sub-A",
+      "weight": 0.1,
+      "source_type": "v76_internal",
+      "strategy_version": "V7.6 Sub-A",
+      "source_entrypoint": "CombinedStrategyV76._run_strategies",
+      "required_outputs": ["return", "nav", "signal"],
+      "embed_in_v76": true,
+      "notes": "A-share long sleeve computed inside V7.6."
+    },
+    {
+      "name": "Sub-A-DK",
+      "weight": 0.15,
+      "source_type": "v76_internal",
+      "strategy_version": "V7.6 Sub-A-DK",
+      "source_entrypoint": "CombinedStrategyV76._run_strategies",
+      "required_outputs": ["return", "nav", "signal"],
+      "embed_in_v76": true,
+      "notes": "A-share long-short sleeve computed inside V7.6."
+    },
+    {
+      "name": "Microcap",
+      "weight": 0.15,
+      "source_type": "external_script",
+      "strategy_version": "v1.6 target-vol",
+      "source_entrypoint": "../微盘股对冲策略/outputs/microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+      "required_outputs": ["date", "return_net", "nav_net", "signal_on", "current_execution_scale"],
+      "embed_in_v76": false,
+      "notes": "Independent Microcap strategy. V7.6 reads only standardized output when needed."
+    },
+    {
+      "name": "Sub-D",
+      "weight": 0.2,
+      "source_type": "external_script",
+      "strategy_version": "v1.1 six-ETF",
+      "source_entrypoint": "run_subd_six_etf_v1_1.py",
+      "required_outputs": ["date", "return", "nav", "scenario", "final_exposure_after_overheat"],
+      "embed_in_v76": false,
+      "notes": "Independent six-ETF strategy. Keep outside V7.6; portfolio-level tools may read its daily output."
+    },
+    {
+      "name": "Sub-B",
+      "weight": 0.4,
+      "source_type": "v76_internal",
+      "strategy_version": "V7.6 Sub-B",
+      "source_entrypoint": "CombinedStrategyV76._run_strategies",
+      "required_outputs": ["return", "nav", "signal"],
+      "embed_in_v76": true,
+      "notes": "US rotation sleeve computed inside V7.6."
+    }
+  ],
+  "performance_query_policy": {
+    "v76_builtin_query": ["Sub-A", "Sub-A-DK", "Sub-B"],
+    "external_sleeves": ["Microcap", "Sub-D"],
+    "combined_portfolio_nav": "Use a separate portfolio-level script when a five-sleeve merged NAV or economic curve is needed."
+  }
+}

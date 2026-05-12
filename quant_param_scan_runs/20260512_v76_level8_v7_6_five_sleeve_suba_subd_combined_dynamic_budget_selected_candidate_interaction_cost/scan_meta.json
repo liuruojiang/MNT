@@ -1,0 +1,180 @@
+{
+  "run_id": "20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost",
+  "created_at": "2026-05-12",
+  "project": "v76_level8",
+  "repo_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略",
+  "strategy": "V7.6 five-sleeve",
+  "subsystem": "SubA_SubD_combined_dynamic_budget",
+  "git_branch": "main",
+  "git_commit": "885fbf4178d01cbd3aba11035e28ba172cc4221b",
+  "git_status_before": "",
+  "git_status_after": "M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M \"V7.6\\345\\217\\230\\346\\233\\264\\350\\257\\264\\346\\230\\216_2026-05-05.md\"\n D analyze_subd_six_etf_v1_1_qveris_robustness.py\n M docs/suba_adk_v75_v76_return_dd_leverage_compare_20260507.md\n M docs/suba_v75_parameter_stability_notes_20260506.md\n M docs/suba_v76_parameter_stability_notes_20260506.md\n D \"docs/subd_six_etf_v1_1_20260509/SubD\\345\\205\\255ETF_V1.1\\345\\215\\207\\347\\272\\247\\346\\226\\207\\346\\241\\243_20260509.md\"\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_159941_data_source_check_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_data_source_validation_20260509.md\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_data_quality_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_sources_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_data_quality.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_sources.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_overheat_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_r2_targetvol_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/subd_six_etf_v1_1_qveris_robustness_20260509.md\n M \"mnt_bot V 7.5 plus.py\"\n M \"mnt_bot V 7.6 plus.py\"\n D research_subd_six_etf_weighted_slope.py\n D run_subd_six_etf_v1_1.py\n D tests/test_cn_preopen_live_snapshot_guard.py\n D tests/test_v76_signal_runtime_display.py\n M \"\\346\\255\\246\\345\\231\\250\\345\\272\\223\\346\\226\\207\\346\\241\\243.md\"\n?? AGENTS.md\n?? build_v76_level8_decision_dashboard.py\n?? build_v76_portfolio_nav.py\n?? docs/suba_entry_switch_delay_20260509/\n?? docs/suba_v76_r2_threshold_confirm_20260511.md\n?? docs/v76_level8_combo_decision_record_20260512.md\n?? outputs/\n?? poe_v76_level8_advisory_bot.py\n?? portfolio_manifests/\n?? quant_param_scan_runs/\n?? run_v76_adk_b_subd_dynamic_budget_optimization.py\n?? run_v76_suba_microcap_dynamic_budget_validation.py\n?? run_v76_suba_subd_dynamic_budget_interaction_validation.py\n?? tests/test_build_v76_level8_decision_dashboard.py\n?? tests/test_build_v76_portfolio_nav.py\n?? tests/test_poe_v76_level8_advisory_bot.py\n?? tests/test_run_v76_adk_b_subd_dynamic_budget_optimization.py\n?? tests/test_run_v76_suba_microcap_dynamic_budget_validation.py\n?? tests/test_run_v76_suba_subd_dynamic_budget_interaction_validation.py\n?? tests/test_v75_v76_nav_drawdown_chart.py\n?? tests/test_v76_combo_advisory_display.py\n?? tests/test_v76_five_sleeve_combo_default.py\n?? tests/test_v76_microcap_source_default.py\n?? tests/test_v76_portfolio_manifest.py\n?? tests/test_v76_suba_r2_threshold_default.py",
+  "scan_type": "selected_candidate_interaction_validation",
+  "parameter_group": "selected_candidate_interaction_cost",
+  "entrypoint": "run_v76_suba_subd_dynamic_budget_interaction_validation.py",
+  "baseline": {
+    "candidate": "fixed_10_15_15_20_40",
+    "weights": {
+      "Sub-A": 0.1,
+      "Sub-A-DK": 0.15,
+      "Microcap": 0.15,
+      "Sub-D": 0.2,
+      "Sub-B": 0.4
+    }
+  },
+  "candidate_grid": [
+    {
+      "candidate": "suba_dd_5_8_weekly_step5_cost0bps",
+      "scenario": "suba_dd_5_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 0
+    },
+    {
+      "candidate": "suba_dd_5_8_weekly_step5_cost5bps",
+      "scenario": "suba_dd_5_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 5
+    },
+    {
+      "candidate": "suba_dd_5_8_weekly_step5_cost10bps",
+      "scenario": "suba_dd_5_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 10
+    },
+    {
+      "candidate": "suba_dd_5_8_weekly_step5_cost20bps",
+      "scenario": "suba_dd_5_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 20
+    },
+    {
+      "candidate": "suba_dd_7_8_weekly_step5_cost0bps",
+      "scenario": "suba_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 0
+    },
+    {
+      "candidate": "suba_dd_7_8_weekly_step5_cost5bps",
+      "scenario": "suba_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 5
+    },
+    {
+      "candidate": "suba_dd_7_8_weekly_step5_cost10bps",
+      "scenario": "suba_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 10
+    },
+    {
+      "candidate": "suba_dd_7_8_weekly_step5_cost20bps",
+      "scenario": "suba_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}]",
+      "cost_bps": 20
+    },
+    {
+      "candidate": "subd_dd_7_8_weekly_step5_cost0bps",
+      "scenario": "subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 0
+    },
+    {
+      "candidate": "subd_dd_7_8_weekly_step5_cost5bps",
+      "scenario": "subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 5
+    },
+    {
+      "candidate": "subd_dd_7_8_weekly_step5_cost10bps",
+      "scenario": "subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 10
+    },
+    {
+      "candidate": "subd_dd_7_8_weekly_step5_cost20bps",
+      "scenario": "subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 20
+    },
+    {
+      "candidate": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5_cost0bps",
+      "scenario": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 0
+    },
+    {
+      "candidate": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5_cost5bps",
+      "scenario": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 5
+    },
+    {
+      "candidate": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5_cost10bps",
+      "scenario": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 10
+    },
+    {
+      "candidate": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5_cost20bps",
+      "scenario": "suba_dd_5_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.05, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 20
+    },
+    {
+      "candidate": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5_cost0bps",
+      "scenario": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 0
+    },
+    {
+      "candidate": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5_cost5bps",
+      "scenario": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 5
+    },
+    {
+      "candidate": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5_cost10bps",
+      "scenario": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 10
+    },
+    {
+      "candidate": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5_cost20bps",
+      "scenario": "suba_dd_7_8_plus_subd_dd_7_8_weekly_step5",
+      "rules_json": "[{\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-A\", \"step\": 0.05}, {\"boost_dd\": 0.07, \"cut_dd\": 0.08, \"execution\": \"weekly\", \"sleeve\": \"Sub-D\", \"step\": 0.05}]",
+      "cost_bps": 20
+    }
+  ],
+  "data_snapshot": {
+    "returns_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\\aligned_five_sleeve_real_subd_returns.csv",
+    "manifest": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\portfolio_manifests\\v76_current.json",
+    "rows": 3743,
+    "start": "2011-12-09",
+    "end": "2026-05-08"
+  },
+  "returns_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\\aligned_five_sleeve_real_subd_returns.csv",
+  "manifest": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\portfolio_manifests\\v76_current.json",
+  "rows": 3743,
+  "start": "2011-12-09",
+  "end": "2026-05-08",
+  "cost_model": {
+    "formula": "allocation_turnover * cost_bps / 10000 subtracted from daily portfolio return",
+    "cost_bps_values": [
+      0,
+      5,
+      10,
+      20
+    ]
+  },
+  "timing": "target for date t uses each sleeve NAV drawdown through t-1; selected candidates execute weekly",
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260512_v76_level8_v7_6_five_sleeve_suba_subd_combined_dynamic_budget_selected_candidate_interaction_cost\\command_log.txt"
+  },
+  "decision": "Sub-A-only remains the cleaner broad-window candidate. Sub-A plus Sub-D is the strongest recent-window interaction candidate but uses more Sub-B absorption and should not be promoted without further robustness/display validation.",
+  "stability_label": "interaction candidate evidence; do not promote by default",
+  "phase": "complete",
+  "finalized_at": "2026-05-12T14:27:25+08:00"
+}

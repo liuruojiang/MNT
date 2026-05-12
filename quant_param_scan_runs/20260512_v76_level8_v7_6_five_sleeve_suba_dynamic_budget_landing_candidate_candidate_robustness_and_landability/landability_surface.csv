@@ -1,0 +1,5 @@
+﻿surface,path,notes
+scenario constants,mnt_bot V 7.6 plus.py,PORTFOLIO_ADVISORY_SCENARIO / PORTFOLIO_STACKED_ADVISORY_SCENARIO currently name the old microcap and Sub-A+microcap advisory scenarios.
+snapshot loader,mnt_bot V 7.6 plus.py,_load_combo_advisory_snapshot reads outputs/portfolio_v76_current scenario files; landing A-only should either add a new scenario or update the selected advisory scenario deliberately.
+signal display,mnt_bot V 7.6 plus.py,"Signal/live-signal output must show Sub-A target 5/10/15%, Sub-B absorber target, trigger 5%, cut 8%, and prior Sub-A NAV drawdown."
+params display,mnt_bot V 7.6 plus.py,参数 / 实时参数 should expose the same thresholds and execution frequency if promoted.

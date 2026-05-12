@@ -1,0 +1,15 @@
+﻿scenario,asset,name,days,full_pct,invested_pct
+six_all_etf_original_conditions,159915.SZ,???ETF159915,256,0.1671018276762402,0.17777777777777778
+six_all_etf_original_conditions,159941.SZ,??ETF159941,318,0.20757180156657964,0.22083333333333333
+six_all_etf_original_conditions,159985.SZ,??ETF159985,320,0.20887728459530025,0.2222222222222222
+six_all_etf_original_conditions,513030.SH,??ETF513030,182,0.11879895561357702,0.12638888888888888
+six_all_etf_original_conditions,513520.SH,??ETF513520,133,0.08681462140992167,0.09236111111111112
+six_all_etf_original_conditions,518880.SH,??ETF518880,231,0.15078328981723238,0.16041666666666668
+six_all_etf_original_conditions,CASH,??,92,0.06005221932114883,
+six_index_except_soy_original_conditions,399006.SZ,?????399006,193,0.12597911227154046,0.13282863041982107
+six_index_except_soy_original_conditions,^NDX,????100??,292,0.1906005221932115,0.20096352374397797
+six_index_except_soy_original_conditions,159985.SZ,??ETF159985,329,0.21475195822454307,0.2264280798348245
+six_index_except_soy_original_conditions,^GDAXI,??DAX??,169,0.11031331592689295,0.11631108052305575
+six_index_except_soy_original_conditions,^N225,??225??,224,0.1462140992167102,0.15416379903647626
+six_index_except_soy_original_conditions,GC=F,COMEX????,246,0.16057441253263707,0.16930488644184447
+six_index_except_soy_original_conditions,CASH,??,79,0.05156657963446475,

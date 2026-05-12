@@ -1,0 +1,81 @@
+{
+  "run_id": "20260512_v76_dynamic_microcap_rebalance_validation",
+  "created_at": "2026-05-12T10:17:02+08:00",
+  "phase": "complete",
+  "project": "A股美股动量组合策略",
+  "strategy": "V7.6",
+  "subsystem": "Combo Microcap risk budget",
+  "repo_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\v76_dynamic_microcap_risk_budget_20260512\\aligned_sleeve_returns.csv",
+  "git_branch": "main",
+  "git_commit": "885fbf4178d01cbd3aba11035e28ba172cc4221b",
+  "git_status_before": "M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M \"V7.6\\345\\217\\230\\346\\233\\264\\350\\257\\264\\346\\230\\216_2026-05-05.md\"\n D analyze_subd_six_etf_v1_1_qveris_robustness.py\n M docs/suba_adk_v75_v76_return_dd_leverage_compare_20260507.md\n M docs/suba_v75_parameter_stability_notes_20260506.md\n M docs/suba_v76_parameter_stability_notes_20260506.md\n D \"docs/subd_six_etf_v1_1_20260509/SubD\\345\\205\\255ETF_V1.1\\345\\215\\207\\347\\272\\247\\346\\226\\207\\346\\241\\243_20260509.md\"\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_159941_data_source_check_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_data_source_validation_20260509.md\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_data_quality_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_sources_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_data_quality.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_sources.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_overheat_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_r2_targetvol_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/subd_six_etf_v1_1_qveris_robustness_20260509.md\n M \"mnt_bot V 7.5 plus.py\"\n M \"mnt_bot V 7.6 plus.py\"\n D research_subd_six_etf_weighted_slope.py\n D run_subd_six_etf_v1_1.py\n D tests/test_cn_preopen_live_snapshot_guard.py\n D tests/test_v76_signal_runtime_display.py\n M \"\\346\\255\\246\\345\\231\\250\\345\\272\\223\\346\\226\\207\\346\\241\\243.md\"\n?? AGENTS.md\n?? docs/suba_entry_switch_delay_20260509/\n?? docs/suba_v76_r2_threshold_confirm_20260511.md\n?? docs/v76_level8_combo_decision_record_20260512.md\n?? outputs/\n?? tests/test_v75_v76_nav_drawdown_chart.py\n?? tests/test_v76_suba_r2_threshold_default.py",
+  "git_status_after": "M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M \"V7.6\\345\\217\\230\\346\\233\\264\\350\\257\\264\\346\\230\\216_2026-05-05.md\"\n D analyze_subd_six_etf_v1_1_qveris_robustness.py\n M docs/suba_adk_v75_v76_return_dd_leverage_compare_20260507.md\n M docs/suba_v75_parameter_stability_notes_20260506.md\n M docs/suba_v76_parameter_stability_notes_20260506.md\n D \"docs/subd_six_etf_v1_1_20260509/SubD\\345\\205\\255ETF_V1.1\\345\\215\\207\\347\\272\\247\\346\\226\\207\\346\\241\\243_20260509.md\"\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_159941_data_source_check_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_data_source_validation_20260509.md\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_data_quality_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_qveris_cps3_sources_20260509.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_data_quality.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_sources.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_overheat_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/outputs/subd_six_etf_v1_1_qveris_r2_targetvol_scan_20260509_summary.csv\n D docs/subd_six_etf_v1_1_20260509/subd_six_etf_v1_1_qveris_robustness_20260509.md\n M \"mnt_bot V 7.5 plus.py\"\n M \"mnt_bot V 7.6 plus.py\"\n D research_subd_six_etf_weighted_slope.py\n D run_subd_six_etf_v1_1.py\n D tests/test_cn_preopen_live_snapshot_guard.py\n D tests/test_v76_signal_runtime_display.py\n M \"\\346\\255\\246\\345\\231\\250\\345\\272\\223\\346\\226\\207\\346\\241\\243.md\"\n?? AGENTS.md\n?? docs/suba_entry_switch_delay_20260509/\n?? docs/suba_v76_r2_threshold_confirm_20260511.md\n?? docs/v76_level8_combo_decision_record_20260512.md\n?? outputs/\n?? quant_param_scan_runs/\n?? tests/test_v75_v76_nav_drawdown_chart.py\n?? tests/test_v76_suba_r2_threshold_default.py",
+  "scan_type": "execution_frequency_and_cost_sensitivity",
+  "parameter_group": "microcap_dd_tier_rebalance_frequency",
+  "baseline": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.15,
+    "Sub-B": 0.6
+  },
+  "candidate_grid": {
+    "bands": {
+      "dd_5_10": {
+        "boost_dd": 0.05,
+        "cut_dd": 0.1
+      },
+      "dd_5_12": {
+        "boost_dd": 0.05,
+        "cut_dd": 0.12
+      },
+      "dd_3_10": {
+        "boost_dd": 0.03,
+        "cut_dd": 0.1
+      }
+    },
+    "executions": [
+      "daily",
+      "weekly",
+      "month_end"
+    ],
+    "cost_bps": [
+      0,
+      5,
+      10,
+      20
+    ]
+  },
+  "data_snapshot": {
+    "input_returns": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\v76_dynamic_microcap_risk_budget_20260512\\aligned_sleeve_returns.csv",
+    "start": "2010-11-22",
+    "end": "2026-05-08",
+    "rows": 4017,
+    "columns": [
+      "Sub-A",
+      "Sub-A-DK",
+      "Microcap",
+      "Sub-B"
+    ]
+  },
+  "cost_model": {
+    "inter_sleeve_allocation_turnover_bps": [
+      0,
+      5,
+      10,
+      20
+    ],
+    "formula": "daily_cost = sum(abs(delta_weights)) * cost_bps / 10000",
+    "intra_sleeve_costs": "inherited from source sleeve return series where available"
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260512_v76_dynamic_microcap_rebalance_validation\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260512_v76_dynamic_microcap_rebalance_validation\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260512_v76_dynamic_microcap_rebalance_validation\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260512_v76_dynamic_microcap_rebalance_validation\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260512_v76_dynamic_microcap_rebalance_validation\\command_log.txt"
+  },
+  "decision": "watchlist_dd_5_12_month_end_validate_not_source_default",
+  "stability_label": "promising_execution_robust_month_end",
+  "finalized_at": "2026-05-12T10:27:53+08:00"
+}

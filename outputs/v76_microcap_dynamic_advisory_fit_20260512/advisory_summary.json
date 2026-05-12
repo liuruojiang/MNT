@@ -1,0 +1,43 @@
+{
+  "rule": "dd_5_12_month_end",
+  "source": "official V7.6 _load_microcap_daily_ret() reading Microcap v1.8 costed return_net",
+  "boost_rule": "20% Microcap if prior Microcap NAV drawdown is within 5%",
+  "cut_rule": "10% Microcap if prior Microcap NAV drawdown is worse than 12%",
+  "neutral_rule": "15% Microcap otherwise",
+  "execution_rule": "month-end only; Sub-B absorbs the difference",
+  "latest_date": "2026-05-08",
+  "latest_microcap_nav": 743.5611975781585,
+  "latest_microcap_peak": 927.4181968045996,
+  "latest_microcap_drawdown": -0.19824605540404172,
+  "latest_prior_drawdown_for_signal": -0.21049375431230377,
+  "latest_daily_signal_microcap_weight": 0.1,
+  "last_month_end_execution_date": "2026-04-30",
+  "last_month_end_signal_microcap_weight": 0.1,
+  "current_executed_month_end_microcap_weight": 0.1,
+  "current_advisory_combo_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.1,
+    "Sub-B": 0.65
+  },
+  "latest_daily_recommendation_combo_weights": {
+    "Sub-A": 0.1,
+    "Sub-A-DK": 0.15,
+    "Microcap": 0.1,
+    "Sub-B": 0.65
+  },
+  "implementation_fit": {
+    "can_compute_from_existing_v76_loader": true,
+    "requires_microcap_internal_change": false,
+    "recommended_integration": "advisory display only before production default",
+    "display_locations": [
+      "parameters/combo weight section",
+      "live parameters combo weight section"
+    ],
+    "do_not_change": [
+      "COMBINED_WEIGHTS production default",
+      "PERFORMANCE_COMBO_ORDER no-microcap performance query",
+      "Microcap v1.8 standalone strategy internals"
+    ]
+  }
+}

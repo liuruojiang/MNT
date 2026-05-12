@@ -1,0 +1,9 @@
+{
+  "method": "replay from existing V7.6 Sub-A detailed file; not a full source rerun",
+  "detail_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\suba_v76_default_validation_20260505\\v76_default_daily.csv",
+  "combo_source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\v76_microcap_v16_10y_combo_20260507\\v76_microcap_v16_10y_nav_daily.csv",
+  "rule": "asset-to-asset switch enters 50%, waits for first down close of new holding to reach recorded target fraction; asset-to-cash immediate",
+  "baseline_replay_max_abs_return_diff": 9.974659986866641e-17,
+  "baseline_replay_mean_abs_return_diff": 3.858764733284834e-17,
+  "outputs": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\docs\\suba_entry_switch_delay_20260509"
+}

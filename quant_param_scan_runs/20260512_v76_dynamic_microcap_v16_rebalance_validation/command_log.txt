@@ -1,0 +1,15 @@
+init_quant_param_scan_run.py
+run_id=20260512_v76_dynamic_microcap_v16_rebalance_validation
+project=A股美股动量组合策略
+strategy=V7.6
+subsystem=Combo Microcap risk budget
+parameter_group=microcap_v1_6_dd_tier_rebalance_frequency
+repo=C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略
+
+python quant_param_scan_runs\20260512_v76_dynamic_microcap_v16_rebalance_validation\run_v16_rebalance_validation.py
+completed_at=2026-05-12T10:34:34+08:00
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-12T10:34:47+08:00
+decision=corrected_to_v1_6_watchlist_not_source_default
+stability_label=v1_6_corrected_watchlist

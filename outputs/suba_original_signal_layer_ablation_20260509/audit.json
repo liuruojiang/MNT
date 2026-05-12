@@ -1,0 +1,191 @@
+{
+  "target_script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.6 plus.py",
+  "entrypoint_used": "custom layer-by-layer rebuild of original Sub-A calc_bias_momentum path plus official overlay functions",
+  "data_mode": "official_fetch_cn_kline_equity_plus_bond_and_volume_overlay_when_enabled",
+  "price_start": "2010-06-01",
+  "price_end": "2026-05-08",
+  "price_rows": 3868,
+  "duplicate_dates": 0,
+  "codes": {
+    "1.H20955": "中证红利",
+    "0.399606": "创业板",
+    "1.H00016": "上证50",
+    "1.H00852": "中证1000",
+    "1.H00905": "中证500",
+    "1.H11077": "10Y国债"
+  },
+  "sources": {
+    "1.H20955": {
+      "name": "中证红利",
+      "source": "csindex+Sina-proxy:1.000827",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 4942
+    },
+    "0.399606": {
+      "name": "创业板",
+      "source": "EastMoney",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3867
+    },
+    "1.H00016": {
+      "name": "上证50",
+      "source": "csindex+Sina-proxy:1.000016",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00852": {
+      "name": "中证1000",
+      "source": "csindex+Sina-proxy:1.000852",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H00905": {
+      "name": "中证500",
+      "source": "csindex+Sina-proxy:1.000905",
+      "first": "2005-01-01",
+      "last": "2026-05-08",
+      "rows": 5183
+    },
+    "1.H11077": {
+      "name": "10Y国债",
+      "source": "target script _add_cn_bond_column",
+      "first": "2010-06-01",
+      "last": "2026-05-08",
+      "rows": 3868
+    }
+  },
+  "signal": "original Sub-A calc_bias_momentum",
+  "signal_formula": "slope(price / MA(CN_BIAS_N), CN_MOM_DAY) * 10000",
+  "formal_parameters": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.2,
+    "CN_BOND_CODE": "1.H11077",
+    "CN_ENTRY_INITIAL_FRACTION": 0.5,
+    "CN_ENTRY_WAIT_DAYS": null,
+    "CN_SWITCH_BUFFER": 1.03,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_MIN_LEV": 0.1,
+    "CN_SCALE_THRESHOLD": 0.0,
+    "CN_SA_CASH_OVERLAY_DECAY_RATIO": 0.55,
+    "CN_SA_CASH_OVERLAY_RECOVERY_RATIO": 0.9,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENTER": 0.36,
+    "CN_SA_SAME_SIDE_OVERHEAT_EXIT": 0.34,
+    "CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE": 0.0,
+    "CN_SA_VOLUME_SCALE": 0.25
+  },
+  "layers": [
+    {
+      "name": "01_equity_naked",
+      "include_r2": false,
+      "include_bond": false,
+      "entry_fraction": 1.0,
+      "switch_buffer": null,
+      "target_vol": false,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "02_plus_r2_filter",
+      "include_r2": true,
+      "include_bond": false,
+      "entry_fraction": 1.0,
+      "switch_buffer": null,
+      "target_vol": false,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "03_plus_bond_rotation",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 1.0,
+      "switch_buffer": null,
+      "target_vol": false,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "04_plus_half_entry",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": null,
+      "target_vol": false,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "05_plus_switch_buffer",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": 1.03,
+      "target_vol": false,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "06_plus_target_vol",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": 1.03,
+      "target_vol": true,
+      "cash_peak": false,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "07_plus_cash_peak",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": 1.03,
+      "target_vol": true,
+      "cash_peak": true,
+      "overheat": false,
+      "volume": false
+    },
+    {
+      "name": "08_plus_same_side_overheat",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": 1.03,
+      "target_vol": true,
+      "cash_peak": true,
+      "overheat": true,
+      "volume": false
+    },
+    {
+      "name": "09_plus_volume_overlay",
+      "include_r2": true,
+      "include_bond": true,
+      "entry_fraction": 0.5,
+      "switch_buffer": 1.03,
+      "target_vol": true,
+      "cash_peak": true,
+      "overheat": true,
+      "volume": true
+    }
+  ],
+  "outputs": {
+    "summary": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_signal_layer_ablation_20260509\\summary.csv",
+    "layer_contribution": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_signal_layer_ablation_20260509\\layer_contribution.csv",
+    "yearly_returns": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_signal_layer_ablation_20260509\\yearly_returns.csv",
+    "daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\suba_original_signal_layer_ablation_20260509\\daily_curves.csv"
+  }
+}

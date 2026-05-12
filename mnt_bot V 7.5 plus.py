@@ -147,8 +147,8 @@ CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
 CN_SA_VOLUME_ZZ2000_MA = 15
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = "0.399006"
-CN_SA_VOLUME_CYB_MA = 10
-CN_SA_VOLUME_CYB_DAYS = 3
+CN_SA_VOLUME_CYB_MA = 15
+CN_SA_VOLUME_CYB_DAYS = 5
 CN_SA_VOLUME_CLEAR_RATIO_ENABLED = True
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID = CN_SA_VOLUME_ZZ2000_SECID
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL = "ZZ2000"
@@ -5702,6 +5702,53 @@ def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
     ax.set_ylabel("NAV (start=1.0)", fontsize=11)
     return False
 
+
+def _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date):
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.ticker import PercentFormatter
+
+    fig, (nav_ax, dd_ax) = plt.subplots(
+        2, 1, figsize=(12, 8), sharex=True, height_ratios=[3, 1]
+    )
+    for name, nav in nav_series.items():
+        nav_ax.plot(
+            nav.index,
+            nav.values,
+            label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
+            color=colors[name],
+            linewidth=1.8,
+        )
+        drawdown = nav / nav.cummax() - 1.0
+        dd_ax.plot(
+            drawdown.index,
+            drawdown.values,
+            color=colors[name],
+            linewidth=1.2,
+            alpha=0.85,
+        )
+    nav_ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    nav_ax.set_title(
+        f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+        fontsize=14,
+        fontweight='bold',
+    )
+    _apply_nav_axis_scale(nav_ax, nav_series)
+    nav_ax.legend(loc='best', fontsize=10, framealpha=0.9)
+    nav_ax.grid(True, alpha=0.3)
+    dd_ax.axhline(y=0.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    dd_ax.set_ylabel("Drawdown", fontsize=11)
+    dd_ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+    dd_ax.grid(True, alpha=0.3)
+    dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    fig.autofmt_xdate(rotation=30)
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
 def beijing_now():
     from datetime import timezone
     utc_now = datetime.now(timezone.utc)
@@ -10069,26 +10116,9 @@ class CombinedStrategyV75(CombinedStrategyBase):
             "Sub-B": "Sub-B (美股轮动)",
             "Combined": f"PV三策略组合 ({_performance_combo_weight_label()})",
         }
-        fig, ax = plt.subplots(figsize=(12, 6))
-        for name, nav in nav_series.items():
-            ax.plot(nav.index, nav.values,
-                    label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
-                    color=colors[name], linewidth=1.8)
-        ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
-        ax.set_title(
-            f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
-            fontsize=14, fontweight='bold')
-        _apply_nav_axis_scale(ax, nav_series)
-        ax.legend(loc='best', fontsize=10, framealpha=0.9)
-        ax.grid(True, alpha=0.3)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        fig.autofmt_xdate(rotation=30)
-        fig.tight_layout()
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        buf.seek(0)
-        chart_bytes = buf.read()
+        chart_bytes = _render_nav_drawdown_chart(
+            nav_series, chart_labels, colors, start_date, end_date
+        )
         max_dd = {}
         for name, nav in nav_series.items():
             drawdown = (nav - nav.cummax()) / nav.cummax()
@@ -10322,26 +10352,9 @@ class CombinedStrategyV75(CombinedStrategyBase):
                 "Sub-B": "Sub-B (US Rotation)",
                 "Combined": f"PV 3-sleeve ({_performance_combo_weight_label()})",
             }
-            fig, ax = plt.subplots(figsize=(12, 6))
-            for name, nav in nav_series.items():
-                ax.plot(nav.index, nav.values,
-                        label=f"{chart_labels[name]}  ({(nav.iloc[-1]-1)*100:+.1f}%)",
-                        color=colors[name], linewidth=1.8)
-            ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
-            ax.set_title(
-                f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
-                fontsize=14, fontweight='bold')
-            _apply_nav_axis_scale(ax, nav_series)
-            ax.legend(loc='best', fontsize=10, framealpha=0.9)
-            ax.grid(True, alpha=0.3)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-            fig.autofmt_xdate(rotation=30)
-            fig.tight_layout()
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-            plt.close(fig)
-            buf.seek(0)
-            chart_bytes = buf.read()
+            chart_bytes = _render_nav_drawdown_chart(
+                nav_series, chart_labels, colors, start_date, end_date
+            )
         with _sm() as msg:
             w = msg.write
             w(f"## 📈 策略表现: {start_date.strftime('%Y-%m')} 至 {end_date.strftime('%Y-%m')}\n\n")
