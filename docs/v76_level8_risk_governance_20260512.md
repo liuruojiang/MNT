@@ -91,3 +91,32 @@ The V7.6 panel smoke check confirmed the rendered line:
 ```text
 Level-8 governance: ACTIVE_OK; relative NAV DD current -0.18%, worst -2.54%; execution load switches 123, turnover 13.9; review line > -5.00%.
 ```
+
+## Freeze Observation
+
+After PR #5 display integration was merged, the real refresh sequence was rerun on `main`:
+
+```powershell
+python build_v76_portfolio_nav.py
+python build_v76_level8_decision_dashboard.py
+python build_v76_level8_risk_governance.py
+```
+
+Refresh result:
+
+- refreshed at: `2026-05-12T17:53:13`
+- latest data date: `2026-05-08`
+- active budget: `advisory_suba_microcap_dd_3_10_month_end`
+- active latest weights: Sub-A `15%`, Sub-A-DK `15%`, Microcap `10%`, Sub-D `20%`, Sub-B `40%`
+- benchmark / rollback: fixed `10/15/15/20/40`
+- governance status: `ACTIVE_OK`
+- relative NAV drawdown: current `-0.18%`, worst `-2.54%`
+- execution load: `123` switches, turnover `13.9`
+
+Freeze rule:
+
+- Do not add another Level-8 overlay or promote another dynamic-budget candidate during the observation window.
+- Each live refresh should rerun the same three-script sequence and check `level8_risk_governance.csv`.
+- If governance remains `ACTIVE_OK`, keep the stacked budget active.
+- If any rule becomes `REVIEW`, stop new promotion work and inspect the failed rule before changing allocations.
+- If any rule becomes `ROLLBACK_FIXED`, use fixed `10/15/15/20/40` until the source output is repaired and the full refresh sequence returns to `ACTIVE_OK`.
