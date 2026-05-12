@@ -2,6 +2,9 @@
 # poe: privacy_shield=half
 """Single-file Poe bot for V7.6 Level-8 portfolio advisory display."""
 
+import csv
+import io
+
 try:
     from fastapi_poe.types import SettingsResponse
 except Exception:
@@ -82,6 +85,12 @@ def _install_local_poe_compat(poe_module):
 poe = _install_local_poe_compat(poe)
 
 
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/liuruojiang/MNT/main/"
+REMOTE_DASHBOARD_PATH = "outputs/portfolio_v76_current/level8_decision_dashboard.csv"
+REMOTE_GOVERNANCE_PATH = "outputs/portfolio_v76_current/level8_risk_governance.csv"
+STACKED_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
+
+
 LEVEL8_ADVISORY_SNAPSHOT = {
     "snapshot_date": "2026-05-12",
     "latest_data_date": "2026-05-08",
@@ -111,10 +120,116 @@ LEVEL8_ADVISORY_SNAPSHOT = {
         "status": "ACTIVE_OK",
         "relative_nav_drawdown": "current -0.18%, worst -2.54%",
         "execution_load": "switches 123, turnover 13.9",
-        "review_line": "> -5.00%",
+        "review_ok_condition": "> -5.00%",
+        "review_trigger": "<= -5.00%",
         "rollback_line": "<= -10.00%",
     },
 }
+
+
+def _csv_rows(text):
+    return list(csv.DictReader(io.StringIO(text.lstrip("\ufeff"))))
+
+
+def _float(value, default=0.0):
+    try:
+        if value in (None, ""):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _status_priority(status):
+    return {
+        "ROLLBACK_FIXED": 0,
+        "REVIEW": 1,
+        "ACTIVE_OK": 2,
+        "INFO": 3,
+    }.get(status, 9)
+
+
+def _read_url_text(path):
+    from urllib.request import urlopen
+
+    with urlopen(GITHUB_RAW_BASE + path, timeout=15) as response:
+        return response.read().decode("utf-8-sig")
+
+
+def parse_snapshot_from_csv_texts(dashboard_csv, governance_csv):
+    dashboard = _csv_rows(dashboard_csv)
+    governance_rows = _csv_rows(governance_csv)
+    active_rows = [
+        row
+        for row in dashboard
+        if row.get("scenario") == STACKED_SCENARIO and row.get("candidate_status") == "ACTIVE_DEFAULT"
+    ]
+    if not active_rows:
+        active_rows = [row for row in dashboard if row.get("candidate_status") == "ACTIVE_DEFAULT"]
+    if not active_rows:
+        raise ValueError("missing ACTIVE_DEFAULT row in dashboard")
+    active = active_rows[0]
+
+    governance_statuses = [row.get("status", "") for row in governance_rows if row.get("status")]
+    governance_status = (
+        sorted(governance_statuses, key=_status_priority)[0]
+        if governance_statuses
+        else "UNKNOWN"
+    )
+    governance_by_rule = {row.get("rule", ""): row for row in governance_rows}
+    relative_dd = governance_by_rule.get("relative_nav_drawdown", {})
+    execution_load = governance_by_rule.get("execution_load", {})
+
+    return {
+        "snapshot_date": "GitHub main",
+        "latest_data_date": active.get("latest_date", "n/a"),
+        "status": active.get("candidate_status", "UNKNOWN"),
+        "scenario": active.get("scenario", "n/a"),
+        "active_scenario": active.get("scenario", "n/a"),
+        "dynamic_sleeves": active.get("dynamic_sleeves", "n/a"),
+        "primary_action": active.get(
+            "primary_action",
+            "Use the active Level-8 portfolio budget; keep fixed weights as benchmark and rollback.",
+        ),
+        "source_note": "Loaded live from GitHub main outputs/portfolio_v76_current. Freshness depends on the latest committed refresh.",
+        "sleeves": [
+            {"name": "Sub-A", "weight": _float(active.get("latest_suba")), "role": "dynamic"},
+            {"name": "Sub-A-DK", "weight": _float(active.get("latest_subadk")), "role": "fixed"},
+            {"name": "Microcap", "weight": _float(active.get("latest_microcap")), "role": "dynamic"},
+            {"name": "Sub-D", "weight": _float(active.get("latest_subd")), "role": "fixed"},
+            {"name": "Sub-B", "weight": _float(active.get("latest_subb")), "role": "absorber"},
+        ],
+        "metrics": {
+            "full_annual_delta": _float(active.get("full_annual_delta")),
+            "full_max_dd_delta": _float(active.get("full_max_dd_delta")),
+            "full_sharpe_delta": _float(active.get("full_sharpe_delta")),
+            "last_1y_annual_delta": _float(active.get("last_1y_annual_delta")),
+            "last_1y_max_dd_delta": _float(active.get("last_1y_max_dd_delta")),
+            "last_1y_sharpe_delta": _float(active.get("last_1y_sharpe_delta")),
+            "latest_excess_nav_vs_fixed": _float(active.get("latest_excess_nav_vs_fixed")),
+        },
+        "governance": {
+            "status": governance_status,
+            "relative_nav_drawdown": relative_dd.get("value", "n/a"),
+            "execution_load": execution_load.get("value", "n/a"),
+            "review_ok_condition": "> -5.00%",
+            "review_trigger": "<= -5.00%",
+            "rollback_line": "<= -10.00%",
+        },
+    }
+
+
+def load_snapshot():
+    try:
+        dashboard_csv = _read_url_text(REMOTE_DASHBOARD_PATH)
+        governance_csv = _read_url_text(REMOTE_GOVERNANCE_PATH)
+        return parse_snapshot_from_csv_texts(dashboard_csv, governance_csv)
+    except Exception as exc:
+        fallback = dict(LEVEL8_ADVISORY_SNAPSHOT)
+        fallback["source_note"] = (
+            f"Embedded fallback snapshot because GitHub main output load failed: {exc}"
+        )
+        return fallback
 
 
 def _pct(value: float) -> str:
@@ -125,8 +240,8 @@ def _weight(value: float) -> str:
     return f"{float(value):.0%}"
 
 
-def render_level8_advisory() -> str:
-    snap = LEVEL8_ADVISORY_SNAPSHOT
+def render_level8_advisory(snap=None) -> str:
+    snap = snap or load_snapshot()
     metrics = snap["metrics"]
     governance = snap["governance"]
     lines = [
@@ -161,7 +276,7 @@ def render_level8_advisory() -> str:
             f"| Status | {governance['status']} |",
             f"| Relative NAV drawdown | {governance['relative_nav_drawdown']} |",
             f"| Execution load | {governance['execution_load']} |",
-            f"| Review line | {governance['review_line']} |",
+            f"| Review line | {governance['review_ok_condition']} |",
             f"| Rollback line | {governance['rollback_line']} |",
             "",
             "This is the active portfolio-level dynamic budget snapshot. Fixed 10/15/15/20/40 remains the benchmark and rollback line.",
@@ -172,8 +287,8 @@ def render_level8_advisory() -> str:
     return "\n".join(lines)
 
 
-def render_status_summary() -> str:
-    snap = LEVEL8_ADVISORY_SNAPSHOT
+def render_status_summary(snap=None) -> str:
+    snap = snap or load_snapshot()
     metrics = snap["metrics"]
     governance = snap["governance"]
     return "\n".join(
@@ -187,12 +302,13 @@ def render_status_summary() -> str:
             "- 回滚基准: 固定 10/15/15/20/40",
             f"- 相对固定超额 NAV: {_pct(metrics['latest_excess_nav_vs_fixed'])}",
             f"- 相对 NAV 回撤: {governance['relative_nav_drawdown']}",
+            f"- 数据来源: {snap['source_note']}",
         ]
     )
 
 
-def render_weights() -> str:
-    snap = LEVEL8_ADVISORY_SNAPSHOT
+def render_weights(snap=None) -> str:
+    snap = snap or load_snapshot()
     lines = [
         "## 当前执行权重",
         "",
@@ -212,13 +328,15 @@ def render_weights() -> str:
         [
             "",
             "固定 10/15/15/20/40 仍保留为 benchmark / rollback。",
+            f"数据来源: {snap['source_note']}",
         ]
     )
     return "\n".join(lines)
 
 
-def render_evidence() -> str:
-    metrics = LEVEL8_ADVISORY_SNAPSHOT["metrics"]
+def render_evidence(snap=None) -> str:
+    snap = snap or load_snapshot()
+    metrics = snap["metrics"]
     return "\n".join(
         [
             "## 相对固定权重证据",
@@ -232,12 +350,15 @@ def render_evidence() -> str:
             f"| 1Y maxDD delta | {_pct(metrics['last_1y_max_dd_delta'])} |",
             f"| 1Y Sharpe delta | {metrics['last_1y_sharpe_delta']:.2f} |",
             f"| Excess NAV vs fixed | {_pct(metrics['latest_excess_nav_vs_fixed'])} |",
+            "",
+            f"数据来源: {snap['source_note']}",
         ]
     )
 
 
-def render_governance() -> str:
-    governance = LEVEL8_ADVISORY_SNAPSHOT["governance"]
+def render_governance(snap=None) -> str:
+    snap = snap or load_snapshot()
+    governance = snap["governance"]
     return "\n".join(
         [
             "## 治理状态",
@@ -245,32 +366,35 @@ def render_governance() -> str:
             f"- 状态: **{governance['status']}**",
             f"- 相对 NAV 回撤: {governance['relative_nav_drawdown']}",
             f"- 执行负担: {governance['execution_load']}",
-            f"- 复核线: {governance['review_line']}",
+            f"- 复核线: {governance['review_ok_condition']}",
             f"- 回滚线: {governance['rollback_line']}",
             "",
             "解释:",
             "",
             "- ACTIVE_OK: 所有治理规则通过，stacked 动态仓位可以继续作为 active budget。",
             "- relative NAV DD: 动态方案相对固定 10/15/15/20/40 的超额 NAV，从自身高点回撤了多少；不是组合自身最大回撤。",
-            "- current -0.18%: 当前超额优势只比自己的历史高点低 0.18%。",
-            "- worst -2.54%: 历史最差相对回撤是 -2.54%，还没有碰到 -5% 复核线。",
-            "- switches 123: 样本期动态预算切换/再平衡次数。",
-            "- turnover 13.9: 样本期组合层权重调整的累计负担；当前阈值是 switches <= 140 且 turnover <= 15.0。",
-            "- review line > -5.00%: 相对回撤保持在 -5% 以内就继续执行；跌到 <= -5% 进入复核。",
+            "- current: 当前超额优势比自己的历史高点低多少。",
+            "- worst: 样本期最差相对回撤。",
+            "- switches: 样本期动态预算切换/再平衡次数。",
+            "- turnover: 样本期组合层权重调整的累计负担；当前阈值是 switches <= 140 且 turnover <= 15.0。",
+            f"- review line {governance['review_ok_condition']}: 相对回撤保持在 -5% 以内就继续执行；跌到 {governance['review_trigger'].replace('.00%', '%')} 进入复核。",
+            f"- 数据来源: {snap['source_note']}",
         ]
     )
 
 
-def render_rollback() -> str:
-    governance = LEVEL8_ADVISORY_SNAPSHOT["governance"]
+def render_rollback(snap=None) -> str:
+    snap = snap or load_snapshot()
+    governance = snap["governance"]
     return "\n".join(
         [
             "## 回滚线",
             "",
             "- 正常: governance 保持 ACTIVE_OK，继续使用 stacked 动态仓位。",
-            f"- 复核: 相对 NAV 回撤到 {governance['review_line']} 时，暂停新增 Level-8 晋级并检查规则。",
+            f"- 复核: 相对 NAV 回撤到 {governance['review_trigger']} 时，暂停新增 Level-8 晋级并检查规则。",
             f"- 回滚: 相对 NAV 回撤到 {governance['rollback_line']} 时，回到固定 10/15/15/20/40。",
             "- 固定权重一直保留为 benchmark / rollback，不删除。",
+            f"- 数据来源: {snap['source_note']}",
         ]
     )
 
@@ -291,7 +415,7 @@ def render_help() -> str:
             "- `回滚`: 什么时候复核、什么时候回到固定 10/15/15/20/40",
             "- `完整`: 展示完整快照",
             "",
-            "这个机器人只展示已验证的 Level-8 组合建议快照，不运行 V7.6 主策略，也不读取本地 CSV。",
+            "这个机器人默认读取 GitHub main 已提交的 Level-8 输出；如果网络失败，才回退到内置快照。它不在 Poe 内部运行完整 V7.6 主策略。",
         ]
     )
 
@@ -301,22 +425,23 @@ def answer_query(query_text: str | None = None) -> str:
     compact = "".join(text.split())
     if not compact or any(token in compact for token in ("help", "帮助", "怎么用", "用法")):
         return render_help()
+    snap = load_snapshot()
     if any(token in compact for token in ("完整", "全部", "full", "detail", "详细")):
-        return render_level8_advisory()
+        return render_level8_advisory(snap)
     if any(token in compact for token in ("治理", "active_ok", "activeok", "review", "复核")):
-        return render_governance()
+        return render_governance(snap)
     if any(token in compact for token in ("权重", "仓位", "weight", "weights", "配置")):
-        return render_weights()
+        return render_weights(snap)
     if any(token in compact for token in ("证据", "收益", "回撤", "夏普", "sharpe", "evidence", "表现")):
-        return render_evidence()
+        return render_evidence(snap)
     if any(token in compact for token in ("回滚", "rollback", "固定", "benchmark", "基准")):
-        return render_rollback()
-    return render_status_summary()
+        return render_rollback(snap)
+    return render_status_summary(snap)
 
 
 _BOT_SETTINGS = SettingsResponse(
     server_bot_dependencies={},
-    introduction_message="V7.6 Level-8 advisory snapshot bot. Send: 建议 / 状态 / 治理 / 权重 / 证据 / 回滚.",
+    introduction_message="V7.6 Level-8 advisory bot. Reads GitHub main outputs; send: 建议 / 状态 / 治理 / 权重 / 证据 / 回滚.",
 )
 poe.update_settings(_BOT_SETTINGS)
 
