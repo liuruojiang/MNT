@@ -480,6 +480,7 @@ PORTFOLIO_STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
 PORTFOLIO_ADVISORY_OUTPUT_DIR = os.path.join("outputs", "portfolio_v76_current")
 PORTFOLIO_ADVISORY_CURVE_FILE = "scenario_economic_curve.csv"
 PORTFOLIO_ADVISORY_RETURNS_FILE = "aligned_sleeve_returns.csv"
+PORTFOLIO_RISK_GOVERNANCE_FILE = "level8_risk_governance.csv"
 PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE = os.path.join(
     "quant_param_scan_runs",
     "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation",
@@ -540,6 +541,29 @@ def _csv_latest_date(path):
     return latest.max().normalize()
 
 
+def _load_level8_governance_snapshot(out_dir):
+    governance_path = os.path.join(out_dir, PORTFOLIO_RISK_GOVERNANCE_FILE)
+    if not os.path.exists(governance_path):
+        return {"available": False, "error": f"missing {PORTFOLIO_RISK_GOVERNANCE_FILE}"}
+    try:
+        governance = pd.read_csv(governance_path)
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+    if governance.empty or "status" not in governance.columns:
+        return {"available": False, "error": "empty governance output"}
+    status_order = {"ROLLBACK_FIXED": 0, "REVIEW": 1, "ACTIVE_OK": 2, "INFO": 3}
+    statuses = governance["status"].dropna().astype(str).tolist()
+    decision_status = sorted(statuses, key=lambda value: status_order.get(value, 9))[0]
+    rows = {str(row.get("rule", "")): row for row in governance.to_dict("records")}
+    return {
+        "available": True,
+        "decision_status": decision_status,
+        "relative_nav_drawdown": str(rows.get("relative_nav_drawdown", {}).get("value", "n/a")),
+        "execution_load": str(rows.get("execution_load", {}).get("value", "n/a")),
+        "rollback_threshold": str(rows.get("relative_nav_drawdown", {}).get("threshold", "n/a")),
+    }
+
+
 def _load_combo_advisory_snapshot():
     out_dir = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_OUTPUT_DIR)
     curve_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_CURVE_FILE)
@@ -574,6 +598,7 @@ def _load_combo_advisory_snapshot():
         COMBINED_WEIGHTS["Sub-A"], suba_prior_dd, boost_dd=0.05, cut_dd=0.08
     )
     microcap_daily_target = _advisory_target_weight(COMBINED_WEIGHTS["Microcap"], microcap_prior_dd)
+    governance = _load_level8_governance_snapshot(out_dir)
     return {
         "available": True,
         "latest_date": latest_date,
@@ -590,6 +615,7 @@ def _load_combo_advisory_snapshot():
         "stacked_microcap_weight": float(latest.get("stacked_advisory_microcap_weight", np.nan)),
         "stacked_subb_weight": float(latest.get("stacked_advisory_subb_weight", np.nan)),
         "stacked_excess_nav": float(latest.get("stacked_advisory_excess_nav", np.nan)),
+        "governance": governance,
     }
 
 
@@ -635,6 +661,19 @@ def _write_combo_advisory_panel(w):
         f"active {PORTFOLIO_STACKED_ADVISORY_SCENARIO}; excess NAV vs fixed "
         f"{_advisory_pct(snapshot['stacked_excess_nav'])} |\n"
     )
+    governance = snapshot.get("governance", {})
+    if governance.get("available"):
+        w(
+            f"\n- Level-8 governance: **{governance['decision_status']}**; "
+            f"relative NAV DD {governance['relative_nav_drawdown']}; "
+            f"execution load {governance['execution_load']}; "
+            f"review line {governance['rollback_threshold']}.\n"
+        )
+    else:
+        w(
+            f"\n- Level-8 governance: unavailable ({governance.get('error', 'unknown error')}); "
+            "run `python build_v76_level8_risk_governance.py` after refreshing portfolio NAV.\n"
+        )
 
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
 

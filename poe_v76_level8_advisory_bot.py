@@ -108,6 +108,13 @@ LEVEL8_ADVISORY_SNAPSHOT = {
         "last_1y_sharpe_delta": 0.4040127267262026,
         "latest_excess_nav_vs_fixed": 0.269270132887075,
     },
+    "governance": {
+        "status": "ACTIVE_OK",
+        "relative_nav_drawdown": "current -0.18%, worst -2.54%",
+        "execution_load": "switches 123, turnover 13.9",
+        "review_line": "> -5.00%",
+        "rollback_line": "<= -10.00%",
+    },
 }
 
 
@@ -122,6 +129,7 @@ def _weight(value: float) -> str:
 def render_level8_advisory() -> str:
     snap = LEVEL8_ADVISORY_SNAPSHOT
     metrics = snap["metrics"]
+    governance = snap["governance"]
     lines = [
         "# V7.6 Level-8 Advisory",
         "",
@@ -149,6 +157,14 @@ def render_level8_advisory() -> str:
             f"| 1Y Sharpe delta | {metrics['last_1y_sharpe_delta']:.2f} |",
             f"| Excess NAV vs fixed | {_pct(metrics['latest_excess_nav_vs_fixed'])} |",
             "",
+            "| Governance | Value |",
+            "|---|---:|",
+            f"| Status | {governance['status']} |",
+            f"| Relative NAV drawdown | {governance['relative_nav_drawdown']} |",
+            f"| Execution load | {governance['execution_load']} |",
+            f"| Review line | {governance['review_line']} |",
+            f"| Rollback line | {governance['rollback_line']} |",
+            "",
             "This is the active portfolio-level dynamic budget snapshot. Fixed 10/15/15/20/40 remains the benchmark and rollback line.",
             "",
             f"Snapshot note: {snap['source_note']}",
@@ -165,6 +181,7 @@ def render_help() -> str:
             "可问：",
             "- 现在组合建议是什么",
             "- 当前 ACTIVE_DEFAULT 状态",
+            "- 当前 ACTIVE_OK 治理状态",
             "- 五个袖珍组合权重",
             "- 这个是不是执行默认",
             "",

@@ -66,3 +66,28 @@ Rule snapshot:
 Keep the stacked active dynamic budget live.
 
 Do not promote another Level-8 candidate until this governance layer remains stable over live refresh cycles. If any rule moves to `REVIEW`, pause new candidate promotion and inspect the rule. If any rule moves to `ROLLBACK_FIXED`, use fixed `10/15/15/20/40` until the source problem is repaired and the dashboard is rerun.
+
+## Display Integration
+
+Follow-up implementation:
+
+- `mnt_bot V 7.6 plus.py` reads `outputs/portfolio_v76_current/level8_risk_governance.csv` in the existing portfolio dynamic-budget panel.
+- `poe_v76_level8_advisory_bot.py` embeds the current governance snapshot for the standalone Poe display bot.
+- The displayed governance line shows:
+  - current status: `ACTIVE_OK`
+  - active-vs-fixed relative NAV drawdown: current `-0.18%`, worst `-2.54%`
+  - execution load: `123` switches, turnover `13.9`
+  - review line: `> -5.00%`
+
+Validation:
+
+```powershell
+python -m py_compile "mnt_bot V 7.6 plus.py" poe_v76_level8_advisory_bot.py build_v76_level8_risk_governance.py
+python poe_v76_level8_advisory_bot.py
+```
+
+The V7.6 panel smoke check confirmed the rendered line:
+
+```text
+Level-8 governance: ACTIVE_OK; relative NAV DD current -0.18%, worst -2.54%; execution load switches 123, turnover 13.9; review line > -5.00%.
+```
