@@ -3,8 +3,8 @@
   "manifest": "portfolio_manifests/v76_current.json",
   "returns_source": "quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv",
   "start": "2011-12-09",
-  "end": "2026-05-11",
-  "rows": 3744,
+  "end": "2026-05-12",
+  "rows": 3745,
   "weights": {
     "Sub-A": 0.1,
     "Sub-A-DK": 0.15,

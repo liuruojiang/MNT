@@ -92,14 +92,14 @@ STACKED_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
 
 
 LEVEL8_ADVISORY_SNAPSHOT = {
-    "snapshot_date": "2026-05-12",
-    "latest_data_date": "2026-05-08",
+    "snapshot_date": "2026-05-13",
+    "latest_data_date": "2026-05-12",
     "status": "ACTIVE_DEFAULT",
     "scenario": "advisory_suba_microcap_dd_3_10_month_end",
     "active_scenario": "advisory_suba_microcap_dd_3_10_month_end",
     "dynamic_sleeves": "Sub-A,Microcap",
     "primary_action": "Use stacked Sub-A 5/8 weekly + Microcap 3/10 month-end as the active portfolio-level dynamic budget; keep fixed weights as benchmark and rollback.",
-    "source_note": "Embedded from the local Level-8 dashboard run verified on 2026-05-12.",
+    "source_note": "Embedded from the local Level-8 dashboard run verified on 2026-05-13.",
     "sleeves": [
         {"name": "Sub-A", "weight": 0.15, "role": "dynamic"},
         {"name": "Sub-A-DK", "weight": 0.15, "role": "fixed"},
@@ -108,17 +108,17 @@ LEVEL8_ADVISORY_SNAPSHOT = {
         {"name": "Sub-B", "weight": 0.40, "role": "absorber"},
     ],
     "metrics": {
-        "full_annual_delta": 0.021750906860742825,
-        "full_max_dd_delta": 0.007155533526533697,
-        "full_sharpe_delta": 0.16753581735735779,
-        "last_1y_annual_delta": 0.043492369292941646,
-        "last_1y_max_dd_delta": 0.0037853338198617983,
-        "last_1y_sharpe_delta": 0.4040127267262026,
-        "latest_excess_nav_vs_fixed": 0.269270132887075,
+        "full_annual_delta": 0.0215526054575265,
+        "full_max_dd_delta": 0.0071570601390986,
+        "full_sharpe_delta": 0.1648418794130282,
+        "last_1y_annual_delta": 0.0379298300466857,
+        "last_1y_max_dd_delta": 0.0017663264281626,
+        "last_1y_sharpe_delta": 0.3439691243939631,
+        "latest_excess_nav_vs_fixed": 0.2666628120243268,
     },
     "governance": {
         "status": "ACTIVE_OK",
-        "relative_nav_drawdown": "current -0.18%, worst -2.54%",
+        "relative_nav_drawdown": "current 0.00%, worst -2.54%",
         "execution_load": "switches 123, turnover 13.9",
         "review_ok_condition": "> -5.00%",
         "review_trigger": "<= -5.00%",

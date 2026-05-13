@@ -38,6 +38,31 @@ def current_shanghai_date() -> pd.Timestamp:
     return pd.Timestamp.now(tz="Asia/Shanghai").tz_localize(None).normalize()
 
 
+def latest_required_close_date(run_date: pd.Timestamp | None = None) -> pd.Timestamp:
+    current = current_shanghai_date() if run_date is None else pd.Timestamp(run_date).normalize()
+    return pd.Timestamp(current - pd.offsets.BDay(1)).normalize()
+
+
+def validate_common_end_freshness(data_meta: dict[str, object], run_date: pd.Timestamp | None = None) -> None:
+    required = latest_required_close_date(run_date)
+    common_end = pd.Timestamp(str(data_meta["common_end"])).normalize()
+    if common_end >= required:
+        return
+    ranges = data_meta.get("series_ranges", {})
+    range_lines = []
+    if isinstance(ranges, dict):
+        for name, values in ranges.items():
+            if isinstance(values, dict):
+                range_lines.append(
+                    f"{name}: end={values.get('end')} rows={values.get('rows')}"
+                )
+    details = "; ".join(range_lines) if range_lines else "no sleeve ranges available"
+    raise RuntimeError(
+        f"source returns stale: common_end {common_end.date().isoformat()} < "
+        f"required {required.date().isoformat()}; {details}"
+    )
+
+
 def git_value(args: list[str]) -> str:
     try:
         return subprocess.check_output(
@@ -233,6 +258,10 @@ Decision: `real_subd_five_sleeve_validation_completed`.
 
 def main() -> None:
     ret_df, data_meta = fetch_returns()
+    run_date = current_shanghai_date()
+    data_meta["run_date"] = run_date.date().isoformat()
+    data_meta["required_close_date"] = latest_required_close_date(run_date).date().isoformat()
+    validate_common_end_freshness(data_meta, run_date)
     ret_df.to_csv(RUN_DIR / "aligned_five_sleeve_real_subd_returns.csv", index_label="date", encoding="utf-8-sig")
     summary, weights, navs = H.build_outputs(ret_df)
     wm = H.window_metrics(summary)
@@ -282,6 +311,12 @@ def main() -> None:
     ]
     print(wm.loc[wm["candidate"].isin(keep), cols].to_string(index=False))
     print(weights.loc[weights["candidate"].isin(keep)].to_string(index=False))
+    print("source_returns_snapshot")
+    print(f"run_date={data_meta['run_date']}")
+    print(f"required_close_date={data_meta['required_close_date']}")
+    print(f"common_end={data_meta['common_end']}")
+    for name, values in data_meta["series_ranges"].items():
+        print(f"{name}: start={values['start']} end={values['end']} rows={values['rows']}")
 
 
 if __name__ == "__main__":

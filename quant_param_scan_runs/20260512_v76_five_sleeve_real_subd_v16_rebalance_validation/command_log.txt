@@ -1,2 +1,8 @@
 python quant_param_scan_runs\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\run_real_subd_v16_rebalance_validation.py
 completed_at=2026-05-12T11:13:44+08:00
+python quant_param_scan_runs\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\run_real_subd_v16_rebalance_validation.py
+completed_at=2026-05-13T13:24:44+08:00
+python quant_param_scan_runs\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\run_real_subd_v16_rebalance_validation.py
+completed_at=2026-05-13T13:27:25+08:00
+python quant_param_scan_runs\20260512_v76_five_sleeve_real_subd_v16_rebalance_validation\run_real_subd_v16_rebalance_validation.py
+completed_at=2026-05-13T13:33:22+08:00
