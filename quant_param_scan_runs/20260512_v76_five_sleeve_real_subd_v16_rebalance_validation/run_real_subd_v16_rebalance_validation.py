@@ -19,6 +19,7 @@ HELPER_PATH = (
     / "20260512_v76_five_sleeve_v16_rebalance_validation"
     / "run_five_sleeve_v16_rebalance_validation.py"
 )
+SUBD_SOURCE_FALLBACK_REF = "885fbf4178d01cbd3aba11035e28ba172cc4221b"
 
 
 def load_helper():
@@ -46,25 +47,45 @@ def git_value(args: list[str]) -> str:
         return ""
 
 
-def load_git_blob_module(module_name: str, repo_path: str) -> types.ModuleType:
-    code = subprocess.check_output(
-        ["git", "show", f"HEAD:{repo_path}"],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+def load_git_blob_module(
+    module_name: str,
+    repo_path: str,
+    refs: tuple[str, ...] = ("HEAD",),
+) -> types.ModuleType:
+    last_error: subprocess.CalledProcessError | None = None
+    for ref in refs:
+        try:
+            code = subprocess.check_output(
+                ["git", "show", f"{ref}:{repo_path}"],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                stderr=subprocess.PIPE,
+            )
+            break
+        except subprocess.CalledProcessError as exc:
+            last_error = exc
+    else:
+        assert last_error is not None
+        raise last_error
     module = types.ModuleType(module_name)
-    module.__file__ = f"git:HEAD:{repo_path}"
+    module.__file__ = f"git:{ref}:{repo_path}"
+    module.__source_ref__ = ref
     sys.modules[module_name] = module
     exec(compile(code, module.__file__, "exec"), module.__dict__)
     return module
 
 
 def build_real_subd_return() -> tuple[pd.Series, dict[str, object]]:
-    subd = load_git_blob_module("research_subd_six_etf_weighted_slope", "research_subd_six_etf_weighted_slope.py")
+    subd_refs = ("HEAD", SUBD_SOURCE_FALLBACK_REF)
+    subd = load_git_blob_module(
+        "research_subd_six_etf_weighted_slope",
+        "research_subd_six_etf_weighted_slope.py",
+        subd_refs,
+    )
     sys.modules["research_subd_six_etf_weighted_slope"] = subd
-    runner = load_git_blob_module("run_subd_six_etf_v1_1_git", "run_subd_six_etf_v1_1.py")
+    runner = load_git_blob_module("run_subd_six_etf_v1_1_git", "run_subd_six_etf_v1_1.py", subd_refs)
     subd.OUTPUT_DIR = RUN_DIR / "subd_outputs"
     config = subd.RunConfig(
         source="sina",
@@ -84,7 +105,10 @@ def build_real_subd_return() -> tuple[pd.Series, dict[str, object]]:
     sources.to_csv(RUN_DIR / "subd_v1_1_sources.csv", index=False, encoding="utf-8-sig")
     subd.data_quality(prices).to_csv(RUN_DIR / "subd_v1_1_data_quality.csv", index=False, encoding="utf-8-sig")
     return curve["return"].dropna().rename("Sub-D"), {
-        "source": "git HEAD:run_subd_six_etf_v1_1.py + git HEAD:research_subd_six_etf_weighted_slope.py",
+        "source": (
+            f"git {runner.__source_ref__}:run_subd_six_etf_v1_1.py"
+            f" + git {subd.__source_ref__}:research_subd_six_etf_weighted_slope.py"
+        ),
         "scenario": "v1_1_staged_50_plus_ma60_overheat",
         "data_source": "akshare.fund_etf_hist_sina raw close",
         "start": curve.index.min().date().isoformat(),
