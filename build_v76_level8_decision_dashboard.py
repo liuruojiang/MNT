@@ -154,6 +154,17 @@ def _weight(value: float) -> str:
     return f"{value:.0%}"
 
 
+def _weight_delta(value: float, base: float) -> str:
+    if pd.isna(value) or pd.isna(base):
+        return "n/a"
+    delta_pp = int(round((float(value) - float(base)) * 100))
+    if delta_pp > 0:
+        return f"+{delta_pp}pp"
+    if delta_pp < 0:
+        return f"{delta_pp}pp"
+    return "0pp"
+
+
 def _scenario_label(scenario: str) -> str:
     return {
         FIXED_SCENARIO: "Fixed default",
@@ -537,6 +548,91 @@ def render_markdown(summary: pd.DataFrame, decision: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _action_row(summary: pd.DataFrame, decision: dict[str, object]) -> pd.Series | None:
+    scenario = str(decision.get("watch_scenario", ""))
+    if scenario and scenario in set(summary["scenario"]):
+        return summary[summary["scenario"] == scenario].iloc[0]
+    active = summary[summary["candidate_status"] == "ACTIVE_DEFAULT"]
+    if not active.empty:
+        return active.iloc[0]
+    fixed = summary[summary["scenario"] == FIXED_SCENARIO]
+    if not fixed.empty:
+        return fixed.iloc[0]
+    if not summary.empty:
+        return summary.iloc[0]
+    return None
+
+
+def render_action_summary(summary: pd.DataFrame, decision: dict[str, object]) -> str:
+    row = _action_row(summary, decision)
+    if row is None:
+        return "\n".join(
+            [
+                "## 今日执行仓位",
+                "",
+                "- 状态: 无可用输出",
+                "- 操作: 不调仓，先刷新 Level-8 Advisory 输出。",
+            ]
+        )
+
+    stale = decision.get("data_freshness") != "fresh"
+    status = str(decision.get("decision_status", ""))
+    latest_date = str(row.get("latest_date", decision.get("latest_date", "")))
+    action = (
+        "不调仓，先刷新数据。"
+        if stale
+        else "按下表配置仓位；若账户已是这些权重，则持有不动。"
+    )
+    sleeves = [
+        ("Sub-A", "latest_suba"),
+        ("Sub-A-DK", "latest_subadk"),
+        ("Microcap", "latest_microcap"),
+        ("Sub-D", "latest_subd"),
+        ("Sub-B", "latest_subb"),
+    ]
+    lines = [
+        "## 今日执行仓位",
+        "",
+        f"- 数据日期: `{latest_date}`",
+        f"- 状态: **{status}**",
+        f"- 操作: {action}",
+        "- 固定回滚线: `10% / 15% / 15% / 20% / 40%`",
+        "",
+        "| 袖珍组合 | 目标仓位 | 相对固定变化 | 说明 |",
+        "|---|---:|---:|---|",
+    ]
+    dynamic = {item.strip() for item in str(row.get("dynamic_sleeves", "")).split(",") if item.strip()}
+    for sleeve, column in sleeves:
+        target = float(row.get(column, np.nan))
+        base = BASE_WEIGHTS[sleeve]
+        if sleeve in dynamic:
+            note = "动态调整"
+        elif sleeve == "Sub-B":
+            note = "吸收权重差"
+        else:
+            note = "固定"
+        lines.append(f"| {sleeve} | {_weight(target)} | {_weight_delta(target, base)} | {note} |")
+
+    lines.extend(
+        [
+            "",
+            "## 触发规则",
+            "",
+            "- Sub-A: 5/8 weekly 动态预算。",
+            "- Microcap: 3/10 month-end 动态预算。",
+            "- Sub-B: 自动吸收 Sub-A 和 Microcap 的仓位差。",
+            "- 复核线: 相对固定组合的超额 NAV 回撤到 -5% 进入复核；到 -10% 回滚固定仓位。",
+            "",
+            "## 证据摘要",
+            "",
+            f"- 相对固定超额 NAV: {_pct(float(row.get('latest_excess_nav_vs_fixed', np.nan)))}",
+            f"- 全样本相对固定: 年化 {_pct(float(row.get('full_annual_delta', np.nan)))} / 最大回撤改善 {_pct(float(row.get('full_max_dd_delta', np.nan)))} / Sharpe +{float(row.get('full_sharpe_delta', np.nan)):.2f}",
+            f"- 近 1 年相对固定: 年化 {_pct(float(row.get('last_1y_annual_delta', np.nan)))} / 最大回撤改善 {_pct(float(row.get('last_1y_max_dd_delta', np.nan)))} / Sharpe +{float(row.get('last_1y_sharpe_delta', np.nan)):.2f}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _history_scenario_name(decision: dict[str, object]) -> str:
     watch = str(decision.get("watch_scenario", ""))
     if watch.startswith("stacked_"):
@@ -606,6 +702,9 @@ def write_dashboard_outputs(summary: pd.DataFrame, decision: dict[str, object], 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     summary.to_csv(out / "level8_decision_dashboard.csv", index=False, encoding="utf-8-sig")
+    (out / "level8_action_summary.md").write_text(
+        render_action_summary(summary, decision), encoding="utf-8"
+    )
     (out / "level8_decision_dashboard.md").write_text(
         render_markdown(summary, decision), encoding="utf-8"
     )
@@ -633,8 +732,11 @@ def main(argv: list[str] | None = None) -> None:
         metrics, curve, source_latest, base_weights, args.external_scan
     )
     write_dashboard_outputs(summary, decision, args.output_dir)
+    print(render_action_summary(summary, decision))
+    print()
     print(render_markdown(summary, decision))
     print(f"WROTE {Path(args.output_dir) / 'level8_decision_dashboard.csv'}")
+    print(f"WROTE {Path(args.output_dir) / 'level8_action_summary.md'}")
     print(f"WROTE {Path(args.output_dir) / 'level8_decision_dashboard.md'}")
     print(f"WROTE {Path(args.output_dir) / 'level8_decision_history.csv'}")
 

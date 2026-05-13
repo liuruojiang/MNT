@@ -115,30 +115,50 @@ jobs:
         if: always()
         run: |
           {
-            echo "## V7.6 Level-8 advisory outputs"
+            echo "# V7.6 Level-8 Advisory"
             echo
-            echo "- Microcap source exit code: ${{ steps.microcap.outputs.exit_code }}"
-            echo "- Source returns exit code: ${{ steps.source_returns.outputs.exit_code }}"
-            echo "- Script exit code: ${{ steps.build.outputs.exit_code }}"
-            echo "- Raw paths consumed by Poe:"
-            echo "  - outputs/portfolio_v76_current/level8_decision_dashboard.csv"
-            echo "  - outputs/portfolio_v76_current/level8_risk_governance.csv"
+            if [ -f outputs/portfolio_v76_current/level8_action_summary.md ]; then
+              cat outputs/portfolio_v76_current/level8_action_summary.md
+            else
+              echo "## 今日执行仓位"
+              echo
+              echo "- 状态: 输出生成失败或尚未生成。"
+              echo "- 操作: 不调仓，先检查下面的运行状态。"
+            fi
+            echo
+            echo "## 运行状态"
+            echo
+            echo "| 阶段 | Exit code |"
+            echo "|---|---:|"
+            echo "| Microcap v1.6 source | ${{ steps.microcap.outputs.exit_code }} |"
+            echo "| Five-sleeve source returns | ${{ steps.source_returns.outputs.exit_code }} |"
+            echo "| Portfolio/advisory build | ${{ steps.build.outputs.exit_code }} |"
+            echo
             echo "- Artifact: v76-level8-advisory-outputs"
             echo
-            echo "### Microcap source tail"
+            echo "<details><summary>排错日志：Microcap source tail</summary>"
+            echo
             echo '```text'
             tail -n 80 microcap_v1_6_source_result.txt || true
             echo '```'
             echo
-            echo "### Source returns tail"
+            echo "</details>"
+            echo
+            echo "<details><summary>排错日志：Source returns tail</summary>"
+            echo
             echo '```text'
             tail -n 80 v76_level8_source_returns_result.txt || true
             echo '```'
             echo
-            echo "### Advisory output tail"
+            echo "</details>"
+            echo
+            echo "<details><summary>排错日志：Advisory output tail</summary>"
+            echo
             echo '```text'
             tail -n 120 v76_level8_advisory_outputs_result.txt || true
             echo '```'
+            echo
+            echo "</details>"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Commit refreshed raw outputs
