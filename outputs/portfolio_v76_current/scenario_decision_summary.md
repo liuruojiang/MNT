@@ -12,7 +12,7 @@ Fixed 10/15/15/20/40 remains the benchmark for attribution and rollback.
 - Latest date: `2026-05-08`
 - Latest Microcap advisory weight: 10.00%
 - Latest Sub-B absorbing weight: 45.00%
-- Advisory excess NAV versus fixed: 10.12%
+- Advisory excess NAV versus fixed: 9.57%
 
 - Scenario: `advisory_suba_dd_5_8_weekly`
 - Latest Sub-A advisory weight: 15.00%
@@ -24,14 +24,14 @@ Fixed 10/15/15/20/40 remains the benchmark for attribution and rollback.
 - Latest Sub-A advisory weight: 15.00%
 - Latest Microcap advisory weight: 10.00%
 - Latest Sub-B absorbing weight: 40.00%
-- Stacked advisory excess NAV versus fixed: 26.93%
+- Stacked advisory excess NAV versus fixed: 26.29%
 
 ## Metric Comparison
 
 | Window | Fixed annual / MaxDD / Sharpe | Microcap advisory annual / MaxDD / Sharpe | Sub-A advisory annual / MaxDD / Sharpe | Stacked advisory annual / MaxDD / Sharpe |
 |---|---:|---:|---:|---:|
-| Full | 30.38% / -7.87% / 3.27 | 31.26% / -7.92% / 3.36 | 31.67% / -7.10% / 3.36 | 32.56% / -7.16% / 3.44 |
-| 1Y | 59.01% / -5.71% / 5.21 | 61.07% / -5.73% / 5.35 | 61.26% / -5.24% / 5.46 | 63.36% / -5.33% / 5.61 |
+| Full | 30.41% / -7.87% / 3.28 | 31.24% / -7.92% / 3.36 | 31.70% / -7.10% / 3.36 | 32.54% / -7.16% / 3.44 |
+| 1Y | 59.46% / -5.50% / 5.24 | 60.72% / -5.73% / 5.32 | 61.72% / -5.10% / 5.49 | 63.00% / -5.33% / 5.58 |
 
 ## Decision
 
