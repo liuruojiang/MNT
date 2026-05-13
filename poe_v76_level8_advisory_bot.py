@@ -86,6 +86,7 @@ poe = _install_local_poe_compat(poe)
 
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/liuruojiang/MNT/main/"
+GITHUB_API_CONTENTS_BASE = "https://api.github.com/repos/liuruojiang/MNT/contents/"
 REMOTE_DASHBOARD_PATH = "outputs/portfolio_v76_current/level8_decision_dashboard.csv"
 REMOTE_GOVERNANCE_PATH = "outputs/portfolio_v76_current/level8_risk_governance.csv"
 STACKED_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
@@ -150,10 +151,23 @@ def _status_priority(status):
 
 
 def _read_url_text(path):
-    from urllib.request import urlopen
+    from urllib.parse import quote
+    from urllib.request import Request, urlopen
 
-    with urlopen(GITHUB_RAW_BASE + path, timeout=15) as response:
-        return response.read().decode("utf-8-sig")
+    api_url = f"{GITHUB_API_CONTENTS_BASE}{quote(path, safe='/')}?ref=main"
+    request = Request(
+        api_url,
+        headers={
+            "Accept": "application/vnd.github.raw",
+            "User-Agent": "v76-level8-advisory-bot",
+        },
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            return response.read().decode("utf-8-sig")
+    except Exception:
+        with urlopen(GITHUB_RAW_BASE + path, timeout=15) as response:
+            return response.read().decode("utf-8-sig")
 
 
 def parse_snapshot_from_csv_texts(dashboard_csv, governance_csv):
