@@ -4,22 +4,22 @@
 
 - Status: **ACTIVE_OK**
 - Action: Continue using stacked active dynamic budget.
-- Curve latest: `2026-05-08`
-- Source latest: `2026-05-08`
-- Latest active excess NAV vs fixed: 25.99%
-- Active relative NAV drawdown from its own peak: -0.33%
+- Curve latest: `2026-05-11`
+- Source latest: `2026-05-11`
+- Latest active excess NAV vs fixed: 26.32%
+- Active relative NAV drawdown from its own peak: -0.01%
 
 ## Rules
 
 | Rule | Status | Value | Threshold | Note |
 |---|---|---:|---:|---|
-| data_freshness | ACTIVE_OK | 2026-05-08 | fresh | Scenario curve is current relative to the aligned source returns. |
+| data_freshness | ACTIVE_OK | 2026-05-11 | fresh | Scenario curve is current relative to the aligned source returns. |
 | active_row | ACTIVE_OK | advisory_suba_microcap_dd_3_10_month_end | advisory_suba_microcap_dd_3_10_month_end | Dashboard marks the stacked scenario as ACTIVE_DEFAULT. |
-| full_window_evidence | ACTIVE_OK | annual 2.11%, maxDD 0.84%, sharpe 0.16 | all >= 0, annual/sharpe strictly > 0 | Full-window evidence must remain positive versus fixed. |
-| latest_1y_evidence | ACTIVE_OK | annual 3.54%, maxDD 0.18%, sharpe 0.33 | all >= 0, annual/sharpe strictly > 0 | Recent-window evidence should remain positive; failure starts review before hard rollback. |
+| full_window_evidence | ACTIVE_OK | annual 2.14%, maxDD 0.84%, sharpe 0.16 | all >= 0, annual/sharpe strictly > 0 | Full-window evidence must remain positive versus fixed. |
+| latest_1y_evidence | ACTIVE_OK | annual 3.77%, maxDD 0.18%, sharpe 0.34 | all >= 0, annual/sharpe strictly > 0 | Recent-window evidence should remain positive; failure starts review before hard rollback. |
 | execution_load | ACTIVE_OK | switches 126, turnover 14.2 | switches <= 140, turnover <= 15.0 | Execution load should stay near the accepted stacked-budget level. |
 | weight_sanity | ACTIVE_OK | Sub-A 15.00%, Sub-A-DK 15.00%, Microcap 10.00%, Sub-D 20.00%, Sub-B 40.00% | sum = 100%, each sleeve in [0%, 100%] | Active budget must remain a valid five-sleeve allocation. |
-| relative_nav_drawdown | ACTIVE_OK | current -0.33%, worst -3.37% | > -5.00% | Active budget has not breached the relative drawdown review threshold. |
+| relative_nav_drawdown | ACTIVE_OK | current -0.01%, worst -3.37% | > -5.00% | Active budget has not breached the relative drawdown review threshold. |
 
 ## Read
 
