@@ -1,8 +1,8 @@
 ﻿rule,status,value,threshold,note
-data_freshness,ACTIVE_OK,2026-05-12,fresh,Scenario curve is current relative to the aligned source returns.
+data_freshness,ACTIVE_OK,2026-05-13,fresh,Scenario curve is current relative to the aligned source returns.
 active_row,ACTIVE_OK,advisory_suba_microcap_dd_3_10_month_end,advisory_suba_microcap_dd_3_10_month_end,Dashboard marks the stacked scenario as ACTIVE_DEFAULT.
-full_window_evidence,ACTIVE_OK,"annual 2.11%, maxDD 0.84%, sharpe 0.16","all >= 0, annual/sharpe strictly > 0",Full-window evidence must remain positive versus fixed.
-latest_1y_evidence,ACTIVE_OK,"annual 3.29%, maxDD 0.18%, sharpe 0.31","all >= 0, annual/sharpe strictly > 0",Recent-window evidence should remain positive; failure starts review before hard rollback.
-execution_load,ACTIVE_OK,"switches 125, turnover 14.1","switches <= 140, turnover <= 15.0",Execution load should stay near the accepted stacked-budget level.
+full_window_evidence,ACTIVE_OK,"annual 2.22%, maxDD 0.75%, sharpe 0.18","all >= 0, annual/sharpe strictly > 0",Full-window evidence must remain positive versus fixed.
+latest_1y_evidence,ACTIVE_OK,"annual 3.90%, maxDD 0.14%, sharpe 0.38","all >= 0, annual/sharpe strictly > 0",Recent-window evidence should remain positive; failure starts review before hard rollback.
+execution_load,ACTIVE_OK,"switches 128, turnover 14.3","switches <= 140, turnover <= 15.0",Execution load should stay near the accepted stacked-budget level.
 weight_sanity,ACTIVE_OK,"Sub-A 15.00%, Sub-A-DK 15.00%, Microcap 15.00%, Sub-D 20.00%, Sub-B 35.00%","sum = 100%, each sleeve in [0%, 100%]",Active budget must remain a valid five-sleeve allocation.
-relative_nav_drawdown,ACTIVE_OK,"current -0.37%, worst -3.37%",> -5.00%,Active budget has not breached the relative drawdown review threshold.
+relative_nav_drawdown,ACTIVE_OK,"current -0.38%, worst -3.37%",> -5.00%,Active budget has not breached the relative drawdown review threshold.

@@ -1,10 +1,10 @@
 {
   "portfolio_id": "v76_current",
   "manifest": "portfolio_manifests/v76_current.json",
-  "returns_source": "quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv",
+  "returns_source": "quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv",
   "start": "2011-12-09",
-  "end": "2026-05-12",
-  "rows": 3745,
+  "end": "2026-05-13",
+  "rows": 3746,
   "weights": {
     "Sub-A": 0.1,
     "Sub-A-DK": 0.15,
@@ -28,7 +28,7 @@
     },
     "advisory_dd_3_10_month_end": {
       "description": "Microcap advisory risk budget: 20% when prior Microcap NAV DD is within 3%, 10% when prior DD is at or below -10%, otherwise 15%; month-end execution; Sub-B absorbs the delta.",
-      "microcap_source": "Microcap v1.6 return_net from aligned returns",
+      "microcap_source": "Microcap v2.0 return_net from aligned returns",
       "execution": "month_end",
       "boost_dd": 0.03,
       "cut_dd": 0.1
@@ -44,7 +44,7 @@
     "advisory_suba_microcap_dd_3_10_month_end": {
       "description": "Stacked Sub-A + Microcap advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end; each sleeve moves +/-5pp from base; Sub-B absorbs both deltas.",
       "suba_source": "Sub-A return from aligned returns",
-      "microcap_source": "Microcap v1.6 return_net from aligned returns",
+      "microcap_source": "Microcap v2.0 return_net from aligned returns",
       "suba_execution": "weekly",
       "suba_boost_dd": 0.05,
       "suba_cut_dd": 0.08,

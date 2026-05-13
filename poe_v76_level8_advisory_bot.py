@@ -3,6 +3,7 @@
 """Single-file Poe bot for V7.6 Level-8 portfolio advisory display."""
 
 import csv
+from datetime import datetime, timedelta, timezone
 import io
 
 try:
@@ -93,8 +94,8 @@ STACKED_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
 
 
 LEVEL8_ADVISORY_SNAPSHOT = {
-    "snapshot_date": "2026-05-13",
-    "latest_data_date": "2026-05-12",
+    "snapshot_date": "2026-05-14",
+    "latest_data_date": "2026-05-13",
     "status": "ACTIVE_DEFAULT",
     "scenario": "advisory_suba_microcap_dd_3_10_month_end",
     "active_scenario": "advisory_suba_microcap_dd_3_10_month_end",
@@ -104,23 +105,23 @@ LEVEL8_ADVISORY_SNAPSHOT = {
     "sleeves": [
         {"name": "Sub-A", "weight": 0.15, "role": "dynamic"},
         {"name": "Sub-A-DK", "weight": 0.15, "role": "fixed"},
-        {"name": "Microcap", "weight": 0.10, "role": "dynamic"},
+        {"name": "Microcap", "weight": 0.15, "role": "dynamic"},
         {"name": "Sub-D", "weight": 0.20, "role": "fixed"},
-        {"name": "Sub-B", "weight": 0.40, "role": "absorber"},
+        {"name": "Sub-B", "weight": 0.35, "role": "absorber"},
     ],
     "metrics": {
-        "full_annual_delta": 0.0215526054575265,
-        "full_max_dd_delta": 0.0071570601390986,
-        "full_sharpe_delta": 0.1648418794130282,
-        "last_1y_annual_delta": 0.0379298300466857,
-        "last_1y_max_dd_delta": 0.0017663264281626,
-        "last_1y_sharpe_delta": 0.3439691243939631,
-        "latest_excess_nav_vs_fixed": 0.2666628120243268,
+        "full_annual_delta": 0.0221513990876998,
+        "full_max_dd_delta": 0.0074693853012305,
+        "full_sharpe_delta": 0.1756014830007823,
+        "last_1y_annual_delta": 0.0390101322884282,
+        "last_1y_max_dd_delta": 0.0014198890391455,
+        "last_1y_sharpe_delta": 0.375830048628277,
+        "latest_excess_nav_vs_fixed": 0.2745850450197049,
     },
     "governance": {
         "status": "ACTIVE_OK",
-        "relative_nav_drawdown": "current 0.00%, worst -2.54%",
-        "execution_load": "switches 123, turnover 13.9",
+        "relative_nav_drawdown": "current -0.38%, worst -3.37%",
+        "execution_load": "switches 128, turnover 14.3",
         "review_ok_condition": "> -5.00%",
         "review_trigger": "<= -5.00%",
         "rollback_line": "<= -10.00%",
@@ -237,13 +238,53 @@ def load_snapshot():
     try:
         dashboard_csv = _read_url_text(REMOTE_DASHBOARD_PATH)
         governance_csv = _read_url_text(REMOTE_GOVERNANCE_PATH)
-        return parse_snapshot_from_csv_texts(dashboard_csv, governance_csv)
+        return _with_snapshot_freshness(parse_snapshot_from_csv_texts(dashboard_csv, governance_csv))
     except Exception as exc:
         fallback = dict(LEVEL8_ADVISORY_SNAPSHOT)
         fallback["source_note"] = (
             f"Embedded fallback snapshot because GitHub main output load failed: {exc}"
         )
-        return fallback
+        return _with_snapshot_freshness(fallback)
+
+
+def _coerce_date(value=None):
+    if value is None:
+        return (datetime.now(timezone.utc) + timedelta(hours=8)).date()
+    if hasattr(value, "date"):
+        return value.date()
+    return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+
+
+def _latest_required_close_date(current_date=None):
+    day = _coerce_date(current_date)
+    required = day - timedelta(days=1)
+    while required.weekday() >= 5:
+        required -= timedelta(days=1)
+    return required
+
+
+def _with_snapshot_freshness(snap, current_date=None):
+    checked = dict(snap)
+    required = _latest_required_close_date(current_date)
+    checked["required_close_date"] = required.isoformat()
+    try:
+        latest = _coerce_date(checked.get("latest_data_date"))
+    except Exception:
+        latest = None
+    is_stale = latest is None or latest < required
+    checked["is_stale"] = bool(is_stale)
+    if is_stale:
+        latest_text = checked.get("latest_data_date", "n/a")
+        checked["status"] = "STALE_SNAPSHOT"
+        checked["primary_action"] = (
+            f"Do not use this as a current execution instruction. "
+            f"Latest data date {latest_text} is older than required close {required.isoformat()}."
+        )
+        checked["source_note"] = (
+            f"STALE: latest data date {latest_text} < required close {required.isoformat()}. "
+            f"{checked.get('source_note', '')}"
+        ).strip()
+    return checked
 
 
 def _pct(value: float) -> str:
@@ -252,6 +293,12 @@ def _pct(value: float) -> str:
 
 def _weight(value: float) -> str:
     return f"{float(value):.0%}"
+
+
+def _status_weight_text(snap) -> str:
+    ordered = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D", "Sub-B"]
+    weights = {sleeve["name"]: sleeve["weight"] for sleeve in snap.get("sleeves", [])}
+    return ", ".join(f"{name} {_weight(weights[name])}" for name in ordered if name in weights)
 
 
 def render_level8_advisory(snap=None) -> str:
@@ -311,7 +358,7 @@ def render_status_summary(snap=None) -> str:
             "",
             f"- 状态: **{snap['status']}** / governance **{governance['status']}**",
             f"- 数据日期: `{snap['latest_data_date']}`",
-            "- 执行权重: Sub-A 15%, Sub-A-DK 15%, Microcap 10%, Sub-D 20%, Sub-B 40%",
+            f"- 执行权重: {_status_weight_text(snap)}",
             "- 动态袖珍: Sub-A + Microcap",
             "- 回滚基准: 固定 10/15/15/20/40",
             f"- 相对固定超额 NAV: {_pct(metrics['latest_excess_nav_vs_fixed'])}",
