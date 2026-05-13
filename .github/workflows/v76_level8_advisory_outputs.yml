@@ -56,15 +56,15 @@ jobs:
             v76-level8-advisory-${{ runner.os }}-
             v76-realtime-signal-${{ runner.os }}-
 
-      - name: Build Microcap v1.6 source output
+      - name: Build Microcap v2.0 source output
         id: microcap
         shell: bash
         run: |
           set +e
           (
             cd ../microcap
-            python microcap_top100_mom16_biweekly_live_v1_6.py
-          ) 2>&1 | tee microcap_v1_6_source_result.txt
+            python microcap_top100_mom16_biweekly_live_v2_0.py
+          ) 2>&1 | tee microcap_v2_0_source_result.txt
           status=${PIPESTATUS[0]}
           echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
           exit 0
@@ -75,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/run_real_subd_v16_rebalance_validation.py 2>&1 | tee v76_level8_source_returns_result.txt
+          python quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/run_real_subd_v20_rebalance_validation.py 2>&1 | tee v76_level8_source_returns_result.txt
           status=${PIPESTATUS[0]}
           echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
           exit 0
@@ -102,11 +102,11 @@ jobs:
         with:
           name: v76-level8-advisory-outputs
           path: |
-            microcap_v1_6_source_result.txt
+            microcap_v2_0_source_result.txt
             v76_level8_source_returns_result.txt
             v76_level8_advisory_outputs_result.txt
-            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv
-            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v16_rebalance_validation/record.md
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/record.md
             outputs/portfolio_v76_current/**
           if-no-files-found: error
           retention-days: 30
@@ -130,7 +130,7 @@ jobs:
             echo
             echo "| 阶段 | Exit code |"
             echo "|---|---:|"
-            echo "| Microcap v1.6 source | ${{ steps.microcap.outputs.exit_code }} |"
+            echo "| Microcap v2.0 source | ${{ steps.microcap.outputs.exit_code }} |"
             echo "| Five-sleeve source returns | ${{ steps.source_returns.outputs.exit_code }} |"
             echo "| Portfolio/advisory build | ${{ steps.build.outputs.exit_code }} |"
             echo
@@ -139,7 +139,7 @@ jobs:
             echo "<details><summary>排错日志：Microcap source tail</summary>"
             echo
             echo '```text'
-            tail -n 80 microcap_v1_6_source_result.txt || true
+            tail -n 80 microcap_v2_0_source_result.txt || true
             echo '```'
             echo
             echo "</details>"

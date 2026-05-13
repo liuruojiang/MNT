@@ -13,7 +13,7 @@ DEFAULT_CURVE = DEFAULT_OUTPUT_DIR / "scenario_economic_curve.csv"
 DEFAULT_SOURCE_RETURNS = (
     ROOT
     / "quant_param_scan_runs"
-    / "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation"
+    / "20260512_v76_five_sleeve_real_subd_v20_rebalance_validation"
     / "aligned_five_sleeve_real_subd_returns.csv"
 )
 

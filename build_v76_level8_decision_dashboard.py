@@ -17,7 +17,7 @@ DEFAULT_MANIFEST = ROOT / "portfolio_manifests" / "v76_current.json"
 DEFAULT_SOURCE_RETURNS = (
     ROOT
     / "quant_param_scan_runs"
-    / "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation"
+    / "20260512_v76_five_sleeve_real_subd_v20_rebalance_validation"
     / "aligned_five_sleeve_real_subd_returns.csv"
 )
 DEFAULT_A_ADK_B_SUBD_SCAN = (

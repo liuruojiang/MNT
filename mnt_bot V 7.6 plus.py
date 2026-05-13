@@ -523,7 +523,7 @@ PORTFOLIO_ADVISORY_RETURNS_FILE = "aligned_sleeve_returns.csv"
 PORTFOLIO_RISK_GOVERNANCE_FILE = "level8_risk_governance.csv"
 PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE = os.path.join(
     "quant_param_scan_runs",
-    "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation",
+    "20260512_v76_five_sleeve_real_subd_v20_rebalance_validation",
     "aligned_five_sleeve_real_subd_returns.csv",
 )
 
@@ -796,29 +796,29 @@ def _check_microcap_cache_latest(ret, expected_latest_date=None, source_label="m
 
 def _load_microcap_daily_ret(msg=None, expected_latest_date=None):
     microcap_root = os.path.join(os.path.dirname(_repo_base_dir()), "微盘股对冲策略")
-    v16_nav_path = os.path.join(
+    v20_nav_path = os.path.join(
         microcap_root,
         "outputs",
-        "microcap_top100_mom16_targetvol25_max1p5_v1_6_costed_nav.csv",
+        "microcap_top100_mom16_targetvol25_max1p5_v2_0_costed_nav.csv",
     )
-    if not os.path.exists(v16_nav_path):
-        raise poe.BotError("V7.6微盘股 v1.6 target-vol 独立模块缓存缺失: " + v16_nav_path)
+    if not os.path.exists(v20_nav_path):
+        raise poe.BotError("V7.6微盘股 v2.0 target-vol 独立模块缓存缺失: " + v20_nav_path)
     try:
-        net = pd.read_csv(v16_nav_path, parse_dates=["date"]).sort_values("date").set_index("date")
+        net = pd.read_csv(v20_nav_path, parse_dates=["date"]).sort_values("date").set_index("date")
         ret = net["return_net"].dropna()
         if ret.empty:
             raise ValueError("empty microcap return series")
-        _check_microcap_cache_latest(ret, expected_latest_date, "v1.6 mom16_targetvol25_max1p5 costed_nav", msg)
+        _check_microcap_cache_latest(ret, expected_latest_date, "v2.0 mom16_targetvol25_max1p5 costed_nav", msg)
         if msg is not None:
             msg.write(
-                f"  微盘股独立脚本 v1.6 target-vol: {ret.index[0].strftime('%Y-%m-%d')}~"
-                f"{ret.index[-1].strftime('%Y-%m-%d')} [{os.path.basename(v16_nav_path)}]\n"
+                f"  微盘股独立脚本 v2.0 target-vol: {ret.index[0].strftime('%Y-%m-%d')}~"
+                f"{ret.index[-1].strftime('%Y-%m-%d')} [{os.path.basename(v20_nav_path)}]\n"
             )
         return ret
     except poe.BotError:
         raise
     except Exception as exc:
-        raise poe.BotError(f"加载微盘股 v1.6 target-vol 独立脚本收益失败: {exc}") from exc
+        raise poe.BotError(f"加载微盘股 v2.0 target-vol 独立脚本收益失败: {exc}") from exc
 
 
 def _sp500_risk_regime_search_paths():
@@ -2604,7 +2604,7 @@ def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v1.6/v1.8未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v2.0未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -2654,7 +2654,7 @@ def _write_volume_warning_panel(msg, compact=False):
             f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v1.6/v1.8未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v2.0未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
@@ -8154,7 +8154,7 @@ class CombinedStrategyBase:
         prompt = f"""解析资金设置。
 
 资金设置支持: Sub-A, Sub-A-DK, Sub-B
-V7.6 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v1.6 target-vol), Sub-D 20%(v1.1 six-ETF), Sub-B 40%
+V7.6 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v2.0 target-vol), Sub-D 20%(v1.1 six-ETF), Sub-B 40%
 注意: Sub-A和Sub-A-DK使用人民币, Sub-B使用美元；微盘和Sub-D由独立脚本处理，不在本资金配置里设置
 
 当前已设置:
@@ -8450,7 +8450,7 @@ _BOT_SETTINGS = SettingsResponse(
     allow_attachments=True,
     introduction_message=(
         "📊 **Strategy Signal V7.6 — 策略信号查询**\n\n"
-        f"V7.6 active组合: Sub-A 15% + Sub-A-DK 15% + 微盘 10%(v1.6 target-vol) + Sub-D 20%(v1.1 six-ETF) + Sub-B 40%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
+        f"V7.6 active组合: Sub-A 15% + Sub-A-DK 15% + 微盘 10%(v2.0 target-vol) + Sub-D 20%(v1.1 six-ETF) + Sub-B 40%（Sub-B收益型混合: 官方腿{SUBB_V75_OFFICIAL_WEIGHT:.0%} / EMA腿{SUBB_V75_EMA_WEIGHT:.0%}）\n\n"
         "**信号查询：**\n"
         '- 发送 **"信号"** -> 收盘信号+Excel\n'
         '- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n'
@@ -9887,9 +9887,9 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
                 f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
-            w(f"| 微盘接入版本 | **v1.6 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v1.6/v1.8未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
-            w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v1.6和Sub-D由独立脚本查看 |\n")
+            w(f"| 微盘接入版本 | **v2.0 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v2.0未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
+            w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v2.0和Sub-D由独立脚本查看 |\n")
             _write_combo_advisory_panel(w)
     def _handle_live_params(self):
         with _sm() as msg:

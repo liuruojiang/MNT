@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = (
     ROOT
     / "quant_param_scan_runs"
-    / "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation"
-    / "run_real_subd_v16_rebalance_validation.py"
+    / "20260512_v76_five_sleeve_real_subd_v20_rebalance_validation"
+    / "run_real_subd_v20_rebalance_validation.py"
 )
 
 

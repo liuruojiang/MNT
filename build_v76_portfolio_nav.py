@@ -15,7 +15,7 @@ DEFAULT_MANIFEST = ROOT / "portfolio_manifests" / "v76_current.json"
 DEFAULT_RETURNS = (
     ROOT
     / "quant_param_scan_runs"
-    / "20260512_v76_five_sleeve_real_subd_v16_rebalance_validation"
+    / "20260512_v76_five_sleeve_real_subd_v20_rebalance_validation"
     / "aligned_five_sleeve_real_subd_returns.csv"
 )
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "portfolio_v76_current"
@@ -1008,7 +1008,7 @@ def write_outputs(
             },
             ADVISORY_SCENARIO: {
                 "description": "Microcap advisory risk budget: 20% when prior Microcap NAV DD is within 3%, 10% when prior DD is at or below -10%, otherwise 15%; month-end execution; Sub-B absorbs the delta.",
-                "microcap_source": "Microcap v1.6 return_net from aligned returns",
+                "microcap_source": "Microcap v2.0 return_net from aligned returns",
                 "execution": "month_end",
                 "boost_dd": 0.03,
                 "cut_dd": 0.10,
@@ -1024,7 +1024,7 @@ def write_outputs(
             STACKED_ADVISORY_SCENARIO: {
                 "description": "Stacked Sub-A + Microcap advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end; each sleeve moves +/-5pp from base; Sub-B absorbs both deltas.",
                 "suba_source": "Sub-A return from aligned returns",
-                "microcap_source": "Microcap v1.6 return_net from aligned returns",
+                "microcap_source": "Microcap v2.0 return_net from aligned returns",
                 "suba_execution": "weekly",
                 "suba_boost_dd": 0.05,
                 "suba_cut_dd": 0.08,
