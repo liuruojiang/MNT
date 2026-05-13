@@ -34,6 +34,10 @@ def load_helper():
 H = load_helper()
 
 
+def current_shanghai_date() -> pd.Timestamp:
+    return pd.Timestamp.now(tz="Asia/Shanghai").tz_localize(None).normalize()
+
+
 def git_value(args: list[str]) -> str:
     try:
         return subprocess.check_output(
@@ -86,12 +90,13 @@ def build_real_subd_return() -> tuple[pd.Series, dict[str, object]]:
     )
     sys.modules["research_subd_six_etf_weighted_slope"] = subd
     runner = load_git_blob_module("run_subd_six_etf_v1_1_git", "run_subd_six_etf_v1_1.py", subd_refs)
+    end_date = current_shanghai_date()
     subd.OUTPUT_DIR = RUN_DIR / "subd_outputs"
     config = subd.RunConfig(
         source="sina",
         one_way_cost=runner.ONE_WAY_COST,
         start_date=runner.START_DATE,
-        end_date=runner.END_DATE,
+        end_date=end_date,
         output_tag="v1_1_20260509_real_subd_combo",
         target_vols=(),
         vol_window=subd.DEFAULT_VOL_WINDOW,
@@ -111,6 +116,7 @@ def build_real_subd_return() -> tuple[pd.Series, dict[str, object]]:
         ),
         "scenario": "v1_1_staged_50_plus_ma60_overheat",
         "data_source": "akshare.fund_etf_hist_sina raw close",
+        "configured_end": end_date.date().isoformat(),
         "start": curve.index.min().date().isoformat(),
         "end": curve.index.max().date().isoformat(),
         "rows": int(len(curve)),
