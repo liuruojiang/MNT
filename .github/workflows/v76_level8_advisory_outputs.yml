@@ -161,13 +161,25 @@ jobs:
             echo "</details>"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Commit refreshed raw outputs
+      - name: Commit refreshed advisory outputs
         if: steps.microcap.outputs.exit_code == '0' && steps.source_returns.outputs.exit_code == '0' && steps.build.outputs.exit_code == '0' && github.event_name != 'pull_request'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add outputs/portfolio_v76_current
+          git add \
+            outputs/portfolio_v76_current \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/aligned_five_sleeve_real_subd_returns.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/command_log.txt \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/nav_outputs.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/record.md \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/scan_meta.json \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/scan_summary.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/subd_v1_1_daily.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/subd_v1_1_data_quality.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/subd_v1_1_sources.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/weight_diagnostics.csv \
+            quant_param_scan_runs/20260512_v76_five_sleeve_real_subd_v20_rebalance_validation/window_metrics.csv
           if git diff --cached --quiet; then
             echo "No Level-8 output changes to commit."
           else
