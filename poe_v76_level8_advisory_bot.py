@@ -91,6 +91,13 @@ GITHUB_API_CONTENTS_BASE = "https://api.github.com/repos/liuruojiang/MNT/content
 REMOTE_DASHBOARD_PATH = "outputs/portfolio_v76_current/level8_decision_dashboard.csv"
 REMOTE_GOVERNANCE_PATH = "outputs/portfolio_v76_current/level8_risk_governance.csv"
 STACKED_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
+FIXED_PORTFOLIO_SLEEVES = [
+    {"name": "Sub-A", "weight": 0.15},
+    {"name": "Sub-A-DK", "weight": 0.15},
+    {"name": "Microcap", "weight": 0.10},
+    {"name": "Sub-D", "weight": 0.20},
+    {"name": "Sub-B", "weight": 0.40},
+]
 
 
 LEVEL8_ADVISORY_SNAPSHOT = {
@@ -99,16 +106,9 @@ LEVEL8_ADVISORY_SNAPSHOT = {
     "status": "ACTIVE_DEFAULT",
     "scenario": "advisory_suba_microcap_dd_3_10_month_end",
     "active_scenario": "advisory_suba_microcap_dd_3_10_month_end",
-    "dynamic_sleeves": "Sub-A,Microcap",
-    "primary_action": "Use stacked Sub-A 5/8 weekly + Microcap 3/10 month-end as the active portfolio-level dynamic budget; keep fixed weights as benchmark and rollback.",
+    "primary_action": "Poe displays fixed portfolio weights only. Query the Advisory side for variable budget details.",
     "source_note": "Embedded from the local Level-8 dashboard run verified on 2026-05-13.",
-    "sleeves": [
-        {"name": "Sub-A", "weight": 0.15, "role": "dynamic"},
-        {"name": "Sub-A-DK", "weight": 0.15, "role": "fixed"},
-        {"name": "Microcap", "weight": 0.15, "role": "dynamic"},
-        {"name": "Sub-D", "weight": 0.20, "role": "fixed"},
-        {"name": "Sub-B", "weight": 0.35, "role": "absorber"},
-    ],
+    "sleeves": FIXED_PORTFOLIO_SLEEVES,
     "metrics": {
         "full_annual_delta": 0.0221513990876998,
         "full_max_dd_delta": 0.0074693853012305,
@@ -149,6 +149,10 @@ def _status_priority(status):
         "ACTIVE_OK": 2,
         "INFO": 3,
     }.get(status, 9)
+
+
+def _fixed_portfolio_sleeves():
+    return [dict(sleeve) for sleeve in FIXED_PORTFOLIO_SLEEVES]
 
 
 def _read_url_text(path):
@@ -201,19 +205,9 @@ def parse_snapshot_from_csv_texts(dashboard_csv, governance_csv):
         "status": active.get("candidate_status", "UNKNOWN"),
         "scenario": active.get("scenario", "n/a"),
         "active_scenario": active.get("scenario", "n/a"),
-        "dynamic_sleeves": active.get("dynamic_sleeves", "n/a"),
-        "primary_action": active.get(
-            "primary_action",
-            "Use the active Level-8 portfolio budget; keep fixed weights as benchmark and rollback.",
-        ),
+        "primary_action": "Poe displays fixed portfolio weights only. Query the Advisory side for variable budget details.",
         "source_note": "Loaded live from GitHub main outputs/portfolio_v76_current. Freshness depends on the latest committed refresh.",
-        "sleeves": [
-            {"name": "Sub-A", "weight": _float(active.get("latest_suba")), "role": "dynamic"},
-            {"name": "Sub-A-DK", "weight": _float(active.get("latest_subadk")), "role": "fixed"},
-            {"name": "Microcap", "weight": _float(active.get("latest_microcap")), "role": "dynamic"},
-            {"name": "Sub-D", "weight": _float(active.get("latest_subd")), "role": "fixed"},
-            {"name": "Sub-B", "weight": _float(active.get("latest_subb")), "role": "absorber"},
-        ],
+        "sleeves": _fixed_portfolio_sleeves(),
         "metrics": {
             "full_annual_delta": _float(active.get("full_annual_delta")),
             "full_max_dd_delta": _float(active.get("full_max_dd_delta")),
@@ -297,7 +291,7 @@ def _weight(value: float) -> str:
 
 def _status_weight_text(snap) -> str:
     ordered = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D", "Sub-B"]
-    weights = {sleeve["name"]: sleeve["weight"] for sleeve in snap.get("sleeves", [])}
+    weights = {sleeve["name"]: sleeve["weight"] for sleeve in _fixed_portfolio_sleeves()}
     return ", ".join(f"{name} {_weight(weights[name])}" for name in ordered if name in weights)
 
 
@@ -311,14 +305,13 @@ def render_level8_advisory(snap=None) -> str:
         f"- Status: **{snap['status']}**",
         f"- Latest data date: `{snap['latest_data_date']}`",
         f"- Scenario: `{snap['scenario']}`",
-        f"- Dynamic sleeves: **{snap['dynamic_sleeves']}**",
-        f"- Primary action: {snap['primary_action']}",
+        "- Display scope: fixed portfolio weights only; use the Advisory side for variable budget details.",
         "",
-        "| Sleeve | Advisory weight | Role |",
-        "|---|---:|---|",
+        "| Strategy | Weight |",
+        "|---|---:|",
     ]
-    for sleeve in snap["sleeves"]:
-        lines.append(f"| {sleeve['name']} | {_weight(sleeve['weight'])} | {sleeve['role']} |")
+    for sleeve in _fixed_portfolio_sleeves():
+        lines.append(f"| {sleeve['name']} | {_weight(sleeve['weight'])} |")
     lines.extend(
         [
             "",
@@ -340,7 +333,7 @@ def render_level8_advisory(snap=None) -> str:
             f"| Review line | {governance['review_ok_condition']} |",
             f"| Rollback line | {governance['rollback_line']} |",
             "",
-            "This is the active portfolio-level dynamic budget snapshot. Fixed 10/15/15/20/40 remains the benchmark and rollback line.",
+            "Poe does not render portfolio-level variable budget details. Use fixed 15/15/10/20/40 here.",
             "",
             f"Snapshot note: {snap['source_note']}",
         ]
@@ -359,8 +352,8 @@ def render_status_summary(snap=None) -> str:
             f"- 状态: **{snap['status']}** / governance **{governance['status']}**",
             f"- 数据日期: `{snap['latest_data_date']}`",
             f"- 执行权重: {_status_weight_text(snap)}",
-            "- 动态袖珍: Sub-A + Microcap",
-            "- 回滚基准: 固定 10/15/15/20/40",
+            "- 展示范围: Poe 仅展示固定组合权重；可变预算细节请去 Advisory 端查询",
+            "- 固定组合: 15/15/10/20/40",
             f"- 相对固定超额 NAV: {_pct(metrics['latest_excess_nav_vs_fixed'])}",
             f"- 相对 NAV 回撤: {governance['relative_nav_drawdown']}",
             f"- 数据来源: {snap['source_note']}",
@@ -371,24 +364,17 @@ def render_status_summary(snap=None) -> str:
 def render_weights(snap=None) -> str:
     snap = snap or load_snapshot()
     lines = [
-        "## 当前执行权重",
+        "## 组合权重",
         "",
-        "| 袖珍组合 | 权重 | 角色 |",
-        "|---|---:|---|",
+        "| 策略 | 权重 |",
+        "|---|---:|",
     ]
-    role_labels = {
-        "dynamic": "动态调整",
-        "fixed": "固定",
-        "absorber": "吸收权重差",
-    }
-    for sleeve in snap["sleeves"]:
-        lines.append(
-            f"| {sleeve['name']} | {_weight(sleeve['weight'])} | {role_labels.get(sleeve['role'], sleeve['role'])} |"
-        )
+    for sleeve in _fixed_portfolio_sleeves():
+        lines.append(f"| {sleeve['name']} | {_weight(sleeve['weight'])} |")
     lines.extend(
         [
             "",
-            "固定 10/15/15/20/40 仍保留为 benchmark / rollback。",
+            "Poe 端不再展示组合层可变预算；如需查询，请直接去 Advisory 端。",
             f"数据来源: {snap['source_note']}",
         ]
     )
@@ -432,11 +418,11 @@ def render_governance(snap=None) -> str:
             "",
             "解释:",
             "",
-            "- ACTIVE_OK: 所有治理规则通过，stacked 动态仓位可以继续作为 active budget。",
-            "- relative NAV DD: 动态方案相对固定 10/15/15/20/40 的超额 NAV，从自身高点回撤了多少；不是组合自身最大回撤。",
+            "- ACTIVE_OK: 治理规则通过；Poe 端仍只展示固定组合权重。",
+            "- relative NAV DD: Advisory 方案相对固定 15/15/10/20/40 的超额 NAV，从自身高点回撤了多少；不是组合自身最大回撤。",
             "- current: 当前超额优势比自己的历史高点低多少。",
             "- worst: 样本期最差相对回撤。",
-            "- switches: 样本期动态预算切换/再平衡次数。",
+            "- switches: 样本期 Advisory 预算切换/再平衡次数。",
             "- turnover: 样本期组合层权重调整的累计负担；当前阈值是 switches <= 140 且 turnover <= 15.0。",
             f"- review line {governance['review_ok_condition']}: 相对回撤保持在 -5% 以内就继续执行；跌到 {governance['review_trigger'].replace('.00%', '%')} 进入复核。",
             f"- 数据来源: {snap['source_note']}",
@@ -451,10 +437,10 @@ def render_rollback(snap=None) -> str:
         [
             "## 回滚线",
             "",
-            "- 正常: governance 保持 ACTIVE_OK，继续使用 stacked 动态仓位。",
+            "- 正常: governance 保持 ACTIVE_OK；Poe 端仍显示固定组合权重。",
             f"- 复核: 相对 NAV 回撤到 {governance['review_trigger']} 时，暂停新增 Level-8 晋级并检查规则。",
-            f"- 回滚: 相对 NAV 回撤到 {governance['rollback_line']} 时，回到固定 10/15/15/20/40。",
-            "- 固定权重一直保留为 benchmark / rollback，不删除。",
+            f"- 回滚: 相对 NAV 回撤到 {governance['rollback_line']} 时，继续以固定 15/15/10/20/40 作为 Poe 端展示口径。",
+            "- 组合层可变预算细节请去 Advisory 端查询。",
             f"- 数据来源: {snap['source_note']}",
         ]
     )
@@ -471,12 +457,12 @@ def render_help() -> str:
             "",
             "- `建议` / `状态`: 当前执行结论",
             "- `治理`: ACTIVE_OK、相对 NAV 回撤、执行负担、复核线、回滚线",
-            "- `权重`: 五个袖珍组合的当前执行权重",
+            "- `权重`: 五个策略的固定组合权重",
             "- `证据`: 相对固定权重的收益、回撤、Sharpe 证据",
-            "- `回滚`: 什么时候复核、什么时候回到固定 10/15/15/20/40",
+            "- `回滚`: 什么时候复核，以及 Poe 端固定权重展示口径",
             "- `完整`: 展示完整快照",
             "",
-            "这个机器人默认读取 GitHub main 已提交的 Level-8 输出；如果网络失败，才回退到内置快照。它不在 Poe 内部运行完整 V7.6 主策略。",
+            "这个机器人默认读取 GitHub main 已提交的 Level-8 输出；如果网络失败，才回退到内置快照。它不在 Poe 内部运行完整 V7.6 主策略，也不展示组合层可变预算。",
         ]
     )
 

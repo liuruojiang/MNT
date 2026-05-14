@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+import sys
 
 import pandas as pd
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import poe_v76_level8_advisory_bot as bot
 
 
 class PoeLevel8StatusSummaryTest(unittest.TestCase):
-    def test_status_summary_uses_snapshot_weights(self) -> None:
+    def test_status_summary_uses_fixed_portfolio_weights(self) -> None:
         snap = dict(bot.LEVEL8_ADVISORY_SNAPSHOT)
         snap["latest_data_date"] = "2026-05-13"
         snap["sleeves"] = [
@@ -21,10 +26,32 @@ class PoeLevel8StatusSummaryTest(unittest.TestCase):
 
         text = bot.render_status_summary(snap)
 
-        self.assertIn("Microcap 15%", text)
-        self.assertIn("Sub-B 35%", text)
-        self.assertNotIn("Microcap 10%", text)
-        self.assertNotIn("Sub-B 40%", text)
+        self.assertIn("Sub-A 15%", text)
+        self.assertIn("Sub-A-DK 15%", text)
+        self.assertIn("Microcap 10%", text)
+        self.assertIn("Sub-D 20%", text)
+        self.assertIn("Sub-B 40%", text)
+        self.assertNotIn("Microcap 15%", text)
+        self.assertNotIn("Sub-B 35%", text)
+
+    def test_poe_queries_do_not_display_dynamic_position_panel(self) -> None:
+        snap = dict(bot.LEVEL8_ADVISORY_SNAPSHOT)
+        snap["latest_data_date"] = "2026-05-13"
+        outputs = [
+            bot.render_level8_advisory(snap),
+            bot.render_status_summary(snap),
+            bot.render_weights(snap),
+            bot.render_governance(snap),
+            bot.render_rollback(snap),
+        ]
+
+        for text in outputs:
+            self.assertNotIn("Dynamic sleeves", text)
+            self.assertNotIn("Advisory weight", text)
+            self.assertNotIn("dynamic budget", text)
+            self.assertNotIn("active budget", text)
+            self.assertNotIn("动态仓位", text)
+            self.assertNotIn("动态调整", text)
 
     def test_explicit_old_snapshot_is_marked_stale(self) -> None:
         snap = dict(bot.LEVEL8_ADVISORY_SNAPSHOT)
