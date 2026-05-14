@@ -820,70 +820,6 @@ def _load_combo_advisory_snapshot(asof_date=None):
     }
 
 
-def _write_combo_advisory_panel(w):
-    snapshot = _load_combo_advisory_snapshot()
-    w("\n### 组合层动态预算 (ACTIVE DYNAMIC BUDGET)\n\n")
-    w(
-        f"说明: active execution weights are {_combined_weight_label()}; "
-        f"fixed {_rollback_weight_label()} is kept only as benchmark / rollback.\n\n"
-    )
-    if not snapshot.get("available"):
-        w(f"- 当前不可用: {snapshot.get('error', 'unknown error')}\n")
-        w(f"- 先运行 `python build_v76_portfolio_nav.py` 刷新 {PORTFOLIO_ADVISORY_OUTPUT_DIR}。\n")
-        return
-    latest_date = snapshot["latest_date"].strftime("%Y-%m-%d")
-    w(f"- 数据日期: **{latest_date}**\n")
-    w(
-        f"- 触发依据: Sub-A prior NAV DD **{_advisory_pct(snapshot['suba_prior_dd'])}** "
-        f"-> 日内理论目标 **{_advisory_weight_pct(snapshot['suba_daily_target'])}**; "
-        f"Microcap prior NAV DD **{_advisory_pct(snapshot['microcap_prior_dd'])}** "
-        f"-> 日内理论目标 **{_advisory_weight_pct(snapshot['microcap_daily_target'])}**\n"
-    )
-    w("- 执行口径: 确认月末才更新组合层建议; Sub-B 吸收 Sub-A/Microcap 的权重差。\n\n")
-    w("| 场景 | Sub-A | Microcap | Sub-B | 说明 |\n|:-|------:|------:|------:|:-|\n")
-    w(
-        f"| Active execution default | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
-        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Microcap'])} | "
-        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Sub-B'])} | active {_combined_weight_label()} |\n"
-    )
-    w(
-        f"| Fixed benchmark / rollback | {_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Sub-A'])} | "
-        f"{_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Microcap'])} | "
-        f"{_advisory_weight_pct(ROLLBACK_COMBINED_WEIGHTS['Sub-B'])} | rollback {_rollback_weight_label()} |\n"
-    )
-    w(
-        f"| Microcap advisory | {_advisory_weight_pct(COMBINED_WEIGHTS['Sub-A'])} | "
-        f"{_advisory_weight_pct(snapshot['microcap_weight'])} | "
-        f"{_advisory_weight_pct(snapshot['microcap_subb_weight'])} | 微盘单独动态预算 |\n"
-    )
-    w(
-        f"| Sub-A 5/8 weekly reference | {_advisory_weight_pct(snapshot['suba_advisory_suba_weight'])} | "
-        f"{_advisory_weight_pct(COMBINED_WEIGHTS['Microcap'])} | "
-        f"{_advisory_weight_pct(snapshot['suba_advisory_subb_weight'])} | "
-        f"reference {PORTFOLIO_SUBA_ADVISORY_SCENARIO}; excess NAV vs fixed "
-        f"{_advisory_pct(snapshot['suba_advisory_excess_nav'])} |\n"
-    )
-    w(
-        f"| Stacked Sub-A 5/8 + Microcap 3/10 | {_advisory_weight_pct(snapshot['stacked_suba_weight'])} | "
-        f"{_advisory_weight_pct(snapshot['stacked_microcap_weight'])} | "
-        f"{_advisory_weight_pct(snapshot['stacked_subb_weight'])} | "
-        f"active {PORTFOLIO_STACKED_ADVISORY_SCENARIO}; excess NAV vs fixed "
-        f"{_advisory_pct(snapshot['stacked_excess_nav'])} |\n"
-    )
-    governance = snapshot.get("governance", {})
-    if governance.get("available"):
-        w(
-            f"\n- Level-8 governance: **{governance['decision_status']}**; "
-            f"relative NAV DD {governance['relative_nav_drawdown']}; "
-            f"execution load {governance['execution_load']}; "
-            f"review line {governance['rollback_threshold']}.\n"
-        )
-    else:
-        w(
-            f"\n- Level-8 governance: unavailable ({governance.get('error', 'unknown error')}); "
-            "run `python build_v76_level8_risk_governance.py` after refreshing portfolio NAV.\n"
-        )
-
 # trade_journal 中也引用为 STRATEGY_WEIGHTS
 
 def _subc_enabled():
@@ -9909,7 +9845,6 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 w(f"含最近60天 {len(all_rebalances)} 条调仓记录（北京时间）")
             else:
                 w("最近60天无调仓记录")
-            _write_combo_advisory_panel(w)
     def _handle_live_signal(self):
         with _sm() as msg:
             w = msg.write
@@ -10377,7 +10312,6 @@ class CombinedStrategyV76(CombinedStrategyBase):
                         target_display = "价格缺失" if target_shares is None else f"{target_shares:,}"
                         w(f"| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n")
             w("\n---\n\n")
-            _write_combo_advisory_panel(w)
     def _handle_params(self):
         with _sm() as msg:
             w = msg.write
@@ -10500,7 +10434,6 @@ class CombinedStrategyV76(CombinedStrategyBase):
             w(f"| 微盘接入版本 | **v2.0 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
             w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v2.0未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v2.0和Sub-D由独立脚本查看 |\n")
-            _write_combo_advisory_panel(w)
     def _handle_live_params(self):
         with _sm() as msg:
             w = msg.write
@@ -10985,7 +10918,6 @@ class CombinedStrategyV76(CombinedStrategyBase):
             for name in COMBINED_DISPLAY_ORDER:
                 cw = COMBINED_WEIGHTS[name]
                 w(f"| {name} | {cw:.0%} |\n")
-            _write_combo_advisory_panel(w)
     def _handle_signal_history(self, query):
         """显示指定日期范围内的所有交易信号（调仓记录）。"""
         start_date, end_date = self._parse_date_with_llm_fallback(query)

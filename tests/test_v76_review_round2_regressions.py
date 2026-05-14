@@ -152,6 +152,13 @@ class V76ReviewRound2RegressionsTest(unittest.TestCase):
         self.assertEqual(prev[self.m.US_ROT_LBS[0]], set())
         self.assertEqual(prev[self.m.US_ROT_LBS[1]], {"QQQ"})
 
+    def test_user_query_handlers_do_not_print_combo_budget_panel(self) -> None:
+        source = SCRIPT.read_text(encoding="utf-8")
+
+        self.assertNotIn("_write_combo_advisory_panel", source)
+        self.assertNotIn("ACTIVE DYNAMIC BUDGET", source)
+        self.assertNotIn("动态明细暂未加载", source)
+
     def test_csindex_fail_counter_is_thread_local(self) -> None:
         self.m._set_csindex_consecutive_fails(2)
         worker_values: list[int] = []

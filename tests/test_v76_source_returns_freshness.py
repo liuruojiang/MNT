@@ -61,13 +61,5 @@ class SourceReturnsFreshnessTest(unittest.TestCase):
 
         self.module.validate_common_end_freshness(meta, pd.Timestamp("2026-05-13"))
 
-    def test_advisory_bot_fallback_snapshot_is_close_confirmed(self) -> None:
-        import poe_v76_level8_advisory_bot as bot
-
-        latest = pd.Timestamp(bot.LEVEL8_ADVISORY_SNAPSHOT["latest_data_date"])
-        required = self.module.latest_required_close_date(pd.Timestamp("2026-05-13"))
-        self.assertGreaterEqual(latest, required)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -23,15 +23,17 @@ FIXED_SCENARIO = "fixed_10_15_15_20_40"
 ADVISORY_SCENARIO = "advisory_dd_3_10_month_end"
 SUBA_ADVISORY_SCENARIO = "advisory_suba_dd_5_8_weekly"
 STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
-ACTIVE_DYNAMIC_BUDGET_SCENARIO = STACKED_ADVISORY_SCENARIO
+SUBD_STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_subd_dd_7_10_month_end"
+ACTIVE_DYNAMIC_BUDGET_SCENARIO = SUBD_STACKED_ADVISORY_SCENARIO
 WINDOWS = {
-    "full": None,
-    "last_10y": pd.DateOffset(years=10),
+    "since_2020": pd.Timestamp("2020-01-01"),
     "last_5y": pd.DateOffset(years=5),
     "last_3y": pd.DateOffset(years=3),
     "last_1y": pd.DateOffset(years=1),
 }
-DYNAMIC_BUDGET_SLEEVES = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D"]
+# ADK keeps its own strategy-level DD RiskGate, so portfolio-layer dynamic
+# budget scans and active rules do not target Sub-A-DK.
+DYNAMIC_BUDGET_SLEEVES = ["Sub-A", "Microcap", "Sub-D"]
 
 
 @dataclass(frozen=True)
@@ -194,10 +196,52 @@ def build_dynamic_sleeve_weights(
     executed.loc[mask] = target.loc[mask]
     executed = executed.ffill()
 
-    dynamic = pd.DataFrame(weights, index=ret_df.index, dtype=float)
-    delta = executed - base
-    dynamic[sleeve] = executed
-    dynamic[absorber] = weights[absorber] - delta
+    return apply_self_funded_dynamic_targets(
+        pd.DataFrame({sleeve: executed}, index=ret_df.index),
+        weights,
+        dynamic_sleeves=[sleeve],
+        absorber=absorber,
+    )
+
+
+def apply_self_funded_dynamic_targets(
+    target_weights: pd.DataFrame,
+    weights: dict[str, float],
+    dynamic_sleeves: list[str],
+    absorber: str = "Sub-B",
+) -> pd.DataFrame:
+    if absorber not in weights:
+        raise ValueError(f"Manifest is missing absorber weight: {absorber}")
+    if len(set(dynamic_sleeves)) != len(dynamic_sleeves):
+        raise ValueError("Dynamic sleeves must be unique")
+    if absorber in dynamic_sleeves:
+        raise ValueError("Dynamic sleeve and absorber must be different")
+    missing = [name for name in dynamic_sleeves if name not in weights or name not in target_weights]
+    if missing:
+        raise ValueError(f"Missing dynamic sleeve targets: {', '.join(missing)}")
+
+    dynamic = pd.DataFrame(weights, index=target_weights.index, dtype=float)
+    base = pd.Series({sleeve: float(weights[sleeve]) for sleeve in dynamic_sleeves}, dtype=float)
+    requested = target_weights[dynamic_sleeves].astype(float)
+    deltas = requested.sub(base, axis=1)
+    cuts = deltas.clip(upper=0.0)
+    boost_requests = deltas.clip(lower=0.0)
+    available_budget = -cuts.sum(axis=1)
+    requested_boost = boost_requests.sum(axis=1)
+    boost_scale = pd.Series(0.0, index=target_weights.index, dtype=float)
+    has_boost = requested_boost > 1e-12
+    boost_scale.loc[has_boost] = np.minimum(
+        1.0,
+        available_budget.loc[has_boost] / requested_boost.loc[has_boost],
+    )
+    funded_boosts = boost_requests.mul(boost_scale, axis=0)
+    dynamic_targets = requested.copy()
+    dynamic_targets.loc[:, dynamic_sleeves] = base + cuts + funded_boosts
+    leftover_budget = available_budget - funded_boosts.sum(axis=1)
+
+    for sleeve in dynamic_sleeves:
+        dynamic[sleeve] = dynamic_targets[sleeve]
+    dynamic[absorber] = weights[absorber] + leftover_budget
     dynamic = dynamic[list(weights)]
     if (dynamic < -1e-12).any().any():
         raise ValueError("Dynamic weights produced a negative sleeve weight")
@@ -250,8 +294,7 @@ def build_multi_dynamic_sleeve_weights(
     if missing:
         raise ValueError(f"Manifest is missing sleeve weights: {', '.join(missing)}")
 
-    dynamic = pd.DataFrame(weights, index=ret_df.index, dtype=float)
-    total_delta = pd.Series(0.0, index=ret_df.index, dtype=float)
+    targets = pd.DataFrame(index=ret_df.index)
     for sleeve in sleeves:
         base = weights[sleeve]
         target = sleeve_target_by_prior_dd(
@@ -268,16 +311,14 @@ def build_multi_dynamic_sleeve_weights(
         executed.iloc[0] = base
         executed.loc[mask] = target.loc[mask]
         executed = executed.ffill()
-        dynamic[sleeve] = executed
-        total_delta = total_delta + (executed - base)
+        targets[sleeve] = executed
 
-    dynamic[absorber] = weights[absorber] - total_delta
-    dynamic = dynamic[list(weights)]
-    if (dynamic < -1e-12).any().any():
-        raise ValueError("Dynamic weights produced a negative sleeve weight")
-    if not np.allclose(dynamic.sum(axis=1).to_numpy(), 1.0):
-        raise ValueError("Dynamic weights must sum to 1.0 on every date")
-    return dynamic
+    return apply_self_funded_dynamic_targets(
+        targets,
+        weights,
+        dynamic_sleeves=sleeves,
+        absorber=absorber,
+    )
 
 
 def build_stacked_suba_microcap_weights(
@@ -322,17 +363,12 @@ def build_stacked_suba_microcap_weights(
     microcap_executed.loc[microcap_mask] = microcap_target.loc[microcap_mask]
     microcap_executed = microcap_executed.ffill()
 
-    dynamic = pd.DataFrame(weights, index=ret_df.index, dtype=float)
-    total_delta = (suba_executed - suba_base) + (microcap_executed - microcap_base)
-    dynamic["Sub-A"] = suba_executed
-    dynamic["Microcap"] = microcap_executed
-    dynamic["Sub-B"] = weights["Sub-B"] - total_delta
-    dynamic = dynamic[list(weights)]
-    if (dynamic < -1e-12).any().any():
-        raise ValueError("Dynamic weights produced a negative sleeve weight")
-    if not np.allclose(dynamic.sum(axis=1).to_numpy(), 1.0):
-        raise ValueError("Dynamic weights must sum to 1.0 on every date")
-    return dynamic
+    return apply_self_funded_dynamic_targets(
+        pd.DataFrame({"Sub-A": suba_executed, "Microcap": microcap_executed}, index=ret_df.index),
+        weights,
+        dynamic_sleeves=["Sub-A", "Microcap"],
+        absorber="Sub-B",
+    )
 
 
 def build_suba_5_8_weekly_weights(
@@ -351,6 +387,47 @@ def build_suba_5_8_weekly_weights(
     )
 
 
+def build_suba_microcap_subd_7_10_month_end_weights(
+    ret_df: pd.DataFrame,
+    weights: dict[str, float],
+) -> pd.DataFrame:
+    required = ["Sub-A", "Microcap", "Sub-D", "Sub-B"]
+    missing = [name for name in required if name not in weights]
+    if missing:
+        raise ValueError(f"Manifest is missing sleeve weights: {', '.join(missing)}")
+
+    targets = pd.DataFrame(index=ret_df.index)
+    rules = [
+        ("Sub-A", 0.05, 0.08, "weekly", 0.05),
+        ("Microcap", 0.03, 0.10, "month_end", 0.05),
+        ("Sub-D", 0.07, 0.10, "month_end", 0.05),
+    ]
+    for sleeve, boost_dd, cut_dd, execution, step in rules:
+        base = weights[sleeve]
+        target = sleeve_target_by_prior_dd(
+            ret_df,
+            sleeve,
+            boost_dd=boost_dd,
+            cut_dd=cut_dd,
+            base=base,
+            boost=base + step,
+            cut=max(base - step, 0.0),
+        )
+        mask = execution_mask(ret_df.index, execution)
+        executed = pd.Series(np.nan, index=ret_df.index, dtype=float)
+        executed.iloc[0] = base
+        executed.loc[mask] = target.loc[mask]
+        executed = executed.ffill()
+        targets[sleeve] = executed
+
+    return apply_self_funded_dynamic_targets(
+        targets,
+        weights,
+        dynamic_sleeves=["Sub-A", "Microcap", "Sub-D"],
+        absorber="Sub-B",
+    )
+
+
 def allocation_turnover(weights_df: pd.DataFrame) -> float:
     return float(weights_df.diff().abs().sum(axis=1).sum())
 
@@ -360,8 +437,15 @@ def rebalance_count(weights_df: pd.DataFrame) -> int:
     return int((changes > 1e-12).sum())
 
 
-def summarize_nav(nav_df: pd.DataFrame, segment: str, offset: pd.DateOffset | None) -> dict[str, object]:
-    part = nav_df.copy() if offset is None else nav_df.loc[nav_df.index >= nav_df.index[-1] - offset].copy()
+def summarize_nav(
+    nav_df: pd.DataFrame, segment: str, window_start: pd.DateOffset | pd.Timestamp | None
+) -> dict[str, object]:
+    if window_start is None:
+        part = nav_df.copy()
+    elif isinstance(window_start, pd.Timestamp):
+        part = nav_df.loc[nav_df.index >= window_start].copy()
+    else:
+        part = nav_df.loc[nav_df.index >= nav_df.index[-1] - window_start].copy()
     if len(part) < 2:
         raise ValueError(f"Not enough rows for {segment}")
     nav = part["portfolio_nav"] / part["portfolio_nav"].iloc[0]
@@ -399,10 +483,13 @@ def build_scenario_outputs(
     suba_advisory_nav = build_portfolio_nav_from_weight_frame(ret_df, suba_advisory_weights)
     stacked_weights = build_stacked_suba_microcap_weights(ret_df, weights)
     stacked_nav = build_portfolio_nav_from_weight_frame(ret_df, stacked_weights)
+    subd_stacked_weights = build_suba_microcap_subd_7_10_month_end_weights(ret_df, weights)
+    subd_stacked_nav = build_portfolio_nav_from_weight_frame(ret_df, subd_stacked_weights)
     scenario_weights = {
         ADVISORY_SCENARIO: advisory_weights,
         SUBA_ADVISORY_SCENARIO: suba_advisory_weights,
         STACKED_ADVISORY_SCENARIO: stacked_weights,
+        SUBD_STACKED_ADVISORY_SCENARIO: subd_stacked_weights,
     }
 
     scenario_nav = pd.DataFrame(index=ret_df.index)
@@ -411,6 +498,7 @@ def build_scenario_outputs(
         ADVISORY_SCENARIO: advisory_nav,
         SUBA_ADVISORY_SCENARIO: suba_advisory_nav,
         STACKED_ADVISORY_SCENARIO: stacked_nav,
+        SUBD_STACKED_ADVISORY_SCENARIO: subd_stacked_nav,
     }.items():
         scenario_nav[f"{scenario}_return"] = nav["portfolio_return"]
         scenario_nav[f"{scenario}_nav"] = nav["portfolio_nav"]
@@ -422,13 +510,19 @@ def build_scenario_outputs(
         (ADVISORY_SCENARIO, advisory_nav, advisory_weights),
         (SUBA_ADVISORY_SCENARIO, suba_advisory_nav, suba_advisory_weights),
         (STACKED_ADVISORY_SCENARIO, stacked_nav, stacked_weights),
+        (SUBD_STACKED_ADVISORY_SCENARIO, subd_stacked_nav, subd_stacked_weights),
     ]:
         scenario_metrics = build_window_metrics(nav)
         scenario_metrics.insert(0, "scenario", scenario)
         scenario_metrics["avg_suba"] = float(weight_frame["Sub-A"].mean())
+        scenario_metrics["avg_subadk"] = float(weight_frame["Sub-A-DK"].mean())
         scenario_metrics["avg_microcap"] = float(weight_frame["Microcap"].mean())
+        scenario_metrics["avg_subd"] = float(weight_frame["Sub-D"].mean())
+        scenario_metrics["avg_subb"] = float(weight_frame["Sub-B"].mean())
         scenario_metrics["latest_suba"] = float(weight_frame["Sub-A"].iloc[-1])
+        scenario_metrics["latest_subadk"] = float(weight_frame["Sub-A-DK"].iloc[-1])
         scenario_metrics["latest_microcap"] = float(weight_frame["Microcap"].iloc[-1])
+        scenario_metrics["latest_subd"] = float(weight_frame["Sub-D"].iloc[-1])
         scenario_metrics["latest_subb"] = float(weight_frame["Sub-B"].iloc[-1])
         scenario_metrics["rebalance_count"] = rebalance_count(weight_frame)
         scenario_metrics["allocation_turnover"] = allocation_turnover(weight_frame)
@@ -484,7 +578,7 @@ def build_dynamic_sleeve_budget_scan(
 
 
 def format_dynamic_sleeve_budget_summary(scan_metrics: pd.DataFrame) -> str:
-    fixed_full = _metric_row(scan_metrics, FIXED_SCENARIO, "full")
+    fixed_since_2020 = _metric_row(scan_metrics, FIXED_SCENARIO, "since_2020")
     fixed_1y = _metric_row(scan_metrics, FIXED_SCENARIO, "last_1y")
     candidate_names = [name for name in scan_metrics["scenario"].unique() if name != FIXED_SCENARIO]
     lines = [
@@ -492,30 +586,30 @@ def format_dynamic_sleeve_budget_summary(scan_metrics: pd.DataFrame) -> str:
         "",
         "## Scope",
         "",
-        "Each candidate applies the same prior-NAV-drawdown rule to one sleeve only. Sub-B absorbs the weight delta. This is research output only and does not change executable defaults.",
+        "Each candidate applies the same prior-NAV-drawdown rule to one sleeve only. Sub-A-DK is excluded because it already has an internal DD RiskGate. Sub-B receives unused cut budget but does not fund unmatched boost requests. This is research output only and does not change executable defaults.",
         "",
         "Rule: month-end execution, +5pp when prior sleeve drawdown is within 3%, -5pp when prior drawdown is at or below -10%, otherwise base weight.",
         "",
         "## Candidate Summary",
         "",
-        "| Candidate | Sleeve | Full Ann. Delta | Full MaxDD Delta | Full Sharpe Delta | 1Y Ann. Delta | 1Y Sharpe Delta | Latest sleeve | Latest Sub-B | Switches | Turnover |",
+        "| Candidate | Sleeve | Since 2020 Ann. Delta | Since 2020 MaxDD Delta | Since 2020 Sharpe Delta | 1Y Ann. Delta | 1Y Sharpe Delta | Latest sleeve | Latest Sub-B | Switches | Turnover |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name in candidate_names:
-        full = _metric_row(scan_metrics, name, "full")
+        since_2020 = _metric_row(scan_metrics, name, "since_2020")
         one_y = _metric_row(scan_metrics, name, "last_1y")
         lines.append(
             "| "
-            f"`{name}` | {full['dynamic_sleeve']} | "
-            f"{_pct(float(full['annual_return'] - fixed_full['annual_return']))} | "
-            f"{_pct(float(full['max_dd'] - fixed_full['max_dd']))} | "
-            f"{float(full['sharpe'] - fixed_full['sharpe']):+.2f} | "
+            f"`{name}` | {since_2020['dynamic_sleeve']} | "
+            f"{_pct(float(since_2020['annual_return'] - fixed_since_2020['annual_return']))} | "
+            f"{_pct(float(since_2020['max_dd'] - fixed_since_2020['max_dd']))} | "
+            f"{float(since_2020['sharpe'] - fixed_since_2020['sharpe']):+.2f} | "
             f"{_pct(float(one_y['annual_return'] - fixed_1y['annual_return']))} | "
             f"{float(one_y['sharpe'] - fixed_1y['sharpe']):+.2f} | "
-            f"{_pct(float(full['latest_dynamic_sleeve']))} | "
-            f"{_pct(float(full['latest_absorber']))} | "
-            f"{int(full['rebalance_count'])} | "
-            f"{float(full['allocation_turnover']):.1f} |"
+            f"{_pct(float(since_2020['latest_dynamic_sleeve']))} | "
+            f"{_pct(float(since_2020['latest_absorber']))} | "
+            f"{int(since_2020['rebalance_count'])} | "
+            f"{float(since_2020['allocation_turnover']):.1f} |"
         )
     return "\n".join(lines)
 
@@ -528,7 +622,8 @@ def build_scenario_economic_curve(
     scenario_prefixes = {
         ADVISORY_SCENARIO: "advisory",
         SUBA_ADVISORY_SCENARIO: "suba_advisory",
-        STACKED_ADVISORY_SCENARIO: "stacked_advisory",
+        STACKED_ADVISORY_SCENARIO: "legacy_stacked_advisory",
+        SUBD_STACKED_ADVISORY_SCENARIO: "stacked_advisory",
     }
     required = [fixed_return_col, fixed_nav_col]
     for scenario in scenario_prefixes:
@@ -548,7 +643,7 @@ def build_scenario_economic_curve(
 
     for scenario, prefix in scenario_prefixes.items():
         weights_df = scenario_weights[scenario]
-        required_weight_cols = ["Sub-A", "Microcap", "Sub-B"]
+        required_weight_cols = ["Sub-A", "Microcap", "Sub-D", "Sub-B"]
         missing_weights = [col for col in required_weight_cols if col not in weights_df.columns]
         if missing_weights:
             raise ValueError(f"{scenario} weights are missing columns: {', '.join(missing_weights)}")
@@ -561,6 +656,7 @@ def build_scenario_economic_curve(
         curve[f"{prefix}_excess_nav"] = scenario_nav_series / fixed_nav - 1.0
         curve[f"{prefix}_suba_weight"] = weights_df["Sub-A"].reindex(curve.index).ffill()
         curve[f"{prefix}_microcap_weight"] = weights_df["Microcap"].reindex(curve.index).ffill()
+        curve[f"{prefix}_subd_weight"] = weights_df["Sub-D"].reindex(curve.index).ffill()
         curve[f"{prefix}_subb_weight"] = weights_df["Sub-B"].reindex(curve.index).ffill()
     return curve
 
@@ -584,14 +680,14 @@ def format_scenario_decision_summary(
     scenario_metrics: pd.DataFrame, economic_curve: pd.DataFrame
 ) -> str:
     latest = economic_curve.iloc[-1]
-    fixed_full = _metric_row(scenario_metrics, FIXED_SCENARIO, "full")
-    advisory_full = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "full")
-    suba_full = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "full")
-    stacked_full = _metric_row(scenario_metrics, STACKED_ADVISORY_SCENARIO, "full")
+    fixed_since_2020 = _metric_row(scenario_metrics, FIXED_SCENARIO, "since_2020")
+    advisory_since_2020 = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "since_2020")
+    suba_since_2020 = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "since_2020")
+    stacked_since_2020 = _metric_row(scenario_metrics, ACTIVE_DYNAMIC_BUDGET_SCENARIO, "since_2020")
     fixed_1y = _metric_row(scenario_metrics, FIXED_SCENARIO, "last_1y")
     advisory_1y = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "last_1y")
     suba_1y = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "last_1y")
-    stacked_1y = _metric_row(scenario_metrics, STACKED_ADVISORY_SCENARIO, "last_1y")
+    stacked_1y = _metric_row(scenario_metrics, ACTIVE_DYNAMIC_BUDGET_SCENARIO, "last_1y")
     return "\n".join(
         [
             "# V7.6 Portfolio Scenario Decision Summary",
@@ -607,33 +703,34 @@ def format_scenario_decision_summary(
             f"- Scenario: `{ADVISORY_SCENARIO}`",
             f"- Latest date: `{economic_curve.index[-1].date().isoformat()}`",
             f"- Latest Microcap advisory weight: {_pct(float(latest['advisory_microcap_weight']))}",
-            f"- Latest Sub-B absorbing weight: {_pct(float(latest['advisory_subb_weight']))}",
+            f"- Latest Sub-B residual weight: {_pct(float(latest['advisory_subb_weight']))}",
             f"- Advisory excess NAV versus fixed: {_pct(float(latest['advisory_excess_nav']))}",
             "",
             f"- Scenario: `{SUBA_ADVISORY_SCENARIO}`",
             f"- Latest Sub-A advisory weight: {_pct(float(latest['suba_advisory_suba_weight']))}",
             f"- Latest Microcap fixed weight: {_pct(float(latest['suba_advisory_microcap_weight']))}",
-            f"- Latest Sub-B absorbing weight: {_pct(float(latest['suba_advisory_subb_weight']))}",
+            f"- Latest Sub-B residual weight: {_pct(float(latest['suba_advisory_subb_weight']))}",
             f"- Sub-A advisory excess NAV versus fixed: {_pct(float(latest['suba_advisory_excess_nav']))}",
             "",
-            f"- Scenario: `{STACKED_ADVISORY_SCENARIO}`",
+            f"- Scenario: `{ACTIVE_DYNAMIC_BUDGET_SCENARIO}`",
             f"- Latest Sub-A advisory weight: {_pct(float(latest['stacked_advisory_suba_weight']))}",
             f"- Latest Microcap advisory weight: {_pct(float(latest['stacked_advisory_microcap_weight']))}",
-            f"- Latest Sub-B absorbing weight: {_pct(float(latest['stacked_advisory_subb_weight']))}",
-            f"- Stacked advisory excess NAV versus fixed: {_pct(float(latest['stacked_advisory_excess_nav']))}",
+            f"- Latest Sub-D advisory weight: {_pct(float(latest['stacked_advisory_subd_weight']))}",
+            f"- Latest Sub-B residual weight: {_pct(float(latest['stacked_advisory_subb_weight']))}",
+            f"- Active advisory excess NAV versus fixed: {_pct(float(latest['stacked_advisory_excess_nav']))}",
             "",
             "## Metric Comparison",
             "",
-            "| Window | Fixed annual / MaxDD / Sharpe | Microcap advisory annual / MaxDD / Sharpe | Sub-A advisory annual / MaxDD / Sharpe | Stacked advisory annual / MaxDD / Sharpe |",
+            "| Window | Fixed annual / MaxDD / Sharpe | Microcap advisory annual / MaxDD / Sharpe | Sub-A advisory annual / MaxDD / Sharpe | Active A+Microcap+D annual / MaxDD / Sharpe |",
             "|---|---:|---:|---:|---:|",
             (
-                f"| Full | {_pct(float(fixed_full['annual_return']))} / {_pct(float(fixed_full['max_dd']))} / "
-                f"{float(fixed_full['sharpe']):.2f} | {_pct(float(advisory_full['annual_return']))} / "
-                f"{_pct(float(advisory_full['max_dd']))} / {float(advisory_full['sharpe']):.2f} | "
-                f"{_pct(float(suba_full['annual_return']))} / {_pct(float(suba_full['max_dd']))} / "
-                f"{float(suba_full['sharpe']):.2f} | "
-                f"{_pct(float(stacked_full['annual_return']))} / {_pct(float(stacked_full['max_dd']))} / "
-                f"{float(stacked_full['sharpe']):.2f} |"
+                f"| Since 2020-01-01 | {_pct(float(fixed_since_2020['annual_return']))} / {_pct(float(fixed_since_2020['max_dd']))} / "
+                f"{float(fixed_since_2020['sharpe']):.2f} | {_pct(float(advisory_since_2020['annual_return']))} / "
+                f"{_pct(float(advisory_since_2020['max_dd']))} / {float(advisory_since_2020['sharpe']):.2f} | "
+                f"{_pct(float(suba_since_2020['annual_return']))} / {_pct(float(suba_since_2020['max_dd']))} / "
+                f"{float(suba_since_2020['sharpe']):.2f} | "
+                f"{_pct(float(stacked_since_2020['annual_return']))} / {_pct(float(stacked_since_2020['max_dd']))} / "
+                f"{float(stacked_since_2020['sharpe']):.2f} |"
             ),
             (
                 f"| 1Y | {_pct(float(fixed_1y['annual_return']))} / {_pct(float(fixed_1y['max_dd']))} / "
@@ -647,7 +744,7 @@ def format_scenario_decision_summary(
             "",
             "## Decision",
             "",
-            f"Use `{ACTIVE_DYNAMIC_BUDGET_SCENARIO}` as the active portfolio-level dynamic budget. Keep Sub-A-only and Microcap-only rules as report-layer comparisons.",
+            f"Use `{ACTIVE_DYNAMIC_BUDGET_SCENARIO}` as the active portfolio-level dynamic budget. Keep Sub-A-only, Microcap-only, and A+Microcap-only rules as report-layer comparisons.",
         ]
     )
 
@@ -759,7 +856,12 @@ def _svg_line_chart(
 
 def _metric_table_html(scenario_metrics: pd.DataFrame) -> str:
     rows = []
-    for segment, label in [("full", "Full"), ("last_10y", "10Y"), ("last_5y", "5Y"), ("last_3y", "3Y"), ("last_1y", "1Y")]:
+    for segment, label in [
+        ("since_2020", "Since 2020-01-01"),
+        ("last_5y", "5Y"),
+        ("last_3y", "3Y"),
+        ("last_1y", "1Y"),
+    ]:
         has_fixed = ((scenario_metrics["scenario"] == FIXED_SCENARIO) & (scenario_metrics["segment"] == segment)).any()
         has_advisory = (
             (scenario_metrics["scenario"] == ADVISORY_SCENARIO)
@@ -770,7 +872,7 @@ def _metric_table_html(scenario_metrics: pd.DataFrame) -> str:
             & (scenario_metrics["segment"] == segment)
         ).any()
         has_stacked = (
-            (scenario_metrics["scenario"] == STACKED_ADVISORY_SCENARIO)
+            (scenario_metrics["scenario"] == ACTIVE_DYNAMIC_BUDGET_SCENARIO)
             & (scenario_metrics["segment"] == segment)
         ).any()
         if not (has_fixed and has_advisory and has_suba and has_stacked):
@@ -778,7 +880,7 @@ def _metric_table_html(scenario_metrics: pd.DataFrame) -> str:
         fixed = _metric_row(scenario_metrics, FIXED_SCENARIO, segment)
         advisory = _metric_row(scenario_metrics, ADVISORY_SCENARIO, segment)
         suba = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, segment)
-        stacked = _metric_row(scenario_metrics, STACKED_ADVISORY_SCENARIO, segment)
+        stacked = _metric_row(scenario_metrics, ACTIVE_DYNAMIC_BUDGET_SCENARIO, segment)
         rows.append(
             "<tr>"
             f"<td>{label}</td>"
@@ -799,7 +901,7 @@ def _metric_table_html(scenario_metrics: pd.DataFrame) -> str:
     return "\n".join(
         [
             '<table class="metrics-table">',
-            "<thead><tr><th>Window</th><th>Fixed Ann.</th><th>Fixed MaxDD</th><th>Fixed Sharpe</th><th>Microcap Ann.</th><th>Microcap MaxDD</th><th>Microcap Sharpe</th><th>Sub-A Ann.</th><th>Sub-A MaxDD</th><th>Sub-A Sharpe</th><th>Stacked Ann.</th><th>Stacked MaxDD</th><th>Stacked Sharpe</th></tr></thead>",
+            "<thead><tr><th>Window</th><th>Fixed Ann.</th><th>Fixed MaxDD</th><th>Fixed Sharpe</th><th>Microcap Ann.</th><th>Microcap MaxDD</th><th>Microcap Sharpe</th><th>Sub-A Ann.</th><th>Sub-A MaxDD</th><th>Sub-A Sharpe</th><th>Active Ann.</th><th>Active MaxDD</th><th>Active Sharpe</th></tr></thead>",
             "<tbody>",
             *rows,
             "</tbody></table>",
@@ -810,13 +912,13 @@ def _metric_table_html(scenario_metrics: pd.DataFrame) -> str:
 def render_scenario_visual_report(scenario_metrics: pd.DataFrame, economic_curve: pd.DataFrame) -> str:
     curve = _downsample_for_svg(economic_curve)
     latest = economic_curve.iloc[-1]
-    fixed_full = _metric_row(scenario_metrics, FIXED_SCENARIO, "full")
-    advisory_full = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "full")
-    suba_full = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "full")
-    stacked_full = _metric_row(scenario_metrics, STACKED_ADVISORY_SCENARIO, "full")
+    fixed_since_2020 = _metric_row(scenario_metrics, FIXED_SCENARIO, "since_2020")
+    advisory_since_2020 = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "since_2020")
+    suba_since_2020 = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "since_2020")
+    stacked_since_2020 = _metric_row(scenario_metrics, ACTIVE_DYNAMIC_BUDGET_SCENARIO, "since_2020")
     advisory_1y = _metric_row(scenario_metrics, ADVISORY_SCENARIO, "last_1y")
     suba_1y = _metric_row(scenario_metrics, SUBA_ADVISORY_SCENARIO, "last_1y")
-    stacked_1y = _metric_row(scenario_metrics, STACKED_ADVISORY_SCENARIO, "last_1y")
+    stacked_1y = _metric_row(scenario_metrics, ACTIVE_DYNAMIC_BUDGET_SCENARIO, "last_1y")
     colors = {
         "Fixed NAV": "#2563eb",
         "Microcap advisory NAV": "#0f766e",
@@ -911,14 +1013,14 @@ def render_scenario_visual_report(scenario_metrics: pd.DataFrame, economic_curve
             "<body><main>",
             "<header>",
             "<h1>V7.6 Portfolio Scenario Visual Report</h1>",
-            f'<div class="muted">Active dynamic budget default: <code>{ACTIVE_DYNAMIC_BUDGET_SCENARIO}</code>. Comparison scenarios: <code>{ADVISORY_SCENARIO}</code> and <code>{STACKED_ADVISORY_SCENARIO}</code>. Fixed 10/15/15/20/40 remains the benchmark. Data through {latest_date}.</div>',
+            f'<div class="muted">Active dynamic budget default: <code>{ACTIVE_DYNAMIC_BUDGET_SCENARIO}</code>. Comparison scenarios: <code>{ADVISORY_SCENARIO}</code>, <code>{SUBA_ADVISORY_SCENARIO}</code>, and <code>{STACKED_ADVISORY_SCENARIO}</code>. Fixed 10/15/15/20/40 remains the benchmark. Data through {latest_date}.</div>',
             "</header>",
             '<section class="cards">',
-            f'<div class="card"><div class="label">Full Annual Delta</div><div class="value">{_pct(float(advisory_full["annual_return"] - fixed_full["annual_return"]))}</div></div>',
-            f'<div class="card"><div class="label">Sub-A Annual Delta</div><div class="value">{_pct(float(suba_full["annual_return"] - fixed_full["annual_return"]))}</div></div>',
-            f'<div class="card"><div class="label">Stacked Annual Delta</div><div class="value">{_pct(float(stacked_full["annual_return"] - fixed_full["annual_return"]))}</div></div>',
-            f'<div class="card"><div class="label">Sub-A Full Sharpe</div><div class="value">{float(suba_full["sharpe"]):.2f}</div></div>',
-            f'<div class="card"><div class="label">Stacked Full Sharpe</div><div class="value">{float(stacked_full["sharpe"]):.2f}</div></div>',
+            f'<div class="card"><div class="label">Since 2020 Annual Delta</div><div class="value">{_pct(float(advisory_since_2020["annual_return"] - fixed_since_2020["annual_return"]))}</div></div>',
+            f'<div class="card"><div class="label">Sub-A Since 2020 Delta</div><div class="value">{_pct(float(suba_since_2020["annual_return"] - fixed_since_2020["annual_return"]))}</div></div>',
+            f'<div class="card"><div class="label">Active Since 2020 Delta</div><div class="value">{_pct(float(stacked_since_2020["annual_return"] - fixed_since_2020["annual_return"]))}</div></div>',
+            f'<div class="card"><div class="label">Sub-A Since 2020 Sharpe</div><div class="value">{float(suba_since_2020["sharpe"]):.2f}</div></div>',
+            f'<div class="card"><div class="label">Active Since 2020 Sharpe</div><div class="value">{float(stacked_since_2020["sharpe"]):.2f}</div></div>',
             f'<div class="card"><div class="label">Sub-A 1Y Annual</div><div class="value">{_pct(float(suba_1y["annual_return"]))}</div></div>',
             f'<div class="card"><div class="label">Stacked 1Y Annual</div><div class="value">{_pct(float(stacked_1y["annual_return"]))}</div></div>',
             f'<div class="card"><div class="label">Sub-A Excess NAV</div><div class="value">{_pct(float(latest["suba_advisory_excess_nav"]))}</div></div>',
@@ -926,6 +1028,7 @@ def render_scenario_visual_report(scenario_metrics: pd.DataFrame, economic_curve
             f'<div class="card"><div class="label">Sub-A Advisory</div><div class="value">{_pct(float(latest["suba_advisory_suba_weight"]))}</div></div>',
             f'<div class="card"><div class="label">Stacked Sub-A</div><div class="value">{_pct(float(latest["stacked_advisory_suba_weight"]))}</div></div>',
             f'<div class="card"><div class="label">Stacked Microcap</div><div class="value">{_pct(float(latest["stacked_advisory_microcap_weight"]))}</div></div>',
+            f'<div class="card"><div class="label">Stacked Sub-D</div><div class="value">{_pct(float(latest["stacked_advisory_subd_weight"]))}</div></div>',
             f'<div class="card"><div class="label">Stacked Sub-B</div><div class="value">{_pct(float(latest["stacked_advisory_subb_weight"]))}</div></div>',
             "</section>",
             '<section class="chart-grid">',
@@ -937,7 +1040,7 @@ def render_scenario_visual_report(scenario_metrics: pd.DataFrame, economic_curve
             '<section class="table-panel">',
             "<h2>Window Metrics</h2>",
             _metric_table_html(scenario_metrics),
-            '<p class="note">The active portfolio-level dynamic budget is stacked Sub-A 5/8 weekly + Microcap 3/10 month-end with Sub-B absorbing both deltas. Sub-A-only and Microcap-only remain comparison scenarios. Fixed 10/15/15/20/40 is retained as the benchmark and rollback line.</p>',
+            '<p class="note">The active portfolio-level dynamic budget is Sub-A 5/8 weekly + Microcap 3/10 month-end + Sub-D 7/10 month-end. Sub-A-DK is fixed at 15% because its own DD RiskGate remains inside the sleeve. Dynamic sleeves are self-funded: cut sleeves provide budget for boost sleeves, and Sub-B only receives unused cut budget. Sub-A-only, Microcap-only, and A+Microcap-only remain comparison scenarios. Fixed 10/15/15/20/40 is retained as the benchmark and rollback line.</p>',
             "</section>",
             "</main></body></html>",
         ]
@@ -957,7 +1060,8 @@ def write_outputs(
     scenario_nav, scenario_metrics, scenario_weights = build_scenario_outputs(ret_df, manifest.weights)
     advisory_weights = scenario_weights[ADVISORY_SCENARIO]
     suba_advisory_weights = scenario_weights[SUBA_ADVISORY_SCENARIO]
-    stacked_weights = scenario_weights[STACKED_ADVISORY_SCENARIO]
+    legacy_stacked_weights = scenario_weights[STACKED_ADVISORY_SCENARIO]
+    stacked_weights = scenario_weights[ACTIVE_DYNAMIC_BUDGET_SCENARIO]
     economic_curve = build_scenario_economic_curve(scenario_nav, scenario_weights)
     decision_summary = format_scenario_decision_summary(scenario_metrics, economic_curve)
     visual_report = render_scenario_visual_report(scenario_metrics, economic_curve)
@@ -987,7 +1091,17 @@ def write_outputs(
         encoding="utf-8-sig",
     )
     stacked_weights.to_csv(
+        out / "weights_advisory_suba_microcap_subd_dd_7_10_month_end.csv",
+        index_label="date",
+        encoding="utf-8-sig",
+    )
+    legacy_stacked_weights.to_csv(
         out / "weights_advisory_suba_microcap_dd_3_10_month_end.csv",
+        index_label="date",
+        encoding="utf-8-sig",
+    )
+    legacy_stacked_weights.to_csv(
+        out / "weights_legacy_advisory_suba_microcap_dd_3_10_month_end.csv",
         index_label="date",
         encoding="utf-8-sig",
     )
@@ -1007,14 +1121,14 @@ def write_outputs(
                 "description": "Static five-sleeve baseline from manifest weights.",
             },
             ADVISORY_SCENARIO: {
-                "description": "Microcap advisory risk budget: 20% when prior Microcap NAV DD is within 3%, 10% when prior DD is at or below -10%, otherwise 15%; month-end execution; Sub-B absorbs the delta.",
+                "description": "Microcap advisory risk budget: 20% requested when prior Microcap NAV DD is within 3%, 10% when prior DD is at or below -10%, otherwise 15%; month-end execution; boosts require cut-funded budget and Sub-B receives unused cuts.",
                 "microcap_source": "Microcap v2.0 return_net from aligned returns",
                 "execution": "month_end",
                 "boost_dd": 0.03,
                 "cut_dd": 0.10,
             },
             SUBA_ADVISORY_SCENARIO: {
-                "description": "Sub-A advisory risk budget: 15% when prior Sub-A NAV DD is within 5%, 5% when prior DD is at or below -8%, otherwise 10%; weekly execution; Sub-B absorbs the delta.",
+                "description": "Sub-A advisory risk budget: 15% requested when prior Sub-A NAV DD is within 5%, 5% when prior DD is at or below -8%, otherwise 10%; weekly execution; boosts require cut-funded budget and Sub-B receives unused cuts.",
                 "suba_source": "Sub-A return from aligned returns",
                 "execution": "weekly",
                 "boost_dd": 0.05,
@@ -1022,7 +1136,7 @@ def write_outputs(
                 "active_dynamic_budget_default": False,
             },
             STACKED_ADVISORY_SCENARIO: {
-                "description": "Stacked Sub-A + Microcap advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end; each sleeve moves +/-5pp from base; Sub-B absorbs both deltas.",
+                "description": "Legacy stacked Sub-A + Microcap advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end; each sleeve can request +/-5pp from base; boosts are funded only by dynamic-sleeve cuts and Sub-B receives unused cuts.",
                 "suba_source": "Sub-A return from aligned returns",
                 "microcap_source": "Microcap v2.0 return_net from aligned returns",
                 "suba_execution": "weekly",
@@ -1031,6 +1145,22 @@ def write_outputs(
                 "microcap_execution": "month_end",
                 "microcap_boost_dd": 0.03,
                 "microcap_cut_dd": 0.10,
+                "active_dynamic_budget_default": False,
+            },
+            SUBD_STACKED_ADVISORY_SCENARIO: {
+                "description": "Active stacked Sub-A + Microcap + Sub-D advisory risk budget: Sub-A uses 5/8 weekly, Microcap uses 3/10 month-end, Sub-D uses 7/10 month-end; Sub-A-DK stays fixed at 15% because its internal DD RiskGate remains in the sleeve; each dynamic sleeve can request +/-5pp from base; boosts are funded only by dynamic-sleeve cuts and Sub-B receives unused cuts.",
+                "suba_source": "Sub-A return from aligned returns",
+                "microcap_source": "Microcap v2.0 return_net from aligned returns",
+                "subd_source": "Sub-D v1.1 six-ETF return from aligned returns",
+                "suba_execution": "weekly",
+                "suba_boost_dd": 0.05,
+                "suba_cut_dd": 0.08,
+                "microcap_execution": "month_end",
+                "microcap_boost_dd": 0.03,
+                "microcap_cut_dd": 0.10,
+                "subd_execution": "month_end",
+                "subd_boost_dd": 0.07,
+                "subd_cut_dd": 0.10,
                 "active_dynamic_budget_default": True,
             },
         },
@@ -1054,6 +1184,12 @@ def write_outputs(
             ),
             "stacked_advisory_weights": output_path_metadata(
                 out / "weights_advisory_suba_microcap_dd_3_10_month_end.csv"
+            ),
+            "legacy_stacked_advisory_weights": output_path_metadata(
+                out / "weights_legacy_advisory_suba_microcap_dd_3_10_month_end.csv"
+            ),
+            "subd_stacked_advisory_weights": output_path_metadata(
+                out / "weights_advisory_suba_microcap_subd_dd_7_10_month_end.csv"
             ),
             "meta": output_path_metadata(out / "meta.json"),
         },

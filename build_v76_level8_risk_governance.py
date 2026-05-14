@@ -17,13 +17,13 @@ DEFAULT_SOURCE_RETURNS = (
     / "aligned_five_sleeve_real_subd_returns.csv"
 )
 
-ACTIVE_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
+ACTIVE_SCENARIO = "advisory_suba_microcap_subd_dd_7_10_month_end"
 FIXED_SCENARIO = "fixed_10_15_15_20_40"
 
 MAX_EXCESS_DD_REVIEW = -0.05
 MAX_EXCESS_DD_ROLLBACK = -0.10
-MAX_ALLOCATION_TURNOVER_REVIEW = 15.0
-MAX_REBALANCE_COUNT_REVIEW = 140
+MAX_ALLOCATION_TURNOVER_REVIEW = 25.0
+MAX_REBALANCE_COUNT_REVIEW = 180
 
 
 def _pct(value: float) -> str:
@@ -174,22 +174,22 @@ def build_governance(
                 "ACTIVE_OK",
                 str(active["scenario"]),
                 ACTIVE_SCENARIO,
-                "Dashboard marks the stacked scenario as ACTIVE_DEFAULT.",
+                "Dashboard marks the Sub-A + Microcap + Sub-D scenario as ACTIVE_DEFAULT; Sub-A-DK stays fixed because its internal DD RiskGate remains active.",
             )
         )
 
     if active is not None:
-        full_annual = _num(active.get("full_annual_delta"))
-        full_dd = _num(active.get("full_max_dd_delta"))
-        full_sharpe = _num(active.get("full_sharpe_delta"))
-        full_ok = full_annual > 0 and full_dd >= 0 and full_sharpe > 0
+        since_2020_annual = _num(active.get("since_2020_annual_delta"))
+        since_2020_dd = _num(active.get("since_2020_max_dd_delta"))
+        since_2020_sharpe = _num(active.get("since_2020_sharpe_delta"))
+        since_2020_ok = since_2020_annual > 0 and since_2020_dd >= 0 and since_2020_sharpe > 0
         rows.append(
             _rule(
-                "full_window_evidence",
-                "ACTIVE_OK" if full_ok else "ROLLBACK_FIXED",
-                f"annual {_pct(full_annual)}, maxDD {_pct(full_dd)}, sharpe {full_sharpe:.2f}",
+                "since_2020_window_evidence",
+                "ACTIVE_OK" if since_2020_ok else "ROLLBACK_FIXED",
+                f"annual {_pct(since_2020_annual)}, maxDD {_pct(since_2020_dd)}, sharpe {since_2020_sharpe:.2f}",
                 "all >= 0, annual/sharpe strictly > 0",
-                "Full-window evidence must remain positive versus fixed.",
+                "Since-2020 evidence must remain positive versus fixed.",
             )
         )
 

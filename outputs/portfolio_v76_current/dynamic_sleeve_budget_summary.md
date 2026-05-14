@@ -2,15 +2,14 @@
 
 ## Scope
 
-Each candidate applies the same prior-NAV-drawdown rule to one sleeve only. Sub-B absorbs the weight delta. This is research output only and does not change executable defaults.
+Each candidate applies the same prior-NAV-drawdown rule to one sleeve only. Sub-A-DK is excluded because it already has an internal DD RiskGate. Sub-B receives unused cut budget but does not fund unmatched boost requests. This is research output only and does not change executable defaults.
 
 Rule: month-end execution, +5pp when prior sleeve drawdown is within 3%, -5pp when prior drawdown is at or below -10%, otherwise base weight.
 
 ## Candidate Summary
 
-| Candidate | Sleeve | Full Ann. Delta | Full MaxDD Delta | Full Sharpe Delta | 1Y Ann. Delta | 1Y Sharpe Delta | Latest sleeve | Latest Sub-B | Switches | Turnover |
+| Candidate | Sleeve | Since 2020 Ann. Delta | Since 2020 MaxDD Delta | Since 2020 Sharpe Delta | 1Y Ann. Delta | 1Y Sharpe Delta | Latest sleeve | Latest Sub-B | Switches | Turnover |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `advisory_suba_dd_3_10_month_end` | Sub-A | 0.59% | 0.50% | +0.01 | 2.83% | +0.28 | 15.00% | 35.00% | 51 | 5.7 |
-| `advisory_subadk_dd_3_10_month_end` | Sub-A-DK | 0.27% | -0.84% | +0.00 | 0.56% | +0.01 | 10.00% | 45.00% | 67 | 7.1 |
-| `advisory_microcap_dd_3_10_month_end` | Microcap | 0.91% | -0.05% | +0.09 | 1.28% | +0.10 | 15.00% | 40.00% | 61 | 6.4 |
-| `advisory_subd_dd_3_10_month_end` | Sub-D | -0.23% | -0.08% | -0.04 | 2.64% | +0.18 | 25.00% | 35.00% | 81 | 8.9 |
+| `advisory_suba_dd_3_10_month_end` | Sub-A | -0.20% | 0.00% | -0.04 | -0.00% | -0.00 | 10.00% | 40.00% | 22 | 2.2 |
+| `advisory_microcap_dd_3_10_month_end` | Microcap | 0.02% | -0.80% | -0.05 | 0.87% | +0.01 | 15.00% | 40.00% | 12 | 1.2 |
+| `advisory_subd_dd_3_10_month_end` | Sub-D | -0.07% | -0.00% | -0.00 | 0.42% | +0.04 | 20.00% | 40.00% | 30 | 3.0 |

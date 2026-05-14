@@ -31,20 +31,22 @@ FIXED_SCENARIO = "fixed_10_15_15_20_40"
 MICROCAP_ADVISORY_SCENARIO = "advisory_dd_3_10_month_end"
 SUBA_ADVISORY_SCENARIO = "advisory_suba_dd_5_8_weekly"
 STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_dd_3_10_month_end"
+SUBD_STACKED_ADVISORY_SCENARIO = "advisory_suba_microcap_subd_dd_7_10_month_end"
+ACTIVE_ADVISORY_SCENARIO = SUBD_STACKED_ADVISORY_SCENARIO
 SCENARIO_ORDER = [
     FIXED_SCENARIO,
     MICROCAP_ADVISORY_SCENARIO,
     SUBA_ADVISORY_SCENARIO,
     STACKED_ADVISORY_SCENARIO,
+    SUBD_STACKED_ADVISORY_SCENARIO,
 ]
 WINDOW_WEIGHTS = {
-    "full": 0.10,
-    "last_10y": 0.15,
+    "since_2020": 0.25,
     "last_5y": 0.25,
     "last_3y": 0.30,
     "last_1y": 0.20,
 }
-EXTERNAL_SCAN_SLEEVES = ["Sub-A-DK", "Sub-B", "Sub-D"]
+EXTERNAL_SCAN_SLEEVES = ["Sub-B", "Sub-D"]
 BASE_WEIGHTS = {
     "Sub-A": 0.10,
     "Sub-A-DK": 0.15,
@@ -57,6 +59,7 @@ DYNAMIC_SLEEVES = {
     MICROCAP_ADVISORY_SCENARIO: "Microcap",
     SUBA_ADVISORY_SCENARIO: "Sub-A",
     STACKED_ADVISORY_SCENARIO: "Sub-A,Microcap",
+    SUBD_STACKED_ADVISORY_SCENARIO: "Sub-A,Microcap,Sub-D",
 }
 HISTORY_COLUMNS = [
     "observed_at",
@@ -72,9 +75,9 @@ HISTORY_COLUMNS = [
     "latest_subd",
     "latest_subb",
     "dynamic_sleeves",
-    "full_annual_delta",
-    "full_max_dd_delta",
-    "full_sharpe_delta",
+    "since_2020_annual_delta",
+    "since_2020_max_dd_delta",
+    "since_2020_sharpe_delta",
     "last_1y_annual_delta",
     "last_1y_max_dd_delta",
     "last_1y_sharpe_delta",
@@ -170,7 +173,8 @@ def _scenario_label(scenario: str) -> str:
         FIXED_SCENARIO: "Fixed default",
         MICROCAP_ADVISORY_SCENARIO: "Microcap advisory",
         SUBA_ADVISORY_SCENARIO: "Sub-A 5/8 weekly advisory",
-        STACKED_ADVISORY_SCENARIO: "Stacked Sub-A 5/8 weekly + Microcap 3/10 month-end",
+        STACKED_ADVISORY_SCENARIO: "Legacy stacked Sub-A 5/8 weekly + Microcap 3/10 month-end",
+        SUBD_STACKED_ADVISORY_SCENARIO: "Active Sub-A 5/8 weekly + Microcap 3/10 month-end + Sub-D 7/10 month-end",
     }.get(scenario, scenario)
 
 
@@ -190,7 +194,8 @@ def _scenario_excess_nav(scenario: str, curve: pd.DataFrame) -> float:
     columns = {
         MICROCAP_ADVISORY_SCENARIO: "advisory_excess_nav",
         SUBA_ADVISORY_SCENARIO: "suba_advisory_excess_nav",
-        STACKED_ADVISORY_SCENARIO: "stacked_advisory_excess_nav",
+        STACKED_ADVISORY_SCENARIO: "legacy_stacked_advisory_excess_nav",
+        SUBD_STACKED_ADVISORY_SCENARIO: "stacked_advisory_excess_nav",
     }
     column = columns.get(scenario)
     if column and column in curve.columns and not curve.empty:
@@ -200,15 +205,13 @@ def _scenario_excess_nav(scenario: str, curve: pd.DataFrame) -> float:
 
 def _all_window_deltas_positive(row: dict[str, object]) -> bool:
     annual_keys = [
-        "full_annual_delta",
-        "last_10y_annual_delta",
+        "since_2020_annual_delta",
         "last_5y_annual_delta",
         "last_3y_annual_delta",
         "last_1y_annual_delta",
     ]
     sharpe_keys = [
-        "full_sharpe_delta",
-        "last_10y_sharpe_delta",
+        "since_2020_sharpe_delta",
         "last_5y_sharpe_delta",
         "last_3y_sharpe_delta",
         "last_1y_sharpe_delta",
@@ -220,42 +223,44 @@ def _classify_candidate(row: dict[str, object]) -> tuple[str, str]:
     scenario = str(row.get("scenario", ""))
     if scenario == FIXED_SCENARIO:
         return "BASELINE", "Executable default benchmark."
-    if scenario == STACKED_ADVISORY_SCENARIO:
-        full_return_ok = float(row.get("full_annual_delta", np.nan)) > 0
-        full_sharpe_ok = float(row.get("full_sharpe_delta", np.nan)) > 0
-        full_dd_ok = float(row.get("full_max_dd_delta", np.nan)) >= 0
+    if scenario == SUBD_STACKED_ADVISORY_SCENARIO:
+        since_2020_return_ok = float(row.get("since_2020_annual_delta", np.nan)) > 0
+        since_2020_sharpe_ok = float(row.get("since_2020_sharpe_delta", np.nan)) > 0
+        since_2020_dd_ok = float(row.get("since_2020_max_dd_delta", np.nan)) >= 0
         one_y_return_ok = float(row.get("last_1y_annual_delta", np.nan)) > 0
         one_y_sharpe_ok = float(row.get("last_1y_sharpe_delta", np.nan)) > 0
         one_y_dd_ok = float(row.get("last_1y_max_dd_delta", np.nan)) >= 0
         if (
-            full_return_ok
-            and full_sharpe_ok
-            and full_dd_ok
+            since_2020_return_ok
+            and since_2020_sharpe_ok
+            and since_2020_dd_ok
             and one_y_return_ok
             and one_y_sharpe_ok
             and one_y_dd_ok
         ):
             return (
                 "ACTIVE_DEFAULT",
-                "Active stacked portfolio-level dynamic budget; fixed weights remain the benchmark and rollback line.",
+                "Active Sub-A + Microcap + Sub-D portfolio-level dynamic budget; Sub-A-DK stays fixed because its internal DD RiskGate remains active; fixed weights remain the benchmark and rollback line.",
             )
         return (
             "REPORT_WATCH_ONLY",
-            "Stacked rule is adopted only when return, Sharpe, and drawdown all improve versus fixed.",
+            "Sub-A + Microcap + Sub-D rule is adopted only when return, Sharpe, and drawdown all improve versus fixed; Sub-A-DK is not a portfolio-layer dynamic sleeve.",
         )
+    if scenario == STACKED_ADVISORY_SCENARIO:
+        return "REPORT_WATCH_ONLY", "Former active A+Microcap advisory; superseded by the Sub-D dynamic-budget candidate."
     if scenario == SUBA_ADVISORY_SCENARIO and _all_window_deltas_positive(row):
-        full_dd_ok = float(row.get("full_max_dd_delta", np.nan)) >= 0
+        since_2020_dd_ok = float(row.get("since_2020_max_dd_delta", np.nan)) >= 0
         one_y_dd_ok = float(row.get("last_1y_max_dd_delta", np.nan)) >= 0
         turnover_ok = float(row.get("allocation_turnover", np.nan)) <= 10.0
-        if full_dd_ok and one_y_dd_ok and turnover_ok:
+        if since_2020_dd_ok and one_y_dd_ok and turnover_ok:
             return "REPORT_WATCH_ONLY", "Former active component; superseded by the adopted stacked dynamic budget."
     if str(row.get("dynamic_sleeves")) == "Sub-B":
         return "DEFER", "Sub-B dynamic budget is weak under the proportional absorber design."
     if str(row.get("dynamic_sleeves")) == "Sub-D" and float(row.get("last_1y_annual_delta", np.nan)) > 0:
-        return "REPORT_WATCH_ONLY", "Strong recent-window evidence, but full-sample Sharpe is not robust enough for default promotion."
-    if float(row.get("full_annual_delta", np.nan)) <= 0 or float(row.get("full_sharpe_delta", np.nan)) <= 0:
-        return "DEFER", "No robust full-sample improvement versus fixed default."
-    if float(row.get("full_max_dd_delta", np.nan)) < 0:
+        return "REPORT_WATCH_ONLY", "Strong recent-window evidence, but since-2020 Sharpe is not robust enough for default promotion."
+    if float(row.get("since_2020_annual_delta", np.nan)) <= 0 or float(row.get("since_2020_sharpe_delta", np.nan)) <= 0:
+        return "DEFER", "No robust since-2020 improvement versus fixed default."
+    if float(row.get("since_2020_max_dd_delta", np.nan)) < 0:
         return "REPORT_WATCH_ONLY", "Positive return evidence but max drawdown worsens versus fixed default."
     return "REPORT_WATCH_ONLY", "Positive evidence, but not broad enough to become the first executable default candidate."
 
@@ -264,34 +269,34 @@ def _build_base_scenario_rows(
     metrics: pd.DataFrame,
     curve: pd.DataFrame,
     latest_date: str,
-    fixed_full: pd.Series | None,
+    fixed_since_2020: pd.Series | None,
     fixed_1y: pd.Series | None,
     base_weights: dict[str, float],
 ) -> list[dict[str, object]]:
     rows = []
     for scenario in [name for name in SCENARIO_ORDER if name in set(metrics["scenario"])]:
-        full = _metric_row(metrics, scenario, "full")
+        since_2020 = _metric_row(metrics, scenario, "since_2020")
         one_y = _metric_row(metrics, scenario, "last_1y")
         row = {
             "scenario": scenario,
             "label": _scenario_label(scenario),
             "latest_date": latest_date,
-            "latest_suba": _latest_or_base(full, "latest_suba", base_weights, "Sub-A"),
-            "latest_subadk": _latest_or_base(full, "latest_subadk", base_weights, "Sub-A-DK"),
-            "latest_microcap": _latest_or_base(full, "latest_microcap", base_weights, "Microcap"),
-            "latest_subd": _latest_or_base(full, "latest_subd", base_weights, "Sub-D"),
-            "latest_subb": _latest_or_base(full, "latest_subb", base_weights, "Sub-B"),
+            "latest_suba": _latest_or_base(since_2020, "latest_suba", base_weights, "Sub-A"),
+            "latest_subadk": _latest_or_base(since_2020, "latest_subadk", base_weights, "Sub-A-DK"),
+            "latest_microcap": _latest_or_base(since_2020, "latest_microcap", base_weights, "Microcap"),
+            "latest_subd": _latest_or_base(since_2020, "latest_subd", base_weights, "Sub-D"),
+            "latest_subb": _latest_or_base(since_2020, "latest_subb", base_weights, "Sub-B"),
             "dynamic_sleeves": DYNAMIC_SLEEVES.get(scenario, ""),
-            "rebalance_count": _float_value(full, "rebalance_count"),
-            "allocation_turnover": _float_value(full, "allocation_turnover"),
-            "full_annual_return": _float_value(full, "annual_return"),
-            "full_max_dd": _float_value(full, "max_dd"),
-            "full_sharpe": _float_value(full, "sharpe"),
+            "rebalance_count": _float_value(since_2020, "rebalance_count"),
+            "allocation_turnover": _float_value(since_2020, "allocation_turnover"),
+            "since_2020_annual_return": _float_value(since_2020, "annual_return"),
+            "since_2020_max_dd": _float_value(since_2020, "max_dd"),
+            "since_2020_sharpe": _float_value(since_2020, "sharpe"),
             "last_1y_annual_return": _float_value(one_y, "annual_return"),
             "last_1y_max_dd": _float_value(one_y, "max_dd"),
             "last_1y_sharpe": _float_value(one_y, "sharpe"),
         }
-        for segment in ["last_10y", "last_5y", "last_3y"]:
+        for segment in ["last_5y", "last_3y"]:
             segment_row = _metric_row(metrics, scenario, segment)
             fixed_segment = _metric_row(metrics, FIXED_SCENARIO, segment)
             row[f"{segment}_annual_delta"] = _float_value(segment_row, "annual_return") - _float_value(
@@ -303,9 +308,9 @@ def _build_base_scenario_rows(
             row[f"{segment}_sharpe_delta"] = _float_value(segment_row, "sharpe") - _float_value(
                 fixed_segment, "sharpe"
             )
-        row["full_annual_delta"] = row["full_annual_return"] - _float_value(fixed_full, "annual_return")
-        row["full_max_dd_delta"] = row["full_max_dd"] - _float_value(fixed_full, "max_dd")
-        row["full_sharpe_delta"] = row["full_sharpe"] - _float_value(fixed_full, "sharpe")
+        row["since_2020_annual_delta"] = row["since_2020_annual_return"] - _float_value(fixed_since_2020, "annual_return")
+        row["since_2020_max_dd_delta"] = row["since_2020_max_dd"] - _float_value(fixed_since_2020, "max_dd")
+        row["since_2020_sharpe_delta"] = row["since_2020_sharpe"] - _float_value(fixed_since_2020, "sharpe")
         row["last_1y_annual_delta"] = row["last_1y_annual_return"] - _float_value(fixed_1y, "annual_return")
         row["last_1y_max_dd_delta"] = row["last_1y_max_dd"] - _float_value(fixed_1y, "max_dd")
         row["last_1y_sharpe_delta"] = row["last_1y_sharpe"] - _float_value(fixed_1y, "sharpe")
@@ -360,6 +365,22 @@ def _external_scan_rows(
     scan = pd.read_csv(scan_path)
     if scan.empty or "dynamic_sleeve" not in scan.columns:
         return []
+    required_cols = [
+        "ann_return_since_2020",
+        "max_dd_since_2020",
+        "sharpe_repo_since_2020",
+        "ann_return_last_5y",
+        "max_dd_last_5y",
+        "sharpe_repo_last_5y",
+        "ann_return_last_3y",
+        "max_dd_last_3y",
+        "sharpe_repo_last_3y",
+        "ann_return_last_1y",
+        "max_dd_last_1y",
+        "sharpe_repo_last_1y",
+    ]
+    if any(col not in scan.columns for col in required_cols):
+        return []
     fixed = scan[scan["candidate"] == FIXED_SCENARIO].iloc[0]
     candidate_rows = []
     for sleeve in EXTERNAL_SCAN_SLEEVES:
@@ -370,7 +391,7 @@ def _external_scan_rows(
             lambda row: _score_external_candidate(row, fixed), axis=1
         )
         best = sleeve_rows.sort_values(
-            ["recent_weighted_score", "sharpe_repo_full"], ascending=[False, False]
+            ["recent_weighted_score", "sharpe_repo_since_2020"], ascending=[False, False]
         ).iloc[0]
         weights = _external_candidate_weights(sleeve, float(best["latest_dynamic_sleeve"]), base_weights)
         row = {
@@ -385,9 +406,9 @@ def _external_scan_rows(
             "dynamic_sleeves": sleeve,
             "rebalance_count": float(best["rebalance_count"]),
             "allocation_turnover": float(best["allocation_turnover"]),
-            "full_annual_return": float(best["ann_return_full"]),
-            "full_max_dd": float(best["max_dd_full"]),
-            "full_sharpe": float(best["sharpe_repo_full"]),
+            "since_2020_annual_return": float(best["ann_return_since_2020"]),
+            "since_2020_max_dd": float(best["max_dd_since_2020"]),
+            "since_2020_sharpe": float(best["sharpe_repo_since_2020"]),
             "last_1y_annual_return": float(best["ann_return_last_1y"]),
             "last_1y_max_dd": float(best["max_dd_last_1y"]),
             "last_1y_sharpe": float(best["sharpe_repo_last_1y"]),
@@ -422,9 +443,9 @@ def build_level8_dashboard(
             "primary_action": "Refresh portfolio report before using advisory weights.",
         }
 
-    fixed_full = _metric_row(metrics, FIXED_SCENARIO, "full")
+    fixed_since_2020 = _metric_row(metrics, FIXED_SCENARIO, "since_2020")
     fixed_1y = _metric_row(metrics, FIXED_SCENARIO, "last_1y")
-    rows = _build_base_scenario_rows(metrics, curve, latest_date, fixed_full, fixed_1y, base_weights)
+    rows = _build_base_scenario_rows(metrics, curve, latest_date, fixed_since_2020, fixed_1y, base_weights)
     rows.extend(_external_scan_rows(external_scan_path, latest_date, base_weights))
 
     summary = pd.DataFrame(rows)
@@ -437,7 +458,7 @@ def build_level8_dashboard(
     }
     summary["_status_order"] = summary["candidate_status"].map(status_order).fillna(9)
     summary = summary.sort_values(
-        ["_status_order", "full_annual_delta", "last_1y_annual_delta"],
+        ["_status_order", "since_2020_annual_delta", "last_1y_annual_delta"],
         ascending=[True, False, False],
     ).drop(columns=["_status_order"]).reset_index(drop=True)
     decision = {
@@ -457,7 +478,7 @@ def build_level8_dashboard(
                 "decision_status": "ACTIVE_DEFAULT",
                 "watch_scenario": str(active["scenario"]),
                 "primary_action": (
-                    "Use stacked Sub-A 5/8 weekly + Microcap 3/10 month-end as the active portfolio-level dynamic budget; keep fixed weights as benchmark and rollback."
+                    "Use Sub-A 5/8 weekly + Microcap 3/10 month-end + Sub-D 7/10 month-end as the active portfolio-level dynamic budget; keep fixed weights as benchmark and rollback."
                 ),
             }
         )
@@ -512,7 +533,7 @@ def render_markdown(summary: pd.DataFrame, decision: dict[str, object]) -> str:
             "",
             "## Scenario Snapshot",
             "",
-            "| Scenario | Status | Sub-A | Sub-A-DK | Microcap | Sub-D | Sub-B | Dynamic sleeves | Full annual / MaxDD / Sharpe | 1Y annual / MaxDD / Sharpe | Excess NAV | Switches | Turnover | Note |",
+            "| Scenario | Status | Sub-A | Sub-A-DK | Microcap | Sub-D | Sub-B | Dynamic sleeves | Since 2020 annual / MaxDD / Sharpe | 1Y annual / MaxDD / Sharpe | Excess NAV | Switches | Turnover | Note |",
             "|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---|",
         ]
     )
@@ -527,7 +548,7 @@ def render_markdown(summary: pd.DataFrame, decision: dict[str, object]) -> str:
             f"{_weight(row['latest_subd'])} | "
             f"{_weight(row['latest_subb'])} | "
             f"{row['dynamic_sleeves']} | "
-            f"{_pct(row['full_annual_return'])} / {_pct(row['full_max_dd'])} / {row['full_sharpe']:.2f} | "
+            f"{_pct(row['since_2020_annual_return'])} / {_pct(row['since_2020_max_dd'])} / {row['since_2020_sharpe']:.2f} | "
             f"{_pct(row['last_1y_annual_return'])} / {_pct(row['last_1y_max_dd'])} / {row['last_1y_sharpe']:.2f} | "
             f"{_pct(row['latest_excess_nav_vs_fixed'])} | "
             f"{int(row['rebalance_count']) if pd.notna(row['rebalance_count']) else 'n/a'} | "
@@ -540,7 +561,7 @@ def render_markdown(summary: pd.DataFrame, decision: dict[str, object]) -> str:
             "",
             "## Read",
             "",
-            "This dashboard is the portfolio-level budget decision surface. The stacked Sub-A 5/8 weekly + Microcap 3/10 month-end rule is the active dynamic budget; fixed weights remain the benchmark and rollback line.",
+            "This dashboard is the portfolio-level budget decision surface. The Sub-A 5/8 weekly + Microcap 3/10 month-end + Sub-D 7/10 month-end rule is tracked as the dynamic-budget candidate; fixed weights remain the benchmark and rollback line until a candidate is ACTIVE_DEFAULT.",
             "",
             "Status labels: ACTIVE_DEFAULT means the current portfolio-level dynamic budget; LANDING_CANDIDATE means next implementation candidate; REPORT_WATCH_ONLY means useful evidence but not a default; DEFER means not suitable under the current test design.",
         ]
@@ -549,6 +570,10 @@ def render_markdown(summary: pd.DataFrame, decision: dict[str, object]) -> str:
 
 
 def _action_row(summary: pd.DataFrame, decision: dict[str, object]) -> pd.Series | None:
+    if decision.get("decision_status") != "ACTIVE_DEFAULT":
+        fixed = summary[summary["scenario"] == FIXED_SCENARIO]
+        if not fixed.empty:
+            return fixed.iloc[0]
     scenario = str(decision.get("watch_scenario", ""))
     if scenario and scenario in set(summary["scenario"]):
         return summary[summary["scenario"] == scenario].iloc[0]
@@ -581,7 +606,11 @@ def render_action_summary(summary: pd.DataFrame, decision: dict[str, object]) ->
     action = (
         "不调仓，先刷新数据。"
         if stale
-        else "按下表配置仓位；若账户已是这些权重，则持有不动。"
+        else (
+            "按下表配置仓位；若账户已是这些权重，则持有不动。"
+            if status == "ACTIVE_DEFAULT"
+            else "不按观察候选调仓；执行固定回滚线。"
+        )
     )
     sleeves = [
         ("Sub-A", "latest_suba"),
@@ -601,13 +630,17 @@ def render_action_summary(summary: pd.DataFrame, decision: dict[str, object]) ->
         "| 袖珍组合 | 目标仓位 | 相对固定变化 | 说明 |",
         "|---|---:|---:|---|",
     ]
-    dynamic = {item.strip() for item in str(row.get("dynamic_sleeves", "")).split(",") if item.strip()}
+    dynamic = {
+        item.strip()
+        for item in str(row.get("dynamic_sleeves", "")).split(",")
+        if item.strip() and item.strip() != "none"
+    }
     for sleeve, column in sleeves:
         target = float(row.get(column, np.nan))
         base = BASE_WEIGHTS[sleeve]
         if sleeve in dynamic:
             note = "动态调整"
-        elif sleeve == "Sub-B":
+        elif sleeve == "Sub-B" and dynamic:
             note = "吸收权重差"
         else:
             note = "固定"
@@ -620,13 +653,14 @@ def render_action_summary(summary: pd.DataFrame, decision: dict[str, object]) ->
             "",
             "- Sub-A: 5/8 weekly 动态预算。",
             "- Microcap: 3/10 month-end 动态预算。",
-            "- Sub-B: 自动吸收 Sub-A 和 Microcap 的仓位差。",
+            "- Sub-D: 7/10 month-end 动态预算。",
+            "- Sub-B: 只接收动态袖子降仓后未被配对使用的预算，不再为未配对加仓请求降仓。",
             "- 复核线: 相对固定组合的超额 NAV 回撤到 -5% 进入复核；到 -10% 回滚固定仓位。",
             "",
             "## 证据摘要",
             "",
             f"- 相对固定超额 NAV: {_pct(float(row.get('latest_excess_nav_vs_fixed', np.nan)))}",
-            f"- 全样本相对固定: 年化 {_pct(float(row.get('full_annual_delta', np.nan)))} / 最大回撤改善 {_pct(float(row.get('full_max_dd_delta', np.nan)))} / Sharpe +{float(row.get('full_sharpe_delta', np.nan)):.2f}",
+            f"- 2020-01-01 以来相对固定: 年化 {_pct(float(row.get('since_2020_annual_delta', np.nan)))} / 最大回撤改善 {_pct(float(row.get('since_2020_max_dd_delta', np.nan)))} / Sharpe +{float(row.get('since_2020_sharpe_delta', np.nan)):.2f}",
             f"- 近 1 年相对固定: 年化 {_pct(float(row.get('last_1y_annual_delta', np.nan)))} / 最大回撤改善 {_pct(float(row.get('last_1y_max_dd_delta', np.nan)))} / Sharpe +{float(row.get('last_1y_sharpe_delta', np.nan)):.2f}",
         ]
     )
