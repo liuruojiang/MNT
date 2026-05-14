@@ -120,6 +120,7 @@ def _install_poe_native_compat(poe_module):
 
 
 poe = _install_poe_native_compat(poe)
+DEBUG_MODE = os.getenv("STRATEGY_DEBUG", "0") == "1"
 
 # ─────────────────────────────────────────────
 # A股 Sub-A 双动量策略
@@ -334,6 +335,17 @@ CN_DK_INDEX_NAMES = {
 # ─────────────────────────────────────────────
 # 美股 Sub-B 轮动策略
 # ─────────────────────────────────────────────
+CN_MARKET_HOLIDAYS = {
+    "2026-01-01", "2026-01-02", "2026-01-03",
+    "2026-02-15", "2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20", "2026-02-21", "2026-02-22", "2026-02-23",
+    "2026-04-04", "2026-04-05", "2026-04-06",
+    "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04", "2026-05-05",
+    "2026-06-19", "2026-06-20", "2026-06-21",
+    "2026-09-25", "2026-09-26", "2026-09-27",
+    "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07",
+}
+CN_MARKET_HOLIDAY_YEARS = {2026}
+
 US_ROT_COMMISSION = 0.001
 US_TRADING_DAYS = 252
 US_ROT_BASE_ASSETS = {
@@ -354,6 +366,8 @@ US_ROT_ASSETS = {**US_ROT_BASE_ASSETS, **US_ROT_MACRO_ASSETS}
 US_ROT_BASE_POOL = [cfg["proxy"] for cfg in US_ROT_BASE_ASSETS.values()]
 US_ROT_MACRO_POOL = [cfg["proxy"] for cfg in US_ROT_MACRO_ASSETS.values()]
 US_ROT_POOL = US_ROT_BASE_POOL + US_ROT_MACRO_POOL
+SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(US_ROT_POOL + ["BIL", "SPY"]))
+SUBB_OPTIONAL_MACRO_TICKERS = tuple()
 US_ROT_FUTURES = {"QQQ", "GLD"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
@@ -569,16 +583,117 @@ def _latest_prior_nav_drawdown(ret_df, sleeve):
 def _csv_latest_date(path):
     if not os.path.exists(path):
         return None
-    try:
-        df = pd.read_csv(path, usecols=["date"], parse_dates=["date"])
-    except Exception:
-        return None
+    df = pd.read_csv(path, usecols=["date"], parse_dates=["date"])
     if df.empty:
-        return None
+        raise ValueError(f"{path} has no rows")
     latest = pd.to_datetime(df["date"], errors="coerce").dropna()
     if latest.empty:
-        return None
+        raise ValueError(f"{path} has no valid date rows")
     return latest.max().normalize()
+
+
+def _latest_required_close_date(asof_date=None, max_calendar_lag=None):
+    current = pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
+    if max_calendar_lag is not None:
+        return pd.Timestamp(current - pd.Timedelta(days=int(max_calendar_lag))).normalize()
+    return pd.Timestamp(current - pd.offsets.BDay(1)).normalize()
+
+
+def _is_cn_required_close_day(date_value):
+    dt = pd.Timestamp(date_value).normalize()
+    if dt.year > max(CN_MARKET_HOLIDAY_YEARS):
+        raise poe.BotError(f"A股交易日历未覆盖 {dt.year}，不能安全判断正式收盘数据新鲜度。")
+    return dt.weekday() < 5 and dt.strftime("%Y-%m-%d") not in CN_MARKET_HOLIDAYS
+
+
+def _latest_cn_required_close_date(asof_date=None):
+    current = pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
+    candidate = current - pd.Timedelta(days=1)
+    for _ in range(14):
+        if _is_cn_required_close_day(candidate):
+            return candidate.normalize()
+        candidate -= pd.Timedelta(days=1)
+    raise poe.BotError(f"A股交易日历无法在 {current.date().isoformat()} 前找到最近收盘日。")
+
+
+def _latest_portfolio_advisory_required_close_date(asof_date=None):
+    # 组合 advisory 跨市场，主脚本目前只有 CN 休市 override；取普通 BDay 与 CN 最近收盘日中更早者，
+    # 避免 A股长假期间把组合层辅助面板误判为过期。
+    generic_required = _latest_required_close_date(asof_date)
+    cn_required = _latest_cn_required_close_date(asof_date)
+    return min(generic_required, cn_required).normalize()
+
+
+def _latest_valid_close_date(df):
+    if df is None or len(df) == 0 or "close" not in df.columns:
+        return None
+    close = pd.to_numeric(df["close"], errors="coerce").dropna()
+    if close.empty:
+        return None
+    return pd.Timestamp(close.index.max()).normalize()
+
+
+def _assert_columns_fresh(raw_dict, required_tickers, expected_date=None, max_lag_days=1, label="US"):
+    latest_by_ticker = {}
+    stale = []
+    for ticker in required_tickers:
+        df = raw_dict.get(ticker) if isinstance(raw_dict, dict) else None
+        if df is None or len(df) == 0:
+            stale.append(f"{ticker}: missing")
+            continue
+        if "close" not in df.columns:
+            stale.append(f"{ticker}: missing close column")
+            continue
+        latest = _latest_valid_close_date(df)
+        if pd.isna(latest):
+            stale.append(f"{ticker}: no valid close")
+            continue
+        latest_by_ticker[ticker] = latest
+    if expected_date is None and latest_by_ticker:
+        expected_date = max(latest_by_ticker.values())
+    if expected_date is not None:
+        cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=max_lag_days)
+        for ticker, latest in latest_by_ticker.items():
+            if latest < cutoff:
+                stale.append(f"{ticker}: latest {latest.date().isoformat()}")
+    if stale:
+        raise poe.BotError(f"{label} 数据过期/缺失，不能生成正式信号: " + "; ".join(stale))
+    return pd.Timestamp(expected_date).normalize() if expected_date is not None else None
+
+
+def _assert_price_frame_columns_fresh(price_df, required_columns, expected_date, max_lag_days=0, label="price", names=None):
+    stale = []
+    cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=max_lag_days)
+    names = names or {}
+    for col in required_columns:
+        display = names.get(col, col)
+        if price_df is None or col not in price_df.columns:
+            stale.append(f"{display}: missing")
+            continue
+        close = pd.to_numeric(price_df[col], errors="coerce").dropna()
+        if close.empty:
+            stale.append(f"{display}: no valid close")
+            continue
+        latest = pd.Timestamp(close.index.max()).normalize()
+        if latest < cutoff:
+            stale.append(f"{display}: latest {latest.date().isoformat()}")
+    if stale:
+        raise poe.BotError(f"{label} 数据过期/缺失，不能生成正式信号: " + "; ".join(stale))
+    return pd.Timestamp(expected_date).normalize()
+
+
+def _latest_live_etf_price(us_close, proxy, live, expected_date=None, max_lag_days=0):
+    if us_close is None or live not in us_close.columns:
+        return None
+    close = pd.to_numeric(us_close[live], errors="coerce").dropna()
+    if close.empty:
+        return None
+    if expected_date is not None:
+        latest_date = pd.Timestamp(close.index[-1]).normalize()
+        cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=int(max_lag_days))
+        if latest_date < cutoff:
+            return None
+    return float(close.iloc[-1])
 
 
 def _load_level8_governance_snapshot(out_dir):
@@ -592,7 +707,10 @@ def _load_level8_governance_snapshot(out_dir):
     if governance.empty or "status" not in governance.columns:
         return {"available": False, "error": "empty governance output"}
     status_order = {"ROLLBACK_FIXED": 0, "REVIEW": 1, "ACTIVE_OK": 2, "INFO": 3}
-    statuses = governance["status"].dropna().astype(str).tolist()
+    statuses = governance["status"].dropna().astype(str).str.strip()
+    statuses = [status for status in statuses if status]
+    if not statuses:
+        return {"available": False, "error": "governance status is empty"}
     decision_status = sorted(statuses, key=lambda value: status_order.get(value, 9))[0]
     rows = {str(row.get("rule", "")): row for row in governance.to_dict("records")}
     return {
@@ -604,7 +722,7 @@ def _load_level8_governance_snapshot(out_dir):
     }
 
 
-def _load_combo_advisory_snapshot():
+def _load_combo_advisory_snapshot(asof_date=None):
     out_dir = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_OUTPUT_DIR)
     curve_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_CURVE_FILE)
     returns_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_RETURNS_FILE)
@@ -613,6 +731,8 @@ def _load_combo_advisory_snapshot():
         return {"available": False, "error": f"missing {PORTFOLIO_ADVISORY_CURVE_FILE}"}
     if not os.path.exists(returns_path):
         return {"available": False, "error": f"missing {PORTFOLIO_ADVISORY_RETURNS_FILE}"}
+    if not os.path.exists(source_returns_path):
+        return {"available": False, "error": f"missing source returns: {source_returns_path}"}
     try:
         curve = pd.read_csv(curve_path, parse_dates=["date"]).set_index("date").sort_index()
         returns = pd.read_csv(returns_path, parse_dates=["date"]).set_index("date").sort_index()
@@ -622,7 +742,29 @@ def _load_combo_advisory_snapshot():
         return {"available": False, "error": "empty portfolio advisory output"}
     latest = curve.iloc[-1]
     latest_date = curve.index[-1]
-    source_latest_date = _csv_latest_date(source_returns_path)
+    try:
+        source_latest_date = _csv_latest_date(source_returns_path)
+    except Exception as exc:
+        return {"available": False, "error": f"invalid source returns: {exc}"}
+    required_close_date = _latest_portfolio_advisory_required_close_date(asof_date)
+    if latest_date.normalize() < required_close_date:
+        return {
+            "available": False,
+            "error": (
+                "stale portfolio advisory report: "
+                f"{PORTFOLIO_ADVISORY_CURVE_FILE} latest {latest_date.date().isoformat()} "
+                f"< required close {required_close_date.date().isoformat()}"
+            ),
+        }
+    if source_latest_date is not None and source_latest_date.normalize() < required_close_date:
+        return {
+            "available": False,
+            "error": (
+                "stale portfolio advisory source returns: "
+                f"{source_latest_date.date().isoformat()} "
+                f"< required close {required_close_date.date().isoformat()}"
+            ),
+        }
     if source_latest_date is not None and latest_date.normalize() < source_latest_date:
         return {
             "available": False,
@@ -766,12 +908,143 @@ SP500_RISK_REGIME_WEIGHTS = {
     "ma_slope": 0.20,
 }
 
+
+class Rule:
+    def __init__(self, name, policy, fail_mode, freshness_required=False, max_lag_days=1):
+        self.name = name
+        self.policy = policy
+        self.fail_mode = fail_mode
+        self.freshness_required = bool(freshness_required)
+        self.max_lag_days = int(max_lag_days)
+
+
+RISK_RULES = {
+    "suba_volume": Rule(
+        name="Sub-A volume overlay",
+        policy="hard_trade_rule",
+        fail_mode="halt",
+        freshness_required=True,
+        max_lag_days=1,
+    ),
+    "dk_volume_warning": Rule(
+        name="Sub-A-DK volume warning",
+        policy="soft_warning",
+        fail_mode="degrade",
+        freshness_required=True,
+        max_lag_days=1,
+    ),
+    "microcap_volume_warning": Rule(
+        name="Microcap volume warning",
+        policy="soft_warning",
+        fail_mode="degrade",
+        freshness_required=True,
+        max_lag_days=1,
+    ),
+    "sp500_risk_regime": Rule(
+        name="S&P 500 risk regime",
+        policy="dashboard_only",
+        fail_mode="degrade",
+        freshness_required=True,
+        max_lag_days=7,
+    ),
+    "subb_inflation_gate": Rule(
+        name="Sub-B official leg inflation gate",
+        policy="hard_trade_rule",
+        fail_mode="halt",
+        freshness_required=False,
+        max_lag_days=1,
+    ),
+}
+
 # 清理临时变量
 del _bt_remaining, _n, _c, _dbmf_w, _pre_dbmf_rest, _w
 
 
 def _repo_base_dir():
     return os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+
+
+def _feature_latest_date(feature):
+    if feature is None:
+        return None
+    if isinstance(feature, dict):
+        for key in ("latest_date", "date", "asof_date"):
+            if key in feature and feature.get(key) is not None:
+                return pd.Timestamp(feature[key]).normalize()
+        return None
+    if hasattr(feature, "index"):
+        idx = getattr(feature, "index")
+        if len(idx) == 0:
+            return None
+        latest = pd.to_datetime(idx, errors="coerce").max()
+        if pd.isna(latest):
+            return None
+        return pd.Timestamp(latest).normalize()
+    return None
+
+
+def _assert_feature_fresh(feature, expected_date, max_lag_days=1, name="feature"):
+    latest = _feature_latest_date(feature)
+    if latest is None:
+        raise poe.BotError(f"{name} 数据日期不可判定")
+    expected = pd.Timestamp(expected_date).normalize()
+    cutoff = expected - pd.Timedelta(days=int(max_lag_days))
+    if latest < cutoff:
+        raise poe.BotError(
+            f"{name} 数据过期: latest={latest.date()}, expected={expected.date()}"
+        )
+    return latest
+
+
+def _feature_freshness_status(feature, expected_date, rule_key, name=None):
+    rule = RISK_RULES[rule_key]
+    expected = pd.Timestamp(expected_date).normalize()
+    latest = _feature_latest_date(feature)
+    out = {
+        "freshness_expected_date": expected.date().isoformat(),
+        "freshness_latest_date": latest.date().isoformat() if latest is not None else None,
+        "freshness_ok": True,
+        "freshness_error": "",
+    }
+    if not rule.freshness_required:
+        return out
+    try:
+        latest = _assert_feature_fresh(
+            feature,
+            expected_date=expected,
+            max_lag_days=rule.max_lag_days,
+            name=name or rule.name,
+        )
+        out["freshness_latest_date"] = latest.date().isoformat()
+    except poe.BotError as exc:
+        out["freshness_ok"] = False
+        out["freshness_error"] = str(exc)
+    return out
+
+
+def _annotate_rule_freshness(feature, expected_date, rule_key):
+    if feature is None or len(feature) == 0:
+        return feature
+    rule = RISK_RULES[rule_key]
+    out = feature.copy()
+    status = _feature_freshness_status(out, expected_date, rule_key, name=rule.name)
+    for key, value in status.items():
+        out[key] = value
+    if rule.policy == "hard_trade_rule" and not status["freshness_ok"]:
+        out["combined_unresolved"] = True
+    return out
+
+
+def _annotate_status_freshness(status, expected_date, rule_key):
+    rule = RISK_RULES[rule_key]
+    checked = dict(status or {})
+    status_feature = {"date": checked.get("date") or checked.get("latest_date")}
+    checked.update(_feature_freshness_status(status_feature, expected_date, rule_key, name=rule.name))
+    return checked
+
+
+def _warning_feature_expected_date(asof_date=None):
+    return pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
 
 
 def _check_microcap_cache_latest(ret, expected_latest_date=None, source_label="microcap", msg=None):
@@ -1080,6 +1353,11 @@ def _sp500_risk_regime_snapshot_is_current_week(snapshot, asof_date=None):
     return latest_ts.normalize() >= _sp500_risk_regime_expected_weekly_label(asof_date)
 
 
+def _annotate_sp500_risk_regime_freshness(snapshot, asof_date=None):
+    expected = _warning_feature_expected_date(asof_date)
+    return _annotate_status_freshness(snapshot, expected, "sp500_risk_regime")
+
+
 def _load_sp500_risk_regime_csv_snapshot(search_paths=None, live_error=None):
     paths = search_paths if search_paths is not None else _sp500_risk_regime_search_paths()
     required = {"risk_score", "regime", "suggested_equity_budget", "credit_proxy", "credit_series"}
@@ -1132,18 +1410,21 @@ def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_
     if prefer_recent_csv and csv_snapshot is not None and _sp500_risk_regime_snapshot_is_current_week(
         csv_snapshot, asof_date=asof_date
     ):
-        return csv_snapshot
+        return _annotate_sp500_risk_regime_freshness(csv_snapshot, asof_date=asof_date)
 
     live_error = None
     if live_fetch:
         try:
-            return _fetch_sp500_risk_regime_live_snapshot()
+            return _annotate_sp500_risk_regime_freshness(
+                _fetch_sp500_risk_regime_live_snapshot(),
+                asof_date=asof_date,
+            )
         except Exception as exc:
             live_error = str(exc)
 
     if csv_snapshot is not None:
         csv_snapshot["live_error"] = live_error
-        return csv_snapshot
+        return _annotate_sp500_risk_regime_freshness(csv_snapshot, asof_date=asof_date)
 
     if not allow_embedded:
         if live_error:
@@ -1161,7 +1442,7 @@ def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_
     if embedded_age_days > 7:
         embedded["source_type"] = "STALE_EMBEDDED_DO_NOT_TRADE"
         embedded["stale_warning"] = "Embedded S&P risk snapshot is older than 7 days; historical reference only."
-    return embedded
+    return _annotate_sp500_risk_regime_freshness(embedded, asof_date=asof_date)
 
 
 INFLATION_PRESSURE_LB = 126
@@ -1240,26 +1521,33 @@ def _normalize_row_idx(index, row_idx):
     return len(index) + row_idx if row_idx < 0 else row_idx
 
 
-def _inflation_pressure_on_from_prices(close_df, row_idx, lookback=INFLATION_PRESSURE_LB):
+def _inflation_pressure_state_from_prices(close_df, row_idx, lookback=INFLATION_PRESSURE_LB):
     row_idx = _normalize_row_idx(close_df.index, row_idx)
     if row_idx < lookback:
-        return False
+        return None
     if "DBC" not in close_df.columns or "TLT" not in close_df.columns:
-        return False
+        return None
     current = close_df.iloc[row_idx]
     previous = close_df.iloc[row_idx - lookback]
     if pd.isna(current.get("DBC")) or pd.isna(previous.get("DBC")):
-        return False
+        return None
     if pd.isna(current.get("TLT")) or pd.isna(previous.get("TLT")):
-        return False
+        return None
     dbc_mom = current["DBC"] / previous["DBC"] - 1.0
     tlt_mom = current["TLT"] / previous["TLT"] - 1.0
     return bool(dbc_mom > 0 and tlt_mom < 0)
 
 
+def _inflation_pressure_on_from_prices(close_df, row_idx, lookback=INFLATION_PRESSURE_LB):
+    return _inflation_pressure_state_from_prices(close_df, row_idx, lookback) is True
+
+
 def _subb_active_ranking_codes(close_df, row_idx, base_codes=None):
     base = list(base_codes) if base_codes is not None else list(US_ROT_BASE_POOL)
-    if not _inflation_pressure_on_from_prices(close_df, row_idx):
+    state = _inflation_pressure_state_from_prices(close_df, row_idx)
+    if state is None:
+        raise poe.BotError("Sub-B通胀门控数据不可判定：DBC/TLT缺失或过期")
+    if state is False:
         return base
     available_macro = [code for code in US_ROT_MACRO_POOL if code in close_df.columns]
     return base + [code for code in available_macro if code not in base]
@@ -1271,8 +1559,11 @@ def _us_rot_late_history_tickers():
 
 def _subb_inflation_gate_context(close_df, row_idx):
     row_idx = _normalize_row_idx(close_df.index, row_idx)
+    state = _inflation_pressure_state_from_prices(close_df, row_idx)
+    if state is None:
+        raise poe.BotError("Sub-B通胀门控数据不可判定：DBC/TLT缺失或过期")
     out = {
-        "pressure_on": _inflation_pressure_on_from_prices(close_df, row_idx),
+        "pressure_on": state,
         "lookback": INFLATION_PRESSURE_LB,
         "latest_date": close_df.index[row_idx],
     }
@@ -1319,6 +1610,8 @@ def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
         else:
             _change_text = changed_date
         w(f"数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{_change_text}**\n")
+        if not snapshot.get("freshness_ok", True):
+            w(f"⚠️ 数据新鲜度: {snapshot.get('freshness_error', 'S&P风险等级数据过期')}；仅提示，不应按最新风控确认执行。\n")
         w(
             f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** "
             f"| 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n"
@@ -1809,7 +2102,9 @@ def _fetch_cn_csindex_with_candidates(index_code):
             if df is not None and len(df) > 50:
                 source = "csindex" if candidate == index_code else f"csindex:{candidate}"
                 return df, source
-        except _DATA_FETCH_ERRORS as e:
+        except poe.BotError:
+            raise
+        except Exception as e:
             last_err = e
             attempts.append(f"{candidate}:{e}")
             time.sleep(1)
@@ -2333,7 +2628,9 @@ def _load_suba_volume_signal():
     if severe_error is not None:
         feature["clear_ratio_error"] = severe_error
     if len(feature) > 0:
-        if errors:
+        if severe_error is not None:
+            feature["combined_unresolved"] = True
+        elif errors:
             if CN_SA_VOLUME_RULE_MODE == "or":
                 feature["combined_unresolved"] = ~feature["old_combined_signal"].astype(bool)
             elif CN_SA_VOLUME_RULE_MODE == "and":
@@ -2353,6 +2650,11 @@ def _load_suba_volume_signal():
         feature["partial_unavailable"] = bool(errors)
     return combined_signal, feature
 
+def _suba_volume_feature_has_unresolved(feature):
+    if feature is None or len(feature) == 0 or "combined_unresolved" not in feature.columns:
+        return False
+    return bool(feature["combined_unresolved"].fillna(False).astype(bool).any())
+
 def _mark_suba_volume_unavailable(cn_result, exc):
     out = cn_result.copy()
     out["suba_volume_rule_on"] = False
@@ -2362,6 +2664,29 @@ def _mark_suba_volume_unavailable(cn_result, exc):
     out["suba_volume_unresolved"] = True
     out["suba_volume_error"] = str(exc)
     return out
+
+
+def _apply_suba_volume_overlay_policy(
+    cn_result,
+    close_df,
+    suba_volume_signal,
+    suba_volume_feature,
+    allow_unresolved_suba_volume=False,
+):
+    if _suba_volume_feature_has_unresolved(suba_volume_feature):
+        message = "Sub-A成交额风控不可判定，本次不应用该overlay改写仓位"
+        if not allow_unresolved_suba_volume:
+            raise poe.BotError("Sub-A成交额风控存在不可判定项，正式路径中止。")
+        return _mark_suba_volume_unavailable(cn_result, message)
+    return apply_suba_volume_overlay(
+        cn_result,
+        close_df,
+        suba_volume_signal,
+        suba_volume_feature,
+        scale=CN_SA_VOLUME_SCALE,
+        rule_name=CN_SA_VOLUME_RULE_NAME,
+    )
+
 
 def _load_dk_volume_warning_feature():
     df, source = _fetch_cn_amount_with_fallback(
@@ -2394,7 +2719,7 @@ def _build_dk_volume_warning_feature(amount, source, ma=None, days=None):
         index=amount.index,
     )
 
-def _volume_warning_status(secid, ma, days, label):
+def _volume_warning_status(secid, ma, days, label, expected_date=None, rule_key=None):
     df, source = _fetch_cn_amount_with_fallback(
         secid,
         label,
@@ -2411,7 +2736,7 @@ def _volume_warning_status(secid, ma, days, label):
     latest_ma = float(ma_series.iloc[-1]) if pd.notna(ma_series.iloc[-1]) else np.nan
     latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
     below = bool(pd.notna(latest_ma) and latest_value < latest_ma)
-    return {
+    status = {
         "label": label,
         "date": latest_date,
         "value": latest_value,
@@ -2423,6 +2748,9 @@ def _volume_warning_status(secid, ma, days, label):
         "days": int(days),
         "source": source,
     }
+    if expected_date is not None and rule_key is not None:
+        status = _annotate_status_freshness(status, expected_date, rule_key)
+    return status
 
 def _read_volume_csv(path, label):
     df = pd.read_csv(path, encoding="utf-8-sig")
@@ -2576,7 +2904,7 @@ def _fetch_microcap_direct_volume():
         + ("; ".join(errors[-3:]) if errors else "")
     )
 
-def _microcap_direct_volume_status():
+def _microcap_direct_volume_status(expected_date=None):
     df, source = _fetch_microcap_direct_volume()
     amount = df["amount"].dropna().sort_index()
     if len(amount) < max(60, MICROCAP_DIRECT_VOLUME_MA + MICROCAP_DIRECT_VOLUME_DAYS):
@@ -2588,7 +2916,7 @@ def _microcap_direct_volume_status():
     latest_ma = float(ma.iloc[-1])
     latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
     below = bool(pd.notna(ma.iloc[-1]) and latest_value < latest_ma)
-    return {
+    status = {
         "date": latest_date,
         "value": latest_value,
         "ma_value": latest_ma,
@@ -2599,9 +2927,13 @@ def _microcap_direct_volume_status():
         "days": MICROCAP_DIRECT_VOLUME_DAYS,
         "source": source,
     }
+    if expected_date is not None:
+        status = _annotate_status_freshness(status, expected_date, "microcap_volume_warning")
+    return status
 
 def _write_volume_warning_panel(msg, compact=False):
     w = msg.write
+    expected_date = _warning_feature_expected_date()
     w("### 成交额风险提醒\n")
     if not compact:
         w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v2.0未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
@@ -2616,19 +2948,26 @@ def _write_volume_warning_panel(msg, compact=False):
             return ""
         return f"；最新{float(value):.4g} vs MA{status['ma']} {float(ma_value):.4g}"
 
+    def _freshness_note(status):
+        if status.get("freshness_ok", True):
+            return ""
+        return f"；数据过期/不可判定: {status.get('freshness_error', 'unknown')}"
+
     try:
         dk = _volume_warning_status(
             CN_DK_VOLUME_YELLOW_SECID,
             CN_DK_VOLUME_YELLOW_MA,
             CN_DK_VOLUME_YELLOW_DAYS,
             CN_DK_VOLUME_YELLOW_LABEL,
+            expected_date=expected_date,
+            rule_key="dk_volume_warning",
         )
         dk_mark = "🟡 警示触发" if dk["triggered"] else "未触发"
         dk_pos = _status_pos(dk)
         w(
             f"- Sub-A-DK成交额清仓警示: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
             f"连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}；"
-            f"仅提示，不参与ADK仓位和净值曲线。\n"
+            f"仅提示，不参与ADK仓位和净值曲线{_freshness_note(dk)}。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
@@ -2639,12 +2978,16 @@ def _write_volume_warning_panel(msg, compact=False):
             MICROCAP_BROAD_VOLUME_ZZ2000_MA,
             MICROCAP_BROAD_VOLUME_ZZ2000_DAYS,
             "中证2000",
+            expected_date=expected_date,
+            rule_key="microcap_volume_warning",
         )
         cyb = _volume_warning_status(
             MICROCAP_BROAD_VOLUME_CYB_SECID,
             MICROCAP_BROAD_VOLUME_CYB_MA,
             MICROCAP_BROAD_VOLUME_CYB_DAYS,
             "创业板",
+            expected_date=expected_date,
+            rule_key="microcap_volume_warning",
         )
         micro_on = zz["triggered"] and cyb["triggered"]
         micro_mark = "🔴 警示触发" if micro_on else "未触发"
@@ -2656,6 +2999,11 @@ def _write_volume_warning_panel(msg, compact=False):
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
             f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v2.0未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
+        if (not zz.get("freshness_ok", True)) or (not cyb.get("freshness_ok", True)):
+            w(
+                f"  数据新鲜度: ZZ2000 {zz.get('freshness_error', 'OK') or 'OK'}；"
+                f"CYB {cyb.get('freshness_error', 'OK') or 'OK'}。\n"
+            )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
@@ -2679,8 +3027,9 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
 
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
-            f"本次无法确认旧缩仓规则和新清仓规则，当前执行仓位暂按100%。\n"
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**UNKNOWN** | "
+            f"本次不应用成交额overlay，成交额scale暂按1.0；最终仓位请以Sub-A主表actual_weight为准。"
+            f"由于硬风控不可判定，不建议直接按正常信号执行。\n"
         )
         return
     on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
@@ -2700,14 +3049,22 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
         data_note_parts.append("部分数据不可用，旧缩仓规则按可用腿判断")
     if clear_unavailable:
-        data_note_parts.append("新清仓规则本次不可确认")
+        data_note_parts.append("清仓比例规则不可判定，不应按正常仓位执行")
+    if "suba_volume_freshness_ok" in cn_result.columns and not _cell_bool(cn_result["suba_volume_freshness_ok"].iloc[idx]):
+        freshness_error = _cell_text(
+            cn_result["suba_volume_freshness_error"].iloc[idx]
+            if "suba_volume_freshness_error" in cn_result.columns
+            else "Sub-A成交额数据过期"
+        )
+        data_note_parts.append(f"{freshness_error}，不应按正常仓位执行")
     data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
     unresolved = "suba_volume_unresolved" in cn_result.columns and _cell_bool(cn_result["suba_volume_unresolved"].iloc[idx])
     if unresolved and not on:
         w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**未知** | "
+            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**UNKNOWN** | "
             f"旧缩仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
-            f"新清仓规则: {ratio_text}；当前执行仓位暂按100%{data_note}\n"
+            f"新清仓规则: {ratio_text}；本次不应用成交额overlay，成交额scale暂按1.0；"
+            f"最终仓位请以Sub-A主表actual_weight为准{data_note}\n"
         )
         return
     status = "清仓触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
@@ -3041,7 +3398,7 @@ def _dict_weight_turnover(old_weights, new_weights):
     assets = set(old_weights) | set(new_weights)
     return float(sum(abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets))
 
-def _dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=("CASH",)):
+def _dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=("CASH", "BIL")):
     old_weights = old_weights or {}
     new_weights = new_weights or {}
     skip = set(non_tradeable_assets or ())
@@ -4563,8 +4920,11 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
     if dk_result is None or len(dk_result) == 0:
         return dk_result
 
-    gate_base_ret = dk_result["return"].fillna(0.0)
-    base_ret = dk_result.get("return_before_dk_execution_cost", gate_base_ret).fillna(0.0)
+    gate_gross_ret = dk_result.get(
+        "return_before_dk_execution_cost",
+        dk_result.get("raw_return", dk_result["return"]),
+    ).fillna(0.0)
+    base_ret = gate_gross_ret
     base_weight = dk_result["weight"].fillna(1.0)
     prior_overlay_scale = dk_result.get("dk_total_overlay_scale", None)
     if prior_overlay_scale is None:
@@ -4575,12 +4935,14 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
             prior_overlay_scale = prior_overlay_scale * dk_result["same_side_overheat_scale"].fillna(1.0)
     else:
         prior_overlay_scale = prior_overlay_scale.fillna(1.0)
-    prior_cost = dk_result.get("dk_execution_cost", pd.Series(0.0, index=dk_result.index)).fillna(0.0)
+    dk_execution_cost = dk_result.get("dk_execution_cost", pd.Series(0.0, index=dk_result.index)).fillna(0.0)
+    prior_cost = dk_execution_cost.copy()
     if "dk_overlay_execution_cost" in dk_result.columns:
         prior_cost = prior_cost + dk_result["dk_overlay_execution_cost"].fillna(0.0)
     if "same_side_overheat_tc" in dk_result.columns:
         prior_cost = prior_cost + dk_result["same_side_overheat_tc"].fillna(0.0)
-    base_nav = (1.0 + gate_base_ret).cumprod()
+    risk_gate_base_ret = (1.0 + gate_gross_ret) * (1.0 - dk_execution_cost) - 1.0
+    base_nav = (1.0 + risk_gate_base_ret).cumprod()
     base_dd = base_nav / base_nav.cummax() - 1.0
 
     gated_ret = []
@@ -4589,11 +4951,11 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
     prev_scale = 1.0
     cooldown_left = 0
 
-    for i, dt in enumerate(gate_base_ret.index):
+    for i, dt in enumerate(risk_gate_base_ret.index):
         if i == 0:
             cur_scale = 1.0
         else:
-            prev_dt = gate_base_ret.index[i - 1]
+            prev_dt = risk_gate_base_ret.index[i - 1]
             prev_dd = float(base_dd.loc[prev_dt])
             trigger = prev_dd <= -enter
             release_ready = prev_dd >= -exit_value if exit_value is not None else prev_dd > -enter
@@ -4622,7 +4984,8 @@ def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_v
         prev_scale = cur_scale
 
     out = dk_result.copy()
-    out["raw_return"] = gate_base_ret
+    out["raw_return"] = gate_gross_ret
+    out["risk_gate_base_return"] = risk_gate_base_ret
     out["raw_nav"] = base_nav
     out["base_weight"] = base_weight
     out["risk_gate_scale"] = pd.Series(gate_scale, index=base_ret.index)
@@ -4717,7 +5080,12 @@ def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold,
         for a, sc in sorted_avail:
             if a in selected:
                 continue
-            if weakest_score > 0 and sc > weakest_score * threshold:
+            should_replace = (
+                sc > weakest_score
+                if weakest_score <= 0
+                else sc > weakest_score * threshold
+            )
+            if should_replace:
                 selected.discard(weakest)
                 selected.add(a)
                 weakest = min(selected, key=lambda a2: available.get(a2, -999))
@@ -5197,7 +5565,10 @@ def _subb_v75_ema_score(close_df, half_life=SUBB_V75_EMA_HALF_LIFE):
 
 
 def _subb_v75_ema_scale_from_hist(hist):
-    if len(hist) < US_ROT_VOL_WINDOW:
+    min_obs = US_ROT_VOL_WINDOW
+    if SUBB_V75_EMA_VOL_MODE == "ewma6m_1vol":
+        min_obs = max(US_ROT_VOL_WINDOW, SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+    if len(hist) < min_obs:
         return 1.0
     if SUBB_V75_EMA_VOL_MODE == "ewma6m_1vol":
         rv = (
@@ -5313,7 +5684,7 @@ def blend_subb_v75_results(official_result, ema_result,
         ema_result.dropna(subset=["return"]).index
     )
     if common_index.empty:
-        raise ValueError("Sub-B V7.5 official/EMA blend has no overlapping return window.")
+        raise ValueError("Sub-B V7.6 official/EMA blend has no overlapping return window.")
     official = official_result.reindex(common_index)
     ema = ema_result.reindex(common_index)
     out = official.copy()
@@ -5369,7 +5740,7 @@ def blend_subb_v75_results(official_result, ema_result,
             out.loc[dt, f"w_{asset}"] = actual[asset]
         if prev_actual is None:
             prev_actual = {"BIL": 1.0}
-        turnover = _dict_weight_turnover(prev_actual, actual)
+        turnover = _dict_tradeable_turnover(prev_actual, actual, non_tradeable_assets=("BIL",))
         turnovers.append(turnover)
         costs.append(turnover * US_ROT_COMMISSION)
         prev_actual = actual
@@ -6442,6 +6813,63 @@ def _pos_entry_value(val, price):
     shares = int(float(val)) if isinstance(val, (int, float)) else 0
     return shares * price if price else 0
 
+def _pos_entry_is_nonzero(val):
+    if isinstance(val, dict) and 'amount' in val:
+        return abs(float(val['amount'])) > 0
+    return isinstance(val, (int, float)) and abs(float(val)) > 0
+
+def _pos_entry_needs_price_for_value(val):
+    return not (isinstance(val, dict) and 'amount' in val)
+
+def _normalize_subb_position_keys(pos):
+    out = {}
+    for key, value in (pos or {}).items():
+        live = _ROT_PROXY_TO_LIVE.get(str(key).upper(), str(key).upper())
+        if live in out and isinstance(out[live], (int, float)) and isinstance(value, (int, float)):
+            out[live] += value
+        elif (
+            live in out
+            and isinstance(out[live], dict)
+            and isinstance(value, dict)
+            and "amount" in out[live]
+            and "amount" in value
+        ):
+            out[live] = dict(out[live], amount=float(out[live]["amount"]) + float(value["amount"]))
+        elif live in out:
+            raise poe.BotError(
+                f"Sub-B持仓 {live} 同时存在股数和金额两种口径，请统一为一种。"
+            )
+        else:
+            out[live] = value
+    return out
+
+def _subb_target_shares(target_value, weight, price, min_weight=0.005):
+    if not isinstance(weight, (int, float)) or weight <= min_weight:
+        return 0
+    if price and price > 0:
+        return int(float(target_value) * float(weight) / price)
+    return None
+
+def _subb_position_adjustment_target_value(position_config, live_prices, capital=None):
+    """Choose a reliable Sub-B adjustment base without partial stale-price valuation."""
+    position_config = _normalize_subb_position_keys(position_config)
+    live_prices = live_prices or {}
+    held_etfs = sorted(etf for etf, raw_pos in position_config.items() if _pos_entry_is_nonzero(raw_pos))
+    missing_prices = [
+        etf for etf in held_etfs
+        if _pos_entry_needs_price_for_value(position_config.get(etf)) and etf not in live_prices
+    ]
+    if missing_prices:
+        if capital and capital > 0:
+            return float(capital), missing_prices, "capital"
+        return None, missing_prices, "unavailable"
+    total_value = sum(_pos_entry_value(position_config.get(etf, 0), live_prices.get(etf, 0)) for etf in held_etfs)
+    if total_value > 0:
+        return float(total_value), [], "positions"
+    if capital and capital > 0:
+        return float(capital), [], "capital"
+    return None, [], "unavailable"
+
 def _pos_entry_shares(val, price):
     """Get equivalent shares of a position entry (converts amount to shares if needed)."""
     if isinstance(val, dict) and 'amount' in val:
@@ -6463,6 +6891,31 @@ def _calc_quantities(capital, weights, prices):
             result[etf] = {"weight": w, "amount": round(amount, 2),
                            "price": None, "qty": None}
     return result
+
+def _position_csv_column_map(columns):
+    col_map = {}
+    for c in columns:
+        cl = str(c).strip().lower()
+        if cl in ('策略', 'strategy', 'sub', '子策略'):
+            col_map['strategy'] = c
+        elif cl in ('etf', 'ticker', '代码', '标的', 'code', 'symbol'):
+            col_map['etf'] = c
+        elif cl in ('数量', 'shares', 'qty', '股数', '持仓', 'quantity'):
+            col_map['shares'] = c
+        elif cl in ('amount', '金额', '市值', 'market_value'):
+            col_map['amount'] = c
+    return col_map
+
+def _position_csv_entry(row, col_map):
+    has_shares = 'shares' in col_map and pd.notna(row[col_map['shares']])
+    has_amount = 'amount' in col_map and pd.notna(row[col_map['amount']])
+    if has_shares and has_amount:
+        raise poe.BotError("CSV同一行同时存在数量和金额，请只保留一种持仓口径。")
+    if has_amount:
+        return {"amount": float(row[col_map['amount']])}
+    if has_shares:
+        return int(float(row[col_map['shares']]))
+    raise poe.BotError("CSV持仓行缺少数量或金额。")
 
 TRADE_LOG_START = "<!--TRADE_LOG"
 TRADE_LOG_END = "TRADE_LOG-->"
@@ -7725,12 +8178,15 @@ class CombinedStrategyBase:
         cn_close = _add_cn_bond_column(cn_close, msg, context="Sub-A国债避险")
         # 数据新鲜度检查: 收盘后如果部分指数缺少当天数据，发出警告
         _cn_open_now, _bj_now_check = is_cn_market_open()
-        _is_cn_trading_day = _bj_today_cn.weekday() < 5  # 简单判断工作日
+        _is_cn_trading_day = _is_cn_required_close_day(_bj_today_cn)
         _cn_after_close = _is_cn_trading_day and not _cn_open_now and _bj_now_check.hour >= 15
         if _cn_after_close:
             _stale_codes = [secid for secid in CN_STOCK_CODES
                             if cn_raw[secid].index[-1].date() < _bj_today_cn]
             if _stale_codes:
+                if not include_cn_live_snapshot:
+                    _stale_names_hard_fail = "、".join(CN_NAMES.get(s, s) for s in _stale_codes)
+                    raise poe.BotError("A股收盘数据未完整更新，不能生成正式收盘信号: " + _stale_names_hard_fail)
                 _stale_names = "、".join(CN_NAMES.get(s, s) for s in _stale_codes)
                 msg.write(f"  ⚠️ **数据延迟:** {_stale_names} 尚未更新到今天({_bj_today_cn})，"
                           f"信号可能不准确，请稍后重新查询\n")
@@ -7746,6 +8202,26 @@ class CombinedStrategyBase:
         # 美股实时补充: 盘中或日K线延迟时用实时行情API补充当日价格
         if include_us_live_snapshot:
             _supplement_us_today_close(us_raw, US_ALL_TICKERS, msg)
+        _required_us_present = [
+            ticker for ticker in SUBB_REQUIRED_PRICE_TICKERS
+            if ticker in us_raw and ticker != US_ROT_BTC_TICKER
+        ]
+        _required_us_dates = [
+            _latest_valid_close_date(us_raw[ticker])
+            for ticker in _required_us_present
+        ]
+        _required_us_dates = [dt for dt in _required_us_dates if dt is not None]
+        _expected_us_date = (
+            max(_required_us_dates)
+            if _required_us_dates else None
+        )
+        _assert_columns_fresh(
+            us_raw,
+            SUBB_REQUIRED_PRICE_TICKERS,
+            expected_date=_expected_us_date,
+            max_lag_days=1 if include_us_live_snapshot else 0,
+            label="Sub-B核心价格",
+        )
         rot_tickers = US_ROT_POOL + ["BIL"]
         _late_rot = _us_rot_late_history_tickers()
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
@@ -7865,10 +8341,22 @@ class CombinedStrategyBase:
                 dk_dfs[col_name] = idx_df.rename(columns={"close": col_name})
                 msg.write(f"  {CN_DK_NAMES[col_name]}: {idx_df.index[0].strftime('%Y-%m-%d')}~{idx_df.index[-1].strftime('%Y-%m-%d')} [{src}]\n")
                 time.sleep(0.2)
-            cn_dk_close = pd.concat([dk_dfs[c] for c in CN_DK_COLS], axis=1).ffill().dropna()
+            cn_dk_raw_close = pd.concat([dk_dfs[c] for c in CN_DK_COLS], axis=1)
+            if _cn_after_close and not include_cn_live_snapshot:
+                _assert_price_frame_columns_fresh(
+                    cn_dk_raw_close,
+                    CN_DK_COLS,
+                    expected_date=pd.Timestamp(_bj_today),
+                    max_lag_days=0,
+                    label="A-DK收盘价格",
+                    names=CN_DK_NAMES,
+                )
+            cn_dk_close = cn_dk_raw_close.ffill().dropna()
             msg.write(f"  A-DK合并截至: {cn_dk_close.index[-1].strftime('%Y-%m-%d')}\n")
-        except _DATA_FETCH_ERRORS as e:
-            raise poe.BotError(f"A-DK多空数据获取失败: {e}")
+        except poe.BotError:
+            raise
+        except Exception as e:
+            raise poe.BotError(f"A-DK多空数据获取失败: {e}") from e
         return cn_close, cn_dk_close, us_rot_close, us_prod_daily
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily,
                         allow_unresolved_suba_volume=False):
@@ -7894,15 +8382,29 @@ class CombinedStrategyBase:
         if CN_SA_VOLUME_OVERLAY_ENABLED:
             try:
                 suba_volume_signal, suba_volume_feature = _load_suba_volume_signal()
-                cn_result = apply_suba_volume_overlay(
+                suba_volume_feature = _annotate_rule_freshness(
+                    suba_volume_feature,
+                    expected_date=cn_close_with_bond.index.max(),
+                    rule_key="suba_volume",
+                )
+                if (
+                    not allow_unresolved_suba_volume
+                    and _suba_volume_feature_has_unresolved(suba_volume_feature)
+                ):
+                    raise poe.BotError(
+                        "Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。"
+                        "信号查询可降级显示“清仓比例规则不可判定，不应按正常仓位执行”。"
+                    )
+                cn_result = _apply_suba_volume_overlay_policy(
                     cn_result,
                     cn_close_with_bond,
                     suba_volume_signal,
                     suba_volume_feature,
-                    scale=CN_SA_VOLUME_SCALE,
-                    rule_name=CN_SA_VOLUME_RULE_NAME,
+                    allow_unresolved_suba_volume=allow_unresolved_suba_volume,
                 )
             except Exception as exc:
+                if isinstance(exc, poe.BotError):
+                    raise
                 if not allow_unresolved_suba_volume:
                     raise poe.BotError(
                         "Sub-A成交额风控数据不可用，正式回测/绩效查询已中止；"
@@ -8238,32 +8740,24 @@ V7.6 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v2.0 target-vol), S
                 df = pd.read_csv(io.StringIO(csv_data))
                 df.columns = [c.strip() for c in df.columns]
                 config = dict(existing)
-                col_map = {}
-                for c in df.columns:
-                    cl = c.lower()
-                    if cl in ('策略', 'strategy', 'sub', '子策略'):
-                        col_map['strategy'] = c
-                    elif cl in ('etf', 'ticker', '代码', '标的', 'code', 'symbol'):
-                        col_map['etf'] = c
-                    elif cl in ('数量', 'shares', 'qty', '股数', '持仓', 'quantity', 'amount'):
-                        col_map['shares'] = c
+                col_map = _position_csv_column_map(df.columns)
 
-                if 'etf' not in col_map or 'shares' not in col_map:
+                if 'etf' not in col_map or ('shares' not in col_map and 'amount' not in col_map):
                     raise poe.BotError(
                         "CSV格式不正确。需要至少包含ETF和数量两列。\n"
                         "支持的列名:\n"
                         "- ETF列: ETF, ticker, 代码, 标的, code, symbol\n"
                         "- 数量列: 数量, shares, qty, 股数, 持仓, quantity\n"
+                        "- 金额列: amount, 金额, 市值, market_value\n"
                         "- 策略列(可选): 策略, strategy, sub")
 
                 if 'strategy' in col_map:
                     for _, row in df.iterrows():
                         strat = str(row[col_map['strategy']]).strip()
                         etf = str(row[col_map['etf']]).strip()
-                        shares = int(float(row[col_map['shares']]))
                         if strat not in config:
                             config[strat] = {}
-                        config[strat][etf] = shares
+                        config[strat][etf] = _position_csv_entry(row, col_map)
                 else:
                     query_text = poe.query.text.strip()
                     strategy = None
@@ -8283,8 +8777,7 @@ V7.6 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v2.0 target-vol), S
                     config[strategy] = {}
                     for _, row in df.iterrows():
                         etf = str(row[col_map['etf']]).strip()
-                        shares = int(float(row[col_map['shares']]))
-                        config[strategy][etf] = shares
+                        config[strategy][etf] = _position_csv_entry(row, col_map)
             except poe.BotError:
                 raise
             except Exception as e:
@@ -8457,8 +8950,8 @@ _BOT_SETTINGS = SettingsResponse(
         '- 发送 **"参数"** / **"信号参数"** -> 策略参数总览\n'
         '- 发送 **"实时参数"** / **"参数实时"** -> 实时参数快照\n\n'
         "**绩效分析：**\n"
-        '- 发送 **"表现 过去两年"** / **"表现 2024至今"** / **"表现 最近6个月"**\n'
-        '- 发送 **"净值曲线 过去两年"** / **"净值曲线 今年"**\n\n'
+        '- 发送 **"表现核心三袖 过去两年"** / **"表现核心三袖 2024至今"** / **"表现核心三袖 最近6个月"**\n'
+        '- 发送 **"净值曲线核心三袖 过去两年"** / **"净值曲线核心三袖 今年"**\n\n'
         "**💰 资金管理:** \"设置资金 Sub-B 5万美元\" -> 信号自动显示目标数量\n\n"
         "**📊 仓位管理:** \"设置仓位 Sub-B: QQQM 100股 GLDM 50股\" 或 \"设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\" -> 信号自动显示调整建议\n"
     ),
@@ -8518,7 +9011,13 @@ class CombinedStrategyV76(CombinedStrategyBase):
         except Exception as exc:
             with _sm() as msg:
                 msg.write("## ⚠️ 查询入口失败\n\n")
-                msg.write(f"{_short_error(exc)}\n")
+                if DEBUG_MODE:
+                    import traceback
+                    msg.write("```text\n")
+                    msg.write(traceback.format_exc())
+                    msg.write("\n```\n")
+                else:
+                    msg.write(f"{_short_error(exc)}\n")
                 msg.write("请重新发送“信号”或“实时信号”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n")
 
     def _run_impl(self):
@@ -9142,14 +9641,20 @@ class CombinedStrategyV76(CombinedStrategyBase):
             _sub_b_capital = _cap_config.get("Sub-B") if _cap_config else None
             _pos_config = _scan_position_config(poe.default_chat)
             _sub_b_pos = _pos_config.get("Sub-B") if _pos_config else None
+            _sub_b_pos = _normalize_subb_position_keys(_sub_b_pos)
             _us_latest_prices = {}
             for etf in _us_all_etfs:
                 _live = _ROT_PROXY_TO_LIVE.get(etf, etf)
-                # 优先用实际ETF价格(仓位调整需要), 回退到proxy价格
-                if _live != etf and _live in us_rot_close.columns:
-                    _us_latest_prices[_live] = us_rot_close[_live].dropna().iloc[-1]
-                elif etf in us_rot_close.columns:
-                    _us_latest_prices[_live] = us_rot_close[etf].iloc[-1]
+                # 目标数量只能用实际ETF价格；缺失/过期则不计算股数。
+                _live_price = _latest_live_etf_price(
+                    us_rot_close,
+                    etf,
+                    _live,
+                    expected_date=us_rot_close.index[-1],
+                    max_lag_days=0,
+                )
+                if _live_price is not None:
+                    _us_latest_prices[_live] = _live_price
             if _sub_b_capital:
                 w("| ETF | 实际权重 | 目标数量 | 金额($) | 变动 |\n|:-|--------:|--------:|--------:|-----:|\n")
             else:
@@ -9165,11 +9670,13 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 if _sub_b_capital:
                     amt = _sub_b_capital * cur
                     price = _us_latest_prices.get(live)
-                    if price and price > 0 and cur > 0.005:
-                        qty = int(amt / price)
+                    qty = _subb_target_shares(_sub_b_capital, cur, price)
+                    if qty == 0:
+                        w(f"| {live} | {cur:.1%} | 0 | {amt:,.0f} | {ds} |\n")
+                    elif qty is not None:
                         w(f"| {live} | {cur:.1%} | {qty:,} | {amt:,.0f} | {ds} |\n")
                     else:
-                        w(f"| {live} | {cur:.1%} | — | — | {ds} |\n")
+                        w(f"| {live} | {cur:.1%} | 价格缺失 | {amt:,.0f} | {ds} |\n")
                 else:
                     w(f"| {live} | {cur:.1%} | {ds} |\n")
             w(f"\n调仓幅度: **{_us_display_turnover:.1%}**")
@@ -9183,10 +9690,27 @@ class CombinedStrategyV76(CombinedStrategyBase):
             # Position adjustments
             if _sub_b_pos:
                 _all_pos_etfs = set(list(_sub_b_pos.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in _us_all_etfs])
-                _total_cur_val = sum(_pos_entry_value(_sub_b_pos.get(e, 0), _us_latest_prices.get(e, 0)) for e in _all_pos_etfs)
-                _target_val = _total_cur_val if _total_cur_val > 0 else _sub_b_capital
+                _target_val, _missing_pos_prices, _target_source = _subb_position_adjustment_target_value(
+                    _sub_b_pos,
+                    _us_latest_prices,
+                    _sub_b_capital,
+                )
+                if _missing_pos_prices:
+                    if _target_source == "capital":
+                        w(
+                            "\n⚠️ 当前持仓中部分ETF价格缺失/过期，"
+                            "不使用部分市值估算；本次按已设置Sub-B资金计算目标数量: "
+                            + ", ".join(_missing_pos_prices) + "\n"
+                        )
+                    else:
+                        w(
+                            "\n⚠️ 当前持仓中部分ETF价格缺失/过期，"
+                            "无法可靠计算当前持仓市值和调仓数量: "
+                            + ", ".join(_missing_pos_prices) + "\n"
+                        )
                 if _target_val and _target_val > 0:
-                    w(f"\n📊 **仓位调整** (基于当前持仓市值${_target_val:,.0f}):\n")
+                    _base_label = "已设置Sub-B资金" if _target_source == "capital" else "当前持仓市值"
+                    w(f"\n📊 **仓位调整** (基于{_base_label}${_target_val:,.0f}):\n")
                     w("| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n")
                     _adj_etfs = set(list(_sub_b_pos.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in _us_all_etfs if _us_display_w.get(e, 0) > 0.005])
                     for etf_live in sorted(_adj_etfs):
@@ -9200,14 +9724,15 @@ class CombinedStrategyV76(CombinedStrategyBase):
                                 _proxy_key = _pk
                                 break
                         _w = _us_display_w.get(_proxy_key, 0) if _proxy_key else _us_display_w.get(etf_live, 0)
-                        if price and price > 0:
-                            target_shares = int(_target_val * _w / price)
-                        else:
-                            target_shares = 0
-                        adj = target_shares - cur_shares
-                        if cur_shares == 0 and target_shares == 0:
+                        target_shares = _subb_target_shares(_target_val, _w, price)
+                        adj = None if target_shares is None else target_shares - cur_shares
+                        if not _pos_entry_is_nonzero(_raw_pos) and cur_shares == 0 and (target_shares is None or target_shares == 0):
                             continue
-                        if adj > 0:
+                        if target_shares is None:
+                            adj_str = "价格缺失"
+                        elif _w <= 0.005 and _pos_entry_is_nonzero(_raw_pos) and isinstance(_raw_pos, dict):
+                            adj_str = "卖出全部"
+                        elif adj > 0:
                             adj_str = f"+{adj:,} 买入"
                         elif adj < 0:
                             adj_str = f"{adj:,} 卖出"
@@ -9218,7 +9743,8 @@ class CombinedStrategyV76(CombinedStrategyBase):
                             cur_display = f"${_raw_pos['amount']:,.0f}"
                         else:
                             cur_display = f"{cur_shares:,}"
-                        w(f"| {etf_live} | {cur_display} | {target_shares:,} | {adj_str} |\n")
+                        target_display = "价格缺失" if target_shares is None else f"{target_shares:,}"
+                        w(f"| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n")
             if _last_us_sig_date:
                 _sig_close_idx = us_rot_close.index.get_loc(_last_us_sig_date)
                 if _sig_close_idx >= US_ROT_MAX_LB:
@@ -9723,21 +10249,44 @@ class CombinedStrategyV76(CombinedStrategyBase):
             # Position adjustments for live signal
             _pos_config_live = _scan_position_config(poe.default_chat)
             _sub_b_pos_live = _pos_config_live.get("Sub-B") if _pos_config_live else None
+            _sub_b_pos_live = _normalize_subb_position_keys(_sub_b_pos_live)
             if _sub_b_pos_live:
                 _us_live_prices = {}
                 for etf in all_a:
                     _live = _ROT_PROXY_TO_LIVE.get(etf, etf)
-                    if _live != etf and _live in us_rot_close.columns:
-                        _us_live_prices[_live] = us_rot_close[_live].dropna().iloc[-1]
-                    elif etf in us_rot_close.columns:
-                        _us_live_prices[_live] = us_rot_close[etf].iloc[-1]
+                    _live_price = _latest_live_etf_price(
+                        us_rot_close,
+                        etf,
+                        _live,
+                        expected_date=us_rot_close.index[-1],
+                        max_lag_days=0,
+                    )
+                    if _live_price is not None:
+                        _us_live_prices[_live] = _live_price
                 _cap_config_live = _scan_capital_config(poe.default_chat)
                 _sub_b_cap_live = _cap_config_live.get("Sub-B") if _cap_config_live else None
                 _all_pos_etfs_live = set(list(_sub_b_pos_live.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in all_a])
-                _total_cur_val_live = sum(_pos_entry_value(_sub_b_pos_live.get(e, 0), _us_live_prices.get(e, 0)) for e in _all_pos_etfs_live)
-                _target_val_live = _total_cur_val_live if _total_cur_val_live > 0 else _sub_b_cap_live
+                _target_val_live, _missing_pos_prices_live, _target_source_live = _subb_position_adjustment_target_value(
+                    _sub_b_pos_live,
+                    _us_live_prices,
+                    _sub_b_cap_live,
+                )
+                if _missing_pos_prices_live:
+                    if _target_source_live == "capital":
+                        w(
+                            "\n⚠️ 当前持仓中部分ETF价格缺失/过期，"
+                            "不使用部分市值估算；本次按已设置Sub-B资金计算目标数量: "
+                            + ", ".join(_missing_pos_prices_live) + "\n"
+                        )
+                    else:
+                        w(
+                            "\n⚠️ 当前持仓中部分ETF价格缺失/过期，"
+                            "无法可靠计算当前持仓市值和调仓数量: "
+                            + ", ".join(_missing_pos_prices_live) + "\n"
+                        )
                 if _target_val_live and _target_val_live > 0:
-                    w(f"\n📊 **仓位调整** (基于当前持仓市值${_target_val_live:,.0f}):\n")
+                    _base_label_live = "已设置Sub-B资金" if _target_source_live == "capital" else "当前持仓市值"
+                    w(f"\n📊 **仓位调整** (基于{_base_label_live}${_target_val_live:,.0f}):\n")
                     w("| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n")
                     _adj_etfs_live = set(list(_sub_b_pos_live.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in all_a if hypo_us_w.get(e, 0) > 0.005])
                     for etf_live in sorted(_adj_etfs_live):
@@ -9750,14 +10299,15 @@ class CombinedStrategyV76(CombinedStrategyBase):
                                 _proxy_key = _pk
                                 break
                         _w = hypo_us_w.get(_proxy_key, 0) if _proxy_key else hypo_us_w.get(etf_live, 0)
-                        if price and price > 0:
-                            target_shares = int(_target_val_live * _w / price)
-                        else:
-                            target_shares = 0
-                        adj = target_shares - cur_shares
-                        if cur_shares == 0 and target_shares == 0:
+                        target_shares = _subb_target_shares(_target_val_live, _w, price)
+                        adj = None if target_shares is None else target_shares - cur_shares
+                        if not _pos_entry_is_nonzero(_raw_pos_live) and cur_shares == 0 and (target_shares is None or target_shares == 0):
                             continue
-                        if adj > 0:
+                        if target_shares is None:
+                            adj_str = "价格缺失"
+                        elif _w <= 0.005 and _pos_entry_is_nonzero(_raw_pos_live) and isinstance(_raw_pos_live, dict):
+                            adj_str = "卖出全部"
+                        elif adj > 0:
                             adj_str = f"+{adj:,} 买入"
                         elif adj < 0:
                             adj_str = f"{adj:,} 卖出"
@@ -9767,7 +10317,8 @@ class CombinedStrategyV76(CombinedStrategyBase):
                             cur_display = f"${_raw_pos_live['amount']:,.0f}"
                         else:
                             cur_display = f"{cur_shares:,}"
-                        w(f"| {etf_live} | {cur_display} | {target_shares:,} | {adj_str} |\n")
+                        target_display = "价格缺失" if target_shares is None else f"{target_shares:,}"
+                        w(f"| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n")
             w("\n---\n\n")
             _write_combo_advisory_panel(w)
     def _handle_params(self):
@@ -10513,12 +11064,12 @@ class CombinedStrategyV76(CombinedStrategyBase):
         if start_date is None:
             raise poe.BotError(
                 "无法解析日期范围。支持的格式示例：\n"
-                "- 净值曲线 今年 / 去年\n"
-                "- 净值曲线 过去两年 / 最近6个月\n"
-                "- 净值曲线 2024-01到2025-01\n"
-                "- 净值曲线 2024至今\n"
-                "- 净值曲线 2024年\n"
-                "- 净值曲线 2024年3月15日到2025年1月20日"
+                "- 净值曲线核心三袖 今年 / 去年\n"
+                "- 净值曲线核心三袖 过去两年 / 最近6个月\n"
+                "- 净值曲线核心三袖 2024-01到2025-01\n"
+                "- 净值曲线核心三袖 2024至今\n"
+                "- 净值曲线核心三袖 2024年\n"
+                "- 净值曲线核心三袖 2024年3月15日到2025年1月20日"
             )
         with _sm() as msg:
             w = msg.write
