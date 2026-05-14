@@ -18,7 +18,6 @@ jobs:
       PYTHONIOENCODING: utf-8
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      QVERIS_API_KEY: ${{ secrets.QVERIS_API_KEY }}
 
     steps:
       - name: Check out repository
@@ -63,7 +62,21 @@ jobs:
           set +e
           (
             cd ../microcap
-            python microcap_top100_mom16_biweekly_live_v2_0.py
+            (
+              while true; do
+                sleep 120
+                echo "[microcap v2.0] still building at $(date -Iseconds)"
+              done
+            ) &
+            heartbeat_pid=$!
+            timeout --foreground 35m python -u microcap_top100_mom16_biweekly_live_v2_0.py
+            status=$?
+            kill "${heartbeat_pid}" 2>/dev/null || true
+            wait "${heartbeat_pid}" 2>/dev/null || true
+            if [ "${status}" -eq 124 ]; then
+              echo "Microcap v2.0 source generation timed out after 35 minutes."
+            fi
+            exit "${status}"
           ) 2>&1 | tee microcap_v2_0_source_result.txt
           status=${PIPESTATUS[0]}
           echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
