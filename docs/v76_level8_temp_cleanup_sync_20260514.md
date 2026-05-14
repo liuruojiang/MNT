@@ -34,6 +34,8 @@ The first backup attempt created a partial backup at `.codex_backups/20260514_23
 
 One later-discovered `20260514_v7_7_candidate_*` scan directory was backed up separately under `.codex_backups/20260514_235608` before removal.
 
+A final late-discovered `20260514_v77_suba_ret20_gate_weighting/` scan record directory was backed up under `.codex_backups/20260514_235933` before removal.
+
 ## Verification
 
 Run after cleanup:
