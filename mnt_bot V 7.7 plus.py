@@ -3645,9 +3645,9 @@ CN_SA_CASH_OVERLAY_ENABLED = False
 CN_SA_CASH_OVERLAY_DECAY_RATIO = 0.55
 CN_SA_CASH_OVERLAY_RECOVERY_RATIO = 0.90
 CN_SA_CASH_OVERLAY_WARMUP_DAYS = 5
-CN_SA_SAME_SIDE_OVERHEAT_ENABLED = False
-CN_SA_SAME_SIDE_OVERHEAT_ENTER = 0.36
-CN_SA_SAME_SIDE_OVERHEAT_EXIT = 0.34
+CN_SA_SAME_SIDE_OVERHEAT_ENABLED = True
+CN_SA_SAME_SIDE_OVERHEAT_ENTER = 0.27
+CN_SA_SAME_SIDE_OVERHEAT_EXIT = 0.24
 CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
 
 def _extract_active_cn_score(cn_result, close_df):
@@ -9376,7 +9376,7 @@ class CombinedStrategyV76(CombinedStrategyBase):
             if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _cn_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _cn_display_idx = -2 if _cn_intraday else -1
             _cn_display_date = cn_result.index[_cn_display_idx]
@@ -9426,9 +9426,9 @@ class CombinedStrategyV76(CombinedStrategyBase):
                     _cn_oh_bias = cn_result["suba_same_side_overheat_bias"].iloc[_cn_display_idx] if "suba_same_side_overheat_bias" in cn_result.columns else np.nan
                     _cn_oh_text = f" | 当前权益乖离: {_cn_oh_bias:.1%}" if pd.notna(_cn_oh_bias) else ""
                     if _cn_oh_on:
-                        w(f"🛡️ **Sub-A同向过热防守生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
+                        w(f"🛡️ **Sub-A MA60过热止盈生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
                     else:
-                        w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
+                        w(f"🟢 **Sub-A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
                 _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx, compact=True)
                 if not _cn_pending:
                     w(f"✅ 最终敞口: **{_cn_sc_rt:.2f}x** (下一交易日维持)")
@@ -9988,7 +9988,7 @@ class CombinedStrategyV76(CombinedStrategyBase):
             if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             hypo_cn_name = CN_NAMES.get(hypo_cn, hypo_cn)
             cn_current_name = CN_NAMES.get(cn_current, cn_current)
             # v6.1: no cooldown, no MA filter
@@ -10031,9 +10031,9 @@ class CombinedStrategyV76(CombinedStrategyBase):
                     _cn_oh_bias3 = cn_result["suba_same_side_overheat_bias"].iloc[-1] if "suba_same_side_overheat_bias" in cn_result.columns else np.nan
                     _cn_oh_text3 = f" | 当前权益乖离: {_cn_oh_bias3:.1%}" if pd.notna(_cn_oh_bias3) else ""
                     if _cn_oh_on3:
-                        w(f"🛡️ **Sub-A同向过热防守生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
+                        w(f"🛡️ **Sub-A MA60过热止盈生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
                     else:
-                        w(f"🟢 **Sub-A同向过热防守关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
+                        w(f"🟢 **Sub-A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
                 _write_suba_volume_overlay_status(msg, cn_result, -1)
                 if not _cn_pending3:
                     w(f"✅ 最终敞口: **{_cn_sc_rt3:.2f}x** (下一交易日维持)")
@@ -10403,9 +10403,9 @@ class CombinedStrategyV76(CombinedStrategyBase):
             w(f"| Cash Overlay开关 | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** | Sub-A持仓score从峰值衰减后切换到现金 |\n")
             w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** | 当前持仓score/本轮峰值score低于阈值后下一日切现金 |\n")
             w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** | score恢复到阈值以上后恢复持仓，并等待新峰值后再触发 |\n")
-            w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 极端过热且乖离动量同向时切现金 |\n")
-            w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 第4组测试结果: 首日阴线过滤 + 36/34过热阈值 |\n")
-            w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
+            w(f"| MA60过热止盈 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 过热且乖离动量同向时切现金 |\n")
+            w(f"| MA60过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 2026-05-18细扫候选: 27/24，收盘判断、下一段close-to-close生效 |\n")
+            w(f"| MA60过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
             w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 旧规则中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%}；新规则中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天触发后清仓 |\n")
             w(f"| 成交额触发后仓位 | **旧规则{CN_SA_VOLUME_SCALE:.0%} / 新规则{CN_SA_VOLUME_CLEAR_RATIO_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
@@ -10554,9 +10554,9 @@ class CombinedStrategyV76(CombinedStrategyBase):
             w(f"| Cash Overlay | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** |\n")
             w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** |\n")
             w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** |\n")
-            w(f"| 同向过热防守 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
-            w(f"| 同向过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
-            w(f"| 同向过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
+            w(f"| MA60过热止盈 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
+            w(f"| MA60过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
+            w(f"| MA60过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
             w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；旧规则ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%}；新规则ZZ2000/SZ50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天，触发后清仓 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
