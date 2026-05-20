@@ -290,32 +290,35 @@ CN_DK_NAMES = {
 CN_DK_BIAS_N = 60            # 乖离动量均线周期
 CN_DK_MOM_DAY = 20           # 斜率拟合窗口
 CN_DK_VOL_SCALE_ENABLED = True
-CN_DK_TARGET_VOL = 0.20
-CN_DK_VOL_WINDOW = 30
+CN_DK_TARGET_VOL = 0.14
+CN_DK_VOL_WINDOW = 40
 CN_DK_MAX_LEV = 1.5
 CN_DK_MIN_LEV = 0.1
 CN_DK_TRADING_DAYS = 242
 CN_DK_SCALE_THRESHOLD = 0.25     # V7.7 ADK scale变动阈值
 CN_DK_TOP_N = 1              # 每天选Top-1配对
 
-ADK_PRIMARY_PROFIT_PAIR_ORDER = (
-    "HS300/ZZ500",
-    "ZZ500/CYB",
-    "SZ50/CYB",
-    "SZ50/ZZ1000",
-)
-ADK_PRIMARY_PROFIT_PAIRS = set(ADK_PRIMARY_PROFIT_PAIR_ORDER)
-ADK_WEAK_PAIR_ORDER = (
-    "HS300/CYB",
-)
-ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
-ADK_INVALID_PAIR_ORDER = (
-    "SZ50/HS300",
+ADK_OFFICIAL_PAIR_ORDER = (
     "SZ50/ZZ500",
+    "SZ50/ZZ1000",
+    "SZ50/CYB",
+    "HS300/ZZ500",
     "HS300/ZZ1000",
-    "ZZ500/ZZ1000",
+    "HS300/CYB",
+    "ZZ500/CYB",
     "ZZ1000/CYB",
 )
+ADK_OFFICIAL_PAIRS = set(ADK_OFFICIAL_PAIR_ORDER)
+ADK_EXCLUDED_PAIR_ORDER = (
+    "SZ50/HS300",
+    "ZZ500/ZZ1000",
+)
+ADK_EXCLUDED_PAIRS = set(ADK_EXCLUDED_PAIR_ORDER)
+ADK_PRIMARY_PROFIT_PAIR_ORDER = ADK_OFFICIAL_PAIR_ORDER
+ADK_PRIMARY_PROFIT_PAIRS = ADK_OFFICIAL_PAIRS
+ADK_WEAK_PAIR_ORDER = ()
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = ADK_EXCLUDED_PAIR_ORDER
 ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
 CN_DK_RISK_GATE_ENABLED = False
 CN_DK_RISK_GATE_ENTER = 0.15
@@ -327,6 +330,8 @@ CN_DK_PAIR_SCORE_DECAY_RATIO = 0.40
 CN_DK_PAIR_SCORE_RECOVERY_RATIO = 0.70
 CN_DK_PAIR_SCORE_DERISK_SCALE = 0.0
 CN_DK_PAIR_SCORE_DECAY_WARMUP_DAYS = 5
+CN_DK_R2_QUALITY_ENABLED = True
+CN_DK_R2_QUALITY_THRESHOLD = 0.05
 CN_DK_SAME_SIDE_OVERHEAT_ENABLED = True
 CN_DK_SAME_SIDE_OVERHEAT_ENTER = 0.22
 CN_DK_SAME_SIDE_OVERHEAT_EXIT = 0.18
@@ -341,7 +346,7 @@ def _dk_score_decay_status_text():
         )
     return "Score衰减关闭"
 
-# v6.1 多配对索引: 5指数 → C(5,2)=10配对, 全部从cn_dk_close读取(价格指数)
+# V7.7 ADK official pool: 5 indices, 8 tradable pairs, all read from cn_dk_close price indices.
 CN_DK_INDICES = {
     'SZ50':   {'col': 'DK_SZ50',   'src': 'dk'},
     'HS300':  {'col': 'DK_HS300',  'src': 'dk'},
@@ -349,6 +354,9 @@ CN_DK_INDICES = {
     'ZZ1000': {'col': 'DK_ZZ1000', 'src': 'dk'},
     'CYB':    {'col': 'DK_CYB',    'src': 'dk'},
 }
+def _dk_is_official_pair(pair):
+    return str(pair) in ADK_OFFICIAL_PAIRS
+
 CN_DK_INDEX_NAMES = {
     'SZ50': '上证50', 'HS300': '沪深300', 'ZZ500': '中证500',
     'ZZ1000': '中证1000', 'CYB': '创业板',
@@ -4328,6 +4336,40 @@ def _dk_calc_bias_momentum(series, bias_n, mom_day):
         result[i] = slope / float(bias_window[0]) * 10000.0
     return pd.Series(result, index=series.index)
 
+
+def _dk_calc_bias_momentum_r2(series, bias_n, mom_day):
+    prices = series.values.astype(float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = series.rolling(bias_n).mean().values
+    total_lookback = bias_n + mom_day - 1
+    x = np.arange(mom_day, dtype=float)
+    weights = np.arange(1, mom_day + 1, dtype=float)
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    x_dev = x - x_bar
+    denom = float((weights * x_dev ** 2).sum())
+    for i in range(total_lookback, n):
+        bias_window = np.empty(mom_day)
+        valid = True
+        for j in range(mom_day):
+            idx = i - mom_day + 1 + j
+            if np.isnan(ma[idx]) or ma[idx] < 1e-10 or np.isnan(prices[idx]):
+                valid = False
+                break
+            bias_window[j] = prices[idx] / ma[idx]
+        if not valid:
+            continue
+        y_bar = float((weights * bias_window).sum() / w_sum)
+        y_dev = bias_window - y_bar
+        slope = float((weights * x_dev * y_dev).sum() / denom)
+        fitted = y_bar + slope * x_dev
+        sse = float((weights * (bias_window - fitted) ** 2).sum())
+        sst = float((weights * y_dev ** 2).sum())
+        result[i] = 1.0 - sse / sst if sst > 1e-18 else np.nan
+    return pd.Series(result, index=series.index)
+
+
 def _run_single_pair_dk(a_prices, b_prices):
     """对单个配对运行乖离动量DK策略, 返回 (strategy_ret, abs_bias_mom, pair_data) 或 (None, None, None)"""
     d = pd.DataFrame({'a': a_prices, 'b': b_prices}).dropna()
@@ -4339,6 +4381,10 @@ def _run_single_pair_dk(a_prices, b_prices):
     d = d.dropna(subset=['a_ret', 'b_ret'])
     d['ratio'] = d['a'] / d['b']
     d['bias_mom'] = _dk_calc_bias_momentum(d['ratio'], CN_DK_BIAS_N, CN_DK_MOM_DAY)
+    d['signal_r2'] = _dk_calc_bias_momentum_r2(d['ratio'], CN_DK_BIAS_N, CN_DK_MOM_DAY)
+    d['rank_score'] = d['bias_mom'].abs()
+    if CN_DK_R2_QUALITY_ENABLED:
+        d['rank_score'] = d['rank_score'].where(d['signal_r2'] >= CN_DK_R2_QUALITY_THRESHOLD)
     n = len(d)
     start_idx = max(CN_DK_BIAS_N + CN_DK_MOM_DAY, CN_DK_VOL_WINDOW) + 1
     # 方向信号: bias_mom > 0 → +1, 否则 -1 (无冷却期)
@@ -4382,7 +4428,7 @@ def _run_single_pair_dk(a_prices, b_prices):
         _only = ~is_flip & ~is_initial & d['position'].notna()
         d.loc[_only, 'tc'] += 2 * CN_DK_COMMISSION * _chg[_only]
         d['strategy_ret'] = (1 + d['strategy_ret']) * (1 - d['tc']) - 1
-    return d['strategy_ret'], d['bias_mom'].abs(), d
+    return d['strategy_ret'], d['rank_score'], d
 
 def _build_top_n_dk(rets_df, signals_df, n=1):
     """合并多配对策略: 每天选信号最强的n个配对, 等权合并"""
@@ -4613,8 +4659,12 @@ def run_dk_strategy(cn_close, cn_dk_close):
     for name, info in CN_DK_INDICES.items():
         src_df = cn_dk_close if info['src'] == 'dk' else cn_close
         if info['col'] in src_df.columns:
-            idx_series[name] = src_df[info['col']]
-    pairs_all = list(combinations(idx_series.keys(), 2))
+            idx_series[name] = src_df[info['col']].rename(info['col'])
+    pairs_all = [
+        (a_name, b_name)
+        for a_name, b_name in combinations(idx_series.keys(), 2)
+        if _dk_is_official_pair(f"{a_name}/{b_name}")
+    ]
     pair_rets = {}
     pair_abs_mom = {}
     pair_data = {}
@@ -7448,22 +7498,7 @@ def _dk_pair_display(pair):
 
 
 def _dk_top_pair_whitelist_warning(pair, label="Top-1"):
-    pair = "none" if pair is None else str(pair)
-    if pair == "none" or pair in ADK_PRIMARY_PROFIT_PAIRS:
-        return ""
-    allowed = "、".join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)
-    if pair in ADK_WEAK_PAIRS:
-        return (
-            f"⚠️ **ADK弱配对警示:** {label} **{_dk_pair_display(pair)}** 属于弱配对，不在4队白名单内；"
-            f"4队白名单为 {allowed}。仅警示，不自动过滤或改仓。"
-            + chr(10)
-        )
-    invalid = "、".join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)
-    return (
-        f"⛔ **ADK无效配对警示:** {label} **{_dk_pair_display(pair)}** 属于无效配对，不在4队白名单内；"
-        f"4队白名单为 {allowed}。无效配对为 {invalid}。仅警示，不自动过滤或改仓。"
-        + chr(10)
-    )
+    return ""
 
 
 def _dk_pos_str(holding_str):
@@ -9790,13 +9825,14 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 if _knives2:
                     _kn_names2 = "、".join(f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives2)
                     w(f"**防接刀:** 🔪 {_kn_names2} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1\n")
+            w("\n---\n\n### Sub-A-DK: 正式8配对Top-1\n")
             dk_close_bj = beijing_time_str(dk_date, "CN", "close")
-            w(f"数据来源: 中证指数+东财K线 | 5指数10配对Top-1 | 收盘: {dk_close_bj}")
+            w(f"数据来源: 中证指数+东财K线 | 5指数正式{len(ADK_OFFICIAL_PAIR_ORDER)}配对Top-1 | 收盘: {dk_close_bj}")
             if cn_unconfirmed and dk_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            _dk_r2_text = f" | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}" if CN_DK_R2_QUALITY_ENABLED else ""
+            w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _dk_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
             dk_current_name = _dk_pos_str(dk_current)
             hypo_dk_name = _dk_pos_str(hypo_dk)
@@ -10407,13 +10443,14 @@ class CombinedStrategyV77(CombinedStrategyBase):
                     if _knives3:
                         _kn_names3 = "、".join(f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives3)
                         w(f"**防接刀:** 🔪 {_kn_names3} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1\n")
+            w("\n---\n\n### Sub-A-DK: 正式8配对Top-1\n")
             dk_close_bj3 = beijing_time_str(dk_date, "CN", "close")
-            w(f"数据来源: 中证指数+东财K线 | 5指数10配对Top-1 | 收盘: {dk_close_bj3}")
+            w(f"数据来源: 中证指数+东财K线 | 5指数正式{len(ADK_OFFICIAL_PAIR_ORDER)}配对Top-1 | 收盘: {dk_close_bj3}")
             if cn_unconfirmed and dk_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            _dk_r2_text3 = f" | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}" if CN_DK_R2_QUALITY_ENABLED else ""
+            w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text3} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             dk_current_name3 = _dk_pos_str(dk_current)
             _dk_effective_issue_date3 = cn_dk_result.index[-2] if len(cn_dk_result) >= 2 else dk_date
             w(f"**当前已生效Top-1:** **{dk_current_name3}**（对应 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
@@ -10724,12 +10761,10 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
             w("6. 无冷却期限制（T+1已天然保证最少1天间隔）\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
+            w("\n---\n\n### Sub-A-DK: 正式8配对Top-1 (V7.7规则)\n\n| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
             w(f"| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n")
-            w(f"| 配对数 | **C(5,2)=10** | 每天从10配对中选Top-1 |\n")
-            w(f"| ADK四对白名单 | **{len(ADK_PRIMARY_PROFIT_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}；弱/无效Top-1仅触发警示，不自动过滤 |\n")
-            w(f"| ADK弱配对 | **{len(ADK_WEAK_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)} |\n")
-            w(f"| ADK无效配对 | **{len(ADK_INVALID_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)} |\n")
+            w(f"| 配对数 | **正式{len(ADK_OFFICIAL_PAIR_ORDER)}对** | 每天从正式池选Top-1 |\n")
+            w(f"| ADK正式8配对池 | **{len(ADK_OFFICIAL_PAIR_ORDER)}对** | {'、'.join(_dk_pair_display(p) for p in ADK_OFFICIAL_PAIR_ORDER)} |\n")
             w(f"| 均线周期 | **{CN_DK_BIAS_N}日** | 乖离率 = price/MA{CN_DK_BIAS_N} |\n")
             w(f"| 斜率拟合窗口 | **{CN_DK_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 波动率缩放目标 | **{CN_DK_TARGET_VOL:.0%}** | 目标年化波动率 |\n")
@@ -10742,6 +10777,9 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 w(f"| Score衰减触发 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}** | 当前pair score相对本轮trade peak衰减到阈值以下后次日降风险 |\n")
                 w(f"| Score恢复阈值 | **{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** | 恢复到阈值以上后回满仓，并等待新peak后才能再次触发 |\n")
                 w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
+            w(f"| R²质量门槛 | **{'启用' if CN_DK_R2_QUALITY_ENABLED else '关闭'}** | 低于门槛的ADK配对不参与Top-1排名 |\n")
+            if CN_DK_R2_QUALITY_ENABLED:
+                w(f"| R²最低值 | **{CN_DK_R2_QUALITY_THRESHOLD:.2f}** | 仅过滤排名分数，方向仍来自原60/20乖离动量 |\n")
             w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | ratio/MA{CN_DK_BIAS_N}乖离与动量同向且过热时降低ADK敞口 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** | T日收盘判断，T+1按防守敞口执行 |\n")
             w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
@@ -10754,8 +10792,8 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| 冷却期 | **无** | v6.1移除(信号天然平滑) |\n")
             w(f"| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n")
             w("\n**计算过程:**\n")
-            w(f"1. 5指数→C(5,2)=10配对，每对计算乖离动量\n")
-            w(f"2. 选|乖离动量|最大的Top-1配对\n")
+            w(f"1. 5指数→正式{len(ADK_OFFICIAL_PAIR_ORDER)}配对，每对计算乖离动量\n")
+            w(f"2. 从正式池选|乖离动量|最大的Top-1配对\n")
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
             w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
@@ -10981,18 +11019,19 @@ class CombinedStrategyV77(CombinedStrategyBase):
                     w(f"\n🟢 **VolScale调仓! {float(_cn_sc_raw_p):.2f}x → {_cn_next_scale_p:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n")
                 else:
                     w(f"\n✅ 最终敞口: **{_cn_sc_p:.2f}x**（下一交易日维持）\n")
-            w("\n---\n\n### Sub-A-DK: 多配对Top-1 (v6.8.2规则)\n\n")
+            w("\n---\n\n### Sub-A-DK: 正式8配对Top-1 (V7.7规则)\n\n")
             w("**参数配置:**\n\n")
             w("| 参数 | 当前值 |\n|:-|------:|\n")
-            w(f"| ADK四对白名单 | **{'、'.join(_dk_pair_display(p) for p in ADK_PRIMARY_PROFIT_PAIR_ORDER)}** |\n")
-            w(f"| ADK弱配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_WEAK_PAIR_ORDER)}** |\n")
-            w(f"| ADK无效配对 | **{'、'.join(_dk_pair_display(p) for p in ADK_INVALID_PAIR_ORDER)}** |\n")
-            w(f"| 弱/无效Top-1 | **仅警示，不自动过滤** |\n")
+            w(f"| ADK正式8配对池 | **{'、'.join(_dk_pair_display(p) for p in ADK_OFFICIAL_PAIR_ORDER)}** |\n")
+            w(f"| Top-1范围 | **只在正式8配对池内排名** |\n")
             w(f"| Score衰减 | **{'启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭'}** |\n")
             if CN_DK_PAIR_SCORE_DECAY_ENABLED:
                 w(f"| Score触发/恢复 | **{CN_DK_PAIR_SCORE_DECAY_RATIO:.0%} / {CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}** |\n")
                 w(f"| 衰减后仓位 | **{CN_DK_PAIR_SCORE_DERISK_SCALE:.2f}x** |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** |\n")
+            w(f"| R²质量门槛 | **{'启用' if CN_DK_R2_QUALITY_ENABLED else '关闭'}** |\n")
+            if CN_DK_R2_QUALITY_ENABLED:
+                w(f"| R²最低值 | **{CN_DK_R2_QUALITY_THRESHOLD:.2f}** |\n")
             w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
