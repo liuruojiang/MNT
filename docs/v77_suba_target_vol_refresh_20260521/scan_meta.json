@@ -1,0 +1,151 @@
+{
+  "run_id": "20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521",
+  "created_at": "2026-05-21T00:09:12+08:00",
+  "phase": "complete",
+  "project": "v77_suba",
+  "strategy": "v7_7",
+  "subsystem": "sub_a",
+  "repo_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "mnt_bot V 7.7 plus.py",
+  "git_branch": "codex/v77-subb-recent-weighted-momentum",
+  "git_commit": "6025c3bd914b3880aa0c5b89ea413cee5c52a224",
+  "git_status_before": "M .cn_official_cache/0_159915.csv\n M .cn_official_cache/0_399006.csv\n M .cn_official_cache/0_399606.csv\n M .cn_official_cache/1_000001.csv\n M .cn_official_cache/1_000016.csv\n M .cn_official_cache/1_000300.csv\n M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_000905.csv\n M .cn_official_cache/1_515100.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M .cn_official_cache/1_H30269.csv\n M AGENTS.md\n M \"mnt_bot V 7.6 plus.py\"\n M \"mnt_bot V 7.7 plus.py\"\n M mnt_strategy_data_cn.csv\n D tests/test_adk_r2_quality_gate.py\n D tests/test_v77_adk_official_8pair.py\n?? docs/power_wma_cost_only_signal_screen_20260517.md\n?? docs/v77_suba_target_vol_threshold_20260519.md\n?? quant_param_scan_runs/20260512_v77_five_sleeve_real_subd_v20_rebalance_validation/",
+  "git_status_after": "M .cn_official_cache/0_159915.csv\n M .cn_official_cache/0_399006.csv\n M .cn_official_cache/0_399606.csv\n M .cn_official_cache/1_000001.csv\n M .cn_official_cache/1_000016.csv\n M .cn_official_cache/1_000300.csv\n M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_000905.csv\n M .cn_official_cache/1_515100.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M .cn_official_cache/1_H30269.csv\n M AGENTS.md\n M \"mnt_bot V 7.6 plus.py\"\n M \"mnt_bot V 7.7 plus.py\"\n M mnt_strategy_data_cn.csv\n D tests/test_adk_r2_quality_gate.py\n D tests/test_v77_adk_official_8pair.py\n?? docs/power_wma_cost_only_signal_screen_20260517.md\n?? docs/v77_suba_target_vol_threshold_20260519.md\n?? quant_param_scan_runs/20260512_v77_five_sleeve_real_subd_v20_rebalance_validation/\n?? quant_param_scan_runs/20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521/",
+  "scan_type": "current-code target-vol-only grid",
+  "parameter_group": "target_vol_refresh_20260521",
+  "baseline": {
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_SCALE_THRESHOLD": 0.0
+  },
+  "candidate_grid": [
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.1,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.125,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.15,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.175,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.2,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.225,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.25,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.275,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.3,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.325,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.35,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.375,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    },
+    {
+      "scenario": "target_vol_only_current_stack",
+      "target_vol": 0.4,
+      "vol_window": 80,
+      "max_lev": 1.5,
+      "scale_threshold": 0.0
+    }
+  ],
+  "data_snapshot": {
+    "cn_source_mode": "free_fetchers_with_local_cache",
+    "cn_sources": {
+      "1.H20955": "csindex+Sina-proxy:1.000827",
+      "0.399606": "Sina",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905",
+      "1.H11077": "csindex+Sina-proxy:1.000012"
+    },
+    "cn_fetch_errors": {},
+    "cn_start": "2010-06-01",
+    "cn_end": "2026-05-20",
+    "cn_rows": 3876,
+    "duplicate_dates": 0,
+    "volume_start": "2000-01-01",
+    "volume_end": "2026-05-20",
+    "volume_rows": 3874
+  },
+  "cost_model": {
+    "CN_COMMISSION": 0.001,
+    "CN_RF_ANNUAL": 0.03,
+    "slippage": "not separately modeled",
+    "open_impact": "not modeled; Sub-A close-to-close path"
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521\\command_log.txt"
+  },
+  "decision": "watchlist_22p5pct_practical_band_20pct_to_25pct_keep_30pct_aggressive_default",
+  "stability_label": "cap_saturated_plateau",
+  "git_status_after_scan": "M .cn_official_cache/0_159915.csv\n M .cn_official_cache/0_399006.csv\n M .cn_official_cache/0_399606.csv\n M .cn_official_cache/1_000001.csv\n M .cn_official_cache/1_000016.csv\n M .cn_official_cache/1_000300.csv\n M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_000905.csv\n M .cn_official_cache/1_515100.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M .cn_official_cache/1_H30269.csv\n M AGENTS.md\n M \"mnt_bot V 7.6 plus.py\"\n M \"mnt_bot V 7.7 plus.py\"\n M mnt_strategy_data_cn.csv\n D tests/test_adk_r2_quality_gate.py\n D tests/test_v77_adk_official_8pair.py\n?? docs/power_wma_cost_only_signal_screen_20260517.md\n?? docs/v77_suba_target_vol_threshold_20260519.md\n?? quant_param_scan_runs/20260512_v77_five_sleeve_real_subd_v20_rebalance_validation/\n?? quant_param_scan_runs/20260521_v77_suba_v7_7_sub_a_target_vol_refresh_20260521/",
+  "finalized_at": "2026-05-21T00:17:15+08:00"
+}

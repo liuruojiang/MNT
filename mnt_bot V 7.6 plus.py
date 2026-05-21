@@ -2658,6 +2658,21 @@ def _mark_suba_volume_unavailable(cn_result, exc):
     return out
 
 
+def _write_suba_volume_query_warning(msg, cn_result):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    unresolved = False
+    if "suba_volume_unresolved" in cn_result.columns:
+        unresolved = bool(cn_result["suba_volume_unresolved"].fillna(False).astype(bool).any())
+    if not unresolved and "suba_volume_unavailable" in cn_result.columns:
+        unresolved = bool(cn_result["suba_volume_unavailable"].fillna(False).astype(bool).any())
+    if unresolved:
+        msg.write(
+            "⚠️ Sub-A成交额风控不可判定：本次查询继续显示主信号/净值，"
+            "但未用成交额overlay改写仓位；不应按正常仓位执行。\n\n"
+        )
+
+
 def _apply_suba_volume_overlay_policy(
     cn_result,
     close_df,
@@ -7390,6 +7405,53 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         "effective_holding": effective_holding,
     }
 
+def _suba_signal_display_state(cn_result, display_idx=-1):
+    if cn_result is None or len(cn_result) == 0:
+        return {
+            "display_idx": None,
+            "display_date": None,
+            "is_signal": False,
+            "current_holding": "cash",
+            "target_holding": "cash",
+            "post_signal_holding": "cash",
+            "last_signal_date": None,
+        }
+
+    n = len(cn_result)
+    pos = display_idx if display_idx >= 0 else n + display_idx
+    pos = int(np.clip(pos, 0, n - 1))
+    display_date = cn_result.index[pos]
+    post_holding = str(cn_result["holding"].iloc[pos]) if "holding" in cn_result.columns else "cash"
+    is_signal = bool(cn_result["is_signal"].iloc[pos]) if "is_signal" in cn_result.columns else False
+
+    if is_signal and pos > 0 and "holding" in cn_result.columns:
+        current_holding = str(cn_result["holding"].iloc[pos - 1])
+    else:
+        current_holding = post_holding
+
+    target_holding = post_holding
+    if is_signal and "target" in cn_result.columns:
+        raw_target = cn_result["target"].iloc[pos]
+        if raw_target is not None and not pd.isna(raw_target):
+            target_holding = str(raw_target)
+
+    hist = cn_result.iloc[:pos + 1]
+    if "is_signal" in hist.columns:
+        past = hist[hist["is_signal"] == True]
+        last_signal_date = past.index[-1] if len(past) > 0 else display_date
+    else:
+        last_signal_date = display_date
+
+    return {
+        "display_idx": pos,
+        "display_date": display_date,
+        "is_signal": is_signal,
+        "current_holding": current_holding,
+        "target_holding": target_holding,
+        "post_signal_holding": post_holding,
+        "last_signal_date": last_signal_date,
+    }
+
 def _build_dk_rank_rows(cn_dk_result, use_shifted=True, top_n=3):
     """提取DK多配对实时解释信息。use_shifted=True 表示当前已生效信号。"""
     signals_df = cn_dk_result.attrs.get("signals_df")
@@ -8503,8 +8565,9 @@ class CombinedStrategyBase:
                 allow_unresolved_suba_volume=True,
             )
         cn_date = cn_close.index[-1]
-        cn_current = cn_result["holding"].iloc[-1]
-        is_cn_signal = bool(cn_result["is_signal"].iloc[-1]) if "is_signal" in cn_result.columns else False
+        cn_display_state = _suba_signal_display_state(cn_result, -1)
+        cn_current = cn_display_state["current_holding"]
+        is_cn_signal = bool(cn_display_state["is_signal"])
         # v6.1: compute bias momentum and R² for display
         cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A展示")
         all_codes_display = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
@@ -8630,6 +8693,9 @@ class CombinedStrategyBase:
             "prod_sig_a": prod_sig_a, "prod_sig_b": prod_sig_b,
             "cn_date": cn_date,
             "is_cn_signal": is_cn_signal, "cn_current": cn_current,
+            "cn_target": cn_display_state["target_holding"],
+            "cn_post_signal_holding": cn_display_state["post_signal_holding"],
+            "cn_display_state": cn_display_state,
             "hypo_cn": hypo_cn,
             "bias_mom_cn": bias_mom_cn, "r2_cn": r2_cn,
             "scores_today": scores_today,
@@ -9340,14 +9406,17 @@ class CombinedStrategyV76(CombinedStrategyBase):
             w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _cn_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _cn_display_idx = -2 if _cn_intraday else -1
-            _cn_display_date = cn_result.index[_cn_display_idx]
-            _cn_display_holding = cn_result["holding"].iloc[_cn_display_idx]
+            _cn_state = _suba_signal_display_state(cn_result, _cn_display_idx)
+            _cn_display_date = _cn_state["display_date"]
+            _cn_display_holding = _cn_state["current_holding"]
+            _cn_target_holding = _cn_state["target_holding"]
+            _cn_post_holding = _cn_state["post_signal_holding"]
             _cn_display_name = CN_NAMES.get(_cn_display_holding, _cn_display_holding)
-            _cn_display_is_signal = bool(cn_result["is_signal"].iloc[_cn_display_idx]) if "is_signal" in cn_result.columns else False
+            _cn_target_name = CN_NAMES.get(_cn_target_holding, _cn_target_holding)
+            _cn_post_name = CN_NAMES.get(_cn_post_holding, _cn_post_holding)
+            _cn_display_is_signal = bool(_cn_state["is_signal"])
             all_display_codes = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else [])
-            _cn_hist_upto_display = cn_result.iloc[:_cn_display_idx + 1] if _cn_display_idx != -1 else cn_result
-            _past_cn_trades_live = _cn_hist_upto_display[_cn_hist_upto_display["is_signal"] == True]
-            last_cn_sig_date = _past_cn_trades_live.index[-1] if len(_past_cn_trades_live) > 0 else _cn_display_date
+            last_cn_sig_date = _cn_state["last_signal_date"]
             if _cn_intraday:
                 w("⏸️ 今日盘中，今日收盘信号未确认\n")
                 w(f"当前已生效持仓: **{_cn_display_name}**（对应 {_cn_display_date.strftime('%Y-%m-%d')} 收盘确认）\n")
@@ -9355,15 +9424,20 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 w("盘中假设信号仅在“实时信号”中显示\n\n")
             elif _cn_display_is_signal:
                 w(f"✅ 信号日 ({_cn_display_date.strftime('%m-%d')})")
-                w(f"\n持仓: **{_cn_display_name}**\n")
-                w(f"今日收盘信号: **{_cn_display_name}**（已确认）\n\n")
+                w(f"\n执行前持仓: **{_cn_display_name}**\n")
+                w(f"今日收盘信号: **卖出{_cn_display_name} / 买入{_cn_target_name}**（已确认，收盘价执行）\n")
+                w(f"收盘执行后状态: **{_cn_post_name}**\n\n")
             else:
                 w(f"⏸️ 今日无换仓 | 上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
                 w(f"持仓: **{_cn_display_name}**\n")
                 w("今日收盘信号: 无变化（已确认）\n\n")
             signal_info["Sub-A"] = {
                 "is_signal": bool(_cn_display_is_signal),
-                "signal_text": _cn_display_name,
+                "signal_text": (
+                    f"{_cn_display_name}->{_cn_target_name}"
+                    if _cn_display_is_signal and _cn_target_holding != _cn_display_holding
+                    else _cn_display_name
+                ),
                 "note": f"{_cn_display_date.strftime('%Y-%m-%d')}收盘确认; 上次{last_cn_sig_date.strftime('%Y-%m-%d')}",
             }
             # ── Sub-A vol-scaling 杠杆显示 ──
@@ -9886,6 +9960,8 @@ class CombinedStrategyV76(CombinedStrategyBase):
         us_date = d["us_date"]
         is_cn_signal = d["is_cn_signal"]
         cn_current = d["cn_current"]
+        cn_target = d.get("cn_target", d.get("hypo_cn", cn_current))
+        cn_post_signal_holding = d.get("cn_post_signal_holding", cn_target)
         hypo_cn = d["hypo_cn"]
         is_us_signal = d["is_us_signal"]
         current_us_w = d["current_us_w"]
@@ -9948,15 +10024,19 @@ class CombinedStrategyV76(CombinedStrategyBase):
             w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | 同向过热{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             hypo_cn_name = CN_NAMES.get(hypo_cn, hypo_cn)
             cn_current_name = CN_NAMES.get(cn_current, cn_current)
+            cn_target_name = CN_NAMES.get(cn_target, cn_target)
+            cn_post_signal_name = CN_NAMES.get(cn_post_signal_holding, cn_post_signal_holding)
             # v6.1: no cooldown, no MA filter
             if is_cn_signal:
                 w(f"✅ 信号日 ({cn_date.strftime('%m-%d')})")
-                w(f"\n持仓: **{cn_current_name}**\n")
+                w(f"\n执行前持仓: **{cn_current_name}**\n")
                 w(f"假设现在收盘，信号: **{hypo_cn_name}**")
                 if hypo_cn != cn_current:
                     w(" 🟢 需换仓")
                 else:
                     w("（无变化）")
+                if cn_target != cn_current:
+                    w(f"\n收盘执行后状态: **{cn_post_signal_name}**")
                 w("\n\n")
             else:
                 _past_cn_trades_live = cn_result.iloc[:-1]
@@ -10464,7 +10544,10 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
             w("⏳ 正在计算实时参数...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
-            self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+                self._cached_run_strategies(
+                    cn_close, cn_dk_close, us_rot_close, us_prod_daily,
+                    allow_unresolved_suba_volume=True,
+                )
         with _sm() as msg:
             w = msg.write
             cn_date = cn_close.index[-1]
@@ -10482,6 +10565,7 @@ class CombinedStrategyV76(CombinedStrategyBase):
             any_live = any_cn_live or (us_open and us_data_is_today)
             bj_ts = bj_now.strftime('%Y-%m-%d %H:%M')
             w(f"## 📐 实时参数值\n\n")
+            _write_suba_volume_query_warning(msg, cn_result)
             if any_live:
                 live_mkts = []
                 if any_cn_live:
@@ -10957,12 +11041,16 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
-            self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            self._cached_run_strategies(
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily,
+                allow_unresolved_suba_volume=True,
+            )
         # v6.1: No MA filter, placeholder for history display
         _cn_market_above_ma = pd.Series(True, index=cn_close.index)
         with _sm() as msg:
             w = msg.write
             w(f"## 📋 信号历史: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}\n\n")
+            _write_suba_volume_query_warning(msg, cn_result)
             # ===== Sub-A =====
             w("### Sub-A: A股轮动\n\n")
             cn_period = cn_result[(cn_result.index >= start_date) & (cn_result.index <= end_date)]
@@ -11093,7 +11181,10 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略净值...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
-            self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            self._cached_run_strategies(
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily,
+                allow_unresolved_suba_volume=True,
+            )
         cn_daily_ret = cn_result["return"]
         dk_daily_ret = cn_dk_result["return"]
         us_daily_ret = us_rot_result["return"]
@@ -11162,6 +11253,7 @@ class CombinedStrategyV76(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             w(f"## 📈 净值曲线: {period_label}\n\n")
+            _write_suba_volume_query_warning(msg, cn_result)
             if not chart_only:
                 w("| 策略 | 期末净值 | 区间收益 | 最大回撤 |\n|:-|--------:|---------:|---------:|\n")
                 for name in PERFORMANCE_COLUMNS:
@@ -11199,7 +11291,10 @@ class CombinedStrategyV76(CombinedStrategyBase):
                 msg, include_us_live_snapshot=False)
             w("⏳ 正在计算策略...\n")
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
-            self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            self._cached_run_strategies(
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily,
+                allow_unresolved_suba_volume=True,
+            )
         cn_daily_period = cn_result["return"][
             (cn_result.index >= start_date) & (cn_result.index <= end_date)]
         dk_daily_period = cn_dk_result["return"][
@@ -11389,6 +11484,7 @@ class CombinedStrategyV76(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             w(f"## 📈 策略表现: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}\n\n")
+            _write_suba_volume_query_warning(msg, cn_result)
             if chart_bytes:
                 msg.attach_file(
                     name=f"perf_nav_{datetime.now().strftime('%Y%m%d')}.png",

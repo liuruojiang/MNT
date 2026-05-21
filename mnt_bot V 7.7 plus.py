@@ -2294,12 +2294,18 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     return df
 
 
-def _add_cn_bond_column(cn_close, msg=None, context="Sub-A", strict=False):
+def _add_cn_bond_column(cn_close, msg=None, context="Sub-A", strict=False, include_live_snapshot=False):
     cn_close_with_bond = cn_close.copy()
     if CN_BOND_CODE in cn_close_with_bond.columns:
         return cn_close_with_bond
     try:
         bond_df, source = fetch_cn_kline(CN_BOND_CODE)
+        if include_live_snapshot:
+            before_latest = pd.Timestamp(bond_df.index.max()).normalize() if len(bond_df) > 0 else None
+            bond_df = _supplement_today_close(bond_df, CN_BOND_CODE, beijing_now().date(), msg)
+            after_latest = pd.Timestamp(bond_df.index.max()).normalize() if len(bond_df) > 0 else None
+            if before_latest is not None and after_latest is not None and after_latest > before_latest:
+                source = f"{source}+realtime-proxy"
         bond_close = pd.to_numeric(bond_df["close"], errors="coerce").dropna()
         if strict:
             expected_date = pd.Timestamp(cn_close_with_bond.index.max()).normalize()
@@ -3064,10 +3070,48 @@ def _write_volume_warning_panel(msg, compact=False):
         w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
     w("\n---\n\n")
 
+def _write_suba_non_momentum_threshold_alert(msg, cn_result, idx=-1, prefix=""):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    w = msg.write
+
+    def _cell_bool(value):
+        return False if pd.isna(value) else bool(value)
+
+    alerts = []
+    if "suba_volume_rule_on" in cn_result.columns:
+        volume_on = _cell_bool(cn_result["suba_volume_rule_on"].iloc[idx])
+        volume_scale = (
+            cn_result["suba_volume_rule_scale"].iloc[idx]
+            if "suba_volume_rule_scale" in cn_result.columns
+            else (CN_SA_VOLUME_SCALE if volume_on else 1.0)
+        )
+        if volume_on and pd.notna(volume_scale) and float(volume_scale) < 1.0 - 1e-12:
+            action = "清仓" if float(volume_scale) <= 1e-12 else "减仓"
+            alerts.append(f"成交额规则触发{action}，当前执行仓位{float(volume_scale):.0%}")
+    if "suba_same_side_overheat_on" in cn_result.columns:
+        overheat_on = _cell_bool(cn_result["suba_same_side_overheat_on"].iloc[idx])
+        if overheat_on:
+            action = "清仓" if CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE <= 1e-12 else "减仓"
+            bias = (
+                cn_result["suba_same_side_overheat_bias"].iloc[idx]
+                if "suba_same_side_overheat_bias" in cn_result.columns
+                else np.nan
+            )
+            bias_text = f"，当前权益乖离{float(bias):.1%}" if pd.notna(bias) else ""
+            alerts.append(f"MA60过热止盈触发{action}{bias_text}")
+    if alerts:
+        w(
+            f"{prefix}🔴 **Sub-A非动量阈值调仓:** {'；'.join(alerts)}。"
+            "这不是原始动量换仓；最终执行按阈值风控后的仓位。\n"
+        )
+
+
 def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact=False):
     if "suba_volume_rule_on" not in cn_result.columns:
         return
     w = msg.write
+    _write_suba_non_momentum_threshold_alert(msg, cn_result, idx, prefix)
 
     def _cell_bool(value):
         return False if pd.isna(value) else bool(value)
@@ -8494,6 +8538,7 @@ class CombinedStrategyBase:
             msg,
             context="Sub-A国债避险",
             strict=_should_strict_cn_bond(include_cn_live_snapshot, _cn_after_close),
+            include_live_snapshot=include_cn_live_snapshot,
         )
         if _cn_after_close:
             _stale_codes = [secid for secid in CN_STOCK_CODES
