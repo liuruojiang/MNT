@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import atexit
+import errno
 import warnings
 import xlsxwriter
 import time
@@ -58,22 +59,37 @@ if "poe" not in globals():
 
 
 class _CompatStartMessage:
+    def __init__(self):
+        self._stdout_closed = False
+
     def __enter__(self):
         return self
 
     def __exit__(self, *_args):
         return False
 
+    def _write_bytes(self, data):
+        if self._stdout_closed:
+            return
+        try:
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+        except BrokenPipeError:
+            self._stdout_closed = True
+        except OSError as exc:
+            if exc.errno in (errno.EPIPE, errno.EINVAL):
+                self._stdout_closed = True
+                return
+            raise
+
     def write(self, value):
         data = str(value).encode("utf-8", errors="replace")
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
+        self._write_bytes(data)
 
     def attach_file(self, **kwargs):
         name = kwargs.get("name", "attachment")
         data = f"\n[attachment: {name}]\n".encode("utf-8", errors="replace")
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
+        self._write_bytes(data)
 
 
 def _install_poe_native_compat(poe_module):
@@ -6068,12 +6084,14 @@ def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
     if not rows:
         return
     write(f"**{title}:**\n\n")
-    write("| ETF | 官方腿(原始→贡献) | EMA腿(原始→贡献) | 最终目标权重 |\n")
-    write("|:-|------:|------:|------:|\n")
+    write("说明: 官方腿/EMA腿权重均为乘以分腿比例后的最终贡献；UUP/DBMF/KMLM 只在官方腿受通胀开关控制，EMA腿始终按 US_ROT_POOL 全池排名。\n\n")
+    write("| ETF | 官方腿权重 | EMA腿权重 | 混合后权重 | 是否受通胀开关控制 |\n")
+    write("|:-|------:|------:|------:|:-|\n")
     for row in rows:
+        inflation_control = "官方腿受控；EMA腿否" if row["asset"] in US_ROT_MACRO_POOL else "否"
         write(
-            f"| {row['live_name']} | {row['official_raw']:.1%}→{row['official_contrib']:.1%} | "
-            f"{row['ema_raw']:.1%}→{row['ema_contrib']:.1%} | {row['final_weight']:.1%} |\n"
+            f"| {row['live_name']} | {row['official_contrib']:.1%} | "
+            f"{row['ema_contrib']:.1%} | {row['final_weight']:.1%} | {inflation_control} |\n"
         )
     write("\n")
 
@@ -7097,7 +7115,12 @@ def _parse_simple_position_config(text):
         }
         items = {}
         for name, code in name_to_code.items():
-            m = re.search(rf"{re.escape(name)}\s*([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)", body, re.I)
+            m = re.search(
+                rf"{re.escape(name)}\s*(?:持仓|金额|仓位|买入)?\s*"
+                rf"([0-9]+(?:\.[0-9]+)?\s*(?:百万|萬|万|千|k|K)?)",
+                body,
+                re.I,
+            )
             if m:
                 amount = _parse_number_with_unit(m.group(1))
                 if amount and amount > 0:
