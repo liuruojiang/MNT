@@ -1,67 +1,67 @@
-# V7.7 ADK ZZ500 成交额警告栏更新与同步记录
+# V7.7 成交量警告牌更新与清理同步记录
 
 日期：2026-05-23
 
 ## 结论
 
-V7.7 的 Sub-A-DK 成交额警告栏已从原来的沪深300 `MA40 / 16天`，替换为中证500 `MA28 / 5天`。该规则只进入警告栏，不参与 ADK 仓位、收益或净值曲线计算。
+本轮 V7.7 只更新成交量“警告牌/参考提醒”显示，不改变 ADK、微盘、组合仓位、收益或 NAV 计算。
 
-## 选择依据
+- ADK DK 成交额警告牌：保留 2026-05-23 已落地的中证500 `MA28 / 5天` warning-only 条件。
+- 微盘成交量参考提醒：把宽口径条件从中证2000/创业板 `MA53 / 13天 AND` 替换为 `MA35 / 18天 AND`，并在展示层标出参考 `scale=25%`。
+- 微盘成交量政策仍为 `warning_only_reference`：仅提示复核，不自动改写微盘仓位，也不参与微盘净值曲线。
 
-本次依据 `quant_param_scan_runs/20260523_a_us_momentum_combo_v7_7_sub_a_dk_multi_index_amount_filter` 的同口径扫描结果选择 `ZZ500 MA28 / 5天`：
+## 微盘警告牌参数
 
-| 窗口 | 基准年化 | 基准最大回撤 | ZZ500 MA28/5 年化 | ZZ500 MA28/5 最大回撤 | 年化变化 | 回撤变化 |
-|---|---:|---:|---:|---:|---:|---:|
-| 10Y | 19.99% | -15.49% | 17.93% | -15.50% | -2.06pp | -0.01pp |
-| 5Y | 23.79% | -13.80% | 22.92% | -11.82% | -0.86pp | +1.98pp |
-| 3Y | 23.48% | -13.80% | 25.13% | -11.82% | +1.65pp | +1.98pp |
-| 1Y | 19.86% | -13.80% | 25.43% | -11.39% | +5.57pp | +2.41pp |
+代码路径：`mnt_bot V 7.7 plus.py`
 
-`MA34 / 4天` 的综合分更高，但 5Y 年化损失达到 `-1.28pp`，10Y 年化损失达到 `-2.61pp`。`MA28 / 5天` 的近年回撤改善仍然明显，且年化损失更小，更适合 warning-only 显示。
+| 项目 | 当前值 |
+|---|---:|
+| 中证2000成交额口径 | `2.932000` |
+| 中证2000 MA / 连续天数 | `35 / 18` |
+| 创业板成交额口径 | `0.399006` |
+| 创业板 MA / 连续天数 | `35 / 18` |
+| 触发逻辑 | 两者都连续低于各自 MA 达到 18 天 |
+| 参考 scale | `25%` |
+| 执行影响 | 无，仅展示 |
 
-## 代码范围
+展示同步范围：
 
-- `mnt_bot V 7.7 plus.py`
-  - `CN_DK_VOLUME_YELLOW_SECID = "1.000905"`
-  - `CN_DK_VOLUME_YELLOW_LABEL = "中证500"`
-  - `CN_DK_VOLUME_YELLOW_MA = 28`
-  - `CN_DK_VOLUME_YELLOW_DAYS = 5`
-  - UNKNOWN 文案改为引用当前标签，避免继续写死沪深300。
+- `_write_volume_warning_panel(...)`：信号和实时信号面板文案加入 `参考scale=25%`。
+- `_handle_params(...)`：参数页的“微盘成交量参考提醒”和“微盘成交量政策”同步为 `MA35 / 18天 AND` 与 `参考scale=25%`。
+- `_handle_live_params(...)`：实时参数页组合权重区同步展示微盘宽口径 `MA35 / 18天 AND` 与 `参考scale=25%`，避免静态参数页和实时参数页不一致。
 
-未改动：
+## ADK 警告牌记录
 
-- ADK 实际敞口计算。
-- ADK return / NAV 计算。
-- DK 成交额 warning-only 策略定位。
+2026-05-23 的多指数成交额扫描保留为研究证据，来源目录：
+
+`quant_param_scan_runs/20260523_a_us_momentum_combo_v7_7_sub_a_dk_multi_index_amount_filter`
+
+该扫描结论为：不把任何 ADK 成交额过滤器提升为生产交易规则；中证500 `MA28 / 5天` 仅作为 warning-only 展示。核心原因是近年窗口有回撤改善，但 10Y 维度没有通过稳健性要求，且存在年化收益拖累。
 
 ## 测试文件清理
 
-本轮清理了临时 `tests/` 目录，包括：
+本轮清理了最近两天运行验证时生成的可再生测试/缓存文件：
 
-- `tests/test_h20955_proxy_guard.py`
-- `tests/test_v77_dk_volume_warning_rule.py`
-- `tests/__pycache__/`
+- `.pytest_cache/`
+- `__pycache__/`
 
-删除前已备份到：
+清理前已备份到：
 
-- `.codex_backups/20260523_1222_test_cleanup/tests/`
+- `.codex_backups/20260523_135650/`
+
+未删除内容：
+
+- `quant_param_scan_runs/20260523_a_us_momentum_combo_v7_7_sub_a_dk_multi_index_amount_filter/`：该目录是已跟踪的研究证据，不作为临时测试文件删除。
+- `docs/` 下的研究记录：作为结论和同步说明保留。
+- `.cn_official_cache/` 与 `mnt_strategy_data_cn.csv`：属于数据缓存/基础数据，不作为测试文件清理。
 
 ## 验证
 
-测试目录已清理，因此按本仓库规则使用实际脚本编译和扫描产物检查验证：
+本轮同步前使用以下命令验证：
 
-- `python -m py_compile "mnt_bot V 6.5 plus.py" ... "mnt_bot V 7.7 plus.py"`
-- `python C:\Users\Administrator.DESKTOP-95I7VVU\.codex\skills\quant-param-scan\scripts\check_quant_param_scan_artifacts.py --phase complete --strict quant_param_scan_runs\20260523_a_us_momentum_combo_v7_7_sub_a_dk_multi_index_amount_filter`
-- `git diff --check`
+- `python -m py_compile "mnt_bot V 7.7 plus.py"`
+- 常量导入检查：`MA35 / 18天 / reference_scale=0.25 / warning_only_reference`
+- `git diff --check -- "mnt_bot V 7.7 plus.py" "docs/v77_adk_zz500_volume_warning_cleanup_sync_20260523.md"`
+- `git status --short --ignored`
 
-## 同步范围
-
-计划同步到 GitHub 的内容：
-
-- V6.5 到 V7.7 的 H20955 官方数据源保护改动。
-- V7.7 Sub-A 展示层绝对动量过滤说明同步。
-- V7.7 ADK 中证500 `MA28 / 5天` 成交额 warning-only 条件。
-- `20260523` 多指数成交额扫描完整产物与 ZZ500 focus 记录。
-- 本说明文档。
-
-测试目录不保留到云端。
+`py_compile` 会重新生成 `__pycache__/`，验证后再次删除该缓存目录，确保工作区不保留测试缓存。

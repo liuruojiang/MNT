@@ -216,11 +216,12 @@ CN_DK_VOLUME_YELLOW_DAYS = 5
 MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
 MICROCAP_BROAD_VOLUME_ZZ2000_SECID = "2.932000"
-MICROCAP_BROAD_VOLUME_ZZ2000_MA = 53
-MICROCAP_BROAD_VOLUME_ZZ2000_DAYS = 13
+MICROCAP_BROAD_VOLUME_ZZ2000_MA = 35
+MICROCAP_BROAD_VOLUME_ZZ2000_DAYS = 18
 MICROCAP_BROAD_VOLUME_CYB_SECID = "0.399006"
-MICROCAP_BROAD_VOLUME_CYB_MA = 53
-MICROCAP_BROAD_VOLUME_CYB_DAYS = 13
+MICROCAP_BROAD_VOLUME_CYB_MA = 35
+MICROCAP_BROAD_VOLUME_CYB_DAYS = 18
+MICROCAP_BROAD_VOLUME_REFERENCE_SCALE = 0.25
 MICROCAP_DIRECT_VOLUME_CODE = "883418.TI"
 MICROCAP_DIRECT_VOLUME_MA = 53
 MICROCAP_DIRECT_VOLUME_DAYS = 13
@@ -3058,7 +3059,8 @@ def _write_volume_warning_panel(msg, compact=False):
             f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；官方v2.0未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
+            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；参考scale={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}。"
+            f"官方v2.0未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
         if (not zz.get("freshness_ok", True)) or (not cyb.get("freshness_ok", True)):
             w(
@@ -10904,10 +10906,10 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
                 f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
-                f"直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
+                f"参考scale {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}；直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
             w(f"| 微盘接入版本 | **v2.0 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v2.0未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，不自动改写微盘仓位 |\n")
+            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v2.0未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，参考scale={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v2.0和Sub-D由独立脚本查看 |\n")
             w(f"| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n")
     def _handle_live_params(self):
@@ -11412,6 +11414,10 @@ class CombinedStrategyV77(CombinedStrategyBase):
             for name in COMBINED_DISPLAY_ORDER:
                 cw = COMBINED_WEIGHTS[name]
                 w(f"| {name} | {cw:.0%} |\n")
+            w(
+                f"| 微盘成交量参考提醒 | 宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"参考scale {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}；warning-only，不改写微盘仓位 |\n"
+            )
             w(f"| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n")
     def _handle_signal_history(self, query):
         """显示指定日期范围内的所有交易信号（调仓记录）。"""
