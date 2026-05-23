@@ -1,0 +1,6 @@
+﻿source_key,source_label,secid,price_start,price_end,price_rows,amount_source,amount_start,amount_end,amount_rows,formal_eval_start
+sz50,SZ50,1.000016,2010-06-01,2026-05-14,3872,CSIndex official amount,2000-01-01,2026-05-22,5437,2014-10-17
+hs300,HS300,1.000300,2010-06-01,2026-05-14,3872,CSIndex official amount,2000-01-01,2026-05-22,5914,2014-10-17
+zz500,ZZ500,1.000905,2010-06-01,2026-05-14,3872,CSIndex official amount,2000-01-01,2026-05-22,5194,2014-10-17
+zz1000,ZZ1000,1.000852,2010-06-01,2026-05-14,3872,CSIndex official amount,2000-01-01,2026-05-22,5193,2014-10-17
+cyb,CYB,0.399006,2010-06-01,2026-05-14,3872,Sohu amount,2010-06-01,2026-05-22,3874,2014-10-17

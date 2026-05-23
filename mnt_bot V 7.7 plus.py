@@ -208,10 +208,10 @@ CN_CSI_AMOUNT_INDEX_CODES = {
 
 # DK和微盘成交额规则只做清仓警示，不参与本脚本仓位/回测降仓。
 CN_DK_VOLUME_POLICY = "warning_only"
-CN_DK_VOLUME_YELLOW_SECID = "1.000300"
-CN_DK_VOLUME_YELLOW_LABEL = "沪深300"
-CN_DK_VOLUME_YELLOW_MA = 40
-CN_DK_VOLUME_YELLOW_DAYS = 16
+CN_DK_VOLUME_YELLOW_SECID = "1.000905"
+CN_DK_VOLUME_YELLOW_LABEL = "中证500"
+CN_DK_VOLUME_YELLOW_MA = 28
+CN_DK_VOLUME_YELLOW_DAYS = 5
 
 MICROCAP_VOLUME_POLICY = "warning_only_reference"
 MICROCAP_BROAD_VOLUME_RULE_MODE = "and"
@@ -260,7 +260,7 @@ CN_CSINDEX_CANDIDATES = {
 
 # 代理全收益指数，使用价格指数用于从第三方(EastMoney/Sina)获取数据，规避中证官网实时失效问题
 CN_H_PROXY_SECIDS = {
-    "1.H20955": "1.000827", # 中证红利低波100 -> 中证红利低波动100指数(价格)
+    # H20955 must use CSIndex official data/cache only.
     "1.H00016": "1.000016", # 上证50全收益 -> 上证50(价格)
     "1.H00852": "1.000852", # 中证1000全收益 -> 中证1000(价格)
     "1.H00905": "1.000905", # 中证500全收益 -> 中证500(价格)
@@ -3032,7 +3032,7 @@ def _write_volume_warning_panel(msg, compact=False):
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- Sub-A-DK成交额清仓警示: **UNKNOWN** | 本次未取到沪深300成交额，无法确认警示条件。{suffix}\n")
+        w(f"- Sub-A-DK成交额清仓警示: **UNKNOWN** | 本次未取到{CN_DK_VOLUME_YELLOW_LABEL}成交额，无法确认警示条件。{suffix}\n")
     try:
         zz = _volume_warning_status(
             MICROCAP_BROAD_VOLUME_ZZ2000_SECID,
@@ -7570,8 +7570,27 @@ def _series_value_at(series, date, pos):
         pass
     return np.nan
 
+def _suba_abs_mom_pass(abs_val):
+    return pd.notna(abs_val) and float(abs_val) > CN_ABS_MOM_THRESHOLD
+
+def _suba_filter_status(bm, r2_val, abs_val):
+    if pd.notna(bm) and float(bm) <= 0:
+        return "动量≤0 ⛔"
+    if pd.isna(r2_val):
+        return "R²=N/A ❌"
+    if float(r2_val) < CN_R2_THRESHOLD:
+        return f"R²={float(r2_val):.3f} ❌"
+    if pd.isna(abs_val):
+        return f"{CN_ABS_MOM_DAY}日动量=N/A ❌"
+    if float(abs_val) <= CN_ABS_MOM_THRESHOLD:
+        return f"{CN_ABS_MOM_DAY}日动量={float(abs_val):+.1%} ≤ {CN_ABS_MOM_THRESHOLD:.0%} ❌"
+    return f"R²={float(r2_val):.3f} ✅ / {CN_ABS_MOM_DAY}日动量={float(abs_val):+.1%} ✅"
+
+def _format_suba_abs_mom(abs_val):
+    return f"{float(abs_val):+.1%}" if pd.notna(abs_val) else "—"
+
 def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
-                                   current_idx=-1, effective_cutoff_idx=None):
+                                   abs_mom=None, current_idx=-1, effective_cutoff_idx=None):
     if cn_result is None or len(cn_result) == 0:
         return [], {
             "effective_date": None,
@@ -7613,14 +7632,9 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
         r2_current = _series_value_at(r2.get(code), current_date, current_pos)
         bm_effective = _series_value_at(bias_mom.get(code), effective_date, effective_pos)
         r2_effective = _series_value_at(r2.get(code), effective_date, effective_pos)
-        if not np.isnan(bm_current) and bm_current <= 0:
-            status = "当前动量≤0 ⛔"
-        elif not np.isnan(r2_current) and r2_current >= CN_R2_THRESHOLD:
-            status = f"当前R²={r2_current:.3f} ✅"
-        elif not np.isnan(r2_current):
-            status = f"当前R²={r2_current:.3f} ❌"
-        else:
-            status = "N/A"
+        abs_current = _series_value_at(abs_mom.get(code), current_date, current_pos) if abs_mom else np.nan
+        abs_effective = _series_value_at(abs_mom.get(code), effective_date, effective_pos) if abs_mom else np.nan
+        status = _suba_filter_status(bm_current, r2_current, abs_current)
         rows.append({
             "code": code,
             "asset_name": CN_NAMES.get(code, code),
@@ -7629,6 +7643,8 @@ def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes,
             "current_momentum": bm_current,
             "effective_r2": r2_effective,
             "current_r2": r2_current,
+            "effective_abs_mom": abs_effective,
+            "current_abs_mom": abs_current,
             "status": status,
         })
     rows.sort(key=lambda row: row["current_momentum"], reverse=True)
@@ -9032,7 +9048,7 @@ class CombinedStrategyBase:
             "cn_post_signal_holding": cn_display_state["post_signal_holding"],
             "cn_display_state": cn_display_state,
             "hypo_cn": hypo_cn,
-            "bias_mom_cn": bias_mom_cn, "r2_cn": r2_cn,
+            "bias_mom_cn": bias_mom_cn, "r2_cn": r2_cn, "abs_mom_cn": abs_mom_cn,
             "scores_today": scores_today,
             "dk_date": dk_date,
             "is_dk_signal": is_dk_signal, "dk_current": dk_current,
@@ -9705,6 +9721,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
         last_confirmed_us_scale = d.get("last_confirmed_us_scale", us_scale)
         bias_mom_cn = d.get("bias_mom_cn", {})
         r2_cn = d.get("r2_cn", {})
+        abs_mom_cn = d.get("abs_mom_cn", {})
         us_signal_set = d["us_signal_set"]
         rot_w_cols = d["rot_w_cols"]
         us_rot_result = d["us_rot_result"]
@@ -9738,7 +9755,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            w(f"阈值: R²≥{CN_R2_THRESHOLD:.2f} | {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%} | 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _cn_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _cn_display_idx = -2 if _cn_intraday else -1
             _cn_state = _suba_signal_display_state(cn_result, _cn_display_idx)
@@ -9808,27 +9825,23 @@ class CombinedStrategyV77(CombinedStrategyBase):
             # v6.1: 乖离动量 + R² 排名表
             _bm_latest_live = {c: float(bias_mom_cn[c].iloc[_cn_display_idx]) for c in all_display_codes if c in bias_mom_cn and not np.isnan(bias_mom_cn[c].iloc[_cn_display_idx])}
             _r2_latest_live = {c: float(r2_cn[c].iloc[_cn_display_idx]) for c in all_display_codes if c in r2_cn and not np.isnan(r2_cn[c].iloc[_cn_display_idx])}
+            _abs_latest_live = {c: float(abs_mom_cn[c].iloc[_cn_display_idx]) for c in all_display_codes if c in abs_mom_cn and not np.isnan(abs_mom_cn[c].iloc[_cn_display_idx])}
             _sorted_live = sorted(_bm_latest_live.keys(), key=lambda c: _bm_latest_live.get(c, float("-inf")), reverse=True)
-            w(f"**排名** (乖离动量):\n\n")
-            w(f"| # | 资产 | 乖离动量 | R² | 状态 |\n")
-            w("|:-|:-|------:|------:|:-|\n")
+            w(f"**排名** (乖离动量排序 + R²/{CN_ABS_MOM_DAY}日动量过滤):\n\n")
+            w(f"| # | 资产 | 乖离动量 | R² | {CN_ABS_MOM_DAY}日动量 | 状态 |\n")
+            w("|:-|:-|------:|------:|------:|:-|\n")
             for _rank, _c in enumerate(_sorted_live, 1):
                 _name = CN_NAMES.get(_c, _c)
                 _bm = _bm_latest_live.get(_c, float("nan"))
                 _r2v = _r2_latest_live.get(_c, float("nan"))
+                _absv = _abs_latest_live.get(_c, float("nan"))
                 _hold = " 👈" if _c == _cn_display_holding else ""
                 _top = " 🎯" if _rank == 1 else ""
-                if not np.isnan(_bm) and _bm <= 0:
-                    _status = "动量≤0 ⛔"
-                elif not np.isnan(_r2v) and _r2v >= CN_R2_THRESHOLD:
-                    _status = f"R²={_r2v:.3f} ✅"
-                elif not np.isnan(_r2v):
-                    _status = f"R²={_r2v:.3f} ❌"
-                else:
-                    _status = "N/A"
+                _status = _suba_filter_status(_bm, _r2v, _absv)
                 _bm_str = f"{_bm:+.1f}" if not np.isnan(_bm) else "N/A"
                 _r2_str = f"{_r2v:.3f}" if not np.isnan(_r2v) else "—"
-                w(f"| {_rank}{_top} | {_name}{_hold} | {_bm_str} | {_r2_str} | {_status} |\n")
+                _abs_str = _format_suba_abs_mom(_absv)
+                w(f"| {_rank}{_top} | {_name}{_hold} | {_bm_str} | {_r2_str} | {_abs_str} | {_status} |\n")
             if _sorted_live:
                 _best = _sorted_live[0]
                 _best_name = CN_NAMES.get(_best, _best)
@@ -9838,8 +9851,11 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 else:
                     _r2v_best = _r2_latest_live.get(_best, float("nan"))
                     _r2_pass = not np.isnan(_r2v_best) and _r2v_best >= CN_R2_THRESHOLD
+                    _abs_best = _abs_latest_live.get(_best, float("nan"))
+                    _abs_pass = _suba_abs_mom_pass(_abs_best)
                     w(f"\n**选择:** 乖离动量最高 -> **{_best_name}**\n")
                     w(f"**R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
+                    w(f"**绝对动量过滤:** {CN_ABS_MOM_DAY}日={_format_suba_abs_mom(_abs_best)} / 阈值>{CN_ABS_MOM_THRESHOLD:.0%} -> {'**通过** ✅' if _abs_pass else '**未通过** ❌ -> 持现金'}\n")
                 # Buffer保护显示
                 if CN_SWITCH_BUFFER > 1.0 and _best != _cn_display_holding and _cn_display_holding != "cash":
                     _hold_bm = _bm_latest_live.get(_cn_display_holding, float("nan"))
@@ -10321,6 +10337,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
         # v6.1: bias momentum + R² display data
         bias_mom_cn = d["bias_mom_cn"]
         r2_cn = d["r2_cn"]
+        abs_mom_cn = d["abs_mom_cn"]
         scores_today = d["scores_today"]
         cn_result = d["cn_result"]
         cn_dk_result = d["cn_dk_result"]
@@ -10366,7 +10383,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             if cn_unconfirmed and cn_data_is_today:
                 w(" ⚡盘中实时")
             w("\n")
-            w(f"阈值: 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
+            w(f"阈值: R²≥{CN_R2_THRESHOLD:.2f} | {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%} | 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             hypo_cn_name = CN_NAMES.get(hypo_cn, hypo_cn)
             cn_current_name = CN_NAMES.get(cn_current, cn_current)
             cn_target_name = CN_NAMES.get(cn_target, cn_target)
@@ -10426,27 +10443,23 @@ class CombinedStrategyV77(CombinedStrategyBase):
             all_display_codes_live2 = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else [])
             _bm_latest_live2 = {c: float(bias_mom_cn[c].iloc[-1]) for c in all_display_codes_live2 if c in bias_mom_cn and not np.isnan(bias_mom_cn[c].iloc[-1])}
             _r2_latest_live2 = {c: float(r2_cn[c].iloc[-1]) for c in all_display_codes_live2 if c in r2_cn and not np.isnan(r2_cn[c].iloc[-1])}
+            _abs_latest_live2 = {c: float(abs_mom_cn[c].iloc[-1]) for c in all_display_codes_live2 if c in abs_mom_cn and not np.isnan(abs_mom_cn[c].iloc[-1])}
             _sorted_live2 = sorted(_bm_latest_live2.keys(), key=lambda c: _bm_latest_live2.get(c, float("-inf")), reverse=True)
-            w(f"**乖离动量排名** (v7.7: bias_mom + R² filter, 10Y bond):\n\n")
-            w(f"| # | 资产 | 乖离动量 | R²({CN_R2_WINDOW}) | 状态 |\n")
-            w("|:-|:-|------:|------:|:-|\n")
+            w(f"**乖离动量排名** (v7.7: bias_mom排序 + R²/{CN_ABS_MOM_DAY}日动量过滤, 10Y bond):\n\n")
+            w(f"| # | 资产 | 乖离动量 | R²({CN_R2_WINDOW}) | {CN_ABS_MOM_DAY}日动量 | 状态 |\n")
+            w("|:-|:-|------:|------:|------:|:-|\n")
             for _rank, _c in enumerate(_sorted_live2, 1):
                 _name = CN_NAMES.get(_c, _c)
                 _bm = _bm_latest_live2.get(_c, float("nan"))
                 _r2v = _r2_latest_live2.get(_c, float("nan"))
+                _absv = _abs_latest_live2.get(_c, float("nan"))
                 _hold = " 👈" if _c == cn_current else ""
                 _top = " 🎯" if _rank == 1 else ""
-                if not np.isnan(_bm) and _bm <= 0:
-                    _status = "动量≤0 ⛔"
-                elif not np.isnan(_r2v) and _r2v >= CN_R2_THRESHOLD:
-                    _status = f"R²={_r2v:.3f} ✅"
-                elif not np.isnan(_r2v):
-                    _status = f"R²={_r2v:.3f} ❌"
-                else:
-                    _status = "N/A"
+                _status = _suba_filter_status(_bm, _r2v, _absv)
                 _bm_str = f"{_bm:+.1f}" if not np.isnan(_bm) else "N/A"
                 _r2_str = f"{_r2v:.3f}" if not np.isnan(_r2v) else "—"
-                w(f"| {_rank}{_top} | {_name}{_hold} | {_bm_str} | {_r2_str} | {_status} |\n")
+                _abs_str = _format_suba_abs_mom(_absv)
+                w(f"| {_rank}{_top} | {_name}{_hold} | {_bm_str} | {_r2_str} | {_abs_str} | {_status} |\n")
             if _sorted_live2:
                 _best2 = _sorted_live2[0]
                 _best2_name = CN_NAMES.get(_best2, _best2)
@@ -10456,8 +10469,11 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 else:
                     _r2v_best2 = _r2_latest_live2.get(_best2, float("nan"))
                     _r2_pass2 = not np.isnan(_r2v_best2) and _r2v_best2 >= CN_R2_THRESHOLD
+                    _abs_best2 = _abs_latest_live2.get(_best2, float("nan"))
+                    _abs_pass2 = _suba_abs_mom_pass(_abs_best2)
                     w(f"\n**选择:** 乖离动量最高 -> **{_best2_name}**\n")
                     w(f"**R²过滤:** R²({CN_R2_WINDOW})={_r2v_best2:.3f} -> {'**通过** ✅' if _r2_pass2 else '**未通过** ❌ -> 持现金'}\n")
+                    w(f"**绝对动量过滤:** {CN_ABS_MOM_DAY}日={_format_suba_abs_mom(_abs_best2)} / 阈值>{CN_ABS_MOM_THRESHOLD:.0%} -> {'**通过** ✅' if _abs_pass2 else '**未通过** ❌ -> 持现金'}\n")
                 # Buffer保护显示
                 if CN_SWITCH_BUFFER > 1.0 and _best2 != cn_current and cn_current != "cash":
                     _hold_bm2 = _bm_latest_live2.get(cn_current, float("nan"))
@@ -10772,7 +10788,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| 均线周期 | **{CN_BIAS_N}日** | price/MA{CN_BIAS_N}计算乖离率 |\n")
             w(f"| 斜率拟合窗口 | **{CN_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
             w(f"| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** | 最近日权重更高；v7.7正式信号使用linear_recent_3x |\n")
-            w(f"| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}** | 候选资产近{CN_ABS_MOM_DAY}日收益需高于阈值，否则持现金 |\n")
+            w(f"| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}** | 候选资产近{CN_ABS_MOM_DAY}日实际涨跌幅需高于阈值，否则持现金；这不是上面的乖离动量分数 |\n")
             w(f"| R²滚动窗口 | **{CN_R2_WINDOW}日** | 趋势强度评估 |\n")
             w(f"| R²门槛 | **{CN_R2_THRESHOLD}** | 所有资产(含国债)需R²≥{CN_R2_THRESHOLD}才持有 |\n")
             w(f"| 国债 | **{CN_BOND_NAME}({CN_BOND_CODE})** | 避险资产，同样参与R²过滤 |\n")
@@ -10800,9 +10816,9 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| 冷却期 | **无** | v6.1移除（乖离动量信号天然平滑） |\n")
             w("\n**计算过程:**\n")
             w(f"1. 乖离率: `bias = price / MA({CN_BIAS_N})`\n")
-            w(f"2. 乖离动量: 最近{CN_MOM_DAY}日bias归一化后按1.0→{CN_BIAS_MOM_WEIGHT_END:.1f}加权线性拟合斜率×10000\n")
+            w(f"2. 乖离动量: 最近{CN_MOM_DAY}日bias归一化后按1.0→{CN_BIAS_MOM_WEIGHT_END:.1f}加权线性拟合斜率×10000，用于排序\n")
             w("3. 选乖离动量最高的资产\n")
-            w(f"4. 候选资产需同时满足R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD}、近{CN_ABS_MOM_DAY}日收益>{CN_ABS_MOM_THRESHOLD:.0%}，否则持现金\n")
+            w(f"4. 候选资产需同时满足R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD}、近{CN_ABS_MOM_DAY}日实际收益>{CN_ABS_MOM_THRESHOLD:.0%}，否则持现金\n")
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
             w("6. 无冷却期限制（T+1已天然保证最少1天间隔）\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
@@ -10941,7 +10957,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** |\n")
             w(f"| 补仓等待天数 | **{'等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日'}** |\n")
             w(f"| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** |\n")
-            w(f"| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}** |\n")
+            w(f"| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}**（近{CN_ABS_MOM_DAY}日实际涨跌幅，不是乖离动量分数） |\n")
             w(f"| Cash Overlay | **{'启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭'}** |\n")
             w(f"| Cash触发阈值 | **{CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}** |\n")
             w(f"| Cash恢复阈值 | **{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%}** |\n")
@@ -10957,28 +10973,31 @@ class CombinedStrategyV77(CombinedStrategyBase):
             all_codes_lp = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
             bias_mom_lp = {}
             r2_lp = {}
+            abs_mom_lp = {}
             for code in all_codes_lp:
                 if code in cn_close_with_bond.columns:
                     bias_mom_lp[code] = calc_bias_momentum(cn_close_with_bond[code])
                     r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
+                    abs_mom_lp[code] = cn_close_with_bond[code].pct_change(CN_ABS_MOM_DAY)
             _cn_params_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
             _effective_cutoff_idx = -2 if _cn_params_intraday else -1
             _suba_rows, _suba_meta = _build_suba_momentum_rank_rows(
                 cn_result, bias_mom_lp, r2_lp, all_codes_lp,
+                abs_mom=abs_mom_lp,
                 current_idx=-1, effective_cutoff_idx=_effective_cutoff_idx)
             _cn_effective_date = _suba_meta["effective_date"]
             _cn_current_date = _suba_meta["current_date"]
             _cn_effective_holding = _suba_meta["effective_holding"]
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d") if _cn_effective_date is not None else "N/A"
             _current_label = _cn_current_date.strftime("%Y-%m-%d") if _cn_current_date is not None else cn_date.strftime("%Y-%m-%d")
-            w(f"**① Sub-A 乖离动量 & R² 排名（生效 vs 当前）:**\n\n")
+            w(f"**① Sub-A 乖离动量排序 & R²/{CN_ABS_MOM_DAY}日动量过滤（生效 vs 当前）:**\n\n")
             w("生效列 = 当前已生效持仓开始确认日；当前列 = 最新实时/收盘快照，用来看持仓动量变化。\n\n")
             if _cn_params_intraday:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前列为 **{_current_label} 盘中快照**，若现在收盘才会生效。\n\n")
             else:
                 w(f"当前已生效: **{CN_NAMES.get(_cn_effective_holding, _cn_effective_holding)}**（{_effective_label} 收盘确认）；当前快照日期 **{_current_label}**。\n\n")
-            w(f"| 排名 | 资产 | 标记 | 生效动量 | 当前动量 | 生效R² | 当前R² | 状态 |\n")
-            w("|:-:|:-|:-|------:|------:|------:|------:|:-|\n")
+            w(f"| 排名 | 资产 | 标记 | 生效动量 | 当前动量 | 生效R² | 当前R² | 生效{CN_ABS_MOM_DAY}日动量 | 当前{CN_ABS_MOM_DAY}日动量 | 状态 |\n")
+            w("|:-:|:-|:-|------:|------:|------:|------:|------:|------:|:-|\n")
             for row in _suba_rows:
                 rank_marker = " 🏆" if row["rank"] == 1 else ""
                 marker = row["marker"] or "—"
@@ -10986,11 +11005,15 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 bm = row["current_momentum"]
                 r2_eff = row["effective_r2"]
                 r2v = row["current_r2"]
+                abs_eff = row["effective_abs_mom"]
+                absv = row["current_abs_mom"]
                 bm_eff_str = f"{bm_eff:+.1f}" if not np.isnan(bm_eff) else "N/A"
                 bm_str = f"{bm:+.1f}" if not np.isnan(bm) else "N/A"
                 r2_eff_str = f"{r2_eff:.3f}" if not np.isnan(r2_eff) else "—"
                 r2_str = f"{r2v:.3f}" if not np.isnan(r2v) else "—"
-                w(f"| {row['rank']}{rank_marker} | {row['asset_name']} | {marker} | {bm_eff_str} | {bm_str} | {r2_eff_str} | {r2_str} | {row['status']} |\n")
+                abs_eff_str = _format_suba_abs_mom(abs_eff)
+                abs_str = _format_suba_abs_mom(absv)
+                w(f"| {row['rank']}{rank_marker} | {row['asset_name']} | {marker} | {bm_eff_str} | {bm_str} | {r2_eff_str} | {r2_str} | {abs_eff_str} | {abs_str} | {row['status']} |\n")
             best_row = _suba_rows[0] if _suba_rows else None
             if best_row:
                 best_name = best_row["asset_name"]
@@ -11001,8 +11024,11 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 else:
                     _r2v_best = best_row["current_r2"]
                     _r2_pass = not np.isnan(_r2v_best) and _r2v_best >= CN_R2_THRESHOLD
+                    _abs_best = best_row["current_abs_mom"]
+                    _abs_pass = _suba_abs_mom_pass(_abs_best)
                     w(f"\n**② 若现在收盘:** 当前动量最高 -> **{best_name}**\n")
                     w(f"**③ 当前R²过滤:** R²({CN_R2_WINDOW})={_r2v_best:.3f} -> {'**通过** ✅' if _r2_pass else '**未通过** ❌ -> 持现金'}\n")
+                    w(f"**③ 当前绝对动量过滤:** {CN_ABS_MOM_DAY}日={_format_suba_abs_mom(_abs_best)} / 阈值>{CN_ABS_MOM_THRESHOLD:.0%} -> {'**通过** ✅' if _abs_pass else '**未通过** ❌ -> 持现金'}\n")
                 # Buffer保护显示
                 if CN_SWITCH_BUFFER > 1.0 and best_code_lp != _cn_effective_holding and _cn_effective_holding != "cash":
                     _hold_row_lp = next((r for r in _suba_rows if r["code"] == _cn_effective_holding), None)
