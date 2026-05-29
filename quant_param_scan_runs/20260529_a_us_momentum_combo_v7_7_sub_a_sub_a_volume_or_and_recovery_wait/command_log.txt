@@ -1,0 +1,12 @@
+init_quant_param_scan_run.py
+run_id=20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait
+project=a_us_momentum_combo
+strategy=v7_7_sub_a
+subsystem=sub_a
+parameter_group=volume_or_and_recovery_wait
+repo=D:\动量策略\A股美股动量组合策略
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T16:25:34+08:00
+decision=prefer_or_with_recovery_wait_0_or_1_research_only
+stability_label=or_more_defensive_and_recovery_wait_beyond_1_costly

@@ -1,0 +1,99 @@
+{
+  "run_id": "20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid",
+  "created_at": "2026-05-29T15:06:12",
+  "updated_at": "2026-05-29T15:17:59",
+  "project": "a_us_momentum_combo",
+  "strategy": "v7_7_sub_a",
+  "parameter_group": "volume_overlay_robustness_grid",
+  "scan_type": "robustness_grid",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "git_branch": "main",
+  "git_commit": "01b5f76bafe6548549e5f6ec83e7bc55fc6fb40a",
+  "git_status_before": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_no_volume_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid/",
+  "git_status_after": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_no_volume_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid/",
+  "baseline": "amount_ma15_zz3_cyb5_scale0",
+  "candidate_grid": {
+    "fields": [
+      "amount",
+      "volume"
+    ],
+    "ma_values": [
+      10,
+      15,
+      20,
+      30
+    ],
+    "zz_days_values": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "cyb_days_values": [
+      3,
+      4,
+      5,
+      6
+    ],
+    "scale_values": [
+      0.0,
+      0.25,
+      0.5,
+      0.75
+    ],
+    "candidate_count_without_no_overlay": 512
+  },
+  "decision": "research_only_no_production_change",
+  "stability_label": "deep_robustness_grid_current_v77_close_confirmed",
+  "cost_model": {
+    "CN_COMMISSION": 0.001,
+    "return_column": "cn_result[return]",
+    "state_machine_costs": true,
+    "open_impact": "not modeled separately; production close-to-close Sub-A path"
+  },
+  "data_snapshot": {
+    "start_date": "2010-09-29",
+    "end_date": "2026-05-28",
+    "close_confirmed": true,
+    "dropped_unconfirmed_current_day": true,
+    "cn_sources": {
+      "1.H20955": "csindex",
+      "0.399606": "EastMoney",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905"
+    },
+    "volume_sources": {
+      "zz2000": "CSIndex official amount",
+      "cyb": "Sohu amount"
+    }
+  },
+  "defaults": {
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_COMMISSION": 0.001,
+    "CN_SA_CASH_OVERLAY_ENABLED": false,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_VOLUME_SCALE": 0.0,
+    "CN_SA_VOLUME_ZZ2000_MA": 15,
+    "CN_SA_VOLUME_ZZ2000_DAYS": 3,
+    "CN_SA_VOLUME_CYB_MA": 15,
+    "CN_SA_VOLUME_CYB_DAYS": 5
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid\\command_log.txt"
+  },
+  "notes": [
+    "No production strategy file was edited.",
+    "The grid uses the same production overlay timing and return rebuild function.",
+    "Composite scores are descriptive and are not a production recommendation."
+  ],
+  "phase": "complete",
+  "finalized_at": "2026-05-29T15:18:27+08:00"
+}

@@ -1,0 +1,6 @@
+2026-05-23T21:21:59.739295 python quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/run_scan.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-23T21:27:00+08:00
+decision=do_not_replace_original_momentum_yet; best v2.5 log-WLS rows are research leads only because recent-window returns and Sharpe remain weaker than the Sub-A original momentum baseline
+stability_label=research_lead_not_promoted

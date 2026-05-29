@@ -1,0 +1,14 @@
+init_quant_param_scan_run.py
+run_id=20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier
+project=a_us_momentum_combo
+strategy=V7.7
+subsystem=Sub-A
+parameter_group=target_vol_max_leverage_balanced_frontier
+repo=D:\动量策略\A股美股动量组合策略
+
+2026-05-29T14:34:38.662357+08:00 python D:\动量策略\A股美股动量组合策略\quant_param_scan_runs\20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier\run_scan.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T14:35:51+08:00
+decision=research_recommend_target_vol_30_max_lev_1p15_balanced_midpoint_no_production_change
+stability_label=balanced_frontier_30vol_1p15cap

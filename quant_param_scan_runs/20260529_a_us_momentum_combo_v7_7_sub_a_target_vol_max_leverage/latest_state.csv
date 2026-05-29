@@ -1,0 +1,16 @@
+﻿candidate,CN_TARGET_VOL,CN_MAX_LEV,CN_VOL_WINDOW,date,holding,effective_holding,base_weight,weight,scale_raw,realized_vol,volume_rule_on,overheat_on
+tv15_lev1p0,0.15,1.0,80,2026-05-28,cash,cash,0.0,0.0,1.0,0.14290196313227474,True,False
+tv15_lev1p2,0.15,1.2,80,2026-05-28,cash,cash,0.0,0.0,1.0775470502902833,0.14290196313227474,True,False
+tv15_lev1p5,0.15,1.5,80,2026-05-28,cash,cash,0.0,0.0,1.0775470502902833,0.14290196313227474,True,False
+tv20_lev1p0,0.2,1.0,80,2026-05-28,cash,cash,0.0,0.0,1.0,0.14290196313227474,True,False
+tv20_lev1p2,0.2,1.2,80,2026-05-28,cash,cash,0.0,0.0,1.2,0.14290196313227474,True,False
+tv20_lev1p5,0.2,1.5,80,2026-05-28,cash,cash,0.0,0.0,1.4367294003870446,0.14290196313227474,True,False
+tv25_lev1p0,0.25,1.0,80,2026-05-28,cash,cash,0.0,0.0,1.0,0.14290196313227474,True,False
+tv25_lev1p2,0.25,1.2,80,2026-05-28,cash,cash,0.0,0.0,1.2,0.14290196313227474,True,False
+tv25_lev1p5,0.25,1.5,80,2026-05-28,cash,cash,0.0,0.0,1.5,0.14290196313227474,True,False
+tv30_lev1p0,0.3,1.0,80,2026-05-28,cash,cash,0.0,0.0,1.0,0.14290196313227474,True,False
+tv30_lev1p2,0.3,1.2,80,2026-05-28,cash,cash,0.0,0.0,1.2,0.14290196313227474,True,False
+tv30_lev1p5,0.3,1.5,80,2026-05-28,cash,cash,0.0,0.0,1.5,0.14290196313227474,True,False
+tv35_lev1p0,0.35,1.0,80,2026-05-28,cash,cash,0.0,0.0,1.0,0.14290196313227474,True,False
+tv35_lev1p2,0.35,1.2,80,2026-05-28,cash,cash,0.0,0.0,1.2,0.14290196313227474,True,False
+tv35_lev1p5,0.35,1.5,80,2026-05-28,cash,cash,0.0,0.0,1.5,0.14290196313227474,True,False

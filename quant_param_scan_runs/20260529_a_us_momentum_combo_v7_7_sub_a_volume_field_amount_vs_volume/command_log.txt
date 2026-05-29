@@ -1,0 +1,13 @@
+init_quant_param_scan_run.py
+run_id=20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume
+project=a_us_momentum_combo
+strategy=v7_7
+subsystem=sub_a
+parameter_group=volume_field_amount_vs_volume
+repo=D:\动量策略\A股美股动量组合策略
+python inline: V7.7 Sub-A compare amount overlay vs volume overlay vs no overlay, close-confirmed
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T14:58:53+08:00
+decision=research_only_no_production_change
+stability_label=single_field_current_v77_close_confirmed

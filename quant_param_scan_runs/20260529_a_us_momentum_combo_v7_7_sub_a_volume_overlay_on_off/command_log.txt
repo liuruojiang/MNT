@@ -1,0 +1,8 @@
+python inline: import mnt_bot V 7.7 plus.py; close-confirmed Sub-A volume overlay on/off comparison
+python inline: rewrite artifacts to quant-param-scan schema, add last_1y required columns
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T14:36:34+08:00
+decision=research_only_no_production_change
+stability_label=single_toggle_current_v77_close_confirmed
+python inline: add strict-check output keys to scan_meta.json

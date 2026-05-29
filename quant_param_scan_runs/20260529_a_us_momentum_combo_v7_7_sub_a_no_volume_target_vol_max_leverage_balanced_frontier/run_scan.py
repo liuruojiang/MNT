@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+
+RUN_DIR = Path(__file__).resolve().parent
+ROOT = RUN_DIR.parents[1]
+BASE_RUN = ROOT / "quant_param_scan_runs" / "20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage"
+BASE_SCRIPT = BASE_RUN / "run_scan.py"
+
+
+def main() -> None:
+    spec = importlib.util.spec_from_file_location("suba_tv_lev_base_scan", BASE_SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {BASE_SCRIPT}")
+    base = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(base)
+
+    original_loader = base.load_mnt_module
+
+    def load_no_volume_module() -> object:
+        mod = original_loader()
+        mod.CN_SA_VOLUME_OVERLAY_ENABLED = False
+        return mod
+
+    base.RUN_DIR = RUN_DIR
+    base.load_mnt_module = load_no_volume_module
+    base.TARGET_VOLS = [0.20, 0.225, 0.25, 0.275, 0.30, 0.325, 0.35]
+    base.MAX_LEVS = [
+        0.70,
+        0.75,
+        0.80,
+        0.85,
+        0.90,
+        0.95,
+        1.00,
+        1.05,
+        1.10,
+        1.15,
+        1.20,
+        1.25,
+        1.30,
+        1.35,
+        1.40,
+        1.45,
+        1.50,
+    ]
+    base.main()
+
+
+if __name__ == "__main__":
+    main()

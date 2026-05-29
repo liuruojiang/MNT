@@ -1,0 +1,13 @@
+﻿date,zz2000,cyb,zz_ma,cyb_ma,zz_ratio,cyb_ratio,zz_streak,cyb_streak,or_wait0_raw,or_wait1_raw,or_wait2_raw,or_wait3_raw,and_wait0_raw,and_wait1_raw,and_wait2_raw,and_wait3_raw,or_wait0_effective,or_wait1_effective,or_wait2_effective,or_wait3_effective,and_wait0_effective,and_wait1_effective,and_wait2_effective,and_wait3_effective
+2026-05-13,6863.03,86697984.0,5859.8615,72686556.4,1.1711932099419073,1.1927650489162531,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-14,7057.01,89393080.0,5980.902,74312711.2,1.1799240315256796,1.2029312153531009,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-15,6852.35,88259880.0,6065.8255,75424147.4,1.129664874137906,1.1701806787676063,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-18,6067.95,76283088.0,6099.6095,75986009.0,0.9948095857611868,1.0039096539469523,1.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-19,6093.88,76849376.0,6133.7855,76495396.2,0.9934941481080485,1.0046274654107876,2.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-20,6180.31,76185368.0,6165.96,76861038.6,1.0023272937223078,0.9912091924295179,0.0,1.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-21,7301.1,90216032.0,6238.404,77859677.0,1.170347415781344,1.158700311587473,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-22,6074.38,79199584.0,6262.1035,78630763.6,0.9700222936270536,1.007234069389096,1.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-25,6584.76,88403640.0,6305.0955,79574720.4,1.044355315474603,1.1109513116178036,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-26,6360.81,84236672.0,6323.380999999999,80057074.4,1.005919143572086,1.0522077234438634,0.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-27,6120.74,83966480.0,6351.379500000001,80589505.6,0.9636867077459312,1.041903401377859,1.0,0.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False
+2026-05-28,5857.15,77332680.0,6371.0265,81066380.8,0.9193416476920948,0.9539426731136368,2.0,1.0,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False

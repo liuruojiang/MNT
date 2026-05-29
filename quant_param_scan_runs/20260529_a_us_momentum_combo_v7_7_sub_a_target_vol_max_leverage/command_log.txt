@@ -1,0 +1,23 @@
+init_quant_param_scan_run.py
+run_id=20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage
+project=a_us_momentum_combo
+strategy=V7.7
+subsystem=Sub-A
+parameter_group=target_vol_max_leverage
+repo=D:\动量策略\A股美股动量组合策略
+
+2026-05-29T14:00:58.153528+08:00 python D:\动量策略\A股美股动量组合策略\quant_param_scan_runs\20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage\run_scan.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T14:02:18+08:00
+decision=research_recommend_max_lev_1p0_target_vol_20_to_25_no_production_change
+stability_label=robust_cap1p0_tv20_25_plateau
+
+2026-05-29T14:05:13.882734+08:00 python D:\动量策略\A股美股动量组合策略\quant_param_scan_runs\20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage\run_scan.py
+
+2026-05-29T14:07:01.167749+08:00 python D:\动量策略\A股美股动量组合策略\quant_param_scan_runs\20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage\run_scan.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-05-29T14:07:36+08:00
+decision=research_recommend_max_lev_1p0_target_vol_20_to_25_no_production_change
+stability_label=robust_cap1p0_tv20_25_plateau

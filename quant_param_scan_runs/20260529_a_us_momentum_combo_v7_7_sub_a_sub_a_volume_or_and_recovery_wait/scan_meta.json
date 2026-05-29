@@ -1,0 +1,74 @@
+{
+  "run_id": "20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait",
+  "created_at": "2026-05-29T16:23:41",
+  "updated_at": "2026-05-29T16:25:06",
+  "phase": "complete",
+  "project": "a_us_momentum_combo",
+  "strategy": "v7_7_sub_a",
+  "subsystem": "sub_a",
+  "parameter_group": "volume_or_and_recovery_wait",
+  "scan_type": "focused_state_machine_grid",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "git_branch": "main",
+  "git_commit": "01b5f76bafe6548549e5f6ec83e7bc55fc6fb40a",
+  "git_status_before": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_no_volume_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid/",
+  "git_status_after": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_no_volume_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_robustness_grid/",
+  "baseline": "no_overlay plus chosen amount_ma20_zz3_cyb4_scale0 variants",
+  "candidate_grid": {
+    "field": "amount",
+    "ma": 20,
+    "zz_days": 3,
+    "cyb_days": 4,
+    "modes": [
+      "or",
+      "and"
+    ],
+    "recovery_wait_days": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "scale": 0.0,
+    "candidate_count_without_no_overlay": 8
+  },
+  "decision": "prefer_or_with_recovery_wait_0_or_1_research_only",
+  "stability_label": "or_more_defensive_and_recovery_wait_beyond_1_costly",
+  "cost_model": {
+    "CN_COMMISSION": 0.001,
+    "return_column": "cn_result[return]",
+    "state_machine_costs": true,
+    "open_impact": "not modeled separately; production close-to-close Sub-A path"
+  },
+  "data_snapshot": {
+    "start_date": "2010-09-29",
+    "end_date": "2026-05-28",
+    "close_confirmed": true,
+    "dropped_unconfirmed_current_day": true,
+    "cn_sources": {
+      "1.H20955": "csindex",
+      "0.399606": "Sina",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905"
+    },
+    "volume_sources": {
+      "zz2000": "CSIndex official amount",
+      "cyb": "Sohu amount"
+    }
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_sub_a_volume_or_and_recovery_wait\\command_log.txt"
+  },
+  "notes": [
+    "No production strategy file was edited.",
+    "Recovery wait keeps the overlay active for N extra false-signal trading days after a trigger.",
+    "The candidate return streams reuse the production Sub-A overlay rebuild path."
+  ],
+  "finalized_at": "2026-05-29T16:25:34+08:00"
+}

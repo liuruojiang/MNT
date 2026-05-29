@@ -1,0 +1,88 @@
+{
+  "run_id": "20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume",
+  "created_at": "2026-05-29T14:58:20",
+  "updated_at": "2026-05-29T14:58:20",
+  "project": "a_us_momentum_combo",
+  "strategy": "v7_7_sub_a",
+  "parameter_group": "volume_field_amount_vs_volume",
+  "scan_type": "single_field_ablation",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "git_branch": "main",
+  "git_commit": "01b5f76bafe6548549e5f6ec83e7bc55fc6fb40a",
+  "git_status_before": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/",
+  "git_status_after": "M .cn_official_cache/1_000852.csv\n M .cn_official_cache/1_H00016.csv\n M .cn_official_cache/1_H00852.csv\n M .cn_official_cache/1_H00905.csv\n M .cn_official_cache/1_H11077.csv\n M .cn_official_cache/1_H20955.csv\n M mnt_strategy_data_cn.csv\n?? TASK_STATE.md\n?? quant_param_scan_runs/20260523_v77_suba_v25_log_wls_cost_only/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_target_vol_max_leverage_balanced_frontier/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume/\n?? quant_param_scan_runs/20260529_a_us_momentum_combo_v7_7_sub_a_volume_overlay_on_off/",
+  "baseline": "amount_overlay_current",
+  "candidate_grid": [
+    "amount_overlay_current",
+    "volume_overlay_candidate",
+    "no_overlay_reference"
+  ],
+  "decision": "research_only_no_production_change",
+  "stability_label": "single_field_current_v77_close_confirmed",
+  "cost_model": {
+    "CN_COMMISSION": 0.001,
+    "return_column": "cn_result[return]",
+    "state_machine_costs": true
+  },
+  "data_snapshot": {
+    "start_date": "2010-09-29",
+    "end_date": "2026-05-28",
+    "close_confirmed": true,
+    "dropped_unconfirmed_current_day": true,
+    "cn_sources": {
+      "1.H20955": "csindex",
+      "0.399606": "Sina",
+      "1.H00016": "csindex+Sina-proxy:1.000016",
+      "1.H00852": "csindex+Sina-proxy:1.000852",
+      "1.H00905": "csindex+Sina-proxy:1.000905"
+    },
+    "amount_sources_latest": {
+      "zz2000": "CSIndex official amount",
+      "cyb": "EastMoney amount"
+    },
+    "volume_sources_latest": {
+      "zz2000": "EastMoney amount",
+      "cyb": "EastMoney amount"
+    },
+    "latest_amount_status_at_end_date": {
+      "date": "2026-05-28",
+      "zz2000_streak": 3.0,
+      "cyb_streak": 2.0,
+      "combined_scale": 0.0
+    },
+    "latest_volume_status_at_end_date": {
+      "date": "2026-05-28",
+      "zz2000_streak": 5.0,
+      "cyb_streak": 5.0,
+      "combined_scale": 0.0
+    }
+  },
+  "defaults": {
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_COMMISSION": 0.001,
+    "CN_SA_CASH_OVERLAY_ENABLED": false,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_VOLUME_SCALE": 0.0,
+    "CN_SA_VOLUME_ZZ2000_MA": 15,
+    "CN_SA_VOLUME_ZZ2000_DAYS": 3,
+    "CN_SA_VOLUME_CYB_MA": 15,
+    "CN_SA_VOLUME_CYB_DAYS": 5
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260529_a_us_momentum_combo_v7_7_sub_a_volume_field_amount_vs_volume\\command_log.txt"
+  },
+  "notes": [
+    "Close-confirmed run: dropped any unconfirmed current-day A-share row via _drop_cn_unconfirmed_today.",
+    "Volume candidate uses the same MA/day/OR/scale parameters as the current amount overlay, but substitutes df[volume] for df[amount].",
+    "No production source file was edited."
+  ],
+  "phase": "complete",
+  "finalized_at": "2026-05-29T14:58:53+08:00"
+}
