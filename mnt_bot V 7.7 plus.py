@@ -166,7 +166,7 @@ CN_VOL_EMOTION_BEAR = 8        # 连续缩量 N 天 → 悲观
 CN_VOL_EMOTION_BULL = 3        # 连续放量 N 天 → 乐观
 CN_VOL_MONITOR_SECID = "1.000001"  # 上证指数
 
-# Sub-A 成交额缩量规则（正式参与 Sub-A 仓位计算）
+# Sub-A 成交额风控规则（正式参与 Sub-A 仓位计算）
 CN_SA_VOLUME_OVERLAY_ENABLED = True
 CN_SA_VOLUME_RULE_MODE = "or"
 CN_SA_VOLUME_SCALE = 0.0
@@ -181,11 +181,11 @@ CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (
     ("0.159535", "中证2000ETF"),
     ("0.159536", "中证2000ETF"),
 )
-CN_SA_VOLUME_ZZ2000_MA = 15
+CN_SA_VOLUME_ZZ2000_MA = 20
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = "0.399006"
-CN_SA_VOLUME_CYB_MA = 15
-CN_SA_VOLUME_CYB_DAYS = 5
+CN_SA_VOLUME_CYB_MA = 20
+CN_SA_VOLUME_CYB_DAYS = 4
 CN_SA_VOLUME_CLEAR_RATIO_ENABLED = False
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID = CN_SA_VOLUME_ZZ2000_SECID
 CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL = "ZZ2000"
@@ -206,7 +206,7 @@ CN_CSI_AMOUNT_INDEX_CODES = {
     "1.000905": "000905",  # 中证500
 }
 
-# DK和微盘成交额规则只做清仓警示，不参与本脚本仓位/回测降仓。
+# DK和微盘成交额规则只做风险警示，不参与本脚本仓位/回测降仓。
 CN_DK_VOLUME_POLICY = "warning_only"
 CN_DK_VOLUME_YELLOW_SECID = "1.000905"
 CN_DK_VOLUME_YELLOW_LABEL = "中证500"
@@ -2724,7 +2724,7 @@ def _write_suba_volume_query_warning(msg, cn_result):
     if unresolved:
         msg.write(
             "⚠️ Sub-A成交额风控不可判定：本次查询继续显示主信号/净值，"
-            "但未用成交额overlay改写仓位；不应按正常仓位执行。\n\n"
+            "但未用成交额风控改写仓位；不应按正常仓位执行。\n\n"
         )
 
 
@@ -2736,7 +2736,7 @@ def _apply_suba_volume_overlay_policy(
     allow_unresolved_suba_volume=False,
 ):
     if _suba_volume_feature_has_unresolved(suba_volume_feature):
-        message = "Sub-A成交额风控不可判定，本次不应用该overlay改写仓位"
+        message = "Sub-A成交额风控不可判定，本次不应用该风控改写仓位"
         if not allow_unresolved_suba_volume:
             raise poe.BotError("Sub-A成交额风控存在不可判定项，正式路径中止。")
         return _mark_suba_volume_unavailable(cn_result, message)
@@ -2998,7 +2998,7 @@ def _write_volume_warning_panel(msg, compact=False):
     expected_date = _warning_feature_expected_date()
     w("### 成交额风险提醒\n")
     if not compact:
-        w("定位: DK成交额只做清仓警示；微盘宽口径成交额为参考警示，官方微盘v2.0未启用该过滤；A策略成交额规则才正式参与仓位计算。\n")
+        w("定位: DK成交额只做风险警示；微盘成交额为参考提示，官方微盘v2.0未启用该成交额风控；Sub-A成交额风控才正式参与仓位计算。\n")
 
     def _status_pos(status):
         return "低于" if bool(status.get("below", False)) else "高于或等于"
@@ -3027,13 +3027,13 @@ def _write_volume_warning_panel(msg, compact=False):
         dk_mark = "🟡 警示触发" if dk["triggered"] else "未触发"
         dk_pos = _status_pos(dk)
         w(
-            f"- Sub-A-DK成交额清仓警示: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
+            f"- Sub-A-DK成交额风险警示: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，"
             f"连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}；"
             f"仅提示，不参与ADK仓位和净值曲线{_freshness_note(dk)}。\n"
         )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- Sub-A-DK成交额清仓警示: **UNKNOWN** | 本次未取到{CN_DK_VOLUME_YELLOW_LABEL}成交额，无法确认警示条件。{suffix}\n")
+        w(f"- Sub-A-DK成交额风险警示: **UNKNOWN** | 本次未取到{CN_DK_VOLUME_YELLOW_LABEL}成交额，无法确认警示条件。{suffix}\n")
     try:
         zz = _volume_warning_status(
             MICROCAP_BROAD_VOLUME_ZZ2000_SECID,
@@ -3056,11 +3056,11 @@ def _write_volume_warning_panel(msg, compact=False):
         zz_pos = _status_pos(zz)
         cyb_pos = _status_pos(cyb)
         w(
-            f"- 微盘宽口径成交额提醒: **{micro_mark}** | "
+            f"- 微盘成交额参考提示: **{micro_mark}** | "
             f"中证2000当前{zz_pos}MA{zz['ma']}，连续低于MA{zz['ma']} {zz['streak']}/{zz['days']}天；"
             f"创业板当前{cyb_pos}MA{cyb['ma']}，连续低于MA{cyb['ma']} {cyb['streak']}/{cyb['days']}天。"
-            f"触发条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；参考scale={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}。"
-            f"官方v2.0未启用该成交量过滤，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
+            f"参考条件: 两者都连续低于MA{zz['ma']}达到{zz['days']}天；参考比例={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}（仅提示，不执行）。"
+            f"官方v2.0未启用该成交额风控，本面板仅提示复核，不参与微盘仓位和净值曲线。\n"
         )
         if (not zz.get("freshness_ok", True)) or (not cyb.get("freshness_ok", True)):
             w(
@@ -3069,7 +3069,7 @@ def _write_volume_warning_panel(msg, compact=False):
             )
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
-        w(f"- 微盘宽口径成交额提醒: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认警示条件。{suffix}\n")
+        w(f"- 微盘成交额参考提示: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认参考提示条件。{suffix}\n")
     w("\n---\n\n")
 
 def _write_suba_non_momentum_threshold_alert(msg, cn_result, idx=-1, prefix=""):
@@ -3089,8 +3089,8 @@ def _write_suba_non_momentum_threshold_alert(msg, cn_result, idx=-1, prefix=""):
             else (CN_SA_VOLUME_SCALE if volume_on else 1.0)
         )
         if volume_on and pd.notna(volume_scale) and float(volume_scale) < 1.0 - 1e-12:
-            action = "清仓" if float(volume_scale) <= 1e-12 else "减仓"
-            alerts.append(f"成交额规则触发{action}，当前执行仓位{float(volume_scale):.0%}")
+            action = "触发" if float(volume_scale) <= 1e-12 else "触发减仓"
+            alerts.append(f"Sub-A成交额风控{action}，当前执行仓位{float(volume_scale):.0%}")
     if "suba_same_side_overheat_on" in cn_result.columns:
         overheat_on = _cell_bool(cn_result["suba_same_side_overheat_on"].iloc[idx])
         if overheat_on:
@@ -3128,8 +3128,8 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
 
     if "suba_volume_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_unavailable"].iloc[idx]):
         w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**UNKNOWN** | "
-            f"本次不应用成交额overlay，成交额scale暂按1.0；最终仓位请以Sub-A主表actual_weight为准。"
+            f"{prefix}**Sub-A成交额风控:** 风控启用；当前**UNKNOWN** | "
+            f"本次不应用成交额风控，成交额调整比例暂按1.0；最终仓位请以Sub-A主表actual_weight为准。"
             f"由于硬风控不可判定，不建议直接按正常信号执行。\n"
         )
         return
@@ -3145,13 +3145,13 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     zz_text = _streak_status("中证2000", zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
     cyb_text = _streak_status("创业板", cyb_streak, CN_SA_VOLUME_CYB_DAYS)
     ratio_text = _streak_status("中证2000/上证50成交额比值", ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS) if clear_enabled else "已关闭"
-    old_status = f"已触发{CN_SA_VOLUME_SCALE:.0%}" if old_on else "未触发缩仓"
-    clear_status = "已触发清仓" if clear_on else ("未触发清仓" if clear_enabled else "已关闭")
+    old_status = f"已触发{CN_SA_VOLUME_SCALE:.0%}" if old_on else "未触发"
+    clear_status = "已触发0%仓位" if clear_on else ("未触发0%仓位" if clear_enabled else "已关闭")
     data_note_parts = []
     if "suba_volume_partial_unavailable" in cn_result.columns and _cell_bool(cn_result["suba_volume_partial_unavailable"].iloc[idx]):
-        data_note_parts.append("部分数据不可用，旧缩仓规则按可用腿判断")
+        data_note_parts.append("部分数据不可用，当前正式规则按可用腿判断")
     if clear_unavailable:
-        data_note_parts.append("清仓比例规则不可判定，不应按正常仓位执行")
+        data_note_parts.append("0%仓位扩展风控不可判定，不应按正常仓位执行")
     if "suba_volume_freshness_ok" in cn_result.columns and not _cell_bool(cn_result["suba_volume_freshness_ok"].iloc[idx]):
         freshness_error = _cell_text(
             cn_result["suba_volume_freshness_error"].iloc[idx]
@@ -3162,24 +3162,24 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix="", compact
     data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ""
     unresolved = "suba_volume_unresolved" in cn_result.columns and _cell_bool(cn_result["suba_volume_unresolved"].iloc[idx])
     if unresolved and not on:
-        clear_unknown_text = f"新清仓规则: {ratio_text}；" if clear_enabled else ""
+        clear_unknown_text = f"扩展风控条件: {ratio_text}；" if clear_enabled else ""
         w(
-            f"{prefix}**Sub-A成交额规则:** 规则启用；当前**UNKNOWN** | "
-            f"旧缩仓规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
-            f"{clear_unknown_text}本次不应用成交额overlay，成交额scale暂按1.0；"
+            f"{prefix}**Sub-A成交额风控:** 风控启用；当前**UNKNOWN** | "
+            f"当前正式规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；"
+            f"{clear_unknown_text}本次不应用成交额风控，成交额调整比例暂按1.0；"
             f"最终仓位请以Sub-A主表actual_weight为准{data_note}\n"
         )
         return
-    status = "清仓触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
+    status = "0%仓位触发" if clear_on else (f"{CN_SA_VOLUME_SCALE:.0%}触发" if old_on else "未触发")
     clear_detail = (
-        f" | 新清仓规则（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
+        f" | 扩展风控条件（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）"
         f"{clear_status}：{ratio_text}"
         if clear_enabled
         else ""
     )
     w(
-        f"{prefix}**Sub-A成交额规则:** 规则启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
-        f"旧缩仓规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）"
+        f"{prefix}**Sub-A成交额风控:** 风控启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | "
+        f"当前正式规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）"
         f"{old_status}：{zz_text}；{cyb_text}{clear_detail}{data_note}\n"
     )
 
@@ -7554,6 +7554,30 @@ def _dk_pos_str(holding_str):
         return "空仓"
     return f"做多 {_dk_leg_name(info['long_leg'])} / 做空 {_dk_leg_name(info['short_leg'])}"
 
+
+def _dk_switch_alert_text(current_name, target_name, issue_date, prefix="若现在收盘"):
+    """生成ADK Top-1切换的醒目展示文案；不参与策略计算。"""
+    issue_label = issue_date.strftime("%Y-%m-%d") if hasattr(issue_date, "strftime") else str(issue_date)
+    if target_name != current_name:
+        return (
+            f"🔴 **换仓红灯: {prefix}将切换为 {target_name}**"
+            f"（当前已生效: {current_name}；{issue_label} 收盘发出，下一交易日执行）\n"
+        )
+    return f"🟢 **{prefix}: 无变化**（{issue_label} 收盘发出，下一交易日无需调仓）\n"
+
+
+def _dk_volume_warning_text(active, label, ma, days):
+    """生成ADK成交额警示文案；DK成交额只提示，不改变仓位或净值。"""
+    if active:
+        return (
+            f"🔴 **成交额警示触发:** {label}成交额连续低于MA{ma}满{days}天；"
+            "只进警示板，不改变ADK仓位、收益和净值曲线。\n"
+        )
+    return (
+        f"🟢 **成交额警示未触发:** {label}成交额未连续低于MA{ma}满{days}天；"
+        "仅提示，不改变ADK仓位。\n"
+    )
+
 def _series_value_at(series, date, pos):
     if series is None or len(series) == 0:
         return np.nan
@@ -8816,7 +8840,7 @@ class CombinedStrategyBase:
                 ):
                     raise poe.BotError(
                         "Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。"
-                        "信号查询可降级显示“清仓比例规则不可判定，不应按正常仓位执行”。"
+                        "信号查询可降级显示“0%仓位扩展风控不可判定，不应按正常仓位执行”。"
                     )
                 cn_result = _apply_suba_volume_overlay_policy(
                     cn_result,
@@ -9914,10 +9938,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 w(_dk_top_pair_whitelist_warning(_dk_effective_pair, "今日Top-1"))
                 w("今日盘中，今日收盘信号未确认；盘中假设信号仅在“实时信号”中显示\n")
             else:
-                if dk_rank_today and hypo_dk == dk_current:
-                    w(f"**今日收盘信号:** **无变化**（{_dk_latest_issue_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日无需调仓）\n")
-                else:
-                    w(f"**今日收盘信号:** **切换为 {_dk_latest_name}**（{_dk_latest_issue_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
+                w(_dk_switch_alert_text(_dk_effective_name, _dk_latest_name, _dk_latest_issue_date, prefix="今日收盘信号"))
                 w(f"**今日Top-1配对/方向:** **{_dk_pair_display(_dk_latest_pair)}** | 方向 {_dk_latest_direction:+d}\n")
                 w(_dk_top_pair_whitelist_warning(_dk_latest_pair, "今日Top-1"))
             if _dk_intraday:
@@ -9939,7 +9960,6 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 _dk_oh_scale_rt = cn_dk_result["same_side_overheat_scale"].iloc[_dk_display_idx] if "same_side_overheat_scale" in cn_dk_result.columns else 1.0
                 _dk_oh_on_rt = bool(cn_dk_result["same_side_overheat_on"].iloc[_dk_display_idx]) if "same_side_overheat_on" in cn_dk_result.columns else False
                 _dk_oh_abs_rt = cn_dk_result["same_side_overheat_abs_bias"].iloc[_dk_display_idx] if "same_side_overheat_abs_bias" in cn_dk_result.columns else np.nan
-                _dk_volume_scale_rt = cn_dk_result["dk_volume_clear_scale"].iloc[_dk_display_idx] if "dk_volume_clear_scale" in cn_dk_result.columns else 1.0
                 _dk_volume_on_rt = bool(cn_dk_result["dk_volume_clear_active"].iloc[_dk_display_idx]) if "dk_volume_clear_active" in cn_dk_result.columns else False
                 _dk_rv_rt = cn_dk_result["realized_vol"].iloc[_dk_display_idx] if "realized_vol" in cn_dk_result.columns else None
                 # 前瞻: 用最新 realized_vol 计算下一交易日 VolScale
@@ -9957,7 +9977,8 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 if "same_side_overheat_scale" in cn_dk_result.columns:
                     w(f" | 同向过热: {_dk_oh_scale_rt:.2f}x")
                 if "dk_volume_clear_scale" in cn_dk_result.columns:
-                    w(f" | 成交额清仓: {_dk_volume_scale_rt:.2f}x")
+                    _dk_volume_status_rt = "触发" if _dk_volume_on_rt else "未触发"
+                    w(f" | 成交额警示: {_dk_volume_status_rt}(不改仓位)")
                 if "risk_gate_scale" in cn_dk_result.columns:
                     w(f" | RiskGate: {_dk_gate_scale_rt:.2f}x")
                 if _dk_rv_rt is not None and not np.isnan(_dk_rv_rt):
@@ -9971,7 +9992,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                         _dd_text = f" | 判断DD(risk_gate_base_dd, 非最终NAV) {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}" if not np.isnan(_dk_gate_dd_rt) else ""
                         w(f"🟢 **风险闸门关闭:** 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n")
                 if "dk_volume_clear_scale" in cn_dk_result.columns and _dk_volume_on_rt:
-                    w(f"🔴 **成交额清仓生效中:** {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天，A-DK敞口按 **{_dk_volume_scale_rt:.0%}** 执行\n")
+                    w(_dk_volume_warning_text(_dk_volume_on_rt, CN_DK_VOLUME_YELLOW_LABEL, CN_DK_VOLUME_YELLOW_MA, CN_DK_VOLUME_YELLOW_DAYS))
                 if "same_side_overheat_scale" in cn_dk_result.columns:
                     _oh_text = f" | 当前同向乖离: {_dk_oh_abs_rt:.1%}" if not np.isnan(_dk_oh_abs_rt) else ""
                     if _dk_oh_on_rt:
@@ -10518,6 +10539,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             _dk_effective_issue_date3 = cn_dk_result.index[-2] if len(cn_dk_result) >= 2 else dk_date
             w(f"**当前已生效Top-1:** **{dk_current_name3}**（对应 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
             if dk_rank_today:
+                w(_dk_switch_alert_text(dk_current_name3, _dk_pos_str(hypo_dk), dk_date, prefix="若现在收盘"))
                 w("**实时Top-3（若现在收盘，用于判断是否按收盘价执行；策略实际只持有Top-1）:**\n")
                 for row in dk_rank_today:
                     _score_live3 = row["score_live"]
@@ -10525,10 +10547,6 @@ class CombinedStrategyV77(CombinedStrategyBase):
                     _rank_mark3 = " ← 若现在收盘将执行" if row["rank"] == 1 else ""
                     w(f"- {row['rank']}. **{row['pair_display']}** | 实时分数 `{_score_live_s3}` | "
                       f"方向 {row['direction']:+d} | {row['position_text']}{_rank_mark3}\n")
-                if hypo_dk == dk_current:
-                    w(f"**若现在收盘:** **无变化**（今日 {dk_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日无需调仓）\n")
-                else:
-                    w(f"**若现在收盘:** **切换为 {_dk_pos_str(hypo_dk)}**（今日 {dk_date.strftime('%Y-%m-%d')} 收盘发出，下一交易日执行）\n")
                 w(f"**若现在收盘的Top-1配对/方向:** **{_dk_pair_display(dk_hypo_top_pair)}** | 方向 {dk_hypo_direction:+d}\n")
                 w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, "今日Top-1"))
             # ── DK vol-scaling 杠杆显示 (实时) ──
@@ -10557,11 +10575,11 @@ class CombinedStrategyV77(CombinedStrategyBase):
                     else:
                         w(f"🟢 **ADK同向过热防守关闭:** 触发 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}{_dk_oh_text_rt3}\n")
                 if "dk_volume_clear_scale" in cn_dk_result.columns:
-                    _dk_volume_scale_rt3 = cn_dk_result["dk_volume_clear_scale"].iloc[-1]
                     _dk_volume_on_rt3 = bool(cn_dk_result["dk_volume_clear_active"].iloc[-1])
-                    w(f"**成交额清仓:** {_dk_volume_scale_rt3:.2f}x")
+                    _dk_volume_status_rt3 = "触发" if _dk_volume_on_rt3 else "未触发"
+                    w(f"**成交额警示:** {_dk_volume_status_rt3}（仅提示，不改仓位）")
                     if _dk_volume_on_rt3:
-                        w(f" 🔴 {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天，当前A-DK清仓生效")
+                        w("\n" + _dk_volume_warning_text(_dk_volume_on_rt3, CN_DK_VOLUME_YELLOW_LABEL, CN_DK_VOLUME_YELLOW_MA, CN_DK_VOLUME_YELLOW_DAYS).rstrip())
                     w("\n")
                 if "risk_gate_scale" in cn_dk_result.columns:
                     _dk_gate_scale_rt3 = cn_dk_result["risk_gate_scale"].iloc[-1]
@@ -10807,8 +10825,8 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| MA60过热止盈 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | 权益持仓 price/MA{CN_BIAS_N}-1 过热且乖离动量同向时切现金 |\n")
             w(f"| MA60过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** | 2026-05-18细扫候选: 27/24，收盘判断、下一段close-to-close生效 |\n")
             w(f"| MA60过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 触发后权益仓位切到现金 |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 正式参与Sub-A仓位: 中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
-            w(f"| 成交额触发后仓位 | **{CN_SA_VOLUME_SCALE:.0%}** | 只缩Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
+            w(f"| Sub-A成交额风控 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}** | 当前正式规则: 中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
+            w(f"| Sub-A成交额触发仓位 | **{CN_SA_VOLUME_SCALE:.0%}** | 只改Sub-A权益敞口；观测日收盘后生效到下一段close-to-close收益 |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
             w(f"| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n")
             w(f"| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n")
@@ -10846,8 +10864,8 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| 同向过热防守 | **{'启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** | ratio/MA{CN_DK_BIAS_N}乖离与动量同向且过热时降低ADK敞口 |\n")
             w(f"| 同向过热触发/恢复 | **{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}** | T日收盘判断，T+1按防守敞口执行 |\n")
             w(f"| 同向过热后仓位 | **{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** | 对VolScale后的ADK敞口再乘该系数 |\n")
-            w(f"| 成交额清仓规则 | **仅提示** | {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天时只进警示板 |\n")
-            w(f"| 成交额触发后仓位 | **不变** | 不参与ADK仓位、收益和净值曲线计算 |\n")
+            w(f"| ADK成交额风险警示 | **仅提示** | {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天时只进警示板 |\n")
+            w(f"| ADK成交额警示政策 | **不改仓位** | 不参与ADK仓位、收益和净值曲线计算 |\n")
             w(f"| DD RiskGate | **{'启用' if CN_DK_RISK_GATE_ENABLED else '关闭'}** | 按ADK策略级回撤判断防守仓位 |\n")
             w("| RiskGate DD口径 | **risk_gate_base_dd** | 基于gate前执行成本净值判断，不是最终NAV回撤；前序overlay和RiskGate后的最终曲线另算 |\n")
             w(f"| DD触发/恢复/防守仓位 | **<=-{CN_DK_RISK_GATE_ENTER:.0%} / >=-{CN_DK_RISK_GATE_EXIT:.0%} / {CN_DK_RISK_GATE_DEFENSE_SCALE:.0%}** | ADK原始净值DD达到触发阈值后按防守仓位，恢复阈值后回满 |\n")
@@ -10905,11 +10923,11 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 _cw = COMBINED_WEIGHTS[_cname]
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
-                f"| 微盘成交量参考提醒 | **宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
-                f"参考scale {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}；直接口径: {MICROCAP_DIRECT_VOLUME_CODE} 成交量 MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
+                f"| 微盘成交额参考提示 | **宽口径参考: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"参考比例 {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}（仅提示，不执行）；直接口径参考: {MICROCAP_DIRECT_VOLUME_CODE} MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
             )
             w(f"| 微盘接入版本 | **v2.0 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
-            w(f"| 微盘成交量政策 | **{MICROCAP_VOLUME_POLICY}**，官方微盘v2.0未启用宽口径成交量过滤；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考警示，参考scale={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}，不自动改写微盘仓位 |\n")
+            w(f"| 微盘成交额政策 | **仅参考，不改仓位** | 官方微盘v2.0未启用宽口径成交额风控；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考提示，参考比例={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}，不自动改写微盘仓位 |\n")
             w(f"| PV/收益查询 | 仅展示 Sub-A/Sub-A-DK/Sub-B 三策略组合（{_performance_combo_weight_label()}）；微盘v2.0和Sub-D由独立脚本查看 |\n")
             w(f"| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n")
     def _handle_live_params(self):
@@ -10966,7 +10984,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
             w(f"| MA60过热止盈 | **{'启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭'}** |\n")
             w(f"| MA60过热触发/恢复 | **{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}** |\n")
             w(f"| MA60过热后仓位 | **{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x** |\n")
-            w(f"| 成交额缩量规则 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
+            w(f"| Sub-A成交额风控 | **{'启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭'}**；当前正式规则: ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
             w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** |\n")
             w(f"| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** |\n")
             w("\n")
@@ -11134,10 +11152,9 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 if not np.isnan(_dk_oh_abs_lp):
                     w(f"| 当前同向乖离 | **{_dk_oh_abs_lp:.1%}** |\n")
             if "dk_volume_clear_scale" in cn_dk_result.columns:
-                _dk_volume_scale_lp = cn_dk_result["dk_volume_clear_scale"].iloc[-1]
                 _dk_volume_on_lp = bool(cn_dk_result["dk_volume_clear_active"].iloc[-1])
-                _dk_volume_status_lp = "清仓生效" if _dk_volume_on_lp else "未触发"
-                w(f"| 成交额清仓 | **{_dk_volume_status_lp}** ({_dk_volume_scale_lp:.2f}x) |\n")
+                _dk_volume_status_lp = "警示触发" if _dk_volume_on_lp else "未触发"
+                w(f"| 成交额警示 | **{_dk_volume_status_lp}**（仅提示，不改仓位） |\n")
             if "risk_gate_scale" in cn_dk_result.columns:
                 _dk_gate_scale_lp = cn_dk_result["risk_gate_scale"].iloc[-1]
                 _dk_gate_on_lp = bool(cn_dk_result["risk_gate_on"].iloc[-1])
@@ -11176,6 +11193,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 w(f"| 今日Top-1配对 | **{dk_hypo_pair_lp}** |\n")
                 w(f"| 今日方向 | **{dk_hypo_dir_lp:+d}** |\n")
                 w(f"| 今日假设持仓 | **{_dk_pos_str(dk_hypo_holding_lp)}** |\n")
+                w("\n" + _dk_switch_alert_text(_dk_pos_str(dk_holding), _dk_pos_str(dk_hypo_holding_lp), dk_date, prefix="今日假设信号"))
                 _dk_hypo_warning = _dk_top_pair_whitelist_warning(dk_hypo_pair_lp, "今日Top-1")
                 if _dk_hypo_warning:
                     w("\n" + _dk_hypo_warning)
@@ -11415,8 +11433,8 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 cw = COMBINED_WEIGHTS[name]
                 w(f"| {name} | {cw:.0%} |\n")
             w(
-                f"| 微盘成交量参考提醒 | 宽口径: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
-                f"参考scale {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}；warning-only，不改写微盘仓位 |\n"
+                f"| 微盘成交额参考提示 | 宽口径参考: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
+                f"参考比例 {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}（仅提示，不执行），不改写微盘仓位 |\n"
             )
             w(f"| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n")
     def _handle_signal_history(self, query):
