@@ -236,26 +236,29 @@ MICROCAP_DIRECT_VOLUME_THS_URL = (
 CN_KNIFE_WINDOW = 3        # 观察窗口（交易日）
 CN_KNIFE_THRESHOLD = -0.05 # 3日跌幅阈值（-5%）
 
-CN_EQUITY_CODES = ["1.H20955", "0.399606", "1.H00016", "1.H00852", "1.H00905"]
+CN_EQUITY_CODES = ["1.930955", "0.399006", "1.000016", "1.000852", "1.000905"]
 CN_ALL_CODES = CN_EQUITY_CODES + [CN_BOND_CODE]
-CN_STOCK_CODES = CN_EQUITY_CODES  # Sub-A用的全收益指数(DK独立获取价格指数)
+CN_STOCK_CODES = CN_EQUITY_CODES  # Sub-A用价格指数；债券避险仍用全收益指数
 CN_NAMES = {
-    "1.H20955": "中证红利",
-    "0.399606": "创业板",
-    "1.H00016": "上证50",
-    "1.H00852": "中证1000",
-    "1.H00905": "中证500",
+    "1.930955": "中证红利低波100",
+    "0.399006": "创业板",
+    "1.000016": "上证50",
+    "1.000852": "中证1000",
+    "1.000905": "中证500",
     "1.H00300": "沪深300",   # 仅用于显示/映射
     "1.H11077": "10Y国债",
     "cash": "Cash",
 }
 
-# A股 全收益指数映射 (全部改用全收益指数，消除ETF前复权不一致问题)
-CN_ZZHL_INDEX_SECID = "1.H20955"    # 中证红利低波100(全收益)
+# A股 Sub-A 股票资产使用价格指数；债券避险资产继续使用全收益指数
+CN_ZZHL_INDEX_SECID = "1.930955"    # 中证红利低波100(价格)
+CN_CSINDEX_PRICE_INDEX_CODES = {
+    "1.930955": "930955",
+}
 CN_ZZHL_PRE_INDEX_CODE = "H00922"   # H20955上市前用H00922(中证红利)扩展历史
 # 中证官网候选代码回退: 主代码异常时仍坚持走官网，不直接切到第三方源
 CN_CSINDEX_CANDIDATES = {
-    "H20955": ["H20955", "H30269"],
+    "H20955": ["H20955"],
 }
 # (国债已改用H11077全收益指数，无需ETF拼接)
 
@@ -406,11 +409,11 @@ SUBB_OPTIONAL_MACRO_TICKERS = tuple()
 US_ROT_FUTURES = {"QQQM", "GLDM"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
-# Sub-B 正式采用 25% target vol + 2.0x max leverage，
+# Sub-B 正式采用 25% target vol + 1.5x max leverage，
 # scale>1: only live assets in US_ROT_FUTURES are levered; proxy inputs are mapped before checking.
 # V6.8.1: leveraged assets are QQQM / GLDM only; TLT/VGLT is not levered.
 US_ROT_TARGET_VOL = 0.25
-US_ROT_MAX_LEV = 2.0
+US_ROT_MAX_LEV = 1.5
 US_ROT_VOL_WINDOW = 40
 US_ROT_LB = 160
 US_ROT_LBS = (160, 260, 390)
@@ -2369,7 +2372,26 @@ def fetch_cn_kline(secid):
     last_err = None
     attempts = []
 
-    if code.startswith('H'):
+    if secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
+        try:
+            df = _fetch_cn_csindex(index_code)
+            if df is not None and len(df) > 50:
+                _save_cn_official_cache(secid, df)
+                return df, f"csindex:{index_code}"
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f"csindex:{e}")
+            time.sleep(1)
+            try:
+                df = _load_cn_official_cache(secid)
+                if df is not None and len(df) > 50:
+                    cache_date = df.index[-1].strftime("%Y-%m-%d")
+                    return df, f"csindex-cache:{cache_date}"
+            except (OSError, ValueError, KeyError) as cache_err:
+                attempts.append(f"cache:{cache_err}")
+
+    elif code.startswith('H'):
         base_df = None
         base_source = None
         try:
@@ -7349,12 +7371,12 @@ def _parse_simple_position_config(text):
             parsed[strategy] = items
     elif strategy == "Sub-A":
         name_to_code = {
-            "红利低波100": "1.H20955",
-            "红利低波": "1.H20955",
-            "创业板": "0.399606",
-            "上证50": "1.H00016",
-            "中证1000": "1.H00852",
-            "中证500": "1.H00905",
+            "红利低波100": "1.930955",
+            "红利低波": "1.930955",
+            "创业板": "0.399006",
+            "上证50": "1.000016",
+            "中证1000": "1.000852",
+            "中证500": "1.000905",
             "国债": "1.H11077",
             "10Y": "1.H11077",
         }
@@ -7561,9 +7583,9 @@ def _dk_switch_alert_text(current_name, target_name, issue_date, prefix="若现�
     if target_name != current_name:
         return (
             f"🔴 **换仓红灯: {prefix}将切换为 {target_name}**"
-            f"（当前已生效: {current_name}；{issue_label} 收盘发出，下一交易日执行）\n"
+            f"（当前已生效: {current_name}；{issue_label} 收盘确认，按该收盘价执行）\n"
         )
-    return f"🟢 **{prefix}: 无变化**（{issue_label} 收盘发出，下一交易日无需调仓）\n"
+    return f"🟢 **{prefix}: 无变化**（{issue_label} 收盘确认，无需调仓）\n"
 
 
 def _dk_volume_warning_text(active, label, ma, days):
@@ -7810,6 +7832,7 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             else 0.0
         )
         scale_changed = has_weight and prev_weight is not None and abs(new_eff_weight - prev_eff_weight) > 0.001
+        execution_date = dk_result.index[i - 1] if i > 0 else date
         if position_changed:
             old_info = parse_dk_holding(prev_holding)
             new_info = parse_dk_holding(holding)
@@ -7825,11 +7848,11 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
             else:
                 sell_text = f"平仓 {prev_holding}"
                 buy_text = f"开仓 {holding}"
-            sell_p = _dk_holding_prices(prev_holding, cn_dk_close, date)
-            buy_p = _dk_holding_prices(holding, cn_dk_close, date)
+            sell_p = _dk_holding_prices(prev_holding, cn_dk_close, execution_date)
+            buy_p = _dk_holding_prices(holding, cn_dk_close, execution_date)
             records.append({
-                "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN", "open"),
+                "日期": execution_date.strftime("%Y-%m-%d"),
+                "北京时间": beijing_time_str(execution_date, "CN", "close"),
                 "策略": strategy_name,
                 "卖出": sell_text,
                 "卖出价格": sell_p,
@@ -7842,10 +7865,10 @@ def extract_dk_rebalances(dk_result, strategy_name="Sub-A-DK", cn_dk_close=None)
                 h_name = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
             else:
                 h_name = CN_DK_NAMES.get(holding, holding)
-            h_prices = _dk_holding_prices(holding, cn_dk_close, date)
+            h_prices = _dk_holding_prices(holding, cn_dk_close, execution_date)
             records.append({
-                "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN", "open"),
+                "日期": execution_date.strftime("%Y-%m-%d"),
+                "北京时间": beijing_time_str(execution_date, "CN", "close"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_eff_weight:.2f}x",
                 "卖出价格": h_prices,
@@ -8544,9 +8567,9 @@ class CombinedStrategyBase:
         else:
             for secid in CN_STOCK_CODES:
                 cn_raw[secid] = _drop_cn_unconfirmed_today(cn_raw[secid])
-        # ZZHL: H20955已通过CN_STOCK_CODES获取, 尝试用H00922扩展更早历史
+# ZZHL全收益历史兼容: 仅在旧H20955池启用时尝试用H00922扩展
         try:
-            zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID)
+            zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID) if CN_ZZHL_INDEX_SECID == "1.H20955" else None
             if zzhl_df is not None and len(zzhl_df) > 0:
                 zzhl_h00922 = None
                 try:
@@ -9260,12 +9283,12 @@ V7.7 active执行权重: Sub-A 15%, Sub-A-DK 15%, 微盘 10%(v2.0 target-vol), S
             prompt = f"""解析仓位设置。
 
 V7.7可设置仓位:
-Sub-A: A股轮动 - 必须使用以下全收益指数代码(不要用ETF代码):
-  1.H20955 = 中证红利 / 红利低波 / 红利低波100 / 中证红利低波100
-  0.399606 = 创业板 / 创业板指
-  1.H00016 = 上证50 / 50
-  1.H00852 = 中证1000 / 1000
-  1.H00905 = 中证500 / 500
+Sub-A: A股轮动 - 股票资产必须使用以下价格指数代码(不要用ETF代码)，债券避险使用全收益指数:
+  1.930955 = 中证红利 / 红利低波 / 红利低波100 / 中证红利低波100
+  0.399006 = 创业板 / 创业板指
+  1.000016 = 上证50 / 50
+  1.000852 = 中证1000 / 1000
+  1.000905 = 中证500 / 500
   1.H11077 = 10Y国债 / 国债
 Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两腿:
   有效标的(用中文名作key): 中证1000, 上证50, 沪深300, 中证500, 创业板
@@ -9297,7 +9320,7 @@ Sub-B: V7.7收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}
 3. "股"=股数, "手"=100股(A股), "张"=合约张数
 4. 如果用户说"清空"某策略的仓位 -> 填空字典 {{}}
 5. ETF代码保持原样(区分大小写)
-6. Sub-A必须用上面列出的全收益指数代码(如1.H20955), 不要用ETF代码(如515100)
+6. Sub-A必须用上面列出的价格指数代码(如1.930955), 不要用ETF代码(如515100)；国债仍用1.H11077全收益指数
 7. Sub-A-DK必须用"做多_"和"做空_"前缀+中文名(如"做多_创业板"), 两腿都要列出
 8. 如果用户指定某个标的的金额(万/百万/元/人民币/美元等), 对应标的输出 {{"amount": 金额数字(转为基本单位,元或美元)}}
    例: "中证1000持仓200万" -> "中证1000": {{"amount": 2000000}}
@@ -9962,16 +9985,16 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 _dk_oh_abs_rt = cn_dk_result["same_side_overheat_abs_bias"].iloc[_dk_display_idx] if "same_side_overheat_abs_bias" in cn_dk_result.columns else np.nan
                 _dk_volume_on_rt = bool(cn_dk_result["dk_volume_clear_active"].iloc[_dk_display_idx]) if "dk_volume_clear_active" in cn_dk_result.columns else False
                 _dk_rv_rt = cn_dk_result["realized_vol"].iloc[_dk_display_idx] if "realized_vol" in cn_dk_result.columns else None
-                # 前瞻: 用最新 realized_vol 计算下一交易日 VolScale
+                # 前瞻: 用最新 realized_vol 计算若本日收盘确认后的 VolScale
                 _dk_cur_vs = _dk_get_vol_scale(cn_dk_result, _dk_display_idx if _dk_display_idx >= 0 else len(cn_dk_result) + _dk_display_idx)
                 _dk_next_raw, _dk_next_vs, _dk_pending = _compute_next_vol_scale(
                     _dk_rv_rt, _dk_cur_vs,
                     CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None,
                     CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 if _dk_pending and not _dk_intraday:
-                    # 计算下一交易日总敞口 (VolScale变化, overlay不变)
+                    # 计算若本日收盘确认后的总敞口 (VolScale变化, overlay不变)
                     _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
-                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 本日收盘确认后按收盘价执行**\n")
                 w(f"**ADK实际敞口:** **{_dk_sc_rt:.2f}x**")
                 w(f" | VolScale: {_dk_cur_vs:.2f}x")
                 if "same_side_overheat_scale" in cn_dk_result.columns:
@@ -10560,7 +10583,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                     CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
                 if _dk_pending3:
                     _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
-                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 本日收盘确认后按收盘价执行**\n")
                 w(f"**波动率缩放:** 当前 VolScale **{_dk_cur_vs3:.2f}x** | 实际敞口 **{_dk_sc_rt3:.2f}x**")
                 if _dk_rv_rt3 is not None and not np.isnan(_dk_rv_rt3):
                     w(f" | 已实现波动率: {_dk_rv_rt3:.1%}")
@@ -11211,17 +11234,17 @@ class CombinedStrategyV77(CombinedStrategyBase):
                 w(f"| 指标 | 值 |\n")
                 w(f"|:-|------:|\n")
                 w(f"| 当前已生效敞口 | **{_dk_sc_p:.2f}x** (VolScale {_dk_cur_vs_p:.2f}x) |\n")
-                w(f"| 下一交易日敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🟢 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
+                w(f"| 本日收盘确认后敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {'🟢 需调仓' if _dk_pending_p else '✅ 维持'} |\n")
                 if _dk_rv_p is not None and not np.isnan(_dk_rv_p):
                     w(f"| 已实现波动率 | {_dk_rv_p:.1%} |\n")
                 w(f"| 目标波动率 | {CN_DK_TARGET_VOL:.0%} |\n")
                 if CN_DK_SCALE_THRESHOLD > 0:
                     if abs(_dk_next_raw_p - _dk_cur_vs_p) > 0.001:
-                        w(f"| 下一日理论VolScale | {_dk_next_raw_p:.2f}x (|Δ|={abs(_dk_next_raw_p - _dk_cur_vs_p):.4f} {'≥' if _dk_pending_p else '<'} {CN_DK_SCALE_THRESHOLD}阈值) |\n")
+                        w(f"| 本日收盘理论VolScale | {_dk_next_raw_p:.2f}x (|Δ|={abs(_dk_next_raw_p - _dk_cur_vs_p):.4f} {'≥' if _dk_pending_p else '<'} {CN_DK_SCALE_THRESHOLD}阈值) |\n")
                     else:
                         w(f"| 调整阈值 | Δ≥{CN_DK_SCALE_THRESHOLD:.2f} |\n")
                 if _dk_pending_p:
-                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 下一交易日开盘前执行**\n")
+                    w(f"\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 本日收盘确认后按收盘价执行**\n")
                 else:
                     w(f"\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n")
             w(f"\n---\n\n### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n\n")

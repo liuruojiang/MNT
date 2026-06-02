@@ -1,0 +1,6 @@
+python run_scan.py
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-06-02T03:13:47+08:00
+decision=diagnostic only: evaluate max leverage mainly on 15Y/10Y/5Y/3Y return-drawdown tradeoff, with 2008/GFC as stress constraint
+stability_label=pressure-and-recent-window-diagnostic

@@ -1,0 +1,168 @@
+{
+  "run_id": "20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy",
+  "created_at": "2026-06-02T03:13:33.900610+08:00",
+  "phase": "complete",
+  "project": "a_us_momentum_combo",
+  "strategy": "V7.7",
+  "subsystem": "Sub-B",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "git_branch": "main",
+  "git_commit": "6a0ffadc944df468045c325860efa169adfdcd05",
+  "git_status_before": "M .cn_official_cache/1_H30269.csv\n M \"mnt_bot V 7.7 plus.py\"\n?? .cn_official_cache/1_930955.csv\n?? outputs/20260601_v77_suba_total_return_vs_price_index/\n?? quant_param_scan_runs/20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy/\n?? tests/",
+  "git_status_after": "M .cn_official_cache/1_H30269.csv\n M \"mnt_bot V 7.7 plus.py\"\n?? .cn_official_cache/1_930955.csv\n?? outputs/20260601_v77_suba_total_return_vs_price_index/\n?? quant_param_scan_runs/20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy/\n?? tests/",
+  "scan_type": "runtime_override_grid",
+  "parameter_group": "US_ROT_MAX_LEV with BIL pre-listing cash proxy",
+  "baseline": {
+    "US_ROT_TARGET_VOL": 0.25,
+    "US_ROT_MAX_LEV": 2.0,
+    "US_ROT_FUTURES": [
+      "GLDM",
+      "QQQM"
+    ]
+  },
+  "candidate_grid": [
+    {
+      "US_ROT_MAX_LEV": 1.0
+    },
+    {
+      "US_ROT_MAX_LEV": 1.25
+    },
+    {
+      "US_ROT_MAX_LEV": 1.5
+    },
+    {
+      "US_ROT_MAX_LEV": 1.75
+    },
+    {
+      "US_ROT_MAX_LEV": 2.0
+    }
+  ],
+  "cost_model": "US_ROT_COMMISSION plus Sub-B blend execution turnover; no extra financing/open-impact model beyond existing Sub-B code",
+  "execution_timing": "T close signal -> T+1 open execution where open data is available",
+  "cash_proxy": {
+    "asset": "BIL",
+    "annual_return": 0.025,
+    "daily_return": 9.79913587377812e-05,
+    "proxy_start": "2006-02-06",
+    "scope": "pre-BIL-listing segment only; listed BIL data is used once available"
+  },
+  "data_snapshot": {
+    "sources": {
+      "QQQ": "Yahoo",
+      "EMXC": "Yahoo",
+      "EFA": "Yahoo",
+      "GLD": "Yahoo",
+      "TLT": "Yahoo",
+      "DBC": "Yahoo",
+      "BTC-USD": "Yahoo",
+      "UUP": "Yahoo",
+      "DBMF": "Yahoo",
+      "KMLM": "Yahoo",
+      "BIL": "Yahoo+synthetic_cash_2.50%_pre_listing",
+      "SPY": "Yahoo",
+      "EEM": "Yahoo",
+      "IBIT": "Yahoo"
+    },
+    "raw_ranges": {
+      "QQQ": {
+        "first_close": "2003-01-02",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "EMXC": {
+        "first_close": "2017-07-26",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "EFA": {
+        "first_close": "2003-01-02",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "GLD": {
+        "first_close": "2004-11-18",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "TLT": {
+        "first_close": "2003-01-02",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "DBC": {
+        "first_close": "2006-02-06",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "BTC-USD": {
+        "first_close": "2014-09-17",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "UUP": {
+        "first_close": "2007-03-01",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "DBMF": {
+        "first_close": "2019-05-08",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "KMLM": {
+        "first_close": "2020-12-02",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "BIL": {
+        "first_close": "2006-02-06",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "SPY": {
+        "first_close": "2003-01-02",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "EEM": {
+        "first_close": "2003-04-14",
+        "last_close": "2026-06-01",
+        "has_open": true
+      },
+      "IBIT": {
+        "first_close": "2024-01-11",
+        "last_close": "2026-06-01",
+        "has_open": true
+      }
+    },
+    "panel_start": "2006-02-06",
+    "panel_end": "2026-06-01",
+    "panel_rows": 5111,
+    "weekend_rows": 0,
+    "columns": [
+      "QQQ",
+      "EFA",
+      "GLD",
+      "TLT",
+      "DBC",
+      "BIL",
+      "EMXC",
+      "UUP",
+      "DBMF",
+      "BTC-USD",
+      "KMLM",
+      "SPY"
+    ]
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260602_a_us_momentum_combo_v7_7_sub_b_max_leverage_2008_cash_proxy\\command_log.txt"
+  },
+  "decision": "diagnostic only: evaluate max leverage mainly on 15Y/10Y/5Y/3Y return-drawdown tradeoff, with 2008/GFC as stress constraint",
+  "stability_label": "pressure-and-recent-window-diagnostic",
+  "finalized_at": "2026-06-02T03:13:47+08:00"
+}

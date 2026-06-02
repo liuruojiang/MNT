@@ -1,0 +1,11 @@
+﻿variant,code,name,source,start,end,rows
+official_total_return,1.H20955,中证红利,csindex,2010-06-01,2026-06-01,3884
+official_total_return,0.399606,创业板,Sina,2010-06-01,2026-06-01,3884
+official_total_return,1.H00016,上证50,csindex+Sina-proxy:1.000016,2010-06-01,2026-06-01,3884
+official_total_return,1.H00852,中证1000,csindex+Sina-proxy:1.000852,2010-06-01,2026-06-01,3884
+official_total_return,1.H00905,中证500,csindex+Sina-proxy:1.000905,2010-06-01,2026-06-01,3884
+all_price_index,1.H30269,??????100_??,csindex,2014-10-17,2026-06-01,2825
+all_price_index,0.399006,???_??,Sina,2014-10-17,2026-06-01,2825
+all_price_index,1.000016,??50_??,Sina,2014-10-17,2026-06-01,2825
+all_price_index,1.000852,??1000_??,Sina,2014-10-17,2026-06-01,2825
+all_price_index,1.000905,??500_??,Sina,2014-10-17,2026-06-01,2825

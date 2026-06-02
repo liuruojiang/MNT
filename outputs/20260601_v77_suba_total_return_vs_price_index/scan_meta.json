@@ -1,0 +1,65 @@
+{
+  "script": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "output_dir": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\20260601_v77_suba_total_return_vs_price_index",
+  "variants": {
+    "official_total_return": {
+      "codes": [
+        "1.H20955",
+        "0.399606",
+        "1.H00016",
+        "1.H00852",
+        "1.H00905"
+      ],
+      "names": {
+        "1.H20955": "中证红利",
+        "0.399606": "创业板",
+        "1.H00016": "上证50",
+        "1.H00852": "中证1000",
+        "1.H00905": "中证500",
+        "1.H00300": "沪深300",
+        "1.H11077": "10Y国债",
+        "cash": "Cash"
+      }
+    },
+    "all_price_index": {
+      "codes": [
+        "1.H30269",
+        "0.399006",
+        "1.000016",
+        "1.000852",
+        "1.000905"
+      ],
+      "names": {
+        "1.H30269": "??????100_??",
+        "0.399006": "???_??",
+        "1.000016": "??50_??",
+        "1.000852": "??1000_??",
+        "1.000905": "??500_??",
+        "1.H11077": "10Y国债",
+        "cash": "Cash"
+      }
+    }
+  },
+  "rules": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_BIAS_MOM_WEIGHT_END": 3.0,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.15,
+    "CN_ABS_MOM_DAY": 20,
+    "CN_ABS_MOM_THRESHOLD": 0.02,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_MIN_LEV": 0.1,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true
+  },
+  "common_window": {
+    "start": "2015-02-10",
+    "end": "2026-06-01",
+    "rows": 2745
+  },
+  "mismatch_days": 1490,
+  "mismatch_share": 0.5428051001821493
+}
