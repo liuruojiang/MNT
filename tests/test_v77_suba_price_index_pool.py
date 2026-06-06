@@ -123,3 +123,30 @@ def test_adk_display_copy_does_not_describe_next_open_execution():
     ]
 
     assert ambiguous_lines == []
+
+
+def test_suba_single_asset_gate_keeps_v77_cash_until_asset_strategy_holds(monkeypatch):
+    mod = load_v77_module()
+    monkeypatch.setattr(mod, "CN_BIAS_N", 5)
+    monkeypatch.setattr(mod, "CN_MOM_DAY", 3)
+    monkeypatch.setattr(mod, "CN_R2_WINDOW", 3)
+    monkeypatch.setattr(mod, "CN_R2_THRESHOLD", 0.0)
+    monkeypatch.setattr(mod, "CN_ABS_MOM_DAY", 2)
+    monkeypatch.setattr(mod, "CN_ABS_MOM_THRESHOLD", -1.0)
+    monkeypatch.setattr(mod, "CN_TARGET_VOL", 0.30)
+    monkeypatch.setattr(mod, "CN_VOL_WINDOW", 5)
+    monkeypatch.setattr(mod, "CN_ENTRY_INITIAL_FRACTION", 1.0)
+    monkeypatch.setattr(mod, "CN_SA_SAME_SIDE_OVERHEAT_ENABLED", False)
+    monkeypatch.setattr(mod, "CN_SA_VOLUME_OVERLAY_ENABLED", False)
+
+    dates = pd.bdate_range("2026-01-01", periods=35)
+    prices = pd.Series([100.0 + i * i * 0.2 for i in range(len(dates))], index=dates)
+    close = pd.DataFrame({"TEST": prices})
+    gate = pd.Series(False, index=dates)
+    gate.iloc[18:] = True
+
+    result = mod.run_cn_strategy(close, ["TEST"], single_asset_signal_gate={"TEST": gate})
+
+    assert result.loc[: gate.index[17], "holding"].eq("cash").all()
+    assert result.loc[gate.index[18]:, "holding"].eq("TEST").any()
+    assert bool(result.loc[gate.index[18]:, "suba_single_gate_blocked"].any()) is False
