@@ -42,6 +42,18 @@ def test_subb_max_leverage_is_reduced_to_one_point_five():
     assert mod.US_ROT_FUTURES == {"QQQM", "GLDM"}
 
 
+def test_subb_bond_sleeve_uses_agg_directly():
+    mod = load_v77_module()
+
+    assert "AGG" in mod.US_ROT_BASE_ASSETS
+    assert mod.US_ROT_BASE_ASSETS["AGG"]["proxy"] == "AGG"
+    assert "AGG" in mod.US_ROT_POOL
+    assert "TLT" not in mod.US_ROT_POOL
+    assert "VGLT" not in mod.US_ROT_ASSETS
+    assert "TLT" in mod.SUBB_INFLATION_GATE_TICKERS
+    assert "TLT" in mod.SUBB_REQUIRED_PRICE_TICKERS
+
+
 def test_930955_fetch_uses_csindex_price_index_branch(monkeypatch):
     mod = load_v77_module()
     dates = pd.bdate_range("2026-03-10", periods=60)

@@ -391,7 +391,7 @@ US_ROT_BASE_ASSETS = {
     "EMXC": {"proxy": "EMXC",    "label": "新兴市场(除中国)"},
     "VEA":  {"proxy": "EFA",     "label": "发达市场"},
     "GLDM": {"proxy": "GLD",     "label": "黄金"},
-    "VGLT": {"proxy": "TLT",     "label": "长期国债"},
+    "AGG":  {"proxy": "AGG",     "label": "综合债券"},
     "PDBC": {"proxy": "DBC",     "label": "大宗商品"},
     "IBIT": {"proxy": "BTC-USD", "label": "比特币"},
 }
@@ -404,14 +404,17 @@ US_ROT_ASSETS = {**US_ROT_BASE_ASSETS, **US_ROT_MACRO_ASSETS}
 US_ROT_BASE_POOL = [cfg["proxy"] for cfg in US_ROT_BASE_ASSETS.values()]
 US_ROT_MACRO_POOL = [cfg["proxy"] for cfg in US_ROT_MACRO_ASSETS.values()]
 US_ROT_POOL = US_ROT_BASE_POOL + US_ROT_MACRO_POOL
-SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(US_ROT_POOL + ["BIL", "SPY"]))
+SUBB_INFLATION_GATE_TICKERS = ("DBC", "TLT", "UUP")
+SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(
+    US_ROT_POOL + ["BIL", "SPY"] + list(SUBB_INFLATION_GATE_TICKERS)
+))
 SUBB_OPTIONAL_MACRO_TICKERS = tuple()
 US_ROT_FUTURES = {"QQQM", "GLDM"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 1.5x max leverage，
 # scale>1: only live assets in US_ROT_FUTURES are levered; proxy inputs are mapped before checking.
-# V6.8.1: leveraged assets are QQQM / GLDM only; TLT/VGLT is not levered.
+# V6.8.1: leveraged assets are QQQM / GLDM only; AGG is not levered.
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 1.5
 US_ROT_VOL_WINDOW = 40
@@ -516,7 +519,7 @@ for _n, _c in PROD_PORTFOLIO.items():
 
 # 全部美股Ticker合集
 US_ALL_TICKERS = sorted(set(
-    US_ROT_POOL + ["BIL", "SPY", US_ROT_EMXC_BT_PROXY] +  # SPY: VolReg风控仍需要
+    list(SUBB_REQUIRED_PRICE_TICKERS) + [US_ROT_EMXC_BT_PROXY] +  # SPY/TLT: VolReg/通胀门控仍需要
     [c["proxy"] for c in PROD_PORTFOLIO.values()] +
     list(US_ROT_ASSETS.keys()) +    # 实盘ETF: QQQM, GLDM, IBIT等 (仓位调整需要实际价格)
     list(PROD_PORTFOLIO.keys())     # 实盘ETF: VTI, QQQM, GLDM等
@@ -8647,7 +8650,7 @@ class CombinedStrategyBase:
             max_lag_days=1 if include_us_live_snapshot else 0,
             label="Sub-B核心价格",
         )
-        rot_tickers = US_ROT_POOL + ["BIL"]
+        rot_tickers = list(dict.fromkeys(US_ROT_POOL + ["BIL"] + list(SUBB_INFLATION_GATE_TICKERS)))
         _late_rot = _us_rot_late_history_tickers()
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
         if "EMXC" in US_ROT_POOL and US_ROT_EMXC_BT_PROXY not in rot_tickers_core:
@@ -9296,7 +9299,7 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
-Sub-B: V7.7收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}({US_ROT_WINDOW_WEIGHT_LABEL}) + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
+Sub-B: V7.7收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}({US_ROT_WINDOW_WEIGHT_LABEL}) + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, AGG, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
