@@ -160,6 +160,91 @@ CN_MIN_LEV = 0.1              # 最小杠杆
 CN_SCALE_THRESHOLD = 0.00     # scale变动阈值；0=连续更新
 CN_ENTRY_INITIAL_FRACTION = 1.0
 
+CN_SA_SINGLE_GATE_ENABLED = True
+CN_SA_SINGLE_GATE_EXECUTION_SHIFT = -1
+CN_SA_SINGLE_GATE_CONFIGS = {
+    "0.399006": {
+        "name": "cyb_long_momentum_v1_2",
+        "mode": "cyb_v1_2",
+        "bias_ma": 50,
+        "mom_day": 27,
+        "weight_end": 1.0,
+        "abs_mom_day": 20,
+        "score_threshold": 0.0,
+        "abs_threshold": -0.025,
+        "nav_decay_threshold": 0.0875,
+        "nav_decay_scale": 0.25,
+        "hot_score_threshold": 120.0,
+        "hot_scale": 0.0,
+        "hot_volume_ma": 60,
+        "hot_volume_ratio_threshold": 1.75,
+        "cost_rate": 0.001,
+    },
+    "1.000016": {
+        "name": "sse50_long_momentum_v1_0",
+        "mode": "sse50_v1_0",
+        "bias_ma": 110,
+        "mom_day": 60,
+        "weight_end": 2.0,
+        "r2_threshold": 0.20,
+        "abs_mom_day": 50,
+        "score_threshold": 0.0,
+        "abs_threshold": -0.13,
+        "volume_ma": 120,
+        "volume_ratio_threshold": 0.80,
+        "target_vol": 0.15,
+        "target_vol_window": 120,
+        "max_leverage": 1.5,
+        "nav_decay_threshold": 0.10,
+        "nav_decay_scale": 0.75,
+        "cost_rate": 0.001,
+    },
+    "1.000852": {
+        "name": "zz1000_long_momentum_v1_2",
+        "mode": "zz1000_v1_2",
+        "bias_ma": 45,
+        "mom_day": 18,
+        "weight_end": 2.5,
+        "score_threshold": 0.0,
+        "abs_mom_day": 20,
+        "abs_reentry_threshold": 0.03,
+        "abs_exit_threshold": 0.0,
+        "nav_decay_threshold": 0.07,
+        "nav_decay_scale": 0.75,
+        "score_hot_threshold": 150.0,
+        "score_hot_scale": 0.0,
+        "volume_ma": 160,
+        "volume_ratio_threshold": 1.00,
+        "volume_exit_threshold": 0.90,
+        "volume_confirm_days": 1,
+        "cost_rate": 0.001,
+    },
+    "1.000905": {
+        "name": "zz500_long_momentum_v1_2",
+        "mode": "zz500_v1_2",
+        "bias_ma": 110,
+        "mom_day": 24,
+        "weight_end": 2.0,
+        "score_threshold": 2.0,
+        "score_exit_threshold": 0.0,
+        "abs_mom_day": 20,
+        "abs_reentry_threshold": -0.04,
+        "abs_exit_threshold": -0.06,
+        "nav_decay_threshold": 0.06,
+        "nav_decay_scale": 0.5,
+        "hot_score_threshold": 90.0,
+        "hot_scale": 0.0,
+        "high_vol_window": 40,
+        "high_vol_threshold": 0.45,
+        "high_vol_scale": 0.5,
+        "volume_ma": 120,
+        "volume_ratio_threshold": 0.75,
+        "volume_exit_threshold": 0.75,
+        "volume_confirm_days": 1,
+        "cost_rate": 0.001,
+    },
+}
+
 # 成交量情绪监控（仅展示，不参与交易决策）
 CN_VOL_EMOTION_MA   = 10       # 均量周期
 CN_VOL_EMOTION_BEAR = 8        # 连续缩量 N 天 → 悲观
@@ -391,7 +476,7 @@ US_ROT_BASE_ASSETS = {
     "EMXC": {"proxy": "EMXC",    "label": "新兴市场(除中国)"},
     "VEA":  {"proxy": "EFA",     "label": "发达市场"},
     "GLDM": {"proxy": "GLD",     "label": "黄金"},
-    "VGLT": {"proxy": "TLT",     "label": "长期国债"},
+    "AGG":  {"proxy": "AGG",     "label": "综合债券"},
     "PDBC": {"proxy": "DBC",     "label": "大宗商品"},
     "IBIT": {"proxy": "BTC-USD", "label": "比特币"},
 }
@@ -404,14 +489,17 @@ US_ROT_ASSETS = {**US_ROT_BASE_ASSETS, **US_ROT_MACRO_ASSETS}
 US_ROT_BASE_POOL = [cfg["proxy"] for cfg in US_ROT_BASE_ASSETS.values()]
 US_ROT_MACRO_POOL = [cfg["proxy"] for cfg in US_ROT_MACRO_ASSETS.values()]
 US_ROT_POOL = US_ROT_BASE_POOL + US_ROT_MACRO_POOL
-SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(US_ROT_POOL + ["BIL", "SPY"]))
+SUBB_INFLATION_GATE_TICKERS = ("DBC", "TLT", "UUP")
+SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(
+    US_ROT_POOL + ["BIL", "SPY"] + list(SUBB_INFLATION_GATE_TICKERS)
+))
 SUBB_OPTIONAL_MACRO_TICKERS = tuple()
 US_ROT_FUTURES = {"QQQM", "GLDM"}
 _ROT_PROXY_TO_LIVE = {cfg["proxy"]: live for live, cfg in US_ROT_ASSETS.items()}
 # 2026-03-27 本轮优化落地:
 # Sub-B 正式采用 25% target vol + 1.5x max leverage，
 # scale>1: only live assets in US_ROT_FUTURES are levered; proxy inputs are mapped before checking.
-# V6.8.1: leveraged assets are QQQM / GLDM only; TLT/VGLT is not levered.
+# V6.8.1: leveraged assets are QQQM / GLDM only; AGG is not levered.
 US_ROT_TARGET_VOL = 0.25
 US_ROT_MAX_LEV = 1.5
 US_ROT_VOL_WINDOW = 40
@@ -516,7 +604,7 @@ for _n, _c in PROD_PORTFOLIO.items():
 
 # 全部美股Ticker合集
 US_ALL_TICKERS = sorted(set(
-    US_ROT_POOL + ["BIL", "SPY", US_ROT_EMXC_BT_PROXY] +  # SPY: VolReg风控仍需要
+    list(SUBB_REQUIRED_PRICE_TICKERS) + [US_ROT_EMXC_BT_PROXY] +  # SPY/TLT: VolReg/通胀门控仍需要
     [c["proxy"] for c in PROD_PORTFOLIO.values()] +
     list(US_ROT_ASSETS.keys()) +    # 实盘ETF: QQQM, GLDM, IBIT等 (仓位调整需要实际价格)
     list(PROD_PORTFOLIO.keys())     # 实盘ETF: VTI, QQQM, GLDM等
@@ -3612,7 +3700,286 @@ def _select_cn_ideal_asset(scores, r2_dict, row_pos, holding="cash", abs_mom_dic
             return best if float(best_score) > float(hold_score) * CN_SWITCH_BUFFER else holding
     return best
 
-def run_cn_strategy(close_df, equity_codes):
+def _suba_single_calc_bias_momentum(close, bias_ma, mom_day, weight_end):
+    prices = pd.to_numeric(close, errors="coerce").to_numpy(dtype=float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = pd.Series(prices, index=close.index).rolling(int(bias_ma)).mean().to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
+    x = np.arange(int(mom_day), dtype=float)
+    weights = np.linspace(1.0, float(weight_end), int(mom_day))
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for end in range(int(bias_ma) + int(mom_day) - 1, n):
+        y = bias[end - int(mom_day) + 1:end + 1]
+        if not np.isfinite(y).all() or y[0] <= 1e-10:
+            continue
+        y_bar = float((weights * y).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (y - y_bar)).sum() / denom)
+        result[end] = slope / float(y[0]) * 10000.0
+    return pd.Series(result, index=close.index, name="score")
+
+
+def _suba_single_calc_bias_momentum_r2(close, bias_ma, mom_day, weight_end):
+    prices = pd.to_numeric(close, errors="coerce").to_numpy(dtype=float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = pd.Series(prices, index=close.index).rolling(int(bias_ma)).mean().to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
+    x = np.arange(int(mom_day), dtype=float)
+    weights = np.linspace(1.0, float(weight_end), int(mom_day))
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for end in range(int(bias_ma) + int(mom_day) - 1, n):
+        y = bias[end - int(mom_day) + 1:end + 1]
+        if not np.isfinite(y).all() or y[0] <= 1e-10:
+            continue
+        y_bar = float((weights * y).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (y - y_bar)).sum() / denom)
+        fitted = y_bar + slope * (x - x_bar)
+        ss_res = float((weights * (y - fitted) ** 2).sum())
+        ss_tot = float((weights * (y - y_bar) ** 2).sum())
+        result[end] = 0.0 if ss_tot <= 1e-20 else max(0.0, min(1.0, 1.0 - ss_res / ss_tot))
+    return pd.Series(result, index=close.index, name="score_r2")
+
+
+def _suba_single_return_series(raw_ret, weight, cost_rate=0.001):
+    weight = pd.Series(weight, index=raw_ret.index).fillna(0.0).astype(float)
+    turnover = weight.diff().abs().fillna(weight.abs())
+    ret = weight * raw_ret.fillna(0.0) - float(cost_rate) * turnover
+    nav = (1.0 + ret).cumprod()
+    return ret, nav, turnover
+
+
+def _suba_single_score_abs_hysteresis(score, abs_mom, score_entry, score_exit, abs_reentry, abs_exit):
+    score_values = pd.to_numeric(score, errors="coerce")
+    abs_values = pd.to_numeric(abs_mom, errors="coerce")
+    score_active = False
+    abs_active = False
+    signal = []
+    for score_value, abs_value in zip(score_values, abs_values):
+        if pd.isna(score_value) or pd.isna(abs_value):
+            score_active = False
+            abs_active = False
+            signal.append(False)
+            continue
+        if score_active:
+            score_active = float(score_value) > float(score_exit)
+        elif float(score_value) > float(score_entry):
+            score_active = True
+        if not score_active:
+            abs_active = False
+            signal.append(False)
+            continue
+        if abs_active:
+            abs_active = float(abs_value) > float(abs_exit)
+        elif float(abs_value) > float(abs_reentry):
+            abs_active = True
+        signal.append(abs_active)
+    return pd.Series(signal, index=score.index, name="base_signal")
+
+
+def _suba_single_abs_hysteresis(score, abs_mom, score_threshold, abs_reentry, abs_exit):
+    score_ok = (pd.to_numeric(score, errors="coerce") > float(score_threshold)).fillna(False)
+    abs_values = pd.to_numeric(abs_mom, errors="coerce")
+    active = False
+    signal = []
+    for ok, value in zip(score_ok, abs_values):
+        if not ok or pd.isna(value):
+            active = False
+        elif active:
+            active = float(value) > float(abs_exit)
+        else:
+            active = float(value) > float(abs_reentry)
+        signal.append(active)
+    return pd.Series(signal, index=score.index, name="base_signal")
+
+
+def _suba_single_volume_hysteresis(volume_ratio, entry_threshold, exit_threshold, confirm_days=1):
+    values = pd.to_numeric(volume_ratio, errors="coerce")
+    active = False
+    entry_count = 0
+    exit_count = 0
+    need = max(1, int(confirm_days))
+    signal = []
+    for value in values:
+        if pd.isna(value):
+            active = False
+            entry_count = 0
+            exit_count = 0
+            signal.append(False)
+            continue
+        ratio = float(value)
+        if active:
+            entry_count = 0
+            if ratio < float(exit_threshold):
+                exit_count += 1
+                if exit_count >= need:
+                    active = False
+                    exit_count = 0
+            else:
+                exit_count = 0
+        else:
+            exit_count = 0
+            if ratio >= float(entry_threshold):
+                entry_count += 1
+                if entry_count >= need:
+                    active = True
+                    entry_count = 0
+            else:
+                entry_count = 0
+        signal.append(active)
+    return pd.Series(signal, index=volume_ratio.index, name="volume_pass_signal")
+
+
+def _suba_single_final_weight(ohlcv, cfg):
+    close = ohlcv["close"].astype(float)
+    volume = ohlcv["volume"].astype(float)
+    raw_ret = close.pct_change().fillna(0.0)
+    score = _suba_single_calc_bias_momentum(close, cfg["bias_ma"], cfg["mom_day"], cfg["weight_end"])
+    abs_mom = close / close.shift(int(cfg["abs_mom_day"])) - 1.0
+    mode = cfg.get("mode")
+
+    if mode == "sse50_v1_0":
+        score_r2 = _suba_single_calc_bias_momentum_r2(close, cfg["bias_ma"], cfg["mom_day"], cfg["weight_end"])
+        volume_ratio = volume / volume.rolling(int(cfg["volume_ma"])).mean()
+        base_signal = (
+            (score > float(cfg["score_threshold"]))
+            & (score_r2 >= float(cfg["r2_threshold"]))
+            & (abs_mom > float(cfg["abs_threshold"]))
+            & (volume_ratio >= float(cfg["volume_ratio_threshold"]))
+        )
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        realized_vol = raw_ret.rolling(int(cfg["target_vol_window"])).std(ddof=0) * np.sqrt(CN_TRADING_DAYS)
+        scale_raw = (float(cfg["target_vol"]) / realized_vol.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan)
+        target_vol_weight = base_weight * scale_raw.clip(lower=0.0, upper=float(cfg["max_leverage"])).shift(1).fillna(1.0)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, target_vol_weight, cfg["cost_rate"])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        final_weight = target_vol_weight.where(
+            base_dd.shift(1).fillna(0.0) > -float(cfg["nav_decay_threshold"]),
+            target_vol_weight * float(cfg["nav_decay_scale"]),
+        )
+        return final_weight.rename("final_weight")
+
+    if mode == "cyb_v1_2":
+        base_signal = ((score > float(cfg["score_threshold"])) & (abs_mom > float(cfg["abs_threshold"])))
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg["cost_rate"])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        after_nav_weight = base_weight.where(
+            base_dd.shift(1).fillna(0.0) > -float(cfg["nav_decay_threshold"]),
+            base_weight * float(cfg["nav_decay_scale"]),
+        )
+        volume_ratio = volume / volume.rolling(int(cfg["hot_volume_ma"]), min_periods=int(cfg["hot_volume_ma"])).mean()
+        hot_volume_confirm = (volume_ratio.shift(1) >= float(cfg["hot_volume_ratio_threshold"])).fillna(False)
+        score_hot_gate = (score.shift(1) >= float(cfg["hot_score_threshold"])) & (after_nav_weight > 0) & hot_volume_confirm
+        return after_nav_weight.where(~score_hot_gate, after_nav_weight * float(cfg["hot_scale"])).rename("final_weight")
+
+    if mode == "zz1000_v1_2":
+        base_signal = _suba_single_abs_hysteresis(
+            score,
+            abs_mom,
+            cfg["score_threshold"],
+            cfg["abs_reentry_threshold"],
+            cfg["abs_exit_threshold"],
+        )
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg["cost_rate"])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        after_nav_weight = base_weight.where(
+            base_dd.shift(1).fillna(0.0) > -float(cfg["nav_decay_threshold"]),
+            base_weight * float(cfg["nav_decay_scale"]),
+        )
+        after_score_hot = after_nav_weight.where(
+            ~((score.shift(1) >= float(cfg["score_hot_threshold"])) & (after_nav_weight > 0)),
+            after_nav_weight * float(cfg["score_hot_scale"]),
+        )
+        volume_ratio = volume / volume.rolling(int(cfg["volume_ma"]), min_periods=int(cfg["volume_ma"])).mean()
+        volume_signal = _suba_single_volume_hysteresis(
+            volume_ratio,
+            cfg["volume_ratio_threshold"],
+            cfg["volume_exit_threshold"],
+            cfg["volume_confirm_days"],
+        )
+        volume_ready_exec = volume_ratio.notna().shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_signal_exec = volume_signal.shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_pass = volume_signal_exec | ~volume_ready_exec
+        return after_score_hot.where(volume_pass, 0.0).rename("final_weight")
+
+    if mode == "zz500_v1_2":
+        base_signal = _suba_single_score_abs_hysteresis(
+            score,
+            abs_mom,
+            cfg["score_threshold"],
+            cfg["score_exit_threshold"],
+            cfg["abs_reentry_threshold"],
+            cfg["abs_exit_threshold"],
+        )
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg["cost_rate"])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        desired_weight = base_weight.where(
+            base_dd.shift(1).fillna(0.0) > -float(cfg["nav_decay_threshold"]),
+            base_weight * float(cfg["nav_decay_scale"]),
+        )
+        score_hot_scale = pd.Series(1.0, index=desired_weight.index)
+        score_hot_scale.loc[(score.shift(1) >= float(cfg["hot_score_threshold"])) & (desired_weight > 0)] = float(cfg["hot_scale"])
+        realized_vol = raw_ret.rolling(int(cfg["high_vol_window"])).std(ddof=0) * np.sqrt(CN_TRADING_DAYS)
+        vol_scale = pd.Series(1.0, index=desired_weight.index)
+        vol_scale.loc[(realized_vol.shift(1) >= float(cfg["high_vol_threshold"])) & (desired_weight > 0)] = float(cfg["high_vol_scale"])
+        overheat_weight = desired_weight * pd.concat([score_hot_scale, vol_scale], axis=1).min(axis=1)
+        volume_ratio = volume / volume.rolling(int(cfg["volume_ma"]), min_periods=int(cfg["volume_ma"])).mean()
+        volume_signal = _suba_single_volume_hysteresis(
+            volume_ratio,
+            cfg["volume_ratio_threshold"],
+            cfg["volume_exit_threshold"],
+            cfg["volume_confirm_days"],
+        )
+        volume_ready_exec = volume_ratio.notna().shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_signal_exec = volume_signal.shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_pass = volume_signal_exec | ~volume_ready_exec
+        return overheat_weight.where(volume_pass, 0.0).rename("final_weight")
+
+    raise ValueError(f"Unsupported Sub-A single gate mode: {mode}")
+
+
+def _build_suba_single_strategy_gates(close_df, msg=None):
+    gates = {}
+    for code, cfg in CN_SA_SINGLE_GATE_CONFIGS.items():
+        if code not in close_df.columns:
+            continue
+        try:
+            ohlcv = _fetch_cn_sina_amount_proxy(code)
+            final_weight = _suba_single_final_weight(ohlcv, cfg)
+            gate = (final_weight.shift(int(CN_SA_SINGLE_GATE_EXECUTION_SHIFT)).fillna(final_weight) > 1e-12)
+            gates[code] = gate.reindex(close_df.index).astype("boolean").ffill().fillna(False).astype(bool)
+            if msg is not None:
+                msg.write(
+                    f"  Sub-A single gate {CN_NAMES.get(code, code)}: "
+                    f"{final_weight.index[-1].strftime('%Y-%m-%d')} [{cfg['name']}]\n"
+                )
+        except _DATA_FETCH_ERRORS as exc:
+            raise poe.BotError(f"Sub-A single gate data unavailable for {CN_NAMES.get(code, code)}: {_short_error(exc)}") from exc
+        except Exception as exc:
+            raise poe.BotError(f"Sub-A single gate failed for {CN_NAMES.get(code, code)}: {_short_error(exc)}") from exc
+    return gates
+
+
+def _normalize_suba_single_asset_gate(single_asset_signal_gate, index):
+    gates = {}
+    if not single_asset_signal_gate:
+        return gates
+    for code, values in single_asset_signal_gate.items():
+        gate = pd.Series(values, dtype="boolean").reindex(index).ffill().fillna(False).astype(bool)
+        gates[str(code)] = gate
+    return gates
+
+
+def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
     """Sub-A V6.1: 乖离动量 + R²过滤 + 国债轮动 + 波动率缩放.
     v6.1变更: 乖离动量替代双动量排名, R²过滤替代MA拐头和冷却期, 国债加入轮动池, 波动率缩放控制风险.
     """
@@ -3630,6 +3997,7 @@ def run_cn_strategy(close_df, equity_codes):
     pending_entry_target = None
     pending_entry_since = None
     pending_entry_days = 0
+    single_asset_gates = _normalize_suba_single_asset_gate(single_asset_signal_gate, close_df.index)
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -3642,6 +4010,14 @@ def run_cn_strategy(close_df, equity_codes):
         ideal = "cash"
         if scores:
             ideal = _select_cn_ideal_asset(scores, r2_dict, i, holding=holding, abs_mom_dict=abs_mom_dict)
+        raw_ideal = ideal
+        single_gate_pass = True
+        single_gate_blocked = False
+        if raw_ideal != "cash" and raw_ideal in single_asset_gates:
+            single_gate_pass = bool(single_asset_gates[raw_ideal].iloc[i])
+            if not single_gate_pass:
+                ideal = "cash"
+                single_gate_blocked = True
         signal_target = ideal if ideal != holding else None
         trade_target = None
         trade_fraction = holding_fraction
@@ -3742,6 +4118,9 @@ def run_cn_strategy(close_df, equity_codes):
             "pending_entry_target": pending_entry_target,
             "pending_entry_since": pending_entry_since,
             "pending_entry_days": pending_entry_days,
+            "suba_single_gate_raw_ideal": raw_ideal,
+            "suba_single_gate_pass": single_gate_pass,
+            "suba_single_gate_blocked": single_gate_blocked,
         })
     df = pd.DataFrame(rows).set_index("date")
     # 波动率缩放 (v6.1): cash日scale=1.0, 权益日scale=target_vol/realized_vol
@@ -8647,7 +9026,7 @@ class CombinedStrategyBase:
             max_lag_days=1 if include_us_live_snapshot else 0,
             label="Sub-B核心价格",
         )
-        rot_tickers = US_ROT_POOL + ["BIL"]
+        rot_tickers = list(dict.fromkeys(US_ROT_POOL + ["BIL"] + list(SUBB_INFLATION_GATE_TICKERS)))
         _late_rot = _us_rot_late_history_tickers()
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
         if "EMXC" in US_ROT_POOL and US_ROT_EMXC_BT_PROXY not in rot_tickers_core:
@@ -8832,7 +9211,16 @@ class CombinedStrategyBase:
                         allow_unresolved_suba_volume=False):
         # v6.1: Sub-A uses bias momentum + R² + bond ETF
         cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A国债避险")
-        cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
+        suba_single_gate = (
+            _build_suba_single_strategy_gates(cn_close_with_bond)
+            if CN_SA_SINGLE_GATE_ENABLED
+            else None
+        )
+        cn_result = run_cn_strategy(
+            cn_close_with_bond,
+            CN_EQUITY_CODES,
+            single_asset_signal_gate=suba_single_gate,
+        )
         if CN_SA_CASH_OVERLAY_ENABLED:
             cn_result = apply_suba_cash_peak_decay_overlay(
                 cn_result,
@@ -9296,7 +9684,7 @@ Sub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两�
   例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}
   例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}
   如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}
-Sub-B: V7.7收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}({US_ROT_WINDOW_WEIGHT_LABEL}) + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, VGLT, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
+Sub-B: V7.7收益型混合 = 官方宏观门控腿{SUBB_V75_OFFICIAL_WEIGHT:.0%}({US_ROT_WINDOW_WEIGHT_LABEL}) + EMA hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}同池候选腿{SUBB_V75_EMA_WEIGHT:.0%}；EMA腿VolScale={SUBB_V75_EMA_VOL_MODE}；EMA腿使用 US_ROT_POOL 全池，包含 QQQM, GLDM, AGG, EMXC, VEA, PDBC, IBIT, UUP, DBMF, KMLM
 
 当前已设置的仓位:
 {chr(10).join(ctx_parts)}
