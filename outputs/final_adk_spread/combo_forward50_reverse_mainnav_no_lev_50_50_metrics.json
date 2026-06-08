@@ -1,0 +1,28 @@
+{
+  "created_at": "2026-06-07T13:02:57+08:00",
+  "combo_id": "combo_forward50_reverse_mainnav_no_lev_50_50",
+  "method": "daily return blend: 50% forward final + 50% reverse main_nav no-leverage candidate; sleeve-level costs retained; no extra combo-level rebalance cost",
+  "source_daily": {
+    "forward": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5_daily.csv",
+    "reverse_layer9_daily_curves": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\quant_param_scan_runs\\20260607_adk_hs300_zz1000_reverse_spread_layer9_volhot_final_ridge_main_vs_return_nav\\daily_curves.csv"
+  },
+  "reverse_candidate": "rev_l9_main_nav_volhot_w25_thr0p14_scale0",
+  "window": {
+    "start": "2014-10-17",
+    "end": "2026-05-14",
+    "rows": 2812
+  },
+  "active_counts": {
+    "both_active_days": 2,
+    "forward_only_days": 1139,
+    "reverse_only_days": 537,
+    "both_inactive_days": 1134,
+    "return_correlation_full": -0.007037751535672749
+  },
+  "outputs": {
+    "daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward50_reverse_mainnav_no_lev_50_50_daily.csv",
+    "metrics": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward50_reverse_mainnav_no_lev_50_50_metrics.csv",
+    "compare_old_levered_combo": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward50_reverse_mainnav_no_lev_50_50_compare_old_levered_combo.csv",
+    "metrics_json": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward50_reverse_mainnav_no_lev_50_50_metrics.json"
+  }
+}

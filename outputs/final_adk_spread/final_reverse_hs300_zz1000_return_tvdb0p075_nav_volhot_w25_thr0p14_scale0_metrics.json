@@ -1,0 +1,151 @@
+{
+  "created_at": "2026-06-08T16:13:58+08:00",
+  "meta": {
+    "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+    "zz1000_column": "1.000852",
+    "hs300_column": "1.000300",
+    "raw_rows": 8657,
+    "zz1000_first_valid": "2014-10-17",
+    "zz1000_last_valid": "2026-06-05",
+    "hs300_first_valid": "2002-01-04",
+    "hs300_last_valid": "2026-06-05",
+    "formal_start": "2014-10-17",
+    "common_start": "2014-10-17",
+    "common_end": "2026-06-05",
+    "common_rows": 2828,
+    "direction": "long HS300 / short ZZ1000",
+    "asset_curve": "CSI300 price index / CSI1000 price index",
+    "spread_formula": "hs300 / zz1000, normalized to 1 at formal common start",
+    "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+    "signal": {
+      "bias_ma": 60,
+      "mom_day": 20,
+      "weight_end": 3.0,
+      "score_threshold": 2.5,
+      "abs_mom_day": 20,
+      "abs_threshold": -0.05
+    },
+    "target_vol": {
+      "enabled": true,
+      "target_vol": 0.14,
+      "target_vol_window": 20,
+      "max_leverage": 1.5,
+      "deadband": 0.075,
+      "deadband_type": "relative_scale_change",
+      "deadband_rule": "keep previous effective scale when abs(raw_scale / previous_effective_scale - 1) < deadband"
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.075,
+      "scale": 0.5,
+      "timing": "prior-row pre-overlay Layer 4 NAV drawdown"
+    },
+    "vol_overheat": {
+      "enabled": true,
+      "window": 25,
+      "threshold": 0.14,
+      "scale": 0.0,
+      "timing": "prior-row realized volatility"
+    },
+    "cost_model": {
+      "one_way_cost_bps": 5.0
+    },
+    "annualization_days": 242.0
+  },
+  "metrics": [
+    {
+      "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+      "segment": "full",
+      "start": "2014-10-17",
+      "end": "2026-06-05",
+      "rows": 2828,
+      "ann_return": 0.09775495672373191,
+      "ann_vol": 0.06374395179930682,
+      "sharpe_repo": 1.533556580105141,
+      "max_dd": -0.057212294624804705,
+      "calmar": 1.7086354841175992,
+      "avg_turnover": 0.03244998841120652,
+      "cost_total": 0.04588428361344602,
+      "avg_exposure": 0.17487006519590995,
+      "final_nav": 2.9740219866829665,
+      "nav_defense_days": 348,
+      "volhot_days": 635
+    },
+    {
+      "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+      "segment": "last_10y",
+      "start": "2016-06-06",
+      "end": "2026-06-05",
+      "rows": 2427,
+      "ann_return": 0.11480239908068213,
+      "ann_vol": 0.06875625442931112,
+      "sharpe_repo": 1.6697011789481848,
+      "max_dd": -0.057212294624804705,
+      "calmar": 2.006603647582226,
+      "avg_turnover": 0.037811523373255884,
+      "cost_total": 0.045884283613446014,
+      "avg_exposure": 0.20376289426206567,
+      "final_nav": 2.9740219866829665,
+      "nav_defense_days": 252,
+      "volhot_days": 508
+    },
+    {
+      "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+      "segment": "last_5y",
+      "start": "2021-06-07",
+      "end": "2026-06-05",
+      "rows": 1211,
+      "ann_return": 0.07115023293473266,
+      "ann_vol": 0.06304729041988574,
+      "sharpe_repo": 1.128521661452578,
+      "max_dd": -0.052179737150922945,
+      "calmar": 1.3635605853847075,
+      "avg_turnover": 0.03639689612582815,
+      "cost_total": 0.02203832060418895,
+      "avg_exposure": 0.18585174590148545,
+      "final_nav": 1.4105071161962448,
+      "nav_defense_days": 122,
+      "volhot_days": 278
+    },
+    {
+      "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+      "segment": "last_3y",
+      "start": "2023-06-05",
+      "end": "2026-06-05",
+      "rows": 727,
+      "ann_return": 0.0864827183858321,
+      "ann_vol": 0.06861245182864276,
+      "sharpe_repo": 1.260452236888717,
+      "max_dd": -0.041753760791632066,
+      "calmar": 2.0712557802257714,
+      "avg_turnover": 0.0379466186866069,
+      "cost_total": 0.013793595892581608,
+      "avg_exposure": 0.20202022208038437,
+      "final_nav": 1.2829724277386352,
+      "nav_defense_days": 40,
+      "volhot_days": 147
+    },
+    {
+      "strategy_id": "final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0",
+      "segment": "last_1y",
+      "start": "2025-06-05",
+      "end": "2026-06-05",
+      "rows": 244,
+      "ann_return": 0.06320687296669569,
+      "ann_vol": 0.04703470658816194,
+      "sharpe_repo": 1.3438347456940252,
+      "max_dd": -0.029543370126714263,
+      "calmar": 2.1394604845552667,
+      "avg_turnover": 0.033556037342284725,
+      "cost_total": 0.004093836555758737,
+      "avg_exposure": 0.19044747040489213,
+      "final_nav": 1.0637455517185417,
+      "nav_defense_days": 6,
+      "volhot_days": 37
+    }
+  ],
+  "outputs": {
+    "daily": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0_daily.csv",
+    "metrics": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_reverse_hs300_zz1000_return_tvdb0p075_nav_volhot_w25_thr0p14_scale0_metrics.json"
+  }
+}

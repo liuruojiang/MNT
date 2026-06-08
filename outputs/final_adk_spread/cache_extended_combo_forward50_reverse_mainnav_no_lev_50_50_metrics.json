@@ -1,0 +1,44 @@
+{
+  "created_at": "2026-06-07T13:09:41+08:00",
+  "diagnostic": true,
+  "reason": "uses .cn_official_cache prices to extend common window without rewriting main panel",
+  "combo_id": "cache_extended_combo_forward50_reverse_mainnav_no_lev_50_50",
+  "method": "daily return blend: 50% cache-extended forward final + 50% cache-extended reverse main_nav no-leverage candidate; sleeve-level costs retained; no extra combo-level rebalance cost",
+  "source_daily": {
+    "forward": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_forward_zz1000_hs300_daily.csv",
+    "reverse_rebuilt": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_ext_rev_main_nav_volhot_w25_thr0p14_scale0_daily.csv",
+    "old_latest_levered_combo": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse50_daily.csv",
+    "old_latest_levered_combo_metrics": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse50_metrics.json"
+  },
+  "source_price_panel": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\_tmp_cn_cache_zz1000_hs300_panel.csv",
+  "window": {
+    "start": "2014-10-17",
+    "end": "2026-06-05",
+    "rows": 2828
+  },
+  "reverse_candidate": {
+    "source_line": "main_tv0p08",
+    "target_vol": 0.08,
+    "target_vol_window": 20,
+    "max_leverage": 1.0,
+    "nav_threshold": 0.075,
+    "nav_defense_scale": 0.25,
+    "volhot_window": 25,
+    "volhot_threshold": 0.14,
+    "volhot_scale": 0.0
+  },
+  "active_counts": {
+    "both_active_days": 2,
+    "forward_only_days": 1150,
+    "reverse_only_days": 537,
+    "both_inactive_days": 1139,
+    "return_correlation_full": -0.006703470487526673
+  },
+  "outputs": {
+    "daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse_mainnav_no_lev_50_50_daily.csv",
+    "metrics": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse_mainnav_no_lev_50_50_metrics.csv",
+    "compare_latest_old_levered_combo": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse_mainnav_no_lev_50_50_compare_latest_old_levered_combo.csv",
+    "metrics_json": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse_mainnav_no_lev_50_50_metrics.json",
+    "reverse_rebuilt_daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\cache_ext_rev_main_nav_volhot_w25_thr0p14_scale0_daily.csv"
+  }
+}

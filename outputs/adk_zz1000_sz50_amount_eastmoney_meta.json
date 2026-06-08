@@ -1,0 +1,50 @@
+{
+  "created_at": "2026-06-07T22:24:49+08:00",
+  "source": "EastMoney push2his amount with CSIndex fallback",
+  "begin_date": "20000101",
+  "secids": {
+    "zz1000": {
+      "secid": "1.000852",
+      "index_code": "000852",
+      "name": "CSI1000",
+      "source": "CSIndex official index-perf tradingValue/tradingVol",
+      "fallback_errors": [
+        "EastMoney: failed to fetch EastMoney amount for 1.000852: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      ],
+      "rows": 5203,
+      "first_date": "2000-01-01",
+      "last_date": "2026-06-05",
+      "amount_first_valid": "2000-01-01",
+      "amount_last_valid": "2026-06-05"
+    },
+    "sz50": {
+      "secid": "1.000016",
+      "index_code": "000016",
+      "name": "SSE50",
+      "source": "CSIndex official index-perf tradingValue/tradingVol",
+      "fallback_errors": [
+        "EastMoney: failed to fetch EastMoney amount for 1.000016: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      ],
+      "rows": 5447,
+      "first_date": "2000-01-01",
+      "last_date": "2026-06-05",
+      "amount_first_valid": "2000-01-01",
+      "amount_last_valid": "2026-06-05"
+    }
+  },
+  "output_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_sz50_amount_eastmoney.csv",
+  "rows": 5447,
+  "first_date": "2000-01-01",
+  "last_date": "2026-06-05",
+  "columns": [
+    "zz1000_close_amount_source",
+    "zz1000_volume",
+    "zz1000_amount",
+    "zz1000_constituents",
+    "sz50_close_amount_source",
+    "sz50_volume",
+    "sz50_amount",
+    "sz50_constituents",
+    "amount_ratio_zz1000_sz50"
+  ]
+}

@@ -1,0 +1,226 @@
+{
+  "created_at": "2026-06-08T02:11:39+08:00",
+  "meta": {
+    "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+    "cyb_column": "0.399006",
+    "hs300_column": "1.000300",
+    "raw_rows": 8657,
+    "cyb_first_valid": "2010-06-01",
+    "cyb_last_valid": "2026-06-05",
+    "hs300_first_valid": "2002-01-04",
+    "hs300_last_valid": "2026-06-05",
+    "formal_start": "2010-06-01",
+    "common_start": "2010-06-01",
+    "common_end": "2026-06-05",
+    "common_rows": 3887,
+    "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+    "direction": "long CYB / short HS300",
+    "asset_curve": "ChiNext price index / CSI300 price index",
+    "baseline": {
+      "line": "return_nav",
+      "source_line": "return_nav_main",
+      "source_quadrant": "q1",
+      "label": "score>-2.5 TV-off + NAV 7.5% scale 0.25"
+    },
+    "signal": {
+      "bias_ma": 60,
+      "mom_day": 30,
+      "weight_end": 3.5,
+      "score_threshold": -2.5,
+      "abs_mom_day": 20,
+      "abs_threshold": 0.0
+    },
+    "target_vol": {
+      "enabled": false,
+      "max_leverage": 1.0
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.075,
+      "scale": 0.25,
+      "timing": "prior-row pre-overlay candidate NAV drawdown"
+    },
+    "vol_overheat": {
+      "enabled": true,
+      "window": 15,
+      "threshold": 0.35,
+      "scale": 0.0,
+      "timing": "prior-row realized volatility"
+    },
+    "amount_overheat": {
+      "enabled": true,
+      "family": "high_pair",
+      "series": "cyb_amount / hs300_amount",
+      "window": 60,
+      "threshold": 1.25,
+      "scale": 0.25,
+      "timing": "T close amount condition shifted to T+1 execution"
+    },
+    "combination_rule": "final exposure = baseline exposure * vol multiplier * amount multiplier",
+    "amount_data": {
+      "amount_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_cyb_hs300_amount_eastmoney.csv",
+      "amount_meta": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_cyb_hs300_amount_eastmoney_meta.json",
+      "source": "EastMoney push2his amount with CSIndex fallback",
+      "common_rows_with_price": 3887,
+      "common_start_with_price": "2010-06-01",
+      "common_end_with_price": "2026-06-05",
+      "cyb_close_max_rel_diff": 0.000271181393766029,
+      "hs300_close_max_rel_diff": 2.34092808426567e-06,
+      "close_check_rel_tolerance": 0.0005,
+      "amount_abs_series": "cyb_amount",
+      "amount_pair_series": "cyb_amount / hs300_amount",
+      "fetch_meta": {
+        "created_at": "2026-06-07T14:57:44+08:00",
+        "source": "EastMoney push2his amount with CSIndex fallback",
+        "begin_date": "20000101",
+        "secids": {
+          "cyb": {
+            "secid": "0.399006",
+            "index_code": "399006",
+            "name": "ChiNext",
+            "source": "EastMoney push2his amount",
+            "fallback_errors": [],
+            "rows": 3887,
+            "first_date": "2010-06-01",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2010-06-01",
+            "amount_last_valid": "2026-06-05"
+          },
+          "hs300": {
+            "secid": "1.000300",
+            "index_code": "000300",
+            "name": "CSI300",
+            "source": "EastMoney push2his amount",
+            "fallback_errors": [],
+            "rows": 5201,
+            "first_date": "2005-01-04",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2005-01-04",
+            "amount_last_valid": "2026-06-05"
+          }
+        },
+        "output_csv": "outputs/adk_cyb_hs300_amount_eastmoney.csv",
+        "rows": 5201,
+        "first_date": "2005-01-04",
+        "last_date": "2026-06-05",
+        "columns": [
+          "cyb_close_csindex",
+          "cyb_volume",
+          "cyb_amount",
+          "cyb_constituents",
+          "hs300_close_csindex",
+          "hs300_volume",
+          "hs300_amount",
+          "hs300_constituents",
+          "amount_ratio_cyb_hs300"
+        ],
+        "note": "Generated from the successful fetch before later EastMoney reconnect failures; top-level path normalized for JSON validity."
+      }
+    },
+    "cost_model": {
+      "one_way_cost_bps": 5.0
+    },
+    "annualization_days": 242.0
+  },
+  "metrics": [
+    {
+      "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+      "segment": "full",
+      "start": "2010-06-01",
+      "end": "2026-06-05",
+      "rows": 3887,
+      "ann_return": 0.1047520929035568,
+      "ann_vol": 0.09419139475570726,
+      "sharpe_repo": 1.1121195643746389,
+      "max_dd": -0.08904510708916524,
+      "calmar": 1.1763935866646034,
+      "avg_turnover": 0.07039490609724723,
+      "cost_total": 0.1368125,
+      "avg_exposure": 0.2790551839464883,
+      "final_nav": 4.953578301604338,
+      "volhot_days": 64,
+      "amount_gate_days": 469,
+      "both_gate_days": 33
+    },
+    {
+      "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+      "segment": "last_10y",
+      "start": "2016-06-06",
+      "end": "2026-06-05",
+      "rows": 2427,
+      "ann_return": 0.10661716418917533,
+      "ann_vol": 0.09322153867680429,
+      "sharpe_repo": 1.1436966789275298,
+      "max_dd": -0.0853827140905492,
+      "calmar": 1.248697295755986,
+      "avg_turnover": 0.06494643592913062,
+      "cost_total": 0.07881250000000001,
+      "avg_exposure": 0.3194787803873094,
+      "final_nav": 2.76214626801469,
+      "volhot_days": 15,
+      "amount_gate_days": 177,
+      "both_gate_days": 9
+    },
+    {
+      "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+      "segment": "last_5y",
+      "start": "2021-06-07",
+      "end": "2026-06-05",
+      "rows": 1211,
+      "ann_return": 0.12286519299342924,
+      "ann_vol": 0.10291193266283713,
+      "sharpe_repo": 1.1938867516555491,
+      "max_dd": -0.08351203599799562,
+      "calmar": 1.471227368907377,
+      "avg_turnover": 0.07060280759702725,
+      "cost_total": 0.04275,
+      "avg_exposure": 0.3478014037985136,
+      "final_nav": 1.785854462951549,
+      "volhot_days": 15,
+      "amount_gate_days": 70,
+      "both_gate_days": 9
+    },
+    {
+      "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+      "segment": "last_3y",
+      "start": "2023-06-05",
+      "end": "2026-06-05",
+      "rows": 727,
+      "ann_return": 0.14945846840308175,
+      "ann_vol": 0.10972391793182971,
+      "sharpe_repo": 1.3621320785859896,
+      "max_dd": -0.08351203599799595,
+      "calmar": 1.7896638085397454,
+      "avg_turnover": 0.06361760660247592,
+      "cost_total": 0.023125,
+      "avg_exposure": 0.3376031636863824,
+      "final_nav": 1.5196018893577297,
+      "volhot_days": 15,
+      "amount_gate_days": 24,
+      "both_gate_days": 9
+    },
+    {
+      "strategy_id": "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25",
+      "segment": "last_1y",
+      "start": "2025-06-05",
+      "end": "2026-06-05",
+      "rows": 244,
+      "ann_return": 0.38497929550832644,
+      "ann_vol": 0.14093994840021204,
+      "sharpe_repo": 2.731512959087668,
+      "max_dd": -0.08351203599799584,
+      "calmar": 4.609866002040297,
+      "avg_turnover": 0.07581967213114754,
+      "cost_total": 0.009250000000000001,
+      "avg_exposure": 0.6854508196721312,
+      "final_nav": 1.388712145424733,
+      "volhot_days": 0,
+      "amount_gate_days": 2,
+      "both_gate_days": 0
+    }
+  ],
+  "outputs": {
+    "daily": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25_daily.csv",
+    "metrics": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25_metrics.json"
+  }
+}

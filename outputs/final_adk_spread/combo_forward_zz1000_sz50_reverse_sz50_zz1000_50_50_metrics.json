@@ -1,0 +1,311 @@
+{
+  "created_at": "2026-06-08T02:11:21+08:00",
+  "meta": {
+    "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+    "weights": {
+      "final_forward_zz1000_sz50_main_q0_low_abs_w40_thr1_days3_scale0p75": 0.5,
+      "final_reverse_sz50_zz1000_return_nav_score_q1_volhot_w20_thr0p18_scale0": 0.5
+    },
+    "combination_rule": "daily blend of already-costed component net returns; no extra combo-level rebalance cost",
+    "common_start": "2014-10-17",
+    "common_end": "2026-06-05",
+    "common_rows": 2828,
+    "both_active_days": 8,
+    "both_active_dates": [
+      "2016-07-19",
+      "2016-09-07",
+      "2017-03-30",
+      "2018-12-10",
+      "2018-12-12",
+      "2020-07-06",
+      "2023-07-14",
+      "2025-10-10"
+    ],
+    "forward_meta": {
+      "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+      "zz1000_column": "1.000852",
+      "sz50_column": "1.000016",
+      "raw_rows": 8657,
+      "zz1000_first_valid": "2014-10-17",
+      "zz1000_last_valid": "2026-06-05",
+      "sz50_first_valid": "2004-01-02",
+      "sz50_last_valid": "2026-06-05",
+      "formal_start": "2014-10-17",
+      "common_start": "2014-10-17",
+      "common_end": "2026-06-05",
+      "common_rows": 2828,
+      "strategy_id": "final_forward_zz1000_sz50_main_q0_low_abs_w40_thr1_days3_scale0p75",
+      "direction": "long ZZ1000 / short SZ50",
+      "asset_curve": "CSI1000 price index / SSE50 price index",
+      "baseline": {
+        "line": "main_q0",
+        "source_line": "main_stable_tv",
+        "source_quadrant": "q0",
+        "label": "main target-vol line, no defense"
+      },
+      "signal": {
+        "bias_ma": 60,
+        "mom_day": 20,
+        "weight_end": 2.5,
+        "score_threshold": 0.0,
+        "abs_mom_day": 50,
+        "abs_threshold": -0.05
+      },
+      "target_vol": {
+        "enabled": true,
+        "target_vol": 0.08,
+        "target_vol_window": 20,
+        "max_leverage": 1.0
+      },
+      "nav_defense": {
+        "enabled": false,
+        "threshold": 0.1,
+        "scale": 0.0,
+        "timing": "prior-row pre-overlay candidate NAV drawdown"
+      },
+      "momentum_decay": {
+        "enabled": false,
+        "decay_threshold": 0.65,
+        "recovery_threshold": 0.8,
+        "warmup_days": 5,
+        "derisk_scale": 0.5,
+        "timing": "prior-row signal-day decay state"
+      },
+      "amount_overlay": {
+        "enabled": true,
+        "family": "low_abs",
+        "series": "zz1000_amount",
+        "window": 40,
+        "threshold": 1.0,
+        "confirm_days": 3,
+        "scale": 0.75,
+        "timing": "T close amount condition shifted to T+1 execution"
+      },
+      "combination_rule": "final exposure = target-vol baseline exposure * amount multiplier",
+      "amount_data": {
+        "amount_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_sz50_amount_eastmoney.csv",
+        "amount_meta": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_sz50_amount_eastmoney_meta.json",
+        "source": "EastMoney push2his amount with CSIndex fallback",
+        "common_rows_with_price": 2828,
+        "common_start_with_price": "2014-10-17",
+        "common_end_with_price": "2026-06-05",
+        "zz1000_close_max_rel_diff": 2.900955574869357e-06,
+        "sz50_close_max_rel_diff": 3.1306253425178454e-06,
+        "amount_units": "Source tradingValue units as published; scans use ratios to rolling MA or same-source cross-index ratios.",
+        "fetch_meta": {
+          "created_at": "2026-06-07T22:24:49+08:00",
+          "source": "EastMoney push2his amount with CSIndex fallback",
+          "begin_date": "20000101",
+          "secids": {
+            "zz1000": {
+              "secid": "1.000852",
+              "index_code": "000852",
+              "name": "CSI1000",
+              "source": "CSIndex official index-perf tradingValue/tradingVol",
+              "fallback_errors": [
+                "EastMoney: failed to fetch EastMoney amount for 1.000852: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+              ],
+              "rows": 5203,
+              "first_date": "2000-01-01",
+              "last_date": "2026-06-05",
+              "amount_first_valid": "2000-01-01",
+              "amount_last_valid": "2026-06-05"
+            },
+            "sz50": {
+              "secid": "1.000016",
+              "index_code": "000016",
+              "name": "SSE50",
+              "source": "CSIndex official index-perf tradingValue/tradingVol",
+              "fallback_errors": [
+                "EastMoney: failed to fetch EastMoney amount for 1.000016: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+              ],
+              "rows": 5447,
+              "first_date": "2000-01-01",
+              "last_date": "2026-06-05",
+              "amount_first_valid": "2000-01-01",
+              "amount_last_valid": "2026-06-05"
+            }
+          },
+          "output_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_sz50_amount_eastmoney.csv",
+          "rows": 5447,
+          "first_date": "2000-01-01",
+          "last_date": "2026-06-05",
+          "columns": [
+            "zz1000_close_amount_source",
+            "zz1000_volume",
+            "zz1000_amount",
+            "zz1000_constituents",
+            "sz50_close_amount_source",
+            "sz50_volume",
+            "sz50_amount",
+            "sz50_constituents",
+            "amount_ratio_zz1000_sz50"
+          ]
+        }
+      },
+      "cost_model": {
+        "one_way_cost_bps": 5.0
+      },
+      "annualization_days": 242.0
+    },
+    "reverse_meta": {
+      "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+      "sz50_column": "1.000016",
+      "zz1000_column": "1.000852",
+      "raw_rows": 8657,
+      "sz50_first_valid": "2004-01-02",
+      "sz50_last_valid": "2026-06-05",
+      "zz1000_first_valid": "2014-10-17",
+      "zz1000_last_valid": "2026-06-05",
+      "formal_start": "2014-10-17",
+      "common_start": "2014-10-17",
+      "common_end": "2026-06-05",
+      "common_rows": 2828,
+      "strategy_id": "final_reverse_sz50_zz1000_return_nav_score_q1_volhot_w20_thr0p18_scale0",
+      "direction": "long SZ50 / short ZZ1000",
+      "asset_curve": "SSE50 price index / CSI1000 price index",
+      "baseline": {
+        "line": "return_nav_score_q1",
+        "source_line": "return_reference_nav_score",
+        "source_quadrant": "q1",
+        "label": "return reference, NAV 4% scale 0.75"
+      },
+      "signal": {
+        "bias_ma": 60,
+        "mom_day": 20,
+        "weight_end": 3.5,
+        "score_threshold": 0.0,
+        "abs_mom_day": 10,
+        "abs_threshold": -0.075
+      },
+      "target_vol": {
+        "enabled": false,
+        "target_vol": null,
+        "target_vol_window": null,
+        "max_leverage": 1.0
+      },
+      "nav_defense": {
+        "enabled": true,
+        "threshold": 0.04,
+        "scale": 0.75,
+        "timing": "prior-row pre-overlay candidate NAV drawdown"
+      },
+      "momentum_decay": {
+        "enabled": false,
+        "decay_threshold": 0.4,
+        "recovery_threshold": 0.7,
+        "warmup_days": 5,
+        "derisk_scale": 0.0,
+        "timing": "prior-row signal-day decay state"
+      },
+      "vol_overheat": {
+        "enabled": true,
+        "window": 20,
+        "threshold": 0.18,
+        "scale": 0.0,
+        "timing": "spread close realized volatility shifted to T+1 execution"
+      },
+      "amount_overlay": {
+        "enabled": false,
+        "reason": "Layer 10 high_abs remains watchlist evidence; not promoted into the fixed final runner."
+      },
+      "combination_rule": "final exposure = q1 NAV baseline exposure * realized-vol overheat multiplier",
+      "cost_model": {
+        "one_way_cost_bps": 5.0
+      },
+      "annualization_days": 242.0
+    },
+    "annualization_days": 242.0
+  },
+  "metrics": [
+    {
+      "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+      "segment": "full",
+      "start": "2014-10-17",
+      "end": "2026-06-05",
+      "rows": 2828,
+      "ann_return": 0.10914799931504882,
+      "ann_vol": 0.06639418756360616,
+      "sharpe_repo": 1.6439390753969867,
+      "max_dd": -0.050553335597738114,
+      "calmar": 2.1590662223272243,
+      "avg_turnover": 0.04144236368744416,
+      "cost_total": 0.05859950225404475,
+      "avg_exposure": 0.25376086029718536,
+      "final_nav": 3.3554059319782126,
+      "both_active_days": 8
+    },
+    {
+      "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+      "segment": "last_10y",
+      "start": "2016-06-06",
+      "end": "2026-06-05",
+      "rows": 2427,
+      "ann_return": 0.10395639040155102,
+      "ann_vol": 0.06242963813767402,
+      "sharpe_repo": 1.665176885573154,
+      "max_dd": -0.05055333559773789,
+      "calmar": 2.0563705475094856,
+      "avg_turnover": 0.04445235117138501,
+      "cost_total": 0.05394292814647462,
+      "avg_exposure": 0.27094029422148264,
+      "final_nav": 2.6962588821058864,
+      "both_active_days": 8
+    },
+    {
+      "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+      "segment": "last_5y",
+      "start": "2021-06-07",
+      "end": "2026-06-05",
+      "rows": 1211,
+      "ann_return": 0.087434950301426,
+      "ann_vol": 0.06073172279732619,
+      "sharpe_repo": 1.4396915857831627,
+      "max_dd": -0.0414159556407695,
+      "calmar": 2.1111416831670504,
+      "avg_turnover": 0.04245391719833559,
+      "cost_total": 0.02570584686359151,
+      "avg_exposure": 0.2759327118369056,
+      "final_nav": 1.5211318598812722,
+      "both_active_days": 2
+    },
+    {
+      "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+      "segment": "last_3y",
+      "start": "2023-06-05",
+      "end": "2026-06-05",
+      "rows": 727,
+      "ann_return": 0.08302117088880512,
+      "ann_vol": 0.05913217230980122,
+      "sharpe_repo": 1.4039932518265403,
+      "max_dd": -0.04141595564076983,
+      "calmar": 2.0045697269165306,
+      "avg_turnover": 0.04265511788621354,
+      "cost_total": 0.015505135351638196,
+      "avg_exposure": 0.2775221231085875,
+      "final_nav": 1.270732000431994,
+      "both_active_days": 2
+    },
+    {
+      "strategy_id": "combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50",
+      "segment": "last_1y",
+      "start": "2025-06-05",
+      "end": "2026-06-05",
+      "rows": 244,
+      "ann_return": 0.09465118590382193,
+      "ann_vol": 0.05783467731938175,
+      "sharpe_repo": 1.6365818967248238,
+      "max_dd": -0.030806040439492643,
+      "calmar": 3.0724878807365736,
+      "avg_turnover": 0.05511597683712992,
+      "cost_total": 0.006724149174129654,
+      "avg_exposure": 0.35019293214802366,
+      "final_nav": 1.0954696372829267,
+      "both_active_days": 1
+    }
+  ],
+  "outputs": {
+    "daily": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50_daily.csv",
+    "metrics": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_forward_zz1000_sz50_reverse_sz50_zz1000_50_50_metrics.json"
+  }
+}

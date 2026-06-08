@@ -1,0 +1,48 @@
+{
+  "created_at": "2026-06-07T05:02:44+08:00",
+  "combo_id": "combo_forward50_reverse50",
+  "method": "daily return blend: 50% forward long ZZ1000/short HS300 + 50% reverse long HS300/short ZZ1000; sleeve-level costs retained; no extra combo-level rebalance cost",
+  "source_daily": {
+    "forward": "outputs\\final_adk_spread\\final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5_daily.csv",
+    "reverse": "outputs\\final_adk_spread\\final_reverse_hs300_zz1000_return_nav_volhot_w25_thr0p14_scale0_daily.csv"
+  },
+  "window": {
+    "start": "2014-10-17",
+    "end": "2026-05-14",
+    "rows": 2812,
+    "formal_start_reason": "CSI1000 formal publication date 2014-10-17; CSI300 published 2005-04-08; local common price panel ends 2026-05-14"
+  },
+  "active_counts": {
+    "both_active_days": 2,
+    "forward_only_days": 1139,
+    "reverse_only_days": 537,
+    "both_inactive_days": 1134,
+    "return_correlation_full": -0.007330914214817036
+  },
+  "full_metrics_50_50": {
+    "combo_id": "w_fwd_0p50_w_rev_0p50",
+    "forward_weight": 0.5,
+    "reverse_weight": 0.5,
+    "segment": "full",
+    "start": "2014-10-17",
+    "end": "2026-05-14",
+    "rows": 2812,
+    "ann_return": 0.09812146666765775,
+    "ann_vol": 0.052348674751829104,
+    "sharpe_repo": 1.8743830122314473,
+    "max_dd": -0.047744956139754824,
+    "calmar": 2.0551169086938788,
+    "avg_turnover": 0.043355015629612824,
+    "cost_total": 0.06095715197523506,
+    "avg_exposure": 0.2606725478491752,
+    "final_nav": 2.9672265983101505,
+    "avg_gross_sleeve_exposure": 0.2606725478491752,
+    "avg_abs_net_pair_exposure": 0.26031692907250376,
+    "avg_net_pair_exposure": 0.08516671246376932
+  },
+  "outputs": {
+    "daily": "outputs\\final_adk_spread\\combo_forward50_reverse50_daily.csv",
+    "weight_sensitivity_metrics": "outputs\\final_adk_spread\\combo_forward_reverse_weight_sensitivity_metrics.csv",
+    "metrics": "outputs\\final_adk_spread\\combo_forward50_reverse50_metrics.json"
+  }
+}

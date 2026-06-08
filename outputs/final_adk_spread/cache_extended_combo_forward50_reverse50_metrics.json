@@ -1,0 +1,192 @@
+{
+  "created_at": "2026-06-07T05:09:10+08:00",
+  "diagnostic": true,
+  "reason": "uses .cn_official_cache prices instead of mnt_strategy_data_cn.csv to extend common window without rewriting main panel",
+  "source_price_panel": "outputs\\final_adk_spread\\_tmp_cn_cache_zz1000_hs300_panel.csv",
+  "window": {
+    "start": "2014-10-17",
+    "end": "2026-06-05",
+    "rows": 2828
+  },
+  "forward_meta": {
+    "source_csv": "outputs\\final_adk_spread\\_tmp_cn_cache_zz1000_hs300_panel.csv",
+    "zz1000_column": "1.000852",
+    "hs300_column": "1.000300",
+    "raw_rows": 5922,
+    "zz1000_first_valid": "2014-10-17",
+    "zz1000_last_valid": "2026-06-05",
+    "hs300_first_valid": "2002-01-04",
+    "hs300_last_valid": "2026-06-05",
+    "formal_start": "2014-10-17",
+    "common_start": "2014-10-17",
+    "common_end": "2026-06-05",
+    "common_rows": 2828,
+    "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+    "direction": "long ZZ1000 / short HS300",
+    "asset_curve": "CSI1000 price index / CSI300 price index",
+    "signal": {
+      "bias_ma": 60,
+      "mom_day": 20,
+      "weight_end": 1.0,
+      "score_threshold": 0.0,
+      "abs_mom_day": 50,
+      "abs_threshold": -0.05
+    },
+    "target_vol": {
+      "enabled": false,
+      "max_leverage": 1.0
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.0875,
+      "scale": 0.0,
+      "timing": "prior-row pre-overlay candidate NAV drawdown"
+    },
+    "amount_overlay": {
+      "enabled": true,
+      "family": "low_abs",
+      "series": "zz1000_amount",
+      "window": 40,
+      "threshold": 1.0,
+      "confirm_days": 1,
+      "scale": 0.5,
+      "timing": "T close amount condition shifted to T+1 execution"
+    },
+    "amount_data": {
+      "amount_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv",
+      "amount_meta": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex_meta.json",
+      "source": "CSIndex official index-perf tradingValue/tradingVol",
+      "common_rows_with_price": 2828,
+      "common_start_with_price": "2014-10-17",
+      "common_end_with_price": "2026-06-05",
+      "zz1000_close_max_rel_diff": 2.900955574869357e-06,
+      "hs300_close_max_rel_diff": 2.0251728989340023e-06,
+      "amount_units": "CSIndex tradingValue units as published; scans use ratios to rolling MA or same-source cross-index ratios.",
+      "fetch_meta": {
+        "created_at": "2026-06-07T01:23:55+08:00",
+        "source": "CSIndex official index-perf tradingValue/tradingVol",
+        "begin_date": "20000101",
+        "secids": {
+          "zz1000": {
+            "secid": "1.000852",
+            "index_code": "000852",
+            "name": "中证1000",
+            "rows": 5203,
+            "first_date": "2000-01-01",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2000-01-01",
+            "amount_last_valid": "2026-06-05"
+          },
+          "hs300": {
+            "secid": "1.000300",
+            "index_code": "000300",
+            "name": "沪深300",
+            "rows": 5924,
+            "first_date": "2000-01-01",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2000-01-01",
+            "amount_last_valid": "2026-06-05"
+          }
+        },
+        "output_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv",
+        "rows": 5924,
+        "first_date": "2000-01-01",
+        "last_date": "2026-06-05",
+        "columns": [
+          "zz1000_close_csindex",
+          "zz1000_volume",
+          "zz1000_amount",
+          "zz1000_constituents",
+          "hs300_close_csindex",
+          "hs300_volume",
+          "hs300_amount",
+          "hs300_constituents",
+          "amount_ratio_zz1000_hs300"
+        ]
+      }
+    },
+    "cost_model": {
+      "one_way_cost_bps": 5.0
+    },
+    "annualization_days": 242.0
+  },
+  "reverse_meta": {
+    "source_csv": "outputs\\final_adk_spread\\_tmp_cn_cache_zz1000_hs300_panel.csv",
+    "zz1000_column": "1.000852",
+    "hs300_column": "1.000300",
+    "raw_rows": 5922,
+    "zz1000_first_valid": "2014-10-17",
+    "zz1000_last_valid": "2026-06-05",
+    "hs300_first_valid": "2002-01-04",
+    "hs300_last_valid": "2026-06-05",
+    "formal_start": "2014-10-17",
+    "common_start": "2014-10-17",
+    "common_end": "2026-06-05",
+    "common_rows": 2828,
+    "direction": "long HS300 / short ZZ1000",
+    "asset_curve": "CSI300 price index / CSI1000 price index",
+    "spread_formula": "hs300 / zz1000, normalized to 1 at formal common start",
+    "strategy_id": "final_reverse_hs300_zz1000_return_nav_volhot_w25_thr0p14_scale0",
+    "signal": {
+      "bias_ma": 60,
+      "mom_day": 20,
+      "weight_end": 3.0,
+      "score_threshold": 2.5,
+      "abs_mom_day": 20,
+      "abs_threshold": -0.05
+    },
+    "target_vol": {
+      "target_vol": 0.14,
+      "target_vol_window": 20,
+      "max_leverage": 1.5
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.075,
+      "scale": 0.5,
+      "timing": "prior-row pre-overlay Layer 4 NAV drawdown"
+    },
+    "vol_overheat": {
+      "enabled": true,
+      "window": 25,
+      "threshold": 0.14,
+      "scale": 0.0,
+      "timing": "prior-row realized volatility"
+    },
+    "cost_model": {
+      "one_way_cost_bps": 5.0
+    },
+    "annualization_days": 242.0
+  },
+  "active_counts": {
+    "both_active_days": 2,
+    "forward_only_days": 1150,
+    "reverse_only_days": 537,
+    "both_inactive_days": 1139,
+    "return_correlation_full": -0.006979840392250272
+  },
+  "full_metrics_50_50": {
+    "combo_id": "cache_w_fwd_0p50_w_rev_0p50",
+    "forward_weight": 0.5,
+    "reverse_weight": 0.5,
+    "segment": "full",
+    "start": "2014-10-17",
+    "end": "2026-06-05",
+    "rows": 2828,
+    "ann_return": 0.09572983971428495,
+    "ann_vol": 0.05253981457012332,
+    "sharpe_repo": 1.8220437300272003,
+    "max_dd": -0.04774401993305011,
+    "calmar": 2.0050645054296603,
+    "avg_turnover": 0.043286626857035035,
+    "cost_total": 0.06120729037584753,
+    "avg_exposure": 0.261142573300567,
+    "final_nav": 2.9105361767152966,
+    "avg_gross_sleeve_exposure": 0.261142573300567,
+    "avg_abs_net_pair_exposure": 0.26078896651131667
+  },
+  "outputs": {
+    "daily_50_50": "outputs\\final_adk_spread\\cache_extended_combo_forward50_reverse50_daily.csv",
+    "weight_sensitivity_metrics": "outputs\\final_adk_spread\\cache_extended_combo_weight_sensitivity_metrics.csv"
+  }
+}

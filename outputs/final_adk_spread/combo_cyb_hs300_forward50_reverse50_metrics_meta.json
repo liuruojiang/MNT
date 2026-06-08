@@ -1,0 +1,14 @@
+{
+  "combo_id": "combo_cyb_hs300_forward50_reverse50",
+  "created_from": [
+    "final_cyb_hs300_return_nav_volhot_w15_thr0p35_scale0_high_pair_w60_thr1p25_scale0p25_daily.csv",
+    "final_reverse_hs300_cyb_nav_decay_scorehot75_volhot_w120_thr0p26_scale0_daily.csv"
+  ],
+  "rule": "daily return = 0.5 * forward_return + 0.5 * reverse_return; no extra combo-level rebalance cost",
+  "common_start": "2010-06-01",
+  "common_end": "2026-06-05",
+  "common_rows": 3887,
+  "annualization_days": 242.0,
+  "metrics_csv": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_cyb_hs300_forward50_reverse50_full_10y_5y_3y_1y_ann_dd_20260607.csv",
+  "daily_csv": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_cyb_hs300_forward50_reverse50_daily.csv"
+}

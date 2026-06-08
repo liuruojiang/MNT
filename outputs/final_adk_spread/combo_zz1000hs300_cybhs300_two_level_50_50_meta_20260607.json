@@ -1,0 +1,43 @@
+{
+  "created_from": {
+    "combo_zz1000_hs300_forward50_reverse50_refreshed_20260607": [
+      "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5_daily.csv",
+      "final_reverse_hs300_zz1000_return_nav_volhot_w25_thr0p14_scale0_daily.csv"
+    ],
+    "combo_cyb_hs300_forward50_reverse50": [
+      "combo_cyb_hs300_forward50_reverse50_daily.csv"
+    ],
+    "combo_zz1000hs300_50_cybhs300_50_refreshed_20260607": [
+      "combo_zz1000_hs300_forward50_reverse50_refreshed_20260607_daily.csv",
+      "combo_cyb_hs300_forward50_reverse50_daily.csv"
+    ]
+  },
+  "rules": {
+    "combo_zz1000_hs300_forward50_reverse50_refreshed_20260607": "daily return = 0.5 * long ZZ1000 short HS300 + 0.5 * long HS300 short ZZ1000; no extra combo-level cost",
+    "combo_cyb_hs300_forward50_reverse50": "daily return file reused from refreshed CYB/HS300 50/50 run; no extra combo-level cost",
+    "combo_zz1000hs300_50_cybhs300_50_refreshed_20260607": "daily return = 0.5 * ZZ1000/HS300 combo + 0.5 * CYB/HS300 combo; no extra combo-level cost"
+  },
+  "common_dates": {
+    "combo_zz1000_hs300_forward50_reverse50_refreshed_20260607": {
+      "start": "2014-10-17",
+      "end": "2026-06-05",
+      "rows": 2828
+    },
+    "combo_cyb_hs300_forward50_reverse50": {
+      "start": "2010-06-01",
+      "end": "2026-06-05",
+      "rows": 3887
+    },
+    "combo_zz1000hs300_50_cybhs300_50_refreshed_20260607": {
+      "start": "2014-10-17",
+      "end": "2026-06-05",
+      "rows": 2828
+    }
+  },
+  "annualization_days": 242.0,
+  "outputs": {
+    "zz_combo_daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_zz1000_hs300_forward50_reverse50_refreshed_20260607_daily.csv",
+    "two_level_daily": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_zz1000hs300_50_cybhs300_50_refreshed_20260607_daily.csv",
+    "metrics_csv": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Desktop\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\combo_zz1000hs300_cybhs300_two_level_50_50_full_10y_5y_3y_1y_ann_dd_20260607.csv"
+  }
+}

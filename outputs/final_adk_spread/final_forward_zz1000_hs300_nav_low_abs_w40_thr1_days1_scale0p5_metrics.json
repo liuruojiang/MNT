@@ -1,0 +1,201 @@
+{
+  "created_at": "2026-06-08T02:11:40+08:00",
+  "meta": {
+    "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_strategy_data_cn.csv",
+    "zz1000_column": "1.000852",
+    "hs300_column": "1.000300",
+    "raw_rows": 8657,
+    "zz1000_first_valid": "2014-10-17",
+    "zz1000_last_valid": "2026-06-05",
+    "hs300_first_valid": "2002-01-04",
+    "hs300_last_valid": "2026-06-05",
+    "formal_start": "2014-10-17",
+    "common_start": "2014-10-17",
+    "common_end": "2026-06-05",
+    "common_rows": 2828,
+    "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+    "direction": "long ZZ1000 / short HS300",
+    "asset_curve": "CSI1000 price index / CSI300 price index",
+    "signal": {
+      "bias_ma": 60,
+      "mom_day": 20,
+      "weight_end": 1.0,
+      "score_threshold": 0.0,
+      "abs_mom_day": 50,
+      "abs_threshold": -0.05
+    },
+    "target_vol": {
+      "enabled": false,
+      "max_leverage": 1.0
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.0875,
+      "scale": 0.0,
+      "timing": "prior-row pre-overlay candidate NAV drawdown"
+    },
+    "amount_overlay": {
+      "enabled": true,
+      "family": "low_abs",
+      "series": "zz1000_amount",
+      "window": 40,
+      "threshold": 1.0,
+      "confirm_days": 1,
+      "scale": 0.5,
+      "timing": "T close amount condition shifted to T+1 execution"
+    },
+    "amount_data": {
+      "amount_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv",
+      "amount_meta": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex_meta.json",
+      "source": "CSIndex official index-perf tradingValue/tradingVol",
+      "common_rows_with_price": 2828,
+      "common_start_with_price": "2014-10-17",
+      "common_end_with_price": "2026-06-05",
+      "zz1000_close_max_rel_diff": 2.900955574869357e-06,
+      "hs300_close_max_rel_diff": 2.0251728989340023e-06,
+      "amount_units": "CSIndex tradingValue units as published; scans use ratios to rolling MA or same-source cross-index ratios.",
+      "fetch_meta": {
+        "created_at": "2026-06-07T01:23:55+08:00",
+        "source": "CSIndex official index-perf tradingValue/tradingVol",
+        "begin_date": "20000101",
+        "secids": {
+          "zz1000": {
+            "secid": "1.000852",
+            "index_code": "000852",
+            "name": "中证1000",
+            "rows": 5203,
+            "first_date": "2000-01-01",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2000-01-01",
+            "amount_last_valid": "2026-06-05"
+          },
+          "hs300": {
+            "secid": "1.000300",
+            "index_code": "000300",
+            "name": "沪深300",
+            "rows": 5924,
+            "first_date": "2000-01-01",
+            "last_date": "2026-06-05",
+            "amount_first_valid": "2000-01-01",
+            "amount_last_valid": "2026-06-05"
+          }
+        },
+        "output_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv",
+        "rows": 5924,
+        "first_date": "2000-01-01",
+        "last_date": "2026-06-05",
+        "columns": [
+          "zz1000_close_csindex",
+          "zz1000_volume",
+          "zz1000_amount",
+          "zz1000_constituents",
+          "hs300_close_csindex",
+          "hs300_volume",
+          "hs300_amount",
+          "hs300_constituents",
+          "amount_ratio_zz1000_hs300"
+        ]
+      }
+    },
+    "cost_model": {
+      "one_way_cost_bps": 5.0
+    },
+    "annualization_days": 242.0
+  },
+  "metrics": [
+    {
+      "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+      "segment": "full",
+      "start": "2014-10-17",
+      "end": "2026-06-05",
+      "rows": 2828,
+      "ann_return": 0.09125419184701467,
+      "ann_vol": 0.08423287191084769,
+      "sharpe_repo": 1.0833560553841541,
+      "max_dd": -0.06418571160863984,
+      "calmar": 1.421721276589091,
+      "avg_turnover": 0.05374823196605375,
+      "cost_total": 0.07600000000000001,
+      "avg_exposure": 0.34777227722772275,
+      "final_nav": 2.7746006179080593,
+      "nav_defense_days": 34,
+      "amount_gate_days": 337
+    },
+    {
+      "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+      "segment": "last_10y",
+      "start": "2016-06-06",
+      "end": "2026-06-05",
+      "rows": 2427,
+      "ann_return": 0.0693107315773922,
+      "ann_vol": 0.07466560172198532,
+      "sharpe_repo": 0.9282819662455574,
+      "max_dd": -0.06418571160863962,
+      "calmar": 1.0798467422157978,
+      "avg_turnover": 0.05480016481252575,
+      "cost_total": 0.0665,
+      "avg_exposure": 0.34981458590852904,
+      "final_nav": 1.9583084741311314,
+      "nav_defense_days": 34,
+      "amount_gate_days": 310
+    },
+    {
+      "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+      "segment": "last_5y",
+      "start": "2021-06-07",
+      "end": "2026-06-05",
+      "rows": 1211,
+      "ann_return": 0.091414230466345,
+      "ann_vol": 0.08117112523740778,
+      "sharpe_repo": 1.1261914898799097,
+      "max_dd": -0.0641857116086395,
+      "calmar": 1.424214644899886,
+      "avg_turnover": 0.0611065235342692,
+      "cost_total": 0.037,
+      "avg_exposure": 0.39719240297274977,
+      "final_nav": 1.5491912741698994,
+      "nav_defense_days": 34,
+      "amount_gate_days": 182
+    },
+    {
+      "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+      "segment": "last_3y",
+      "start": "2023-06-05",
+      "end": "2026-06-05",
+      "rows": 727,
+      "ann_return": 0.05686222067021229,
+      "ann_vol": 0.07417260234771426,
+      "sharpe_repo": 0.7666202731252099,
+      "max_dd": -0.06418571160863995,
+      "calmar": 0.885901538599724,
+      "avg_turnover": 0.054332874828060526,
+      "cost_total": 0.01975,
+      "avg_exposure": 0.3686382393397524,
+      "final_nav": 1.180740255912076,
+      "nav_defense_days": 34,
+      "amount_gate_days": 114
+    },
+    {
+      "strategy_id": "final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5",
+      "segment": "last_1y",
+      "start": "2025-06-05",
+      "end": "2026-06-05",
+      "rows": 244,
+      "ann_return": 0.09444360379499339,
+      "ann_vol": 0.08771543305729379,
+      "sharpe_repo": 1.0767045262525798,
+      "max_dd": -0.05398381028856358,
+      "calmar": 1.7494801365475525,
+      "avg_turnover": 0.05737704918032787,
+      "cost_total": 0.007000000000000001,
+      "avg_exposure": 0.5409836065573771,
+      "final_nav": 1.0952601832954496,
+      "nav_defense_days": 0,
+      "amount_gate_days": 36
+    }
+  ],
+  "outputs": {
+    "daily": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5_daily.csv",
+    "metrics": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5_metrics.json"
+  }
+}
