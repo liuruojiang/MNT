@@ -1,4 +1,16 @@
 __pycache__/
 *.py[cod]
+outputs/
+output/
+data/
+quant_param_scan_runs/
 .codex_backups/
+.vendor_libs/
 .worktrees/
+**pycache**/
+*.pyc
+*.bak
+*.bak_*
+*_backup*
+*_old.py
+*_copy.py
