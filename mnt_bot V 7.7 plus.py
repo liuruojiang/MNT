@@ -160,7 +160,9 @@ CN_MIN_LEV = 0.1              # 最小杠杆
 CN_SCALE_THRESHOLD = 0.00     # scale变动阈值；0=连续更新
 CN_ENTRY_INITIAL_FRACTION = 1.0
 
-CN_SA_SINGLE_GATE_ENABLED = True
+# Research-only single-index gate prototypes from the standalone A-share long-only workspace.
+# V7.7 Sub-A production logic must not require these sleeves to be active before holding.
+CN_SA_SINGLE_GATE_ENABLED = False
 CN_SA_SINGLE_GATE_EXECUTION_SHIFT = -1
 CN_SA_SINGLE_GATE_CONFIGS = {
     "0.399006": {
