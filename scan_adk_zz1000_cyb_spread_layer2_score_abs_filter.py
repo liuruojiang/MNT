@@ -1,0 +1,489 @@
+"""Layer 2 score / absolute-bias filter scan for long ZZ1000 / short CYB.
+
+Inputs are the Layer 1 dense width-supported anchors:
+- main width: bias_ma=35, mom_day=20, weight_end=3.0
+- nearby confirmation: bias_ma=35, mom_day=21, weight_end=3.0
+- defensive-width watchlist: bias_ma=60, mom_day=12, weight_end=2.0
+
+Layer 2 scans score thresholds and absolute ratio-bias filters only.
+No target-vol, NAV defense, overheat, amount, volume, or momentum decay is applied.
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import scan_adk_cyb_zz1000_spread_long_only as metric_base
+import scan_adk_zz1000_cyb_spread_layer1_dense_patch as l1dense
+import scan_adk_zz1000_cyb_spread_long_only as base
+
+
+RUN_DIR = base.ROOT / "quant_param_scan_runs" / "20260611_adk_zz1000_cyb_spread_long_only_v77_adk_spread_layer2_score_abs_filter_three_l1_width_anchors"
+
+ANCHORS = [
+    {"anchor": "width_35_20_we3", "bias_ma": 35, "mom_day": 20, "weight_end": 3.0},
+    {"anchor": "neighbor_35_21_we3", "bias_ma": 35, "mom_day": 21, "weight_end": 3.0},
+    {"anchor": "defensive_60_12_we2", "bias_ma": 60, "mom_day": 12, "weight_end": 2.0},
+]
+SCORE_THRESHOLDS = [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 7.5, 10.0]
+ABS_MAS = list(range(20, 81, 5))
+ABS_THRESHOLDS = [round(x, 3) for x in np.arange(-0.08, 0.0801, 0.005)]
+LOSS_TIERS = [1.0, 2.0, 3.0]
+
+
+def fmt_num(value: float, pct: bool = False) -> str:
+    scaled = value * 100.0 if pct else value
+    sign = "m" if scaled < 0 else ""
+    return sign + f"{abs(scaled):g}".replace(".", "p")
+
+
+def load_panel() -> tuple[object, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    mod = base.load_v77()
+    cyb = mod._load_cn_official_cache(mod.CN_DK_CYB_SECID).rename(columns={"close": "CYB"})
+    zz1000 = mod._load_cn_official_cache(mod.CN_DK_ZZ1000_SECID).rename(columns={"close": "ZZ1000"})
+    panel = pd.concat([zz1000["ZZ1000"], cyb["CYB"]], axis=1).dropna()
+    panel = panel.loc[panel.index >= base.FORMAL_START].copy()
+    panel["ratio"] = panel["ZZ1000"] / panel["CYB"]
+    panel["spread_return"] = panel["ZZ1000"].pct_change().fillna(0.0) - panel["CYB"].pct_change().fillna(0.0)
+    return mod, zz1000, cyb, panel
+
+
+def precompute(panel: pd.DataFrame) -> tuple[dict[str, pd.Series], dict[str, pd.Series], dict[int, pd.Series]]:
+    ratio = panel["ratio"]
+    scores: dict[str, pd.Series] = {}
+    r2s: dict[str, pd.Series] = {}
+    for anchor in ANCHORS:
+        feature = ratio / ratio.rolling(int(anchor["bias_ma"])).mean() - 1.0
+        score, r2 = l1dense.fast_weighted_slope_and_r2(
+            feature,
+            int(anchor["mom_day"]),
+            float(anchor["weight_end"]),
+        )
+        scores[str(anchor["anchor"])] = score
+        r2s[str(anchor["anchor"])] = r2
+    abs_bias = {ma: ratio / ratio.rolling(ma).mean() - 1.0 for ma in ABS_MAS}
+    return scores, r2s, abs_bias
+
+
+def make_grid() -> list[dict[str, object]]:
+    grid: list[dict[str, object]] = []
+    for anchor in ANCHORS:
+        for score_thr in SCORE_THRESHOLDS:
+            grid.append(
+                {
+                    **anchor,
+                    "candidate": f"l2_{anchor['anchor']}_score{fmt_num(score_thr)}_abs_off",
+                    "score_threshold": score_thr,
+                    "abs_ma": 0,
+                    "abs_threshold": -999.0,
+                    "abs_filter": "off",
+                }
+            )
+            for abs_ma in ABS_MAS:
+                for abs_thr in ABS_THRESHOLDS:
+                    grid.append(
+                        {
+                            **anchor,
+                            "candidate": f"l2_{anchor['anchor']}_score{fmt_num(score_thr)}_abs{abs_ma}_gt_{fmt_num(abs_thr, pct=True)}pct",
+                            "score_threshold": score_thr,
+                            "abs_ma": abs_ma,
+                            "abs_threshold": abs_thr,
+                            "abs_filter": "ratio_bias",
+                        }
+                    )
+    return grid
+
+
+def candidate_returns(
+    panel: pd.DataFrame,
+    candidate: dict[str, object],
+    scores: dict[str, pd.Series],
+    r2s: dict[str, pd.Series],
+    abs_bias: dict[int, pd.Series],
+) -> pd.DataFrame:
+    anchor = str(candidate["anchor"])
+    score = scores[anchor]
+    r2 = r2s[anchor]
+    signal = (score > float(candidate["score_threshold"])) & (r2 >= 0.05)
+    abs_ma = int(candidate["abs_ma"])
+    if abs_ma > 0:
+        signal = signal & (abs_bias[abs_ma] > float(candidate["abs_threshold"]))
+        abs_series = abs_bias[abs_ma]
+    else:
+        abs_series = pd.Series(np.nan, index=panel.index)
+
+    weight = signal.astype(float).shift(1).fillna(0.0)
+    turnover = weight.diff().abs().fillna(weight.abs())
+    cost = turnover * (2.0 * base.COMMISSION_ONE_WAY)
+    gross_return = weight * panel["spread_return"]
+    ret = gross_return - cost
+    warmup = max(int(candidate["bias_ma"]), int(candidate["mom_day"]), abs_ma) + 2
+    return pd.DataFrame(
+        {
+            "return": ret,
+            "gross_return": gross_return,
+            "cost": cost,
+            "turnover": turnover,
+            "weight": weight,
+            "score": score,
+            "r2": r2,
+            "abs_bias": abs_series,
+            "ratio": panel["ratio"],
+            "spread_return": panel["spread_return"],
+        },
+        index=panel.index,
+    ).iloc[warmup:].copy()
+
+
+def add_baselines_and_flags(wm: pd.DataFrame) -> pd.DataFrame:
+    out = wm.copy()
+    baselines = out[(out["score_threshold"] == 0.0) & (out["abs_filter"] == "off")].set_index("anchor")
+    for col in [
+        "ann_return_full",
+        "max_dd_full",
+        "ann_return_last_5y",
+        "max_dd_last_5y",
+        "ann_return_last_3y",
+        "max_dd_last_3y",
+        "ann_return_last_1y",
+        "max_dd_last_1y",
+        "sharpe_repo_full",
+    ]:
+        out[f"base_{col}"] = out["anchor"].map(baselines[col])
+    out["full_ann_loss_pp"] = (out["base_ann_return_full"] - out["ann_return_full"]) * 100.0
+    out["full_dd_improve_pp"] = (out["max_dd_full"] - out["base_max_dd_full"]) * 100.0
+    out["fivey_ann_loss_pp"] = (out["base_ann_return_last_5y"] - out["ann_return_last_5y"]) * 100.0
+    out["fivey_dd_improve_pp"] = (out["max_dd_last_5y"] - out["base_max_dd_last_5y"]) * 100.0
+    out["threey_dd_improve_pp"] = (out["max_dd_last_3y"] - out["base_max_dd_last_3y"]) * 100.0
+    out["oney_dd_improve_pp"] = (out["max_dd_last_1y"] - out["base_max_dd_last_1y"]) * 100.0
+    out["pass_full_ann_dd"] = (
+        (out["ann_return_full"] >= out["base_ann_return_full"] - 1e-12)
+        & (out["max_dd_full"] >= out["base_max_dd_full"] - 1e-12)
+    )
+    out["pass_full_and_5y"] = (
+        out["pass_full_ann_dd"]
+        & (out["ann_return_last_5y"] >= out["base_ann_return_last_5y"] - 1e-12)
+        & (out["max_dd_last_5y"] >= out["base_max_dd_last_5y"] - 1e-12)
+    )
+    for tier in LOSS_TIERS:
+        tag = str(tier).replace(".", "p")
+        out[f"pass_loss_le_{tag}pp"] = (
+            (out["full_ann_loss_pp"] <= tier + 1e-12)
+            & (out["full_dd_improve_pp"] > 0)
+            & (out["fivey_dd_improve_pp"] >= -1e-12)
+        )
+    return out
+
+
+def patch_summary(wm: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    source = wm[wm["abs_filter"] == "ratio_bias"]
+    for tier in LOSS_TIERS:
+        tag = str(tier).replace(".", "p")
+        pass_col = f"pass_loss_le_{tag}pp"
+        for (anchor, score_thr), group in source.groupby(["anchor", "score_threshold"]):
+            passed = group[group[pass_col]].copy()
+            if passed.empty:
+                rows.append(
+                    {
+                        "loss_tier_pp": tier,
+                        "anchor": anchor,
+                        "score_threshold": score_thr,
+                        "pass_count": 0,
+                        "ma_count": 0,
+                        "threshold_count": 0,
+                        "best_candidate": "",
+                        "best_full_ann_return": np.nan,
+                        "best_full_max_dd": np.nan,
+                        "best_full_ann_loss_pp": np.nan,
+                        "best_full_dd_improve_pp": np.nan,
+                        "best_5y_ann_return": np.nan,
+                        "best_5y_max_dd": np.nan,
+                        "patch_like": False,
+                    }
+                )
+                continue
+            best = passed.sort_values(["full_dd_improve_pp", "ann_return_full"], ascending=[False, False]).iloc[0]
+            thrs = sorted(passed["abs_threshold"].unique())
+            adjacent_thr = any(round(thrs[i + 1] - thrs[i], 3) <= 0.006 for i in range(len(thrs) - 1))
+            patch_like = bool(
+                len(passed) >= 4
+                and passed["abs_ma"].nunique() >= 2
+                and passed["abs_threshold"].nunique() >= 2
+                and adjacent_thr
+            )
+            rows.append(
+                {
+                    "loss_tier_pp": tier,
+                    "anchor": anchor,
+                    "score_threshold": score_thr,
+                    "pass_count": int(len(passed)),
+                    "ma_count": int(passed["abs_ma"].nunique()),
+                    "threshold_count": int(passed["abs_threshold"].nunique()),
+                    "best_candidate": best["candidate"],
+                    "best_full_ann_return": best["ann_return_full"],
+                    "best_full_max_dd": best["max_dd_full"],
+                    "best_full_ann_loss_pp": best["full_ann_loss_pp"],
+                    "best_full_dd_improve_pp": best["full_dd_improve_pp"],
+                    "best_5y_ann_return": best["ann_return_last_5y"],
+                    "best_5y_max_dd": best["max_dd_last_5y"],
+                    "patch_like": patch_like,
+                }
+            )
+    return pd.DataFrame(rows).sort_values(
+        ["loss_tier_pp", "patch_like", "pass_count", "best_full_dd_improve_pp"],
+        ascending=[True, False, False, False],
+    )
+
+
+def pct(value: float) -> str:
+    return f"{value * 100:.2f}%"
+
+
+def window_table(df: pd.DataFrame, n: int = 10) -> str:
+    cols = ["candidate", "anchor", "score_threshold", "abs_ma", "abs_threshold"]
+    for segment, _years in base.SEGMENTS:
+        cols.extend([f"ann_return_{segment}", f"max_dd_{segment}"])
+    display = df.head(n)[cols].copy()
+    for col in display.columns:
+        if col.startswith("ann_return_") or col.startswith("max_dd_"):
+            display[col] = display[col].map(lambda x: pct(float(x)))
+    return display.to_markdown(index=False)
+
+
+def main() -> None:
+    mod, zz1000, cyb, panel = load_panel()
+    scores, r2s, abs_bias = precompute(panel)
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    grid = make_grid()
+    long_rows = []
+    wide_rows = []
+    curves: dict[str, pd.DataFrame] = {}
+
+    for cand in grid:
+        result = candidate_returns(panel, cand, scores, r2s, abs_bias)
+        wide = {**cand}
+        for segment, years in base.SEGMENTS:
+            metrics = metric_base.metrics_for_segment(result, segment, years)
+            long_rows.append({**cand, **metrics})
+            for key in ["ann_return", "max_dd", "sharpe_repo", "avg_weight", "avg_turnover", "holding_day_ratio"]:
+                wide[f"{key}_{segment}"] = metrics[key]
+        wide_rows.append(wide)
+        if cand["score_threshold"] == 0.0 and cand["abs_filter"] == "off":
+            curves[str(cand["candidate"])] = result
+
+    scan_summary = pd.DataFrame(long_rows)
+    window_metrics = add_baselines_and_flags(pd.DataFrame(wide_rows))
+    ridge = patch_summary(window_metrics)
+
+    full_pass = window_metrics[
+        (window_metrics["abs_filter"] == "ratio_bias") & window_metrics["pass_full_ann_dd"]
+    ].sort_values(["full_dd_improve_pp", "ann_return_full"], ascending=[False, False])
+    strict_pass = window_metrics[
+        (window_metrics["abs_filter"] == "ratio_bias") & window_metrics["pass_full_and_5y"]
+    ].sort_values(["full_dd_improve_pp", "ann_return_full"], ascending=[False, False])
+    top_tier: dict[float, pd.DataFrame] = {}
+    for tier in LOSS_TIERS:
+        tag = str(tier).replace(".", "p")
+        pass_col = f"pass_loss_le_{tag}pp"
+        passed = window_metrics[
+            (window_metrics["abs_filter"] == "ratio_bias") & window_metrics[pass_col]
+        ].sort_values(["full_dd_improve_pp", "ann_return_full"], ascending=[False, False])
+        passed.to_csv(RUN_DIR / f"dd_first_pass_loss_le_{tag}pp.csv", index=False, encoding="utf-8-sig")
+        top_tier[tier] = passed
+
+    selected_names = set()
+    for df in [full_pass, strict_pass, *top_tier.values()]:
+        selected_names.update(df.head(8)["candidate"].astype(str).tolist())
+    selected_lookup = {cand["candidate"]: cand for cand in grid if str(cand["candidate"]) in selected_names}
+    for name, cand in selected_lookup.items():
+        if name not in curves:
+            curves[name] = candidate_returns(panel, cand, scores, r2s, abs_bias)
+
+    daily_rows = []
+    for name, curve in curves.items():
+        out = curve.copy()
+        out["nav"] = (1.0 + out["return"]).cumprod()
+        out["candidate"] = name
+        daily_rows.append(out.reset_index(names="date"))
+    daily = pd.concat(daily_rows, ignore_index=True) if daily_rows else pd.DataFrame()
+
+    scan_summary.to_csv(RUN_DIR / "scan_summary.csv", index=False, encoding="utf-8-sig")
+    window_metrics.to_csv(RUN_DIR / "window_metrics.csv", index=False, encoding="utf-8-sig")
+    ridge.to_csv(RUN_DIR / "ridge_width.csv", index=False, encoding="utf-8-sig")
+    full_pass.to_csv(RUN_DIR / "full_baseline_pass_candidates.csv", index=False, encoding="utf-8-sig")
+    strict_pass.to_csv(RUN_DIR / "full_and_5y_pass_candidates.csv", index=False, encoding="utf-8-sig")
+    daily.to_csv(RUN_DIR / "daily_curves.csv", index=False, encoding="utf-8-sig")
+
+    record_lines = [
+        "# ZZ1000/CYB Layer 2 Score And Absolute-Bias Filter Scan",
+        "",
+        "## Run Metadata",
+        f"- created_at: {datetime.now().isoformat(timespec='seconds')}",
+        f"- run_folder: `{RUN_DIR}`",
+        "- decision: `layer2_score_abs_complete_not_promoted`",
+        "- stability: `strict_and_dd_first_patch_review`",
+        "",
+        "## Research Question",
+        "Scan score thresholds and absolute ratio-bias filters against the Layer 1 width-supported anchors.",
+        "",
+        "## Implementation Anchor",
+        "- Imports data loader from `scan_adk_zz1000_cyb_spread_long_only.py`.",
+        "- Uses the vectorized weighted-slope/r2 implementation from `scan_adk_zz1000_cyb_spread_layer1_dense_patch.py`, already checked against the original rolling implementation.",
+        "- Anchors: `35/20/we3.0`, `35/21/we3.0`, and `60/12/we2.0`.",
+        "",
+        "## Data Snapshot",
+        f"- ZZ1000 rows: {len(zz1000)}, start {zz1000.index.min().date()}, end {zz1000.index.max().date()}.",
+        f"- CYB rows: {len(cyb)}, start {cyb.index.min().date()}, end {cyb.index.max().date()}.",
+        f"- Formal aligned rows: {len(panel)}, start {panel.index.min().date()}, end {panel.index.max().date()}.",
+        "- Formal start: `2014-10-17`, constrained by CSI 1000 publication date.",
+        "",
+        "## Cost and Execution Assumptions",
+        "- T close signal -> T+1 close-to-close spread return.",
+        "- Return stream: ZZ1000 close-to-close return minus CYB close-to-close return.",
+        f"- Two-leg transaction cost with one-way commission {base.COMMISSION_ONE_WAY:.4%} on exposure changes.",
+        "- No target-vol, NAV defense, overheat, amount, volume, or momentum-decay overlay is applied.",
+        "",
+        "## Runtime Override Plan",
+        "No production defaults changed. This is a research-only Layer 2 scan.",
+        "",
+        "## Commands",
+        "- `python -m py_compile \"scan_adk_zz1000_cyb_spread_layer2_score_abs_filter.py\"`",
+        "- `python \"scan_adk_zz1000_cyb_spread_layer2_score_abs_filter.py\"`",
+        "- strict artifact checker after run.",
+        "",
+        "## Output Files",
+        "- `scan_summary.csv`",
+        "- `window_metrics.csv`",
+        "- `daily_curves.csv`",
+        "- `ridge_width.csv`",
+        "- `full_baseline_pass_candidates.csv`",
+        "- `full_and_5y_pass_candidates.csv`",
+        "- `dd_first_pass_loss_le_1p0pp.csv`",
+        "- `dd_first_pass_loss_le_2p0pp.csv`",
+        "- `dd_first_pass_loss_le_3p0pp.csv`",
+        "- `scan_meta.json`",
+        "- `command_log.txt`",
+        "",
+        "## Full-Sample Results",
+        window_table(full_pass, 12) if not full_pass.empty else "No candidates passed strict full-sample annual-return and drawdown non-underperformance.",
+        "",
+        "## Window Results",
+        window_table(strict_pass, 12) if not strict_pass.empty else "No candidates passed strict full+5Y annual-return and drawdown non-underperformance.",
+        "",
+        "## Stability Classification",
+        ridge.to_markdown(index=False),
+        "",
+        "## Decision",
+        "Layer 2 score/absolute-bias scan completed but not promoted. Stop for user review before Layer 3.",
+        "",
+        "## User-Facing Summary",
+        f"- strict full pass count: {len(full_pass)}",
+        f"- strict full+5Y pass count: {len(strict_pass)}",
+        f"- loss<=1pp pass count: {len(top_tier[1.0])}",
+        f"- loss<=2pp pass count: {len(top_tier[2.0])}",
+        f"- loss<=3pp pass count: {len(top_tier[3.0])}",
+    ]
+    (RUN_DIR / "record.md").write_text("\n".join(record_lines), encoding="utf-8")
+
+    meta = {
+        "run_id": RUN_DIR.name,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "project": "A-share / US momentum combo",
+        "strategy": "V7.7 ADK spread research",
+        "repo_root": str(base.ROOT),
+        "entrypoint": str(Path(__file__).name),
+        "implementation_anchor": "scan_adk_zz1000_cyb_spread_long_only.py",
+        "git_branch": "dirty_worktree_not_cleaned",
+        "git_commit": "not_recorded",
+        "git_status_before": "dirty_worktree_with_prior_research_artifacts",
+        "git_status_after": "dirty_worktree_with_prior_research_artifacts",
+        "scan_type": "layer2_score_abs_filter",
+        "parameter_group": "score_threshold_abs_bias_filter",
+        "baseline": {"anchors": ANCHORS, "loss_tiers_pp": LOSS_TIERS},
+        "candidate_grid": grid,
+        "cost_model": {
+            "one_way_commission": base.COMMISSION_ONE_WAY,
+            "legs": 2,
+            "execution": "T close signal -> T+1 close-to-close return",
+        },
+        "data_snapshot": {
+            "source": "mnt_bot V 7.7 plus.py _load_cn_official_cache",
+            "zz1000": {
+                "secid": str(mod.CN_DK_ZZ1000_SECID),
+                "rows": int(len(zz1000)),
+                "start": str(zz1000.index.min().date()),
+                "end": str(zz1000.index.max().date()),
+                "publication_date": "2014-10-17",
+            },
+            "cyb": {
+                "secid": str(mod.CN_DK_CYB_SECID),
+                "rows": int(len(cyb)),
+                "start": str(cyb.index.min().date()),
+                "end": str(cyb.index.max().date()),
+            },
+            "formal": {
+                "rows": int(len(panel)),
+                "start": str(panel.index.min().date()),
+                "end": str(panel.index.max().date()),
+                "start_rule": "latest actual publication/listing date; ZZ1000 publication 2014-10-17",
+            },
+        },
+        "decision": "layer2_score_abs_complete_not_promoted",
+        "stability_label": "strict_and_dd_first_patch_review",
+        "outputs": {
+            "record": str(RUN_DIR / "record.md"),
+            "scan_summary": str(RUN_DIR / "scan_summary.csv"),
+            "window_metrics": str(RUN_DIR / "window_metrics.csv"),
+            "scan_meta": str(RUN_DIR / "scan_meta.json"),
+            "command_log": str(RUN_DIR / "command_log.txt"),
+            "daily_curves": str(RUN_DIR / "daily_curves.csv"),
+            "ridge_width": str(RUN_DIR / "ridge_width.csv"),
+            "full_baseline_pass_candidates": str(RUN_DIR / "full_baseline_pass_candidates.csv"),
+            "full_and_5y_pass_candidates": str(RUN_DIR / "full_and_5y_pass_candidates.csv"),
+        },
+    }
+    (RUN_DIR / "scan_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    (RUN_DIR / "command_log.txt").write_text(
+        "python -m py_compile \"scan_adk_zz1000_cyb_spread_layer2_score_abs_filter.py\"\n"
+        "python \"scan_adk_zz1000_cyb_spread_layer2_score_abs_filter.py\"\n"
+        "python C:\\Users\\Administrator.DESKTOP-95I7VVU\\.codex\\skills\\quant-param-scan\\scripts\\check_quant_param_scan_artifacts.py --phase complete --strict <run_folder>\n",
+        encoding="utf-8",
+    )
+
+    cols = [
+        "candidate",
+        "anchor",
+        "score_threshold",
+        "abs_ma",
+        "abs_threshold",
+        "ann_return_full",
+        "max_dd_full",
+        "full_ann_loss_pp",
+        "full_dd_improve_pp",
+        "ann_return_last_5y",
+        "max_dd_last_5y",
+        "fivey_ann_loss_pp",
+        "fivey_dd_improve_pp",
+        "ann_return_last_1y",
+        "max_dd_last_1y",
+    ]
+    print(f"RUN_DIR={RUN_DIR}")
+    print(f"DATA={panel.index.min().date()}->{panel.index.max().date()} rows={len(panel)} candidates={len(grid)}")
+    for tier in LOSS_TIERS:
+        print(f"LOSS_LE_{tier}PP_COUNT={len(top_tier[tier])}")
+        print(top_tier[tier][cols].head(12).to_string(index=False) if not top_tier[tier].empty else "NONE")
+    print(f"STRICT_FULL_PASS_COUNT={len(full_pass)}")
+    print(full_pass[cols].head(12).to_string(index=False) if not full_pass.empty else "NONE")
+    print(f"STRICT_FULL_5Y_PASS_COUNT={len(strict_pass)}")
+    print(strict_pass[cols].head(12).to_string(index=False) if not strict_pass.empty else "NONE")
+    print("RIDGE")
+    print(ridge.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
