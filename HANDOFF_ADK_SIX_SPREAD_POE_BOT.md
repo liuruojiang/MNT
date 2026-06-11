@@ -2,7 +2,7 @@
 
 ## Workspace
 
-- Repo: `C:\Users\Administrator.DESKTOP-95I7VVU\Desktop\动量策略\A股美股动量组合策略`
+- Repo: `D:\动量策略\A股美股动量组合策略`
 - Current date/context: 2026-06-08, Asia/Shanghai.
 - Follow local `AGENTS.md` rules:
   - For ADK/DK-style formal tests, explicitly respect index publication/common-sample windows.

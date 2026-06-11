@@ -1,6 +1,6 @@
 # Agent Notes
 
-Common rules live in `C:\Users\Administrator.DESKTOP-95I7VVU\AGENTS.md`. This file only adds local rules for the A-share / US momentum combo workspace.
+This repo-local file is the active guidance for the A-share / US momentum combo workspace at `D:\动量策略\A股美股动量组合策略`. Any broader machine-level notes outside this repository are optional context, not a required dependency for running or maintaining this project.
 
 ## Window And Inception Rules
 
