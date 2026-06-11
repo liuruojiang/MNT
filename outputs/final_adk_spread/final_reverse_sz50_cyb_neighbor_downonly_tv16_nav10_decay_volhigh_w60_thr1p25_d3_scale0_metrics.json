@@ -1,0 +1,320 @@
+{
+  "created_at": "2026-06-09T22:55:03+08:00",
+  "meta": {
+    "source_csv": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+    "cyb_column": "0.399006",
+    "sz50_column": "1.000016",
+    "cyb_first_valid": "2010-06-01",
+    "cyb_last_valid": "2026-06-05",
+    "sz50_first_valid": "2004-01-02",
+    "sz50_last_valid": "2026-06-05",
+    "formal_start": "2010-06-01",
+    "common_start": "2010-06-01",
+    "common_end": "2026-06-05",
+    "common_rows": 3887,
+    "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+    "candidate": "l7vol_neighbor_downonly_tv16_w30_min0_sz50_vol_high_w60_thr1p25_d3_scale0",
+    "direction": "long SZ50 / short CYB",
+    "asset_curve": "SSE50 price index / ChiNext price index",
+    "baseline": {
+      "line": "neighbor_downonly_tv16_w30_min0",
+      "branch": "neighbor_nav10_s025_decay030_rec080_w3_s0",
+      "role": "defensive_neighbor",
+      "label": "neighbor signal, TV16%, NAV10% scale25%, momentum decay to cash, down-only TV cap, SZ50 high-volume cash gate"
+    },
+    "signal": {
+      "bias_ma": 30,
+      "mom_day": 32,
+      "weight_end": 3.5,
+      "score_threshold": 1.0,
+      "abs_mom_day": 15,
+      "abs_threshold": -0.07,
+      "r2_threshold": 0.05
+    },
+    "target_vol": {
+      "enabled": true,
+      "target_vol": 0.16,
+      "target_vol_window": 20,
+      "max_leverage": 1.25,
+      "min_leverage": 0.1
+    },
+    "nav_defense": {
+      "enabled": true,
+      "threshold": 0.1,
+      "scale": 0.25,
+      "timing": "prior-row pre-overlay candidate NAV drawdown"
+    },
+    "momentum_decay": {
+      "enabled": true,
+      "decay_threshold": 0.3,
+      "recovery_threshold": 0.8,
+      "warmup_days": 3,
+      "scale": 0.0,
+      "timing": "score peak decay shifted to next execution row"
+    },
+    "overheat": {
+      "enabled": true,
+      "kind": "downonly_tv",
+      "gate": 0.09,
+      "target_vol": 0.16,
+      "window": 30,
+      "min_scale": 0.0,
+      "timing": "prior-row realized volatility cap"
+    },
+    "volume_overlay": {
+      "enabled": true,
+      "family": "sz50_vol_high",
+      "series": "sz50_volume / sz50_volume_rolling_mean",
+      "window": 60,
+      "threshold": 1.25,
+      "confirm_days": 3,
+      "scale": 0.0,
+      "timing": "T close volume condition shifted to T+1 execution"
+    },
+    "combination_rule": "final exposure = target-vol baseline exposure * NAV multiplier * score-decay multiplier * down-only-TV multiplier * SZ50-high-volume multiplier",
+    "volume_data": {
+      "volume_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_sz50_cyb_volume_sohu_real.csv",
+      "volume_meta": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_sz50_cyb_volume_sohu_real_meta.json",
+      "source": "Sohu real volume panel",
+      "complete_rows": 3884,
+      "metadata": {
+        "created_at": "2026-06-09T19:29:53",
+        "primary_source": "Sohu amount endpoint",
+        "primary_output_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_sz50_cyb_volume_sohu_real.csv",
+        "sina_crosscheck_csv": "D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_sz50_cyb_volume_sina_crosscheck.csv",
+        "direction_context": "long SZ50 / short CYB",
+        "reason": "EastMoney failed during live refetch; CSIndex had SZ50 but no CYB mapping; Sohu provided same-source CYB and SZ50 volume.",
+        "attempts": {
+          "EastMoney": {
+            "cyb": {
+              "ok": false,
+              "secid": "0.399006",
+              "name": "ChiNext",
+              "error_type": "ConnectionError",
+              "error": "HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?secid=0.399006&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&beg=20000101&end=20260709&lmt=10000 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))"
+            },
+            "sz50": {
+              "ok": false,
+              "secid": "1.000016",
+              "name": "SSE50",
+              "error_type": "ConnectionError",
+              "error": "HTTPSConnectionPool(host='push2his.eastmoney.com', port=443): Max retries exceeded with url: /api/qt/stock/kline/get?secid=1.000016&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&beg=20000101&end=20260709&lmt=10000 (Caused by ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))"
+            }
+          },
+          "CSIndex": {
+            "cyb": {
+              "ok": false,
+              "secid": "0.399006",
+              "name": "ChiNext",
+              "error_type": "ValueError",
+              "error": "no csindex amount mapping for 0.399006"
+            },
+            "sz50": {
+              "ok": true,
+              "secid": "1.000016",
+              "name": "SSE50",
+              "rows": 5449,
+              "first_date": "2000-01-01",
+              "last_date": "2026-06-09",
+              "volume_positive_rows": 5446,
+              "amount_positive_rows": 5446,
+              "latest_volume": 5403.07,
+              "latest_amount": 1464.67
+            }
+          },
+          "Sina": {
+            "cyb": {
+              "ok": true,
+              "secid": "0.399006",
+              "name": "ChiNext",
+              "rows": 3889,
+              "first_date": "2010-06-01",
+              "last_date": "2026-06-09",
+              "volume_positive_rows": 3889,
+              "amount_positive_rows": 3889,
+              "latest_volume": 20975558495.0,
+              "latest_amount": 20975558495.0
+            },
+            "sz50": {
+              "ok": true,
+              "secid": "1.000016",
+              "name": "SSE50",
+              "rows": 5446,
+              "first_date": "2004-01-02",
+              "last_date": "2026-06-09",
+              "volume_positive_rows": 5446,
+              "amount_positive_rows": 5446,
+              "latest_volume": 5403071100.0,
+              "latest_amount": 5403071100.0
+            }
+          },
+          "Sohu": {
+            "cyb": {
+              "ok": true,
+              "secid": "0.399006",
+              "name": "ChiNext",
+              "rows": 3886,
+              "first_date": "2010-06-01",
+              "last_date": "2026-06-09",
+              "volume_positive_rows": 3886,
+              "amount_positive_rows": 3886,
+              "latest_volume": 216665792.0,
+              "latest_amount": 72418800.0
+            },
+            "sz50": {
+              "ok": true,
+              "secid": "1.000016",
+              "name": "SSE50",
+              "rows": 5443,
+              "first_date": "2004-01-02",
+              "last_date": "2026-06-09",
+              "volume_positive_rows": 5443,
+              "amount_positive_rows": 5443,
+              "latest_volume": 54030708.0,
+              "latest_amount": 14646749.0
+            }
+          }
+        },
+        "formal_overlap_to_price_end": {
+          "start": "2010-06-01",
+          "end": "2026-06-05",
+          "rows": 3884,
+          "price_formal_start": "2010-06-01",
+          "price_formal_end": "2026-06-05"
+        },
+        "columns": [
+          "cyb_close",
+          "cyb_volume",
+          "cyb_amount",
+          "sz50_close",
+          "sz50_volume",
+          "sz50_amount",
+          "source"
+        ],
+        "unit_note": "Use only own-MA relative volume features or unitless relative ratios; raw volume units are source-specific."
+      }
+    },
+    "cost_model": {
+      "one_way_commission": 0.0005,
+      "legs": 2,
+      "execution": "T close signal -> T+1 close-to-close return"
+    },
+    "annualization_days": 242
+  },
+  "metrics": [
+    {
+      "segment": "full",
+      "start": "2010-08-27",
+      "end": "2026-06-05",
+      "rows": 3827,
+      "ann_return": 0.08319348321277964,
+      "ann_vol": 0.0776987454250406,
+      "max_dd": -0.08150467886970525,
+      "sharpe_repo": 1.0707184878942486,
+      "avg_weight": 0.2295821758604903,
+      "avg_turnover": 0.04272376097938444,
+      "holding_days": 1377,
+      "holding_day_ratio": 0.35981186307812907,
+      "cost_total": 0.16350383326810425,
+      "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+      "avg_exposure": 0.2295821758604903,
+      "final_nav": 3.5386940353574556,
+      "nav_defense_days": 348,
+      "momentum_decay_days": 90,
+      "overheat_days": 2626,
+      "volume_gate_days": 314
+    },
+    {
+      "segment": "last_10y",
+      "start": "2016-06-06",
+      "end": "2026-06-05",
+      "rows": 2427,
+      "ann_return": 0.07575286524653757,
+      "ann_vol": 0.08249656022342822,
+      "max_dd": -0.08150467886970536,
+      "sharpe_repo": 0.9182548344000468,
+      "avg_weight": 0.27245385468027344,
+      "avg_turnover": 0.04854741744567315,
+      "holding_days": 849,
+      "holding_day_ratio": 0.34981458590852904,
+      "cost_total": 0.11782458214064873,
+      "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+      "avg_exposure": 0.27245385468027344,
+      "final_nav": 2.079899827792606,
+      "nav_defense_days": 65,
+      "momentum_decay_days": 73,
+      "overheat_days": 1453,
+      "volume_gate_days": 173
+    },
+    {
+      "segment": "last_5y",
+      "start": "2021-06-07",
+      "end": "2026-06-05",
+      "rows": 1211,
+      "ann_return": 0.06850906962627512,
+      "ann_vol": 0.08134646104020385,
+      "max_dd": -0.08150467886970514,
+      "sharpe_repo": 0.842188692049134,
+      "avg_weight": 0.2842829508637329,
+      "avg_turnover": 0.051310116744148176,
+      "holding_days": 424,
+      "holding_day_ratio": 0.3501238645747316,
+      "cost_total": 0.06213655137716345,
+      "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+      "avg_exposure": 0.2842829508637329,
+      "final_nav": 1.3931888258540959,
+      "nav_defense_days": 63,
+      "momentum_decay_days": 45,
+      "overheat_days": 706,
+      "volume_gate_days": 79
+    },
+    {
+      "segment": "last_3y",
+      "start": "2023-06-05",
+      "end": "2026-06-05",
+      "rows": 727,
+      "ann_return": 0.08612348282846982,
+      "ann_vol": 0.07750929249770636,
+      "max_dd": -0.08027584035728397,
+      "sharpe_repo": 1.1111375172340578,
+      "avg_weight": 0.2766944184644852,
+      "avg_turnover": 0.045193335489058926,
+      "holding_days": 235,
+      "holding_day_ratio": 0.32324621733149933,
+      "cost_total": 0.03285555490054584,
+      "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+      "avg_exposure": 0.2766944184644852,
+      "final_nav": 1.281698487774317,
+      "nav_defense_days": 59,
+      "momentum_decay_days": 27,
+      "overheat_days": 360,
+      "volume_gate_days": 49
+    },
+    {
+      "segment": "last_1y",
+      "start": "2025-06-05",
+      "end": "2026-06-05",
+      "rows": 244,
+      "ann_return": -0.025906170274424434,
+      "ann_vol": 0.040226534880982455,
+      "max_dd": -0.03976875610759645,
+      "sharpe_repo": -0.644007005601466,
+      "avg_weight": 0.08329135719885558,
+      "avg_turnover": 0.017910308870190118,
+      "holding_days": 42,
+      "holding_day_ratio": 0.1721311475409836,
+      "cost_total": 0.004370115364326389,
+      "strategy_id": "final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0",
+      "avg_exposure": 0.08329135719885558,
+      "final_nav": 0.9738825495877205,
+      "nav_defense_days": 59,
+      "momentum_decay_days": 16,
+      "overheat_days": 178,
+      "volume_gate_days": 24
+    }
+  ],
+  "outputs": {
+    "daily": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0_daily.csv",
+    "metrics": "D:\\动量策略\\A股美股动量组合策略\\outputs\\final_adk_spread\\final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0_metrics.json"
+  }
+}
