@@ -1,5 +1,15 @@
 # Task State
 
+## Cleanup Anchor - 2026-06-13
+
+- Poe 16-leg file under repair on 2026-06-13: `poe_adk_16_spread_v1_0_bot.py`.
+- Regression test file intentionally retained on 2026-06-13: `tests/test_poe_adk_16_spread_decay.py`.
+- Latest verification: `python -m pytest tests/test_poe_adk_16_spread_decay.py -q` passed with `19 passed, 1 warning`; `python -m py_compile "poe_adk_16_spread_v1_0_bot.py"` passed; `git diff --check` passed with LF/CRLF warning only.
+- Corrected V7.7 plus 16-leg rerun output from 2026-06-13: `outputs/adk_v77_16_complete_overlay_rerun_20260613_194956`.
+- Do not use stale 16-leg overlay outputs that had `SZ50/CYB` strength as `0` on 2026-06-11 and 2026-06-12, especially `outputs/adk_v77_16_complete_overlay_latest_20260613` and `outputs/adk_v77_16_complete_overlay_poe_local_artifacts_20260613`, for the 2026-06-13 Poe-repaired conclusions.
+- Net-NAV drawdown cooldown three-line retest is recorded under `quant_param_scan_runs\20260613_adk_v77_16_overlay_mnt_bot_v7_7_direct_transitive_consensus_nav_cooldown_drawdown_cross_cooldown`; decision is `research_only_do_not_promote_without_walk_forward`.
+- Detailed sync record: `docs\adk_16_spread_cleanup_sync_20260613.md`.
+
 ## Active Task 2026-06-11: ZZ1000 / CYB Forward Spread
 
 - Goal: Start a new standalone ADK spread test for `long ZZ1000 / short CYB`, strictly following `docs/adk_spread_layered_test_process.md`.

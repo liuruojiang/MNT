@@ -28,6 +28,7 @@ This repo-local file is the active guidance for the A-share / US momentum combo 
 ## Local Verification
 
 - If `tests/` is absent or intentionally cleaned, run the smallest real verification available, usually `python -m py_compile "mnt_bot V X.Y plus.py"` plus `git diff --check` on touched docs/code.
+- For `poe_adk_16_spread_v1_0_bot.py`, keep and run `tests/test_poe_adk_16_spread_decay.py` when changing online rebuild, snapshot seeding, query routing, exposure display, performance labels, or combo-return behavior.
 
 ## New Strategy Test Standard
 

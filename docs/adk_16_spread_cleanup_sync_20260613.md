@@ -57,3 +57,128 @@
 - The current repo has remote `origin = https://github.com/liuruojiang/MNT.git`.
 - Git-backed sibling zones need separate commits/pushes because they are separate repositories.
 - Non-Git sibling zones received local `docs/new_strategy_test_standard_process.md` copies.
+
+## Later Update: Poe 16-Leg Online-Only Repair - 2026-06-13
+
+### Scope
+
+- File under repair: `poe_adk_16_spread_v1_0_bot.py`.
+- Regression test file retained: `tests/test_poe_adk_16_spread_decay.py`.
+- Main goal: make the Poe version usable as an online-only recent-window signal bot without reading stale local artifacts, while preserving enough long-state seed data to avoid signal/state drift.
+
+### Poe Routing And Online Rebuild
+
+- Default query and plain `信号` now route to `render_signal(live=True)`.
+- `历史信号` is routed before the plain signal branch and also uses the online context.
+- `POE_ONLINE_ONLY=True` means Poe signal/performance paths do not use local generated artifacts as their primary context.
+- Online rebuild uses a recent window rather than full-history rebuild:
+  - fetch lookback: `ONLINE_FETCH_LOOKBACK_BARS = 420`
+  - rebuild lookback: `ONLINE_REBUILD_LOOKBACK_BARS = 260`
+- `load_performance_curves()` uses recent online rebuild and labels the report as `Poe最近窗口（约260个交易日）`, not full sample.
+
+### Snapshot Seed Rows
+
+- `STATE_SNAPSHOT` seeds long-running state for all 16 directed legs.
+- `_snapshot_seed_rows()` now ensures seed-only curves have:
+  - `return = 0.0`
+  - `gross_return = 0.0`
+  - `cost = 0.0`
+  - `turnover = 0.0`
+  - `nav_high` from `nav` when absent
+  - `base_nav_high` from `base_nav` when absent
+  - `base_gross_exposure` from `gross_exposure` when absent
+- This prevents `build_combo_curves()` from failing when the latest online date equals the snapshot date and a strategy has only the seed row.
+
+### Signal/Display Corrections
+
+- `基础Score` display now requires both score and absolute momentum to pass. A line such as `Score 62.835 / threshold 2.000` with `AbsMom70 -16.78% / threshold -7.00%` is displayed as not passed.
+- Post-close execution exposure now uses the current row's overlay multiplier instead of the current return-period exposure ratio. This fixed cases such as `SZ50/CYB` where a down-only target-vol/overheat overlay should show about `62.3%` post-close exposure rather than `100.0%`.
+- Down-only target-vol state is no longer pre-shifted before execution fill; `_fill_online_execution_row()` is the single place that applies previous-row state for the return period.
+- NAV drawdown display/rebuild state uses seeded `nav_high` / `base_nav_high` when available.
+
+### Regression Tests Retained On 2026-06-13
+
+Run and keep this regression file unless the Poe 16-leg bot is intentionally retired:
+
+```powershell
+python -m pytest tests/test_poe_adk_16_spread_decay.py -q
+```
+
+Verified result on 2026-06-13:
+
+```text
+19 passed, 1 warning
+```
+
+The warning is the external `fastapi_poe` / Pydantic v2 deprecation warning.
+
+Additional verification:
+
+```powershell
+python -m py_compile "poe_adk_16_spread_v1_0_bot.py"
+git diff --check
+```
+
+`git diff --check` passed with LF/CRLF normalization warning only.
+
+### V7.7 Plus 16-Leg Overlay Rerun
+
+The corrected rerun from 2026-06-13 is:
+
+```text
+outputs/adk_v77_16_complete_overlay_rerun_20260613_194956
+```
+
+Inputs:
+
+- V7.7 before series: `outputs/adk_v77_12_substrategy_overlay_pair_conflict_flat_20260612/v77_adk_before_daily.csv`
+- 16-leg strength source: `outputs/final_adk_spread/*_daily.csv` as read on 2026-06-13
+- Sample: `2015-04-20` to `2026-06-12`, `2710` rows.
+
+Important signal correction:
+
+- On `2026-06-12`, V7.7 selected `SZ50/CYB` with weight about `53.43%`.
+- In the 2026-06-13 rerun, `SZ50/CYB` strength is about `8.39%`, so `direct16` does not block it.
+- Older outputs such as `outputs/adk_v77_16_complete_overlay_latest_20260613` and `outputs/adk_v77_16_complete_overlay_poe_local_artifacts_20260613` treated `SZ50/CYB` as `0` on 2026-06-11 and 2026-06-12 and should not be used for the 2026-06-13 Poe-repaired conclusion.
+
+2026-06-13 rerun headline metrics:
+
+| Window | V7.7 baseline Ann / MaxDD | direct16 Ann / MaxDD | transitive16 Ann / MaxDD | consensus16 Ann / MaxDD |
+|---|---:|---:|---:|---:|
+| Full | 18.09% / -21.32% | 17.77% / -11.93% | 16.00% / -14.37% | 18.91% / -10.90% |
+| 10Y | 20.11% / -15.49% | 18.44% / -11.67% | 16.80% / -14.37% | 19.63% / -10.90% |
+| 5Y | 23.88% / -14.05% | 16.88% / -11.67% | 14.73% / -14.37% | 17.83% / -10.90% |
+| 3Y | 25.35% / -14.05% | 18.07% / -11.67% | 17.66% / -12.94% | 19.28% / -10.90% |
+| 1Y | 23.97% / -14.05% | 22.11% / -10.80% | 24.24% / -9.23% | 25.95% / -10.90% |
+
+### Net-NAV Drawdown Cooldown Retest
+
+Uniform three-line retest run folder:
+
+```text
+quant_param_scan_runs/20260613_adk_v77_16_overlay_mnt_bot_v7_7_direct_transitive_consensus_nav_cooldown_drawdown_cross_cooldown
+```
+
+Rule tested:
+
+- For each line independently, compute that line's net NAV drawdown.
+- When drawdown crosses from above to `<= -threshold`, set return to `0` from the next trading day for `N` trading days.
+- Grid: thresholds `5% / 6% / 7% / 8%` and cooldown days `5 / 8 / 10 / 15 / 20`.
+- Annualization: `242` trading days/year, calibrated to the earlier `recent_drawdown_candidate_scan.csv`.
+- Extra cooldown unwind/re-entry cost: `0.0`; source returns are already net of the underlying V7.7/16-leg overlay costs.
+
+Artifact checks:
+
+```powershell
+python "D:\Codex\home\skills\quant-param-scan\scripts\finalize_quant_param_scan_run.py" "quant_param_scan_runs\20260613_adk_v77_16_overlay_mnt_bot_v7_7_direct_transitive_consensus_nav_cooldown_drawdown_cross_cooldown" --decision "research_only_do_not_promote_without_walk_forward" --stability-label "unstable_recent_drawdown_fit" --repo "D:\动量策略\A股美股动量组合策略"
+python "D:\Codex\home\skills\quant-param-scan\scripts\check_quant_param_scan_artifacts.py" --phase complete --strict "quant_param_scan_runs\20260613_adk_v77_16_overlay_mnt_bot_v7_7_direct_transitive_consensus_nav_cooldown_drawdown_cross_cooldown"
+```
+
+Both passed.
+
+Conclusion:
+
+- Do not promote one unified net-NAV cooldown rule across `direct16`, `transitive16`, and `consensus16`.
+- `consensus16` is the only line where the cooldown family remains a plausible research candidate.
+- `direct16` and `transitive16` are too unstable: many candidates improve recent 1Y drawdown while worsening full-sample drawdown or sacrificing too much annualized return.
+- Treat cooldown as `research_only_do_not_promote_without_walk_forward`.

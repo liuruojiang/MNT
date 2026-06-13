@@ -1,4 +1,4 @@
-﻿# poe: name=ADK-16-Spread-V1
+# poe: name=ADK-16-Spread-V1
 # poe: privacy_shield=half
 """Poe-native ADK spread signal bot with a local CLI smoke-test path.
 
@@ -112,7 +112,28 @@ OUTPUT_DIR = ROOT / "outputs" / "final_adk_spread"
 BJ_TZ = timezone(timedelta(hours=8))
 ANNUAL_DAYS = 242.0
 ONE_WAY_COST_BPS = 5
-EXECUTION_TIMING = "T鏀剁洏淇″彿 -> T+1鎸夋敹鐩樺埌鏀剁洏浠峰樊鏀剁泭鎵ц锛屽凡鍚崟杈?bps鎴愭湰"
+EXECUTION_TIMING = "T收盘信号 -> T+1按收盘到收盘价差收益执行，已含单边5bps成本"
+ONLINE_FETCH_LOOKBACK_BARS = 420
+ONLINE_REBUILD_LOOKBACK_BARS = 260
+
+STATE_SNAPSHOT = {
+    "forward_zz1000_hs300": {"as_of": "2026-06-12", "values": {"nav": 2.774600617908, "nav_high": 2.932931431918, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -26.297305895275}},
+    "reverse_hs300_zz1000": {"as_of": "2026-06-12", "values": {"nav": 2.974021986683, "nav_high": 2.985301182408, "base_nav": 2.998013675902, "base_nav_high": 3.002291075989, "gross_exposure": 0.0, "base_gross_exposure": 0.92433351715, "target_vol_scale": 0.92433351715, "target_vol_raw_scale": 0.899156112483, "score": 22.74904180205}},
+    "forward_cyb_zz1000": {"as_of": "2026-06-12", "values": {"nav": 3.020249922019, "nav_high": 3.182602475989, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 0.0, "target_vol_raw_scale": 0.741976076513, "score": -1.115921113765}},
+    "reverse_zz1000_cyb": {"as_of": "2026-06-12", "values": {"nav": 1.56769823852, "nav_high": 1.661399533332, "gross_exposure": 0.818486735429, "base_gross_exposure": 0.818486735429, "target_vol_scale": 0.818486735429, "target_vol_raw_scale": 0.818486735429, "score": 6.766934395577}},
+    "forward_cyb_hs300": {"as_of": "2026-06-12", "values": {"nav": 4.863016179219, "nav_high": 5.060549541413, "base_nav": 5.579933052483, "base_nav_high": 5.806587230889, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "target_vol_raw_scale": 1.0, "score": -10.658816397633}},
+    "reverse_hs300_cyb": {"as_of": "2026-06-12", "values": {"nav": 5.210788306701, "nav_high": 5.383896580054, "base_nav": 3.707147690105, "base_nav_high": 3.707147690105, "nav_decay_nav": 3.707147690105, "nav_decay_nav_high": 3.830303323749, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "target_vol_raw_scale": 1.0, "score": 19.774988639871, "decay_gate": 1.0, "decay_mult": 0.0}},
+    "forward_zz1000_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.172013827796, "nav_high": 3.231228029486, "base_nav": 3.297418687443, "base_nav_high": 3.358973909399, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 0.381628571571, "target_vol_raw_scale": 0.377206792156, "score": -28.176271172283}},
+    "reverse_sz50_zz1000": {"as_of": "2026-06-12", "values": {"nav": 3.388301924779, "nav_high": 3.527667372032, "gross_exposure": 0.0, "base_gross_exposure": 1.0, "target_vol_scale": 1.0, "score": 29.451040077473, "nav_defense_gate": 1.0}},
+    "forward_cyb_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.521521268556, "nav_high": 3.6430003972, "base_nav": 4.748953353932, "base_nav_high": 4.97131642832, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "target_vol_raw_scale": 0.915822218458, "score": -1.514196682145}},
+    "reverse_sz50_cyb": {"as_of": "2026-06-12", "values": {"nav": 3.544513026629, "nav_high": 3.685251920166, "gross_exposure": 0.083878502614, "base_gross_exposure": 0.083878502614, "target_vol_scale": 1.0, "decay_gate": 0.0}},
+    "forward_zz500_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.285688299949, "nav_high": 3.364608150221, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -8.107319458701, "decay_mult": 1.0}},
+    "reverse_sz50_zz500": {"as_of": "2026-06-12", "values": {"nav": 2.923011883905, "nav_high": 3.116913297545, "gross_exposure": 0.922980051067, "base_gross_exposure": 0.922980051067, "target_vol_scale": 1.0, "score": 4.880159127596, "decay_mult": 1.0}},
+    "forward_hs300_zz500": {"as_of": "2026-06-05", "values": {"nav": 2.196628228962, "nav_high": 2.244068034773, "gross_exposure": 1.057997445795, "base_gross_exposure": 1.057997445795, "target_vol_scale": 1.057997445795, "score": 4.928667688218}},
+    "reverse_zz500_hs300": {"as_of": "2026-06-05", "values": {"nav": 3.43833129182, "nav_high": 3.667334713579, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -7.692834114414}},
+    "forward_cyb_zz500": {"as_of": "2026-06-05", "values": {"nav": 2.634462839157, "nav_high": 2.680931788432, "gross_exposure": 0.643928559043, "base_gross_exposure": 0.643928559043, "target_vol_scale": 1.0, "score": 5.827184943533}},
+    "reverse_zz500_cyb": {"as_of": "2026-06-05", "values": {"nav": 1.730314116717, "nav_high": 1.776684724722, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -3.650456914588}},
+}
 
 
 class StrategyConfig:
@@ -360,10 +381,10 @@ CN_SINA_SYMBOLS = {
 CN_TENCENT_SYMBOLS = CN_SINA_SYMBOLS
 
 CN_ASSET_NAMES = {
-    "zz1000": "涓瘉1000",
-    "hs300": "娌繁300",
-    "cyb": "CYB",
-    "sz50": "涓婅瘉50",
+    "zz1000": "中证1000",
+    "hs300": "沪深300",
+    "cyb": "创业板",
+    "sz50": "上证50",
     "zz500": "中证500",
 }
 
@@ -387,193 +408,778 @@ STRATEGY_LEGS = {
 }
 
 ONLINE_DISABLED = os.environ.get("POE_ADK_DISABLE_ONLINE", "").strip().lower() in {"1", "true", "yes", "on"}
-USE_LOCAL_ARTIFACTS = os.environ.get("POE_ADK_USE_LOCAL_ARTIFACTS", "").strip().lower() in {"1", "true", "yes", "on"}
-ALLOW_ONLINE_REBUILD = os.environ.get("POE_ADK_ALLOW_ONLINE_REBUILD", "").strip().lower() in {"1", "true", "yes", "on"}
+POE_MODE = "poe_online_rebuild"
+POE_ONLINE_ONLY = True
 
 
 _EMBEDDED_ARTIFACT_BLOB = (
-    '{Wp48S^xk9=GL@E0stWa8~^|S5YJf5;w{=jbzJ}e1cnoIWM#r43n`rHH_k%GN!vhiB!3^uzR0#100V6ph|9g)nm7T&u^1OZzE;B>KqmZv*T+)b`M7*g^m~n`'
-    'X=;oiure%^`&!7sg1lx4Xmed*&3$-Boes07O3!XrOl(15m<6tgkkpL#=;3WCOyE#HQ7A-1|12<_s|<3f-wzLw!bj^w&Y%<I)osjYisgOX?Ozba;{k>j(vQ_I'
-    '=6*@uOG2r%%mpGvBme@Yb>v)p1HxdI$$i?AvRj{tjj5$fTRFAg09`7_;utJU3=uy5v6v!)zl2uHwT+9QUXk#vRmLt^-p?joHp}ax40zu!JewMtKKWd!zhcHG'
-    'Bf#!aE@ezwM*;tGqu~Po<i&ji&m8J8Ny}C_L(&l3pbDcju$v_iqK1F3&jo%JY+S@!$|;Q+%K><NP$}2n&b^moTNB^s!es1_1@!qhFp{<sZ`TQZ6tZKL1>51l'
-    '+%n@}-UEs$?o8UR^lDd-I%#v$Kx^CQ@rV_Y7|StN;K6vL4%F+p9iSY1??QtNPKX6UCSY}lre+pVKr`71wN3Y_k`Dp1P?=0%o5Dv#b#s;AVyAwEzIl0t63u|y'
-    '-`<q@859cy({l<&cJLA)6zbJHE>-$w16_I06a2eQuqAon4l{S&@imM8EW|sZ66!aK87dlCj{5Q6clgz#ftEItRx>CYUhTEW-}J|ZKv#TU1akm6kexm^MfHvh'
-    '?q`Cyrsu?VdI}aJxVL-bGmoK^2)yJ|Povy!BR^DF^-?wiU@OZ^U*KQybnUv5TLWxd#MOb5<O@~Q+M&Mc2on!Y1RNJ#<-d;S+bbLQ-7q;ahXQ4-pptCkJ|a?F'
-    'GTiIUhA#_(`3dA4$+%h!R^t0l%}IO%G%N&nDa4!`L(7<Hi%3@Q=SSbD2<Sj~E@CiQ*BtjVqplL@MuWyTz+-30Iv7|}x}d}$El~u$L?WehRPhwIde~P}Ip%$?'
-    '_@yrqGA&^HC>1{Z&fJc$ORn#|x$o&NO$Zyd2w-}vD1vK7s!+pd($L=`W9$1sY!9L43rEiHXLVgro~^Lnii2KB@Ji5~qZfFPAnJ(-C3|i;K)x?S%-1SmP+H6t'
-    '1!UPxOO@&tHdc}m-JR0F7CnOZzOJ#Lkqr@WC+=DIg)M_?))Y`KC`#b?)@7e?hd(rF<l(+1(%@Rct0%d-Ah8D+d;{co)-*`1YVxGVQEkpacY|pozFk|Y)>X9~'
-    '>d(v&GWmmb@L<0lweow@X=0FA*=4wOD0(+UHP<mG__MH+lIVSQQ;n@dR^Ag%t)6A=-U2|D7ek5WUZRx2)|(XHx)__t&$~I*(w06i%3K`!#4dp=3U36ir=lQu'
-    '>i7NqqDO6j{(?ba)DC$o>UuH^FYu=bI=K|%Di+Y5yO?ldhw3R{CImlW^iGOGat!w`8i^{@duZ#JyH--L?Yj0k(@uxbp4#xF;-(bD7)8U}cx$9%M2ZyGqJFh5'
-    ')}xeeypOtOH7m2SQMz1ENFVhwo-PfbYuCC(%B%zXP;&qSvAKX=A@f+)L}~PT|7gEjFSoV&NTxp`&aF~|#;QS-M>xZU)H^#V4}#l3Xy2EdO;x<S|Fy)~9w61*'
-    '9Z;||PstfDqvgQVKRBQz*@=wi*~hGu-jS;5Iy*i#$w5q{aoJ!Q{#a$_``C22dk868PQ6gZ$o8@_M*Q7f%e$bM7IxM*#DzB&*%%g$bJrwXX4pYz$&^{|<KY=X'
-    'Ze0+jEsGF<kY(Uvk_SZG1Iwj)oZ}L7CH%Zam@wTvuKugYyqlK9dNed&taiR0rdfo7q_~?F<G_tjjj~V3&fNBEi5JO^O-_ns0aUP>R0;rAVV!JI<2FryxTR;Q'
-    'gT)|W-eRWu>)nr95A?gzOg*!Bo3u^90nRK_1N~}0gM6IN4zCC7!Z}Q@#By`Pj4GPPS@Ol_nhIKQeq9I-WIA^dCLN_#gUob6m`+_()y)m}e|}PB5lQK-Zr&v#'
-    'ygq+}_7jZFq!e4FiEPEeg957I3v~KPW6NZdnxfieRKE|7Yh>Vp%aJ)NX^*!bj}`*s7182OzDzQR<!a~V<Y%TVY~>9pf?)ky?o$WcuPSaj+vpLD?rSjG!nEj%'
-    'iwYb?^S1{Ykn=fH;k|KnpQ<C_dLtFO6#gjfIiI^RsO9Le5Q<u0Xc~*?<p7F>Jzv>=Gex+LbjDnj7+e02@!A-|lL)wJC==n?V{n}j{`ah8bYMz)B%+L-(()yX'
-    'nAKWiLHN2`yo295*3dGsaM~~keP?7~hi6rkPE$m7jp$yh*r3WYi%BtQ_pW;ROAM2tnJzbBh_2x?iDfcLet>~kuPK+LZz>C3LA!yH@i9)e%VHXnkH%24EVTUW'
-    'N?-R;WX3|?hyi;3RA=9L-o-X}j0oc{W5`HS@pK&U60$=+zz^{NXx{XBlH*)o=Na~05z-{~c})+vb!|E@4|(!R)6+`(f#}uloS^3e!k*RF#^c1(p4#^$Tb+|c'
-    'o|BC%P3yK1<U+Vom%vE?YRwijk@h`$7dkOe5hCanrj<sO-XYi4gqO`~dl`4@yI;wtFr|gO8!7s;n}#2tk4w2Xa1YU*NHfiUaK^G$7(d+9F#K5MtW{xXBxfB|'
-    ')*D^ED<`^TI;}J7h^e10*s*C8TpT)4wzU>nki9r!d7IajGsE8`1k_)|Ok28p*h8jPbn7qR(VLpqaPD%IUmEGVWgVPZZT2t1M8f_luKZPNZ^x|5aGO8g;q;9L'
-    'PRxFWQev)&Q)I$DLbt7x;p~FO$&K0EHGR;Rdkp0+-~%;0lEPil;8tYY6OycpUm9|iD)j%u^Bug`Y08RAP8B2H>XFPV9(o|hrj-kNKE~M828SW_3eTMT>%Uf3'
-    'RX&(fe2k-loe@#N!-_J-CAf!dNdjx&-OL6-VAfFK?|Unb;7aWlnaPGYj@}Pry&y(!b!jcipr+z+XG|R^O?-+t=k9aH)e#*HQ4kI?La5#mxuxO`tL3ic&#XaH'
-    'KqoQuUY&Fi#V2ZKOXk5q6)4D~8X)EC+!Pk^40F}aB&>D*5-my;D$AeP`>JvBgN239F?LiWmwph-Jqn@qd3en@ve70mq)hm^-S38>ZAQ98dd_PeVl{>|bm)`@'
-    'g0q4H$TL_#0V8RaVNb*Py;5<(pdNa0mZd1S3FVP`2su2ZvV?97*utOyN*%=%774MZefgl|MwvY_u;J=_sOZ96IEA>Xfm+<hW;?CU;nqiP1s&Z*dU6IAMlk7s'
-    '|7CpsBsoMbyeW9&Gd@x9mDD-vg~<;EQA5{N)Ju=a8tLpwUK0#ee^cs0;T2k>WTM)#fEy3mh}%ByysntbHay0<s>$X_NdKmGPIx#RM=Gyx{V2gu>yz31%!4Iw'
-    'VYD*hDtTTT0i~q$JkY(fUGk15v#O=x@UTG@b&CMdo*IZ)VLx*onMzEu3zi#>s$FcyQg63|JDzYwR;PG)bpqq{))f-)?qke^|Ln_`dQYua$Nkf&6>rpOBp$7%'
-    'QVGz3E2Jpq;;^gVr(dShD18Ch#KoEX;LvR4#W;;FWF1cY1%_sKb@y%N)?n4b6fX?I@rvL+ec8+Z=#>|9+kBZgIfEDB0nsT6nAFG)?ssW(NBVwDRz#=xlZ*^l'
-    '@}5yy*Cz-QjGDAhN1jcBDD%xG+<w%)&#~HLSDCI+c~=eKg^#BL!}^?cJ)yW@vD<Y0T~~}TPTe9rQ(;uh?F7+<i3pfGbKQ;>dA(3vr{RQt!MR%RiVsm>!{Db='
-    'OavYDvbp+{Ct<dB^iY1zhgem<M>yjc9@fi*PI)0A6=VNs^Kvpr8cmM?DSn|0hj-ZZLEXxgeHY>%SVGg@Io@7d&g!d}5OkUdXr3&JWoHGtf5#GPuKvf2nH`)Z'
-    'yP^YcvD59!gg_JTsqxD4pR%54-is1_C4PcIia^{24sF~W9utx!${u`?VK<5QUxPHHutv;!j=a(l;*XdO?5&4E`^PJ*cYuo`1KJ*5-k@CTv}*!Q)1fw=a@6vE'
-    'PX3=2>@tn|$Z_t4BgXDDkw($3E?k*sVKUOX-V6=>rqgb%kR&y^ZH+>sX?mt;(b!V7$f!KF62MR*%q0y}lHZEH;fFw&MI>FtM$U4+n!ZWkYc3<L)1RHufl|1D'
-    'M`ju%C9DPGQAIx)It}KBjPfn~)KE3f*OcGcpt~ekH7hVy%I$y36Z?n;ZqVO_Y_bQAiB5>s?wKH-%66?A<NWTYw>v{$e?3=_*ztQ)ZgCK9cM9A<&*Cm8y^7~x'
-    '%;_3-Dz&FC8bn9t8M|_@M`WQ@YK%7Z<B&nhIijU<`6W*28Rh`h{Ac(rBEwn`#Ey?a`;Mr|pZGe5nC3gc5VbAjMIeBIN4U_-;9_g1nZs2zmeRa|viwVQQG?z)'
-    '_2%ux<=oouAZ)|QQ}JIUOlmBLXSqj@=X`elRdsK#!X5%(Kd`rAhFFv%iQL(t=B?ki*Gf%W262~0&;WtL*WKVwaBQ-aStdwrz3PL$G-<ny%#Eu9@RLg5%Ch|W'
-    'xnRotokR%NkHsr>fSSx`#w@pHr}T~JX+-h%?>-A4w;-5u*%yDT5M9|e$pFDA>W_4>uBDd_0m)p4(|CBn&$5bI;i%bk-Mc>3Ykvv@Xe~MrvsWybH88Z5j64UL'
-    '(m7a1@)IL+p6U%CB(<Z9pOUrewx)iH0ak$&{VxHTAzxZFu=M1^zfW&tyiMo2sG%M6mP}+acU2MT2sYyzszm4;|L}t&wB0~TVIr=k{_8ggjgwSe99zda^hMAr'
-    'S5*{DC+%e}d?m`TSw({$T+c|TDK>4ZeBc%F&fwv~n{^0Q)feX&RXvG4Ro%69y#vF3og2NgpEfg9hEgAF;ravEoQ@;Y-mMYWCN-g1fM$G1Z3xHLX`Ui5<nE@v'
-    'c4PeEf~JUegTp)Dcj>*Zyjet`#Jj(7dKE;(iSI<b;}A7N*d!Zr#Y(gtq6*~0ih64hDmjC~_+@<gLsq*or@4L1h|k{1>9cV`1QKPJ(LB@oQxo{$vrd)|8_Y_Y'
-    '%6hdB<}T#4U))7|#}PItie3Q}IWv50!ldsn$SJ!dCBH6P)PplqC(9RckYj~N9;|=M#PHwBI6d6Ey@XrY(csQeAQ&)8F&IZQBJW~kx+b@ZYkNw52pmF$J*QED'
-    '^r}^@k6Px+2?3moLDqzoe5au;hnWKVjEw=|LhNK5F<xuKlO-UtHhPD()H3uFAX&kbrGANl(`CwLJMxO>-Vz!??b3;H8d_7|p$?4vZrGIO_h4qQir%U#Wj1zc'
-    '*u7W=13OfTi>QX|PNaWr#xG<6JZ=a-NOAz@By}igH5LfrqIMH)7f<Iba_FljB%=@WLP#2(WFkdq7#Z~zJX@0dEOp*)hcoC&V37yfq}SVDDIBsl$$Ayw2#Wa7'
-    'aUnX|Zh6pg;#<q$O!dvad!Y6cjqpO|rzXz<BBv8m40H4R70Niypll<g;Icc*O*5GPvMaa>Tc>4#0)>Pp%^`U5TUd=E-$TgmX;5ERT0Oq}Ur8|@#VjmVm`;UB'
-    'crUnRLk-L$+BwsxsE~LCciwo}e&e;N&lV;Rv2cp`qVf)=tpDwCDnR;L^EB*&3R@bnDkSPb&5ZF4!uZm&6v|BQ%pr`LLmj`5&4Ev4#BprTAwg!ox>Fmp;)liL'
-    'DDC2+p5V4vr>&paGJlp0g@P=KrHNPqRAyMv_zmiVzNCW8%wE|5{<N3!i^*go_NE%JrhcySYCx|SiYk++2(hNSc(4;q#W?ix`H9glQ)7~-#zmfig}7w{&$0l!'
-    '6L?57O<;<NQ(CSTbfb!eNA&~m&j(t4Hk4cti)Wqrfx;DJoAdK_28TV<eGXF<Ok{I}V?x9)o28!si>@*s|7(hNy9#8N;)B5lFRX~)R3B4q<<^#z6mF^D`l!&j'
-    'N<-*n655rcR2gmh4H*tQk%Olg2I9x|>=}|9%X<kXnYm_<(z(4;9QBMz`%_uAg!?jZe5~&eP^v@_bmr9T2!^)}vWd^JYpj&iS+WuoI7?Uc$JE+;)b`97Xmrtj'
-    'h&i@TjWWc|w7#wL;aoLR8eVS4NrlL8+}?tVfk1$ks4EM~)j<dMSZ)P_Iyd3yJ|BW`>Dg|$T7EAJKcz6XOXP@^JW5T#OvQ~h--{mh74Fm~{_q$a$2Ru#JUCzb'
-    '?qx7gOS9&^j=7l@!oo7sT8fu_BZk0eNkOAJ6XvxR|KTYwa<^2)m3Ze4jg1i1V4~YAfL6Tec$0?}*T_>5mPF`J(I-*dvYtT!3(O50XZoPu`Diwy*Jr!uq36rw'
-    '%H)dD!}-o|AnX^jMkRMUZ>B{1(PP83JbO7ex&hi45Cjcd5RHo}s}XeOY9Kr$-QLri&G2f@E3OPCv-9GR9MN~GlI|fLh}$i1oF}>-m_+2{62y7mHMRk6sH0{R'
-    'ZUl;{F~BekJKM$kMrT`F?{mM2P=T3R26-AK4)M|>jTSAufpM=EjMJEqwzh@?P!9>ij<ym<sg(ySQ5o5QYq+eg_x`&<QoJNLXgW%sA^2KlUJ+Fd1Cam3CKXgM'
-    'KeoyM?#3RRc8pod(TieBGO-R>{%}WKzAf_RlkG>`bQ4<8$u**sZ{GZD5B9u7l{s~uxcC3mFD}#Hewy-#r5cjbwzA~y83lK%+~JidX1U!>m0>+S)ugmzopX%u'
-    's;U^e!rv@e+wbcCcBr|<3Kh)yoUlYMS8;qDRJUc1qq&hMvH53lKZ!&-QmS{qJiEh@-VD$OsX@*p?hz}nX$8+ncEZ>k=B_iUhY&1;?v>7`OD-9kp8j&r?V2L%'
-    '#X8<Zck1{BuF1lal?y^X)mlJAJRi~rsVtAJj(AR*nJteopQ!PUgR3oLyUYOsFi;W>iBcS&T(~^2BJ`mJlQ`sG9ZYqTc9*nDU%U54zoguar`NNURKdaiN4V=m'
-    'mwWEO!6~4UyZmu){Md)7);c;AUGV>N!i3@l*b|%c3aV%<`Yj;R3Q?*!)HY^8?6g!Q&YWq(AOq0CU7waKs?FsM=Y-sChK@&V-m30BGcrPh-NIAEu{0GMS>Q^;'
-    '!vP;M{O$2-bh8QiFXpI%F&rn0mQ`yaLsQ8@k<T(5UfCygm%Y@_h@PMVy&S*GG*~CddDx93^VTnE6v9!6`KPrOyIJf!{tt)%&zcJw9)K};`}HB=l9EJ~z3jc#'
-    ';LOo@_W|dZH!kI((9W+R5)*sdQ2?<8lo-54{I?ez+Q~s>+YAs)BuP9(YUIUuxT+ZDQTqD*?4G{@;BhtM0#tMgB*+t$MYFHG=Q{LyB<FAEx+oNb7>t5q8ERc@'
-    'Ubr?n>z-vp{ZHzAH>zD-U}}KMIVmba_C%b8FAgS`Qc(X(mYz+dttlG5oB2M(^adJh4hyd<&{K-YqiQP53;0@nVWg9*Ejztz#V<g{0z9SH3fdgQ8o~*(gW-P='
-    'vPMnJCkg>cH+rrz{$2}2j4r4Z_}eh{Rnu0kuy;m}g?V-xXSY?S?tGXBk8fQ#`G(gqTNWr`6^qXyGg3#krR5S5=fMaT8jG@*9oRO1>}eDUuM(fU>%LJGq|%!D'
-    '5AHI)Dq5%utUjWBs$}4Fg2VgJ_M7jhHJ1D9Wo^*h$`q(4Xt~VkpNiIRAMn<_F^z3;^_Gf^kK>fd`D(}I{0=7h`zF(1<y^}UECN1Y5=r|1$hXGJ@1kYwdH3<h'
-    'Ouk9Fiv8u{!SyH<8wQpxAm9|J!3JY()o)(~K(q|6btcP|RATe1F;1V62_GvUtE*AbVPGW3#dD-=aag4u-53Oluq`NBG^6o666q)HY9sMU#mGysnx};UfZNGL'
-    '87@7gVxdzBJ{haQQrBLH(Rp+aQ$La|zFi{<x2qHUC7Jz-r5ZH7DOPW(B>^WQL)Ce-M-8b#Qjd%3m+exbhJUHfI6U*fK1#rh@`g7e>;4X76!^%@fQh-hTLm^y'
-    '$GuI?6z&pAIgNM_q2$TZbx(~A_z(t#>wAFJdk69x&fuP_$hX!{KE8x;ZEGnCYLvoPgvQ2>(Qm8p`*O686}xo9<;Ed1mHO#VQ3vqN+vv4seDuoOE*7~EXItx0'
-    'SHWA>i)yKX5YX_N8cVYp)dUkSn+c6B4rLJ|bNp7n#9i}$;XXpYg?KGu_a1svR<Zi>H6SyV-*7o`HWjk;XK|h90kZ6;M#7#%@jv<oq;0k1L31Ip>lxJ_+LHE0'
-    'wcTFu{ManQ==Ky1bD-w1n0x1e)*!P{_TfjFX;uMZ0FS(;os}m7cMW)OO4}>6D(fkMUDIKo)T|oJs5jCYctsk3n#4;V|EW&fsR~PVOoez-<)89=lF?hnaEYo?'
-    '^1&A9#Ec{fml7yIwI>dG22xnFlTiavu!>9L{qT}l5w$iJmF}NKbke#!p78Xz5!Fl+(fouE>@$hrVcDC#%~~7DJO=~lewhrEFRCE#5anb(k19H15EIcFokkD@'
-    '>r{(Sy2MXlUYO#jP}oqS$^mI9mkPOc$6Nak4}Q*QAq0wBLcYa(MzpR(s8+48af~?XeLmPPVYSOHrfQ>!v281nhZxdkXRRtQjGGSACFANGXr5Pe6F6Gp!T+7Y'
-    '44k6r4<$?`GY@pgG~oASH!#Ps(fwYyLSwmJy9X&amlof?x}6%qkXYbEc%+%ItU%mU!iqfW;(Z29%r9}uRMQH^j!VE@xm&1Ag{GCM|3Pt1fEZmeT~M^05;cru'
-    '&K4oPLMJmMb2>LXe_t){Msc`LM)$b&Jgm6S`Ab?4!Dpf9{TQ>GL*>@3s+e(Xi_zRq5ODG!tD|Zw=<qw1nYk1h0rtA~dDh&AJi!YN1_$9;*blXN(hrcE9SQwL'
-    'NZ0*D&$$<reM>cOzgD}Hg$5tVt$7h{?D)BH$RH*}psK$sM!?mkR)PcgwDcG0(?u1kV1DZashIH_m}4?hX@130N6yc+_!Oig=o6a$?<z_HB-<R`w|V_aiUV_e'
-    '>wVcZj{&&Ha1~7)NYwXC2T3bWKR4;fv8Xm&!Oqz^VO7wqaR*yGN{#|DPvAR6>5HiS1L*z;-Ij-7(%0<Zg79MpZ~!`t<KAZ@(nDR)dPRT@kP0tiEfn5W{z+nd'
-    'S#wA-r0$c<a838~=)E2y))@sqr?qR*c%D|^BcKiR*#D_C>~igu7fv>$$?&ZHr(!COoSSto-Ha6WF-uWwz>UzDC;^q8!MwflUcGbW^!GJGzf#u+d=fo@c+Mw+'
-    'g9s^h6Z+B*Pz#Ehznw^^Z=dss<e6m0nd<zf^a3()Cfwno0!)C%qMy7C_Irzys`c39E}WuvR>NCkXgiIQS$Y)`D@zvNIf$`cfNiS)6!3`NiJ%#ftX+^dkuM`d'
-    '_H2?Kj8X@gnQlzb@!W%1aM#24<$p(ybO1PQCPyZ?u%=86j;I=EsLpkOY(qjB#HEwv8SQTJfio&=$RTlcO=9s0y5P8Od+*M{k4?(Hal$aT*@n)VYn57S(3hoD'
-    'CToJ~C(>(o>q`ks?3y`>=JaP`mf}e!>7RB#M3%*_b>1x*2<iR#AlD=7c$KmAyIJpqK;tbgG~pbj7dv`kNA_C1G2TW5M>k|O%}N5Ysz0X$0%CH6PA8Ef3wANV'
-    'cTr`uT<vJ=S1u8Tf+FBU8CwyVV`=bvf!m!@l_d(!P73rB8H$dzZP|8_GIqUT<QV>FpOOfCtM%<c6obuX30c~A??~|1Qb+_=&_vy>LuRj@fWGp9Q67vKPNxow'
-    'tjMS5(<U|VRKeeq_(LnE?5ePIv%9#Shv(fV&^5t*lLdf7)W1{yADxdQ>^1xo5J7DqhtiiJ^~E&=*=={iotEu!A+_)el*?i<_9=ebbVfIMvQ69$PEY{ciBz}0'
-    'Z5957eLhOovcYD4)vQI?@*hb~)7nw>%hb#2w}{iAOAq)Qwk~e<cZh-QM*hgLY#`}Qwpj0d3(IxR^@qT@fJ^#@B{$@Jj~Mn_PcX!201~?}j<Eoy6>ghYj`Hxe'
-    'UiAOngDEMA^E7nV!6V!xoBD`Dv$y@>y+;sndP#<h7A4MgH8-g)T`B4}R(vSjb685qz~&Fjafk4ckBtmZ`VY2{&W|{nIf6a?DkNZnCQ$l-C(`%gjb|p#e9G^6'
-    'G`ZF<cGyQT@;8Bhuk{(g{bbKbQ$y)ZOdF>(|E_0gMC>^*vtjUcoa<HQ9RgokvCUuas2=-?y28-)0b}GEekILl;>owE>NA;ecKU+>S5)h00@^`K&>~I?Ay>($'
-    '`|5_*%=9rw${k&{hUZewiAErt#e)VL2g%_#bK?y^x!q<iF^D`$UGs4OJ)GF4r#ox*eq&YVjG64z$UiZV6hYib7yY?wbaAo+Ikw$B&b^Z<G}TMi{N=r>A>vw+'
-    '%<WTyR;xV(zy@0inlIeO7!8g{p-Tm^J5VLT_3}b8BM7onD3uY-!8!M$<2d()T7@D2y2&e7P6xZ1Zt$9OZ)>{CV4swDG(@DRC<!q1Dh7Y=n(u~)wsbAnvXYYb'
-    '!CxwT3g#<vu2hL1h{LAGPIb4FNR|1YCeRc76#TQrXT^=99$7l7PANvysUjh>1@R-q{0Pb65u->rsEH3ge>I`;^caizxMJC}wAO(0cNWCpRvwP*3?t~++?D{D'
-    'JOY`8GSq=}{?;rLX7!J>>{i9Bo1=#IV<)41Qtoc#<5{e`Ooz>2?bf)|*`ubN`xeU8O?^=m^o8KZZ$AUGRu6A*6+VoNcu+nNc=qqdMQn&qER1i>?{C&l;RF#W'
-    'u(Nh6b3lG(mF7QBjkk(D;?4-AHe!Bh@|034nbQ3aP#l9px7!gd*#)IB0j+mDF1QRQ=ftDlx+LF6mqsjdi0+(~L)e#(f!-6QM6eWDRwNJQMIlYu*8pp&dfsAk'
-    'g-NH*xRWE!wWV7(B2%19X3QCy<PWNDCt7`Wi#L2L7}d>n_-%OAE6Mmn62kYd-tCAfT8+LCoVT(9S-1NekZ9=MW<~k7KcnyN{!;)A3knW1n>ATrC#r0mm&w4R'
-    '?eE{*1voeGqER_8ft1%beK3SbOY=M`u$0B4d5qtQOd)fV-%>~=l$PDFH1#@YJw5Au)Z88sPhW4tCWz_-;Q$jxwO3gftjD<b)_*YgL(Ue^hzZ&=W;ZJTSHc^m'
-    '16@GLi28^F;{aoDOtW~Dz<o=)OIzFa6r@>KI&~P-a*!<(dCReMRwIHdM+)Pk5IT*)(u5BNrYfueN+^MPNMXo1>2c8Em1!m3LQP&CHd6oBSa{NmcQvQJH}+u4'
-    'm3eO{nuiq{B%&7#*Bvfd_717CezoW9rT28V7IV-mhp8#|Qa(ElnhdN%`E^j&q3YGDBo3kq{8$eD-{8KZtgs)BEA*>jryTvA@LxWy7#HeA!~bj4f_$gJbp?44'
-    '^>4iIUkpc}X(+SqBDrRP!49wEfS?qb3XeiEqz|8zyWk6tb{$}ywZ1RqX&HS6t*`{wAeWPb6&lu9zV8%|FYtL>6wl8KzzgdFbwb5kA(6?bcq4ks7)uT74Rrwu'
-    '9^UjmwK^PqLd1(!-oGGQ9&%G%8yD(teL}xX#HQ9I_uKO{7UFf_Tlisl@9`hMj>910I#mKuKY!if&B6$+lE9f>{jab{d`c}7gRi>_6F^G_M7J1#YPf1S5?$je'
-    'Hr4wb2Kwxx`GX@h=qJ}v@GuG`6H=1H`LiFrYuehSh4q(f?)l8t@IIl5zfGT_A5c>8`$C9s_`~%LJ#XTn;y~=V<g83NiRcn@J4=Auw%NP8a`Vs-vk1ngquWT1'
-    '6MwBr$t){!|5{%LiyrfXrV>PP5w234IFFtgEkdaLp`DeU>xI+Z4)_(el}4?#;=s{$k6TiBxu%$bxBsyIB#yk+F1qGCbjzG`7~7x(DY3e9a?Uog?t7^?{UdX6'
-    'C(>oBxJSKU1##py4yr&Zb@Bp&FX}D_@bUy>C^lk+SO7nPl%Mgzbk)hD@4m5|J(Zxn;;P~$L*P0h6EMC*8}}6=TnGTfBo^Rr8oo)})JdftUV_`Sh5~#ymilno'
-    ')QU~yeqsq$GF=!k9;|NIS5s=S(8IwsT0rSkGATB~4_s8QJ4X;{8u00mGkrb_$A%qh)u6Bp*eWF&YY)xnjfSU5oIVXLTDjMv7NBQ#D0gg~R{K!CiAFYWhGR#@'
-    'rF1Zic&C?{=Wjk2dWHU7%lMi~HDa~&#AUOlaW#HvEsF7a0}M&e;dQblE4v^4qO&#)d!F5~Fnlk;b!SSg4-p=X9UXC%PXmt|YokMouAzo=TR4z;_`4CIM=8o*'
-    '5!KuTz~FqMb<Fmavo(kr+93iW;W6zM953mPQQv-<v<q!<8hbwuj#O3A$y*DWm!s>=IqkovOyw7IFQab=+szX)OvB{A91*h{!xgDFcmf0Fj2ysJ)W+W={GVYe'
-    'CByoz_Y*2bz=l@hcjPMb(Ir3-D-{h9NsaNIFSWa^NW_u{%cePiH%KCoIij3^@uGO3Q=pH;a{klv;dML#toOb~wG%E8WS}PjWPWz%Jt$D(s+}kNMo#^zgMIRB'
-    'LwA_dEe5M>e-^Nz2c?YU_qhd*PbWL6nv1-7v#}^l&XY;0s)LQfs!))mmYKKE)8&qnN}m_iYa-#e?L?XJngeOyU-&HE7ZyJdlIqEQ*2_@*9*s2EH@{C#{K1T8'
-    'uH4T%0mqz4>1&7^oWOvhVb$wSM=AZ4o6O$pGJ>_oW;|k;31~XMPzDsKL?I4@VH_1VdWSsApR<`EAt;zPa`4iM18X;d00jv}dx@teX&{Sfn*z$SU5~097FKP;'
-    'OEIoc8JFIgyN^XD?I>gyM~$0ZtP8;{GIO$3Vk+f4_on9P-7?~sMr6s!f6JO+9{4OmX=QauYi^?2FG}dJ7Dr}mR7nQn*f@p2{l;=j?GM`7XXl;p<bBjQL*<Ya'
-    '4(X8+we65Hh=zq4I1kgaS>na~#xjTgLtEP^g8n=4(+n%X<^(}rUe6PXl3u%MTLakwU`$%1dsej}I8PtRK~n=Ph6x2&MnP~xO=Ywrx6QLb`>HH+_mEj5J6y8F'
-    'JK$D2cVB+=)`@bi7m9%x8I|xOd^jn=Fol5nauoJnO`%3yp6#qoEZ9aKekWoUC27S9V)tUqzN6w;VWmJ%0%45d333M~9at$g{?nlE)2_}O8Ke>qOEhkJ+CBNT'
-    'fq20&G|Ix6Iiol&PjU{zAKcCGB@8jYSrS|GJGjW*<gglH4zCHRi-;kpC87xOFxNJ_sny^yfn($umyG?z$HA6lZ|_<il&U(qKdf4`3$03ruRm;ix~Z<_B-@jb'
-    '3PZ>K<gmg;9od^XhI@1FJ+Fs1d&fQ`zbnFOPQuTvjy_aMh^+_hdhAmANq|74iC6V>8kznz^cLt?4vJBj>F)gMFjDWG`I!MPOGtIQaK(etYa!whKCD)?RS8_a'
-    'NUF2TuSXd2_NWueb;sovNb{HiSfxYe1{b(pKynzNPR^${;$GRD_TJ`NG$-NYA(GI|-a!kb;nXNWuX)|-AqPIMYog>))T&zjYdl>{mDk(rBv7TEQ3McOL`5Hs'
-    'usaOUD~}jYm;)F|=K#S)5O7|%B%PP{X~#sJ)J?Il0R|<#LZby*_x!Jh#k^!`nsmwfD!i4!lkpJZ2-qVi5#~r9MtpPcnl<(>=~J0!1xBS?)^~||pH<L1?$_K('
-    '0y?Kv-*MGDv5JjkgJtrzg~n%lGne&9ACL654uBi?`3E*~R&Q|tCk)7dM=1UZZH`mNS_7(Q>RADA;4y8t%)PTuOw4z%$@c6yTg{lS`7wuACY7B`C|3javx}xr'
-    'hF87P?m4AcI8~$@QqNk?7nFP2%C*CHcgwt8*pm)7i7*ZI*a*Wn&?lOw6y!z-L3xEtx{1D{VIMUJ7Rc(I{{^1+mth8k!@M^6iXOeV5$0<*FA^5!$55iEW}-#G'
-    '+y+1Hcj|s<D+}q<m{GM8G=x_Sa*gl0zjS&X2F{0T<2v`$kNv2Xmzp@C;1K_t&3cRn%sCH9hjCq;ggKZV01iumKz`qn;D?X5dSN0iBa3op;sq|Z@;=JNzNics'
-    '_qs{-Y=kbqN-?DOZhwmu^L13S6n2H{8bSWK(M1oiV12QCN%&Gx;Tz-|w5~nB0#_`FosBe1?;D-ok^dpb_EX)AH1W_r9niBo&M!2+D+Lu#Im@6BPQKE;JJNF-'
-    'vIODyPH28k`I<08T0rsNHnZD3NTrD|SlAs$8n^quWi=+h>e<9O#ykXsez>zK@^M(;{zn(~KhNbS7ZRG2LxGf_%$dL>X^5pM60YpMr3L?!>34O+%#@w<9%%9^'
-    '?BTE^bj#r#!64L3dFwU~bq+t0hkK2bOWNde$3=$lY@JCfqD1aV^zI^U)}GyCyoC+Pi$bM(0OJT~{BQ5jGGgqVf@xNqAS5>QjB!H{DE-7W32WpEe|DJy3`lU9'
-    'B!r9E7k9)(eB_maeo${7Ai7Hu*WjOxvlZHGgc7D>s+Z;GTR@e=8~I2Bl0pbj-wR_c$X5p5S*$#%d02D;>J_dprVs1RPr!qFXQ4yceN+yV9`q>XmmNRu>qE`c'
-    '(_`hGp{4TS+b13;$rEM2X#wQjji|RK9J!y%mieHR7PMW0{2L?^2|JiF(F%DffQYW!#4!vEf9NN7EEKGtC5?|Jq_&gaj&&~1x`}9pr9{iC-NIyl(%u+C8TCg~'
-    'heJ5FIP%}(R_K+{RK6lJ2#T;GVW!N-=Z!4lC0Uz~F$ohxddN0CAg{EBmk1=Kh$K<~oOo-=erEy<h^0RTIjPd57tEV$8A(KOn&H<aUOvG)mN`)j=-U8vZXqwC'
-    '{bEwTA~LuSX1uS}tj?6st0_s8hgkT#|I>t2Hd^ahp4VreEM3&-dFBkLK53ov3Sqx@Gz2YspHaMMyu2r_E7NR3M!J)_N<r0>D`&<NTJQf}^gU!8a%!O`T5_fw'
-    '0DYE%1-u3M;c<NO`h#Dbfs(thPQ8$bQ|DVSk-Lbwu}Ia<D6PH+PjW>DwvGy6LAwoU<#@DfpIB(03rmvfuPqYZ8W4hqS+RR{6t71xOoZR{+r(U~iFT?-f(6xs'
-    '_}o++fS!XjOm>5x%gQlR`7{nPF*_N@0vOfyJ`B{^#_hh#d&rP5^<En3J4pv6;|d8{Vs%==3TALk-`wy%0FaHLfx+^%c>+cwqeLv5n3-p3U@7)c?xZ_}rtFVU'
-    '`Q`e)dz2M|ht+Gg3nRE0#PS7SOiGj+%yk7O67H9gh+yJdSZsYRF+Ol6?oC5$tv#{y9KpS?H*9b%)UV=aOY+O01Br>W_i?_?!6z!8pwUEKF07SvTn$6ZZ4Eo`'
-    'i*CFAtv&YCqY9eJFFEj|1nMlqIgM?bd1p-ygtI2dwRJ+YN3!X5oWAOT0cgmEi7l3DhxoIn>4DJ3y%-;mf7d>T?9l?(f!COa7*$MEill7#OUwaSS>OdCj*zMA'
-    '`hi3dM>L8H5c{>+oyXoxz=y<!@=z(dWG}=JcO+Xwx>99)o9sub*#YA16X8MV?OxbIF#!5Z=BmmN!Mg_!hXk6p&Madqy3r0P(5#&DRuf?wHKp#m_wLKqrp1J@'
-    'I?w>ATC{iqs67!D2R1STd$fsXXXKDUgcp0fxuaCGJ<sNqsN8zCUQc^7rHhxb8IYZ))R}omGm=T)uqg(MG%{Je^a2v#laVRIY@MEw7Up+H-1ky24UuXm%KNL~'
-    ')u>O1aGwG~KX=Z=<`-oE_vQZ?Yd(p0?o?zUj&#5`lEn8K^q&50;w`fmR5_dgDBpEIP#Wj<?s>t}YfY=fcPX()1ZN6mzvJ5@<~}W<zEAuzG*7}R<^6gqJFwK!'
-    'kRr3+rz%4~Oo1?yK|Tn!{0Us-ADwg9X)BwB$T<&dd?daQw_nSBoga;o`X^GUzj{wSA<SdjF1<7eI9VH4>Yp+wCb}#W4_i0FSZ59|Dmdj#ElfP_z(fU(xaFhn'
-    'N7cQ+7xY2~8gKE1ZNER=IKWRbi=3))Tl`Y5W7*hbXZ-*5r+Ejij>BzMD*}`8Q>-EP8XeTBeg10nnFQTt54~V$^7=xh*ERIK<Go~;Q!0)xOlJBUdkiN<Ip;PW'
-    'PY=Gd>(fZ-ZL6vA>f!FKCu7#3QgOsft{t|=qMv1i11se^)F_D@DLXyI{B~(%?#geC)cQyjl)T<>Km*cqbcEO$aEABme_Z(QkfHiMF)Taiz+Q||SGIA{0gr5}'
-    'e+Zm2d~QR{XZ|bSj*tAaTQ7_@hcwMZ++*H&7X%oKgDD~g)C_*F*(hK!YoBS)OdY;42|c%(cSh`%o&dQ=<^NY~8X2d5>0uapP7BF}iZG*w7oJoxu)D)f*I#-{'
-    '3$X)W<gR7Ivj4UGW6iv!C#E?3$#{Z)9-9>{!}>??WFaalkLe+i@#-L&`x}uzb43Lj!A7H=6J7k_ZZKB=6%?O3otv_J!@RhI<qS<l0q-2HW!{llKr5`p;+EB+'
-    'm0yH_&;;<;`nHL(LcpFjR!61w8dMYj2UM`9+&?Z6(>_l8wDMoG23;b)X=Uc`zuW0aV?4P;5sQrg`gU`Jd%#Pdc^D(-;gzC|h;T{kzCjXs)_b5AKv(2`#?&_l'
-    '?vnr)I7S&Z`QFrxUUQRPQ&C9_)~IwgP!51H+vB2U1uwT0zs~!p7y&NTWV##gFErHQG_e?zvJt~yTf4_}c#P}>N(R%ye#7vOaCi^tF}EA8vA45w;ZBDhPi!@o'
-    'O-^WH*037@S5@DsleuS(Y4bdrWj^sd8vqS);EEVoPI$+M8JhMBleX^t)H3AyYyZTjWT!ZT-Ez&%fgLbpxxDMa;`HL@befsmDR6^FJu`lsF&Bk`d+=xMHciBE'
-    'n5s@FmjQ62)H_qrZNK1Yg@Ul*C#%H5IZ{V=6d`AagpghoA^S_fm{OXUTc-8kk=OYu<?Qd_LjN5`K`M^^*;&aS4M~3((V<nl<x2G*R3ZlV{V7EAN3~0p`xyR1'
-    'R;F=~A{S%~Xvf`sQMuJg1&Nw-#Y8C=$C)t2vIXAQ07&4hE<a=x3=xl!0vO65SxsyY>2;Q`h4U-5epf1fwuE{kY}!94%Dg|G)((JH0OvCXcv!Ao`JkaZ7fN-D'
-    'qxwW!P8y2f@>TZS`d!H7mz~CanFiqx4=YX6p(OWbT4+CHO>qT(ARN#+mGWI|ml@79%}Vw^sT!Ylsrn8IMNMna50nuA9+Q2i$*yfuLp8}DyZvSa=p(&6)I&Io'
-    'fQQnamoa;g$YO0^MPu^#SFVp4K%%J+bJwtp%PjdKZj%<1bJjleb*PAn&s^^)Wz$#PtCwJaX!b;1HzCG5sXe#(T4P(o)Vly?LLGA67NS~-umMV0FXb=C51L85'
-    '(f!kW4WTLoSq&x^3n)fhs0q;2!JVY+PY1pE>qC@uvZH058Eyr6AY_m|NNrtFOscp*a`1$qr4Ac+N&uEtTaBbZ90@q|YKL9~LMpG0awMse+Z#s-v1JZU<_hcO'
-    'aR9=RJce$^6LEXME3`<4$SU7AAYhiZ_5VrMB1*$3mq|lvwCl0CA7~V)ScsDJ@sUMgA72@PaC?yBS{t(gKTCd@8ip;G22XlU&IWMRU0*ScX}y1xoN^}JR_j%C'
-    'lp?N-qJ)LcyXU>&fibgwE$HMtvfc0)-7WLvmu^@SqKBd#X?#~Ua@!Oc&W=vp3@B_NELMuo?36<&vGwuwO6y$ur#VTTwr9Z#-;9b5Y4V3=+geOBGD_QN8O94q'
-    '*vpWyJ4AZ^W1XB+>}EZ{v(T~T=vd|U1D)>jelK)<P=2_h4;;HLaNSpXA-q6gK0xqFHp@ezz>RX_1US|7d79r@IqT{PJ+)|J<~YP`u=JP@V!!lc74=bh0lwkS'
-    'px$boOb*sFQ-9D+Q;HWCDz&p9bd&)%GWwUBZjc9}&5`o!)RbHsnDp4wnCBQ4SJyN&8{Gk`vz%_cI2^X*Zn3~SuIG}6{7#JT%mMIdC{~%KF$i3Qm3;yo+){`1'
-    ')LwZ(7>`9Nu!C#FU?GaJEJ;CYsIW0_I`i42dEiDhj(~ad1lm`B{`DTDA<7(8;#Tyn?P{ln!u59d&lyFYiQt=KcyGqkd#iWBvh~~yNgdjG*HsK35FJ_Jt0(Vc'
-    ')_cUyd`$pRw{@ykroK(ubHpn?S$Fu&ZxH{T%odQg`?zu@jENfmm*$0*D(xPSb#WW+aj7QSvxZMsnrX$2w*!XaR3U}jT+>6VNwUExmJ+l=rG;Bmyuf&8r{iaA'
-    ';G?M*Koq&}{YTP{;`OR&IxjO=+&|t~B~ryH-~iWAi^G(Vym@kL`Oq6njXez)h&tk%Tl_8snpggEWErmD?ixD=_aE*-;e(1)h9h|3W8-d<8((Y7L06g?4%A<>'
-    'GJ5$`G3v(iSxnylMO%Y|tDGd3qcAJ6+-G>E8_%u{7~5iDSP&W8V}sTk@+CWgtc$DZ66pA4+BGLRgryu_6nPa#HWK+<Gdk61aw?N=5X)l5`M6f3H7*pj#prjK'
-    'HuqYk+4W8q{n5G%7_T?juf8%O*b_Ksp_)R7vMhj32(fri@e4qMDD;rnHXm8$eY-38$oZM%ugeVwv&zLMD@YN+d=;TZrBM0EIzF+VS2_5kUiYNP7{>DDeg`Ul'
-    '9Ql<5+1&;5lHW63=9~ed>&xR#FTU?1R&?#ip?!Bnsq5>RSTWxz@HSGcC^d{&$S6^<pbR;nyW<ttmt1BG2W3Utpbtdi(4$sa{27Q-9MCmLG}m?MA}(F6p;UNS'
-    'u7S`(%PrI7)?}QOdz`nHC6fvBhKAZE^3xT79yhf>{z2+sNga*HaaGFXQr4TxBq8fe5M%h3v;|mp`jMe{vrOO>#NP_APlLGS=+me2bHecy?Zh_)9XA0g?B@}E'
-    'd=nP1qD6XrSA&VhsF9|BW*BZ@{v5ZAx`t6^HYs)faBM8f7AxCVypmXF|G3+&N$&M9bdVcgp11MB8owPXHI}5N88La)BFJ<YFBXXj+$SH2xP=oGOpFm4C~RQo'
-    'i0-RCGvO->%+ev}YxQEW&#=Ae@XDj;5(9;Ie#IPB!YfJm!!;QOMGnr@G*?Qwrvq^a0T)sz;NmJ}y}E01ia~0{$b_;UMCPxXM^vPmqh_Ax`XfB^V>tA9T9wL-'
-    '3bFu&Ly2m6X3CZP+LsV?&QC6`h3nBt1a*+Q6j^;vzI1vZ(vjRB^|tKJ7t7bHzn{)+7@l|9Axy7CQ!3>tacrqmDoj`2RcRyqT{8!>S?A&e2_+iK2X)%)Q5I6O'
-    '7EP+YaLXDaT*LU=46HK`KWbJCOuV<KpE^(c&nl@zctta&WxktGBdv_3FdQRpF|6Yb&&4L_#@$9V_1_~N!c>k0`J_y)^ei(`aPEz03#}aSR=3`c!9KGNh;0JX'
-    '@aBe?#Vv-N9+~kqZwu|{_$`Hyb7ivKVnq>gM2oj|DK;B3X<!aQOT9CC^@5$YX<+=*=lEzI!N<tKBSt85XC~rJ2I{d9oeuscuu_Pq%a9TqGrqp#3jt*}MklNI'
-    '#b{^7*stK9)nrjqVR%3O3rwd!(`Nh?&XpZuJrGp7yb#QSwtLs<`NR?O@8;3M^^u04&`lAN5H{F*<(+)t09u>Z&d7+(m93}s=!bIjv83AMxxdAO*6A}jPMM+j'
-    'j!|J})Kv6V?GUfb%5j&koRpqq3?;WLICRX_xu-B}KYFuK?dMIDvENy-AQjOcuVuWA<%TsW1}T{qk=+)N6BqaxK&1Vnb@yRX`K1ejnf6?iTX;ZGv+A2acn#ha'
-    'sKwv9m~N0#b*<t`JAZ;;VK9G*+l>GNYZSvMRp28u>c2a35E#<GxOHP9(dBYf6)X8iqW%*;+{{DJZGx$GZZ;IlrW;_>wp*>IdO%JoIkzVHmj;QBLQRH@xKMaA'
-    'o_li?`KxV-1jr7TJ#<~`NQycMK3e!uAbIxt;J@Z3cREUEc%V-;kg$R*mgm-{xBPK2*1W1eQ%5}hgSG5^8AR+o&zMo?Z|}ra4r`{oNrEkEBJ&?Vy2l@o91oC3'
-    'Bs6=>Ds!|9C&2D;5~<_8%walxXwGl<h+lfyH6a_htwsiB-1g=j21u~09}9razB38bz$;4g%!Ox_It_&=O=3beKR^AIe>N4MLlRL{GB_TWdA}lqVbSBGcJd+}'
-    'ABCyU1qgO#=yxxq$02FcBNEg2Gk#xw(xCeXr(Zcqf0gGMIpSI!ZOd;h<_75~`bgnfBL&JKEpNUrKQwE=bB8TnShe4zB?6MJ7v`7jVEEk{aS|~VBl`eg%o*9P'
-    'ybwfj)eUgVY^{44a}ZkqZxO#U{O+S#Vg?XAJ9F#bZyr+>m90j-xvD9NRiHQ9e$IgS-24VTHVvlKCUXaEGtpbH#*s{yfcz5B>mXE6?BYHewBV!R<T;Fx;3KM='
-    'gJ4nKZ<{(}lEC~HZ)UXsFJneHC7`~5yM^Lt8H)}{P`?}dY@q!GNQyuDujUx}p3P4XXO_f$1oHx17;yWl^2~p5xMHUzZ6-G~{tU)Is1qn5ra=(K7KekyKF}Xw'
-    '8{JuvLK6)Ee0VEae6O*kk#|N`Ik)liog&}cA<83Iq)x{sE;AbdIR{cvj*EoOKTDQ6EGN=CxCUg-#UZO<QccY%4^ucGk&kAbts;kq9zRdqx!_k?*^F<wj(++5'
-    'l6D*q16a*IDIi~OB%RwTM)>l<@vnOZVxS7szcB}hiu?gF?e*vWfk6+bky-BclQSZkW<;fk8;xUH+fy&(?G)POBnzb-0olm#Dax>;Zz+M)9&%>kNmzxGD#CZQ'
-    'P)C^ocDJ%`nzmQq1>PU~&6Dfo{_Vy5uz%QRAL0c~rI|G4F!vuNinUJ)5ZLPopRnv@C??;IwYF8t0U5AdW9O+z;?LpU9M2_U4yH5nq~HdAr()f?7z@4o^9C!<'
-    '9nX#a+dsWi-TDYt-T8NCE=esY3_1XWg2tzV=mz<v!ly!tzxoQi3e>p!B#6xr$1J@nv0P82d#8Ekuw?FMQr<GX>sp~HtUGT1#sssFX%kWD1lyg~Ec{8!F@dbe'
-    'uCe)yUN_&NM4f0<>2O{B@!o@I+Kp;C!>qg6dG20fa2mGIy4IO&ff!w@y`;E8oA&y#+5g7r+B6uTG{<;mSSF#QeOz#&cS;XGSY?>XtbPZ}(p5`!Zo%BJIB4+L'
-    'T76XRtx7%2q347UB7Fyk1EOL*Xj7uq7?uf93dS_ZZ@$(yk-n`VoZ>Fz<1JK*iB6W4+qU=rItQT!tlKDko@M*$mzCy`h^s0^4%i7xD83G-$|JsU?z^@VvRu@}'
-    '6nkOkD|w*b=}aei)h5xCnq$^pn=e~O<Toj2c;(L;cI`L&b`U)ofK?yYx67?QkQiwzVSYehM@7uMx1_(Ls-9^HaxI1dHvY0CzwJ-slTp_UDPfi5_T3yam_=R5'
-    '6b;|heeDgh40RrEt7bh*SP1Ln(`+ZD)%t0xML2xbbTEpc4+J7)mK&4|txJKMKcGuA6XGqhsEh`hN#66mN_1{h`9&=~aC`r-#5x1#hV6Y}_%L&PLn#f=PNT2L'
-    'ZyA93imRB8q!h@K33eL%IeGJ7I>Jsyy}YF83BypRo)==Sq9{=F@FvYI8NI|PKywpMRpf@KblBXxS*?F%(}r(|D0^fvmw)38&@jF8<a3#rm7;L$57fQC1A22q'
-    '6mkg<di;n&y4PG{SG`-4i7JIj?HnYkO@@Rh?DJIJI>WG~J`%U9Em0TeK4l&gM}0W1yUZhISe<U)FgmdNk^On<e^JdX@F<_xUgz%7&Yt*`rkHKMw~*kDY91^Q'
-    '=aX4=qLL>aVEXjVKrJJ8j3&1o=>AzCCd@vm%}Q6MFoet8FCf9U%S?CiB+ZX_xsknTnJ*>m^ZU_W1>WKod46eejdU=o7)rTCRdEXi#)`>~?$YNFOKFlvYP~@U'
-    'DbP<&`lvCvLJoV`mK26Onn1(@SrbrA$C*AL+LO!>{%FXwh?B?p6EJ~S2lj|v#j9n5wI(sxdDaJf&E5v=C*Ox68<CpB>!Ug?PxS!M%RTN?aOo5u?8+8cn)CN)'
-    'g!w9UfhZ1E$27NK6em+XnQaiuk^yJpq=;mFy?ukKV<+-|W0F$u%Sv*btLtNX-$X*qV#sE%MNlCJ@B`=;nV+oxFsR!g0+~1x(*P7?gzgnfy+2Y6iXa+fnY=Qq'
-    'yI4+v;Kuc6R9~+%v{ZfPnm^T0IJM0N`(17TM81!D1&p%uiSxH#!H%)8l<71`kB()gn`pG0ldD?Z$h#?flA(YHQ<sV)cDy}1N}1{_po#l8?%dwX#4Dx^4|mGZ'
-    'q_fPc`ipe#M`XWa0HK(6jaLL%SHaaw?WmX|0vjEAZmHCDnD&|3{)e8oM+wsUYsbpR$8oNldZ=1G*P-Wf>qE87jEjV)e9k2Y*IY`t<DFM!|BAalje%jU5`G&!'
-    'uwvv?yCCp+i^MH<=FlYoVlj@R-4Z2zoF|2s%kzbJ|Jc}(YL{;^0rtoB9YjFB$h&u`00000VZ77zjNy=%00EJO0o&UMiw7P#vBYQl0ssI200dcD'
+    '{Wp48S^xk9=GL@E0stWa8~^|S5YJf50RRC200000hgwQemrW2t009~T+%BblAGY&-0RR9100dcD'
 )
 
 
 _EMBEDDED_ARTIFACT_CACHE: Optional[dict[str, bytes]] = None
+
+
+FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overheat': {'enabled': True,
+                                           'family': 'high_pair',
+                                           'scale': 0.25,
+                                           'series': 'cyb_amount / hs300_amount',
+                                           'threshold': 1.25,
+                                           'timing': 'T close amount condition shifted to T+1 execution',
+                                           'window': 60},
+                       'annualization_days': 242.0,
+                       'asset_curve': 'ChiNext price index / CSI300 price index',
+                       'baseline': {'label': 'score>-2.5 TV-off + NAV 7.5% scale 0.25',
+                                    'line': 'return_nav',
+                                    'source_line': 'return_nav_main',
+                                    'source_quadrant': 'q1'},
+                       'combination_rule': 'final exposure = baseline exposure * vol multiplier * amount multiplier',
+                       'common_end': '2026-06-05',
+                       'common_start': '2010-06-01',
+                       'cost_model': {'one_way_cost_bps': 5.0},
+                       'direction': 'long CYB / short HS300',
+                       'display_name': '创业板/沪深300 正向',
+                       'formal_start': '2010-06-01',
+                       'nav_defense': {'enabled': True,
+                                       'scale': 0.25,
+                                       'threshold': 0.075,
+                                       'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                       'poe_strategy_key': 'forward_cyb_hs300',
+                       'signal': {'abs_mom_day': 20,
+                                  'abs_threshold': 0.0,
+                                  'bias_ma': 60,
+                                  'mom_day': 30,
+                                  'score_threshold': -2.5,
+                                  'weight_end': 3.5},
+                       'strategy_id': 'forward_cyb_hs300',
+                       'target_vol': {'enabled': False, 'max_leverage': 1.0},
+                       'vol_overheat': {'enabled': True,
+                                        'scale': 0.0,
+                                        'threshold': 0.35,
+                                        'timing': 'prior-row realized volatility',
+                                        'window': 15}},
+ 'forward_cyb_sz50': {'amount_overlay': {'confirm_days': 5,
+                                         'enabled': True,
+                                         'family': 'cyb_low',
+                                         'scale': 0.25,
+                                         'series': 'cyb_amount / cyb_amount_rolling_mean',
+                                         'threshold': 1.0,
+                                         'timing': 'T close amount condition shifted to T+1 execution',
+                                         'unit_warning': 'raw CYB and SZ50 amount units differ; this rule uses CYB '
+                                                         'own-MA relative amount only',
+                                         'window': 20},
+                      'annualization_days': 242,
+                      'asset_curve': 'ChiNext price index / SSE50 price index',
+                      'baseline': {'label': 'score>5, abs30>1.5%, TV24%, NAV6% scale75%, volhot40>18% scale75%',
+                                   'line': 'main_nav6_volhot_w40'},
+                      'combination_rule': 'final exposure = target-vol baseline exposure * NAV multiplier * volhot '
+                                          'multiplier * CYB-low-amount multiplier',
+                      'common_end': '2026-06-12',
+                      'common_start': '2010-06-01',
+                      'cost_model': {'execution': 'T close signal -> T+1 close-to-close return',
+                                     'legs': 2,
+                                     'one_way_commission': 0.0005},
+                      'direction': 'long CYB / short SZ50',
+                      'formal_start': '2010-06-01',
+                      'nav_defense': {'enabled': True,
+                                      'scale': 0.75,
+                                      'threshold': 0.06,
+                                      'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                      'signal': {'abs_mom_day': 30,
+                                 'abs_threshold': 0.015,
+                                 'bias_ma': 80,
+                                 'mom_day': 28,
+                                 'r2_threshold': 0.05,
+                                 'score_threshold': 5.0,
+                                 'weight_end': 2.5},
+                      'strategy_id': 'final_cyb_sz50_return_nav6_volhot_w40_thr0p18_scale0p75_cyb_low_w20_thr1_d5_scale0p25',
+                      'target_vol': {'enabled': True,
+                                     'gate': 0.1,
+                                     'max_leverage': 1.5,
+                                     'min_leverage': 0.1,
+                                     'target_vol': 0.24,
+                                     'target_vol_window': 30},
+                      'vol_overheat': {'enabled': True,
+                                       'scale': 0.75,
+                                       'threshold': 0.18,
+                                       'timing': 'prior-row realized volatility',
+                                       'window': 40}},
+ 'forward_cyb_zz1000': {'annualization_days': 242,
+                        'asset_curve': 'ChiNext price index / CSI 1000 price index',
+                        'candidate': 'stage2_tv14_max1p5_db0p375_volhot_w20_thr0p26_scale0p0',
+                        'combination_rule': 'final exposure = target-vol deadbanded exposure * volhot multiplier',
+                        'common_end': '2026-06-12',
+                        'common_start': '2014-10-17',
+                        'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close spread return',
+                                       'legs': 2,
+                                       'one_way_commission': 0.0005},
+                        'direction': 'long CYB / short ZZ1000',
+                        'formal_start': '2014-10-17',
+                        'signal': {'abs_mom_day': 35,
+                                   'abs_threshold': -0.03,
+                                   'bias_ma': 50,
+                                   'mom_day': 20,
+                                   'r2_threshold': 0.05,
+                                   'score_threshold': 1.0,
+                                   'weight_end': 4.0},
+                        'strategy_id': 'final_cyb_zz1000_tv14_max1p5_db0p375_volhot_w20_thr0p26_scale0',
+                        'target_vol': {'deadband_timing': 'during active holding, keep last scale unless absolute '
+                                                          'raw-scale change exceeds deadband',
+                                       'enabled': True,
+                                       'max_leverage': 1.5,
+                                       'min_leverage': 0.1,
+                                       'scale_deadband': 0.375,
+                                       'target_vol': 0.14,
+                                       'target_vol_window': 20},
+                        'vol_overheat': {'active_days_full': 93,
+                                         'enabled': True,
+                                         'rescan_note': 'Downstream rescan selected w20/thr0.26/scale0.0; trigger days '
+                                                        'are cut to zero exposure.',
+                                         'scale': 0.0,
+                                         'threshold': 0.26,
+                                         'timing': 'prior-row spread realized volatility controls next execution '
+                                                   'exposure',
+                                         'window': 20}},
+ 'forward_cyb_zz500': {'amount_overlay': {'confirm_days': 1,
+                                          'enabled': True,
+                                          'feature': 'pair_amount_high',
+                                          'scale': 0.0,
+                                          'source': 'Sohu amount',
+                                          'threshold': 1.5,
+                                          'timing': 'T close amount condition shifted to T+1 execution',
+                                          'window': 20},
+                       'annualization_days': 242,
+                       'asset_curve': 'ChiNext price index / CSI500 price index',
+                       'baseline': {'final_candidate': 'l11ridge_primary_nav3_cyb_volume_high_w100_thr1p75_d3_scale0',
+                                    'layer10_candidate': 'l10vol_primary_nav3_cyb_volume_high_w60_thr1p75_d3_scale0p75',
+                                    'layer7_candidate': 'l7_primary_nav3_volhot_w40_thr26_scale0p5',
+                                    'layer9_candidate': 'l9amt_primary_nav3_pair_amount_high_w20_thr1p5_d1_scale0',
+                                    'line': 'primary_nav3',
+                                    'line_role': 'primary_width_watchlist',
+                                    'source_candidate': 'l3_primary_30_28_we3_s1_abs30_p1p5_tv10_rv120_max1p5_floor0p5_dbrel15'},
+                       'candidate': 'l11ridge_primary_nav3_cyb_volume_high_w100_thr1p75_d3_scale0',
+                       'combination_rule': 'final exposure = target-vol signal * NAV-DD defense * volhot * amount gate '
+                                           '* Layer10 volume gate * final-ridge volume gate',
+                       'common_end': '2026-06-05',
+                       'common_start': '2010-06-01',
+                       'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close return',
+                                      'financing_borrow_or_basis': 'excluded',
+                                      'legs': 2,
+                                      'one_way_commission': 0.0005,
+                                      'short_locate_or_borrow': 'excluded',
+                                      'slippage': 'excluded'},
+                       'direction': 'long CYB / short ZZ500',
+                       'final_ridge_overlay': {'confirm_days': 3,
+                                               'enabled': True,
+                                               'feature': 'cyb_volume_high',
+                                               'scale': 0.0,
+                                               'threshold': 1.75,
+                                               'timing': 'T close final-ridge volume condition shifted to T+1 '
+                                                         'execution',
+                                               'window': 100},
+                       'formal_start': '2010-06-01',
+                       'layer10_volume_overlay': {'confirm_days': 3,
+                                                  'enabled': True,
+                                                  'feature': 'cyb_volume_high',
+                                                  'scale': 0.75,
+                                                  'threshold': 1.75,
+                                                  'window': 60},
+                       'long_leg': 'CYB',
+                       'nav_defense': {'defense_scale': 0.5,
+                                       'enabled': True,
+                                       'nav_dd_threshold': -0.03,
+                                       'timing': 'prior-row pre-overlay NAV drawdown shifted to next execution row'},
+                       'profile': 'primary_nav3',
+                       'result_status': 'quasi-formal fixed research script; close-to-close index spread with V7.7 '
+                                        'amount/volume fallback overlays and commission costs',
+                       'short_leg': 'ZZ500',
+                       'signal': {'abs_ma': 30,
+                                  'abs_threshold': 0.015,
+                                  'anchor': 'bias_30_28_we3',
+                                  'bias_ma': 30,
+                                  'family': 'bias_momentum',
+                                  'mom_day': 28,
+                                  'r2_threshold': 0.05,
+                                  'score_threshold': 1.0,
+                                  'weight_end': 3.0},
+                       'strategy_id': 'substrategy_cyb_zz500_primary_nav3_volridge',
+                       'substrategy_id': 'substrategy_cyb_zz500_primary_nav3_volridge',
+                       'target_vol': {'deadband_mode': 'rel',
+                                      'deadband_value': 0.15,
+                                      'enabled': True,
+                                      'max_leverage': 1.5,
+                                      'min_scale': 0.5,
+                                      'target_vol': 0.1,
+                                      'target_vol_window': 120},
+                       'volhot_overlay': {'enabled': True,
+                                          'scale': 0.5,
+                                          'threshold': 0.26,
+                                          'timing': 'prior-row realized spread volatility shifted to next execution '
+                                                    'row',
+                                          'window': 40.0}},
+ 'forward_hs300_zz500': {'amount_overlay': {'confirm_days': 1,
+                                            'enabled': True,
+                                            'feature': 'zz500_amount_high',
+                                            'scale': 0.25,
+                                            'series': 'ZZ500_amount / ZZ500_amount_rolling_mean',
+                                            'source': 'EastMoney amount',
+                                            'threshold': 1.25,
+                                            'timing': 'T close amount condition shifted to T+1 execution',
+                                            'window': 120},
+                         'annualization_days': 242,
+                         'asset_curve': 'CSI300 price index / CSI500 price index',
+                         'baseline': {'label': 'Layer 6 NAV-only primary line plus Layer 10 ZZ500 high-amount final '
+                                               'ridge',
+                                      'line': 'primary_nav_only',
+                                      'source_candidate': 'l6_primary_q_nav_only'},
+                         'candidate': 'l10ridge_primary_nav_only_zz500_amount_high_w120_thr1p25_d1_scale0p25',
+                         'combination_rule': 'final exposure = NAV-only target-vol signal exposure * ZZ500-high-amount '
+                                             'multiplier',
+                         'common_end': '2026-06-05',
+                         'common_start': '2007-01-15',
+                         'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close return',
+                                        'financing_borrow_or_basis': 'excluded',
+                                        'legs': 2,
+                                        'one_way_commission': 0.0005,
+                                        'short_locate_or_borrow': 'excluded',
+                                        'slippage': 'excluded'},
+                         'direction': 'long HS300 / short ZZ500',
+                         'formal_start': '2007-01-15',
+                         'long_leg': 'HS300',
+                         'nav_defense': {'defense_scale': 0.5,
+                                         'enabled': True,
+                                         'nav_threshold': 0.0875,
+                                         'timing': 'prior-row pre-overlay NAV drawdown shifted to next execution row'},
+                         'result_status': 'quasi-formal fixed research script; close-to-close index spread with '
+                                          'EastMoney amount overlay and commission costs',
+                         'short_leg': 'ZZ500',
+                         'signal': {'abs_ma': 30,
+                                    'abs_threshold': -0.005,
+                                    'anchor': 'bias_60_18_we2p5',
+                                    'bias_ma': 60,
+                                    'mom_day': 18,
+                                    'r2_threshold': 0.05,
+                                    'score_threshold': 0.0,
+                                    'weight_end': 2.5},
+                         'strategy_id': 'substrategy_hs300_zz500_primary_nav_zz500amthigh_w120_thr1p25_d1_scale0p25',
+                         'substrategy_id': 'substrategy_hs300_zz500_primary_nav_zz500amthigh_w120_thr1p25_d1_scale0p25',
+                         'target_vol': {'deadband_mode': 'rel',
+                                        'deadband_value': 0.15,
+                                        'enabled': True,
+                                        'max_leverage': 2.0,
+                                        'min_scale': 0.0,
+                                        'target_vol': 0.12,
+                                        'target_vol_window': 20}},
+ 'forward_zz1000_hs300': {'amount_overlay': {'confirm_days': 1,
+                                             'enabled': True,
+                                             'family': 'low_abs',
+                                             'scale': 0.5,
+                                             'series': 'zz1000_amount',
+                                             'source': 'D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv',
+                                             'threshold': 1.0,
+                                             'timing': 'T close amount condition shifted to T+1 execution',
+                                             'window': 40},
+                          'annualization_days': 242.0,
+                          'asset_curve': 'CSI1000 price index / CSI300 price index',
+                          'common_end': '2026-06-12',
+                          'common_start': '2014-10-17',
+                          'cost_model': {'cost': 'turnover * 5bp', 'one_way_cost_bps': 5.0},
+                          'direction': 'long ZZ1000 / short HS300',
+                          'display_name': '中证1000/沪深300 正向',
+                          'formal_start': '2014-10-17',
+                          'nav_defense': {'enabled': True,
+                                          'scale': 0.0,
+                                          'threshold': 0.0875,
+                                          'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                          'poe_strategy_key': 'forward_zz1000_hs300',
+                          'signal': {'abs_mom_day': 50,
+                                     'abs_threshold': -0.05,
+                                     'bias_ma': 60,
+                                     'mom_day': 20,
+                                     'r2_filter': False,
+                                     'score_threshold': 0.0,
+                                     'weight_end': 1.0},
+                          'strategy_id': 'final_forward_zz1000_hs300_nav_low_abs_w40_thr1_days1_scale0p5',
+                          'target_vol': {'enabled': False, 'max_leverage': 1.0}},
+ 'forward_zz1000_sz50': {'amount_overlay': {'confirm_days': 3,
+                                            'enabled': True,
+                                            'family': 'low_abs',
+                                            'scale': 0.75,
+                                            'series': 'zz1000_amount',
+                                            'threshold': 1.0,
+                                            'timing': 'T close amount condition shifted to T+1 execution',
+                                            'window': 40},
+                         'annualization_days': 242.0,
+                         'asset_curve': 'CSI1000 price index / SSE50 price index',
+                         'baseline': {'label': 'main target-vol line, no defense',
+                                      'line': 'main_q0',
+                                      'source_line': 'main_stable_tv',
+                                      'source_quadrant': 'q0'},
+                         'combination_rule': 'final exposure = target-vol baseline exposure * amount multiplier',
+                         'common_end': '2026-06-05',
+                         'common_start': '2014-10-17',
+                         'cost_model': {'one_way_cost_bps': 5.0},
+                         'direction': 'long ZZ1000 / short SZ50',
+                         'display_name': '中证1000/上证50 正向',
+                         'formal_start': '2014-10-17',
+                         'momentum_decay': {'decay_threshold': 0.65,
+                                            'derisk_scale': 0.5,
+                                            'enabled': False,
+                                            'recovery_threshold': 0.8,
+                                            'timing': 'prior-row signal-day decay state',
+                                            'warmup_days': 5},
+                         'nav_defense': {'enabled': False,
+                                         'scale': 0.0,
+                                         'threshold': 0.1,
+                                         'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                         'poe_strategy_key': 'forward_zz1000_sz50',
+                         'signal': {'abs_mom_day': 50,
+                                    'abs_threshold': -0.05,
+                                    'bias_ma': 60,
+                                    'mom_day': 20,
+                                    'score_threshold': 0.0,
+                                    'weight_end': 2.5},
+                         'strategy_id': 'forward_zz1000_sz50',
+                         'target_vol': {'deadband': 0.075,
+                                        'deadband_rule': 'keep previous effective scale when abs(raw_scale / '
+                                                         'previous_effective_scale - 1) < deadband',
+                                        'deadband_type': 'relative_scale_change',
+                                        'enabled': True,
+                                        'max_leverage': 1.0,
+                                        'target_vol': 0.08,
+                                        'target_vol_window': 20}},
+ 'forward_zz500_sz50': {'amount_overlay': {'confirm_days': 3,
+                                           'enabled': True,
+                                           'feature': 'zz500_amount_low',
+                                           'scale': 0.25,
+                                           'series': 'zz500_amount / zz500_amount_rolling_mean',
+                                           'source': 'CSIndex official tradingValue/amount',
+                                           'threshold': 0.85,
+                                           'timing': 'T close amount condition shifted to T+1 execution',
+                                           'window': 60},
+                        'annualization_days': 242,
+                        'asset_curve': 'CSI500 price index / SSE50 price index',
+                        'baseline': {'label': 'width-confirm Layer 6 decay-only line plus Layer 9 CSIndex ZZ500 '
+                                              'low-amount filter',
+                                     'line': 'width_confirm_decay_only',
+                                     'source_candidate': 'l6_width_confirm_q_decay_only'},
+                        'candidate': 'l9amt_width_confirm_decay_only_zz500_amount_low_w60_thr0p85_d3_scale0p25',
+                        'combination_rule': 'final exposure = target-vol signal exposure * momentum-decay multiplier * '
+                                            'ZZ500-low-amount multiplier',
+                        'common_end': '2026-06-12',
+                        'common_start': '2007-01-15',
+                        'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close return',
+                                       'financing_borrow_or_basis': 'excluded',
+                                       'legs': 2,
+                                       'one_way_commission': 0.0005,
+                                       'slippage': 'excluded'},
+                        'direction': 'long ZZ500 / short SZ50',
+                        'formal_start': '2007-01-15',
+                        'momentum_decay': {'decay_threshold': 0.45,
+                                           'enabled': True,
+                                           'recovery_threshold': 0.9,
+                                           'scale': 0.0,
+                                           'timing': 'T close score-peak decay state shifted to T+1 execution',
+                                           'warmup_days': 10},
+                        'result_status': 'quasi-formal fixed research script; close-to-close index spread with CSIndex '
+                                         'official amount overlay and commission costs',
+                        'signal': {'abs_ma': 65,
+                                   'abs_threshold': -0.02,
+                                   'bias_ma': 115,
+                                   'family': 'bias_momentum',
+                                   'mom_day': 22,
+                                   'r2_threshold': 0.05,
+                                   'score_threshold': 2.0,
+                                   'weight_end': 2.75},
+                        'strategy_id': 'final_zz500_sz50_width_confirm_decay045_zz500amtlow_w60_thr0p85_d3_scale0p25',
+                        'target_vol': {'enabled': True,
+                                       'max_leverage': 1.25,
+                                       'min_leverage': 0.1,
+                                       'scale_deadband': 0.3,
+                                       'target_vol': 0.12,
+                                       'target_vol_window': 40}},
+ 'reverse_hs300_cyb': {'annualization_days': 242.0,
+                       'asset_curve': 'CSI300 price index / ChiNext price index',
+                       'combination_rule': 'final exposure = NAV/decay exposure * scorehot multiplier * volhot '
+                                           'multiplier',
+                       'common_end': '2026-06-05',
+                       'common_start': '2010-06-01',
+                       'cost_model': {'one_way_cost_bps': 5.0},
+                       'direction': 'long HS300 / short CYB',
+                       'display_name': '沪深300/创业板 反向',
+                       'formal_start': '2010-06-01',
+                       'momentum_decay': {'decay_threshold': 0.7,
+                                          'enabled': True,
+                                          'recovery_threshold': 0.8,
+                                          'scale': 0.0,
+                                          'timing': 'signal-day decay scale shifted to next-row execution',
+                                          'warmup_days': 10},
+                       'nav_defense': {'enabled': True,
+                                       'scale': 0.75,
+                                       'threshold': 0.075,
+                                       'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                       'poe_strategy_key': 'reverse_hs300_cyb',
+                       'score_overheat': {'enabled': True,
+                                          'scale': 0.0,
+                                          'threshold': 75.0,
+                                          'timing': 'prior-row score'},
+                       'signal': {'abs_mom_day': 80,
+                                  'abs_threshold': 0.0,
+                                  'bias_ma': 60,
+                                  'mom_day': 25,
+                                  'score_threshold': -10.0,
+                                  'weight_end': 2.5},
+                       'strategy_id': 'reverse_hs300_cyb',
+                       'target_vol': {'enabled': False, 'max_leverage': 1.0},
+                       'vol_overheat': {'enabled': True,
+                                        'scale': 0.0,
+                                        'threshold': 0.26,
+                                        'timing': 'prior-row realized volatility',
+                                        'window': 120}},
+ 'reverse_hs300_zz1000': {'annualization_days': 242.0,
+                          'asset_curve': 'CSI300 price index / CSI1000 price index',
+                          'common_end': '2026-06-05',
+                          'common_start': '2014-10-17',
+                          'cost_model': {'one_way_cost_bps': 5.0},
+                          'direction': 'long HS300 / short ZZ1000',
+                          'display_name': '沪深300/中证1000 反向',
+                          'formal_start': '2014-10-17',
+                          'nav_defense': {'enabled': True,
+                                          'scale': 0.5,
+                                          'threshold': 0.075,
+                                          'timing': 'prior-row pre-overlay Layer 4 NAV drawdown'},
+                          'poe_strategy_key': 'reverse_hs300_zz1000',
+                          'signal': {'abs_mom_day': 20,
+                                     'abs_threshold': -0.05,
+                                     'bias_ma': 60,
+                                     'mom_day': 20,
+                                     'score_threshold': 2.5,
+                                     'weight_end': 3.0},
+                          'strategy_id': 'reverse_hs300_zz1000',
+                          'target_vol': {'deadband': 0.075,
+                                         'deadband_rule': 'keep previous effective scale when abs(raw_scale / '
+                                                          'previous_effective_scale - 1) < deadband',
+                                         'deadband_type': 'relative_scale_change',
+                                         'enabled': True,
+                                         'max_leverage': 1.5,
+                                         'target_vol': 0.14,
+                                         'target_vol_window': 20},
+                          'vol_overheat': {'enabled': True,
+                                           'scale': 0.0,
+                                           'threshold': 0.14,
+                                           'timing': 'prior-row realized volatility',
+                                           'window': 25}},
+ 'reverse_sz50_cyb': {'annualization_days': 242,
+                      'asset_curve': 'SSE50 price index / ChiNext price index',
+                      'baseline': {'branch': 'neighbor_nav10_s025_decay030_rec080_w3_s0',
+                                   'label': 'neighbor signal, TV16%, NAV10% scale25%, momentum decay to cash, '
+                                            'down-only TV cap, SZ50 high-volume cash gate',
+                                   'line': 'neighbor_downonly_tv16_w30_min0',
+                                   'role': 'defensive_neighbor'},
+                      'candidate': 'l7vol_neighbor_downonly_tv16_w30_min0_sz50_vol_high_w60_thr1p25_d3_scale0',
+                      'combination_rule': 'final exposure = target-vol baseline exposure * NAV multiplier * '
+                                          'score-decay multiplier * down-only-TV multiplier * SZ50-high-volume '
+                                          'multiplier',
+                      'common_end': '2026-06-12',
+                      'common_start': '2010-06-01',
+                      'cost_model': {'execution': 'T close signal -> T+1 close-to-close return',
+                                     'legs': 2,
+                                     'one_way_commission': 0.0005},
+                      'direction': 'long SZ50 / short CYB',
+                      'formal_start': '2010-06-01',
+                      'momentum_decay': {'decay_threshold': 0.3,
+                                         'enabled': True,
+                                         'recovery_threshold': 0.8,
+                                         'scale': 0.0,
+                                         'timing': 'score peak decay shifted to next execution row',
+                                         'warmup_days': 3},
+                      'nav_defense': {'enabled': True,
+                                      'scale': 0.25,
+                                      'threshold': 0.1,
+                                      'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                      'overheat': {'enabled': True,
+                                   'gate': 0.09,
+                                   'kind': 'downonly_tv',
+                                   'min_scale': 0.0,
+                                   'target_vol': 0.16,
+                                   'timing': 'prior-row realized volatility cap',
+                                   'window': 30},
+                      'signal': {'abs_mom_day': 15,
+                                 'abs_threshold': -0.07,
+                                 'bias_ma': 30,
+                                 'mom_day': 32,
+                                 'r2_threshold': 0.05,
+                                 'score_threshold': 1.0,
+                                 'weight_end': 3.5},
+                      'strategy_id': 'final_reverse_sz50_cyb_neighbor_downonly_tv16_nav10_decay_volhigh_w60_thr1p25_d3_scale0',
+                      'target_vol': {'enabled': True,
+                                     'max_leverage': 1.25,
+                                     'min_leverage': 0.1,
+                                     'target_vol': 0.16,
+                                     'target_vol_window': 20},
+                      'volume_overlay': {'confirm_days': 3,
+                                         'enabled': True,
+                                         'family': 'sz50_vol_high',
+                                         'scale': 0.0,
+                                         'series': 'sz50_volume / sz50_volume_rolling_mean',
+                                         'threshold': 1.25,
+                                         'timing': 'T close volume condition shifted to T+1 execution',
+                                         'window': 60}},
+ 'reverse_sz50_zz1000': {'amount_overlay': {'enabled': False,
+                                            'reason': 'Layer 10 high_abs remains watchlist evidence; not promoted into '
+                                                      'the fixed final runner.'},
+                         'annualization_days': 242.0,
+                         'asset_curve': 'SSE50 price index / CSI1000 price index',
+                         'common_end': '2026-06-12',
+                         'common_start': '2014-10-17',
+                         'cost_model': {'cost': 'turnover * 5bp', 'one_way_cost_bps': 5.0},
+                         'direction': 'long SZ50 / short ZZ1000',
+                         'display_name': '上证50/中证1000 反向',
+                         'formal_start': '2014-10-17',
+                         'nav_defense': {'enabled': True,
+                                         'scale': 0.75,
+                                         'threshold': 0.04,
+                                         'timing': 'prior-row pre-overlay candidate NAV drawdown'},
+                         'poe_strategy_key': 'reverse_sz50_zz1000',
+                         'signal': {'abs_mom_day': 10,
+                                    'abs_threshold': -0.075,
+                                    'bias_ma': 60,
+                                    'mom_day': 20,
+                                    'r2_filter': False,
+                                    'score_threshold': 0.0,
+                                    'weight_end': 3.5},
+                         'strategy_id': 'final_reverse_sz50_zz1000_return_nav_score_q1_volhot_w20_thr0p18_scale0',
+                         'target_vol': {'enabled': False,
+                                        'max_leverage': 1.0,
+                                        'target_vol': None,
+                                        'target_vol_window': None},
+                         'vol_overheat': {'enabled': True,
+                                          'scale': 0.0,
+                                          'threshold': 0.18,
+                                          'timing': 'spread close realized volatility shifted to T+1 execution',
+                                          'window': 20}},
+ 'reverse_sz50_zz500': {'amount_overlay': {'enabled': True,
+                                           'kind': 'zz500_amt_hot',
+                                           'scale': 0.25,
+                                           'series': 'ZZ500_amount / ZZ500_amount_rolling_mean',
+                                           'threshold': 1.2,
+                                           'timing': 'T close amount condition shifted to T+1 execution',
+                                           'window': 60},
+                        'annualization_days': 242,
+                        'asset_curve': 'SSE50 price index / CSI500 price index',
+                        'baseline': {'label': 'Layer 6 primary after rejected NAV and rejected entry staging',
+                                     'layer6_candidate': 'l6_return_s0_decay030_rec080_w3_s025_scorehot18_scale0p25',
+                                     'line': 'primary_scorehot18_s025'},
+                        'candidate': 'l8_primary_scorehot18_s025_zz500_amthot_w60_thr1p2_scale0p25',
+                        'combination_rule': 'final exposure = target-vol signal exposure * momentum-decay multiplier * '
+                                            'scorehot multiplier * ZZ500-amount-hot multiplier',
+                        'common_end': '2026-06-12',
+                        'common_start': '2007-01-15',
+                        'cost_model': {'execution': 'T close signal -> T+1 close-to-close return',
+                                       'legs': 2,
+                                       'one_way_commission': 0.0005},
+                        'direction': 'long SZ50 / short ZZ500',
+                        'formal_start': '2007-01-15',
+                        'momentum_decay': {'decay_threshold': 0.3,
+                                           'enabled': True,
+                                           'recovery_threshold': 0.8,
+                                           'scale': 0.25,
+                                           'timing': 'T close score-peak decay state shifted to T+1 execution',
+                                           'warmup_days': 3},
+                        'result_status': 'quasi-formal research fixed script; close-to-close index spread with amount '
+                                         'overlay and commission costs',
+                        'score_overheat': {'enabled': True,
+                                           'kind': 'scorehot',
+                                           'scale': 0.25,
+                                           'score_threshold': 18.0,
+                                           'timing': 'prior-row score state'},
+                        'signal': {'abs_ma': 80,
+                                   'abs_threshold': -0.05,
+                                   'bias_ma': 60,
+                                   'mom_day': 18,
+                                   'r2_threshold': 0.05,
+                                   'score_threshold': 0.0,
+                                   'weight_end': 2.75},
+                        'strategy_id': 'final_sz50_zz500_score0_abs80_tv16_decay030_scorehot18_zz500amthot_w60_thr1p2_scale0p25',
+                        'target_vol': {'enabled': True,
+                                       'max_leverage': 1.5,
+                                       'min_leverage': 0.1,
+                                       'scale_deadband': 0.3,
+                                       'target_vol': 0.16,
+                                       'target_vol_window': 20}},
+ 'reverse_zz1000_cyb': {'annualization_days': 242,
+                        'common_end': '2026-06-12',
+                        'common_start': '2014-10-17',
+                        'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close spread return',
+                                       'legs': 2,
+                                       'one_way_commission': 0.0005},
+                        'direction': 'long ZZ1000 / short CYB',
+                        'formal_start': '2014-10-17',
+                        'line': {'abs_ma': 70,
+                                 'abs_threshold': -0.07,
+                                 'bias_ma': 60,
+                                 'line': 'primary_tv14_vw60_max1p25_db0p05',
+                                 'line_role': 'formal_carry',
+                                 'max_leverage': 1.25,
+                                 'mom_day': 12,
+                                 'scale_deadband': 0.05,
+                                 'score_threshold': 2.0,
+                                 'source_line': 'primary_s2_abs70_m7',
+                                 'target_vol': 0.14,
+                                 'tv_enabled': True,
+                                 'vol_window': 60,
+                                 'weight_end': 2.0},
+                        'long_leg': 'ZZ1000',
+                        'short_leg': 'CYB',
+                        'strategy_id': 'substrategy_zz1000_cyb_tv14_db5_cybvol_w60_thr1p05_d6_scale0p25',
+                        'substrategy_id': 'substrategy_zz1000_cyb_tv14_db5_cybvol_w60_thr1p05_d6_scale0p25',
+                        'target_vol': {'enabled': True,
+                                       'max_leverage': 1.25,
+                                       'min_leverage': 0.1,
+                                       'scale_deadband': 0.05,
+                                       'target_vol': 0.14,
+                                       'vol_window': 60},
+                        'volume_filter': {'confirm_days': 6,
+                                          'enabled': True,
+                                          'feature': 'cyb_vol_low',
+                                          'scale': 0.25,
+                                          'threshold': 1.05,
+                                          'timing': 'T-close volume state shifted to T+1 execution exposure',
+                                          'window': 60}},
+ 'reverse_zz500_cyb': {'amount_overlay': {'confirm_days': 3,
+                                          'enabled': True,
+                                          'feature': 'zz500_amount_low',
+                                          'scale': 0.0,
+                                          'source': 'CSIndex official amount',
+                                          'threshold': 1.0,
+                                          'timing': 'T close amount condition shifted to T+1 execution',
+                                          'window': 40},
+                       'annualization_days': 242,
+                       'asset_curve': 'CSI500 price index / ChiNext price index',
+                       'baseline': {'layer7_candidate': 'l7_confirm_strict_small_decay_volhot_w20_thr15_scale0p25',
+                                    'layer9_candidate': 'l9amt_confirm_strict_small_decay_zz500_amount_low_w40_thr1_d3_scale0',
+                                    'line': 'confirm_strict_small_decay',
+                                    'line_role': 'main_strict_full_5y',
+                                    'source_candidate': 'l3_bias_confirm_abs65_m3_tv12_rv20_max1_floor0_dbrel5'},
+                       'candidate': 'l9amt_confirm_strict_small_decay_zz500_amount_low_w40_thr1_d3_scale0',
+                       'combination_rule': 'final exposure = target-vol signal * momentum decay * volhot * amount gate',
+                       'common_end': '2026-06-05',
+                       'common_start': '2010-06-01',
+                       'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close return',
+                                      'financing_borrow_or_basis': 'excluded',
+                                      'legs': 2,
+                                      'one_way_commission': 0.0005,
+                                      'short_locate_or_borrow': 'excluded',
+                                      'slippage': 'excluded'},
+                       'direction': 'long ZZ500 / short CYB',
+                       'formal_start': '2010-06-01',
+                       'long_leg': 'ZZ500',
+                       'momentum_decay': {'confirm_days': 2,
+                                          'decay_ratio': 0.55,
+                                          'derisk_scale': 0.75,
+                                          'enabled': True,
+                                          'recovery_ratio': 0.75},
+                       'profile': 'main_confirm',
+                       'result_status': 'quasi-formal fixed research script; close-to-close index spread with V7.7 '
+                                        'amount fallback and commission costs',
+                       'short_leg': 'CYB',
+                       'signal': {'abs_ma': 65,
+                                  'abs_threshold': -0.03,
+                                  'anchor': 'bias_10_29_we3',
+                                  'bias_ma': 10,
+                                  'family': 'bias_momentum',
+                                  'mom_day': 29,
+                                  'r2_threshold': 0.05,
+                                  'score_threshold': 0.0,
+                                  'weight_end': 3.0},
+                       'strategy_id': 'substrategy_zz500_cyb_confirm_strict_decay_volhot_amtlow',
+                       'substrategy_id': 'substrategy_zz500_cyb_confirm_strict_decay_volhot_amtlow',
+                       'target_vol': {'deadband_mode': 'rel',
+                                      'deadband_value': 0.05,
+                                      'enabled': True,
+                                      'max_leverage': 1.0,
+                                      'min_scale': 0.0,
+                                      'target_vol': 0.12,
+                                      'target_vol_window': 20},
+                       'volhot_overlay': {'enabled': True,
+                                          'scale': 0.25,
+                                          'threshold': 0.15,
+                                          'timing': 'prior-row realized spread volatility shifted to next execution '
+                                                    'row',
+                                          'window': 20.0}},
+ 'reverse_zz500_hs300': {'amount_overlay': {'confirm_days': 1,
+                                            'enabled': True,
+                                            'feature': 'zz500_amount_low',
+                                            'scale': 0.25,
+                                            'source': 'EastMoney amount',
+                                            'threshold': 0.75,
+                                            'timing': 'T close amount condition shifted to T+1 execution',
+                                            'window': 120},
+                         'annualization_days': 242,
+                         'asset_curve': 'CSI500 price index / CSI300 price index',
+                         'baseline': {'final_candidate': 'l11ridge_main_confirm_pair_volume_high_w50_thr1p25_d5_scale0',
+                                      'layer10_candidate': 'l10vol_main_confirm_pair_volume_high_w40_thr1p25_d5_scale0',
+                                      'layer7_candidate': 'l7_main_confirm_volhot_w40_thr22_scale0p5',
+                                      'layer9_candidate': 'l9amt_main_confirm_zz500_amount_low_w120_thr0p75_d1_scale0p25',
+                                      'line': 'main_confirm',
+                                      'line_role': 'main_strict_full_5y',
+                                      'source_candidate': 'l3_confirm_bias_we2_score2_abs65_m2_tv20_rv60_max1_floor0_dbabs0p2'},
+                         'candidate': 'l11ridge_main_confirm_pair_volume_high_w50_thr1p25_d5_scale0',
+                         'combination_rule': 'final exposure = target-vol signal * volhot * amount gate * Layer10 '
+                                             'volume gate * final-ridge volume gate',
+                         'common_end': '2026-06-05',
+                         'common_start': '2007-01-15',
+                         'cost_model': {'execution': 'T close signal/state -> T+1 close-to-close return',
+                                        'financing_borrow_or_basis': 'excluded',
+                                        'legs': 2,
+                                        'one_way_commission': 0.0005,
+                                        'short_locate_or_borrow': 'excluded',
+                                        'slippage': 'excluded'},
+                         'direction': 'long ZZ500 / short HS300',
+                         'final_ridge_overlay': {'confirm_days': 5,
+                                                 'enabled': True,
+                                                 'feature': 'pair_volume_high',
+                                                 'scale': 0.0,
+                                                 'threshold': 1.25,
+                                                 'timing': 'T close final-ridge volume condition shifted to T+1 '
+                                                           'execution',
+                                                 'window': 50},
+                         'formal_start': '2007-01-15',
+                         'layer10_volume_overlay': {'confirm_days': 5,
+                                                    'enabled': True,
+                                                    'feature': 'pair_volume_high',
+                                                    'scale': 0.0,
+                                                    'threshold': 1.25,
+                                                    'window': 40},
+                         'long_leg': 'ZZ500',
+                         'profile': 'main_confirm',
+                         'result_status': 'quasi-formal fixed research script; close-to-close index spread with '
+                                          'EastMoney amount/volume overlays and commission costs',
+                         'short_leg': 'HS300',
+                         'signal': {'abs_ma': 65,
+                                    'abs_threshold': -0.02,
+                                    'anchor': 'bias_130_20_we2',
+                                    'bias_ma': 130,
+                                    'family': 'bias_momentum',
+                                    'mom_day': 20,
+                                    'r2_threshold': 0.05,
+                                    'score_threshold': 2.0,
+                                    'weight_end': 2.0},
+                         'strategy_id': 'substrategy_zz500_hs300_purple_mainconfirm_amtlow_volridge',
+                         'substrategy_id': 'substrategy_zz500_hs300_purple_mainconfirm_amtlow_volridge',
+                         'target_vol': {'deadband_mode': 'abs',
+                                        'deadband_value': 0.2,
+                                        'enabled': True,
+                                        'max_leverage': 1.0,
+                                        'min_scale': 0.0,
+                                        'target_vol': 0.2,
+                                        'target_vol_window': 60},
+                         'volhot_overlay': {'enabled': True,
+                                            'scale': 0.5,
+                                            'threshold': 0.22,
+                                            'timing': 'prior-row realized spread volatility shifted to next execution '
+                                                      'row',
+                                            'window': 40.0}}}
 
 
 def _embedded_artifacts() -> dict[str, bytes]:
@@ -630,9 +1236,46 @@ def _artifact_bytes(filename: str) -> bytes:
     return _embedded_artifact_bytes(filename)
 
 
+def canonicalize_meta(meta: dict) -> dict:
+    out = dict(meta)
+
+    line = out.get("line")
+    if isinstance(line, dict) and "signal" not in out:
+        out["signal"] = {
+            "bias_ma": line.get("bias_ma"),
+            "mom_day": line.get("mom_day"),
+            "weight_end": line.get("weight_end"),
+            "score_threshold": line.get("score_threshold"),
+            "abs_mom_day": line.get("abs_ma"),
+            "abs_threshold": line.get("abs_threshold"),
+            "r2_threshold": line.get("r2_threshold"),
+        }
+
+    target_vol = out.get("target_vol")
+    if isinstance(target_vol, dict):
+        target_vol = dict(target_vol)
+        if "target_vol_window" not in target_vol and "vol_window" in target_vol:
+            target_vol["target_vol_window"] = target_vol.get("vol_window")
+        out["target_vol"] = target_vol
+
+    if "volume_filter" in out and "volume_overlay" not in out:
+        out["volume_overlay"] = dict(out["volume_filter"]) if isinstance(out["volume_filter"], dict) else out["volume_filter"]
+
+    if "volhot_overlay" in out and "vol_overheat" not in out:
+        out["vol_overheat"] = dict(out["volhot_overlay"]) if isinstance(out["volhot_overlay"], dict) else out["volhot_overlay"]
+
+    return out
+
+
 def load_meta(config: StrategyConfig) -> dict:
-    payload = json.loads(_artifact_bytes(config.metrics_file).decode("utf-8"))
-    return payload.get("meta", payload)
+    try:
+        payload = json.loads(_artifact_bytes(config.metrics_file).decode("utf-8"))
+        return canonicalize_meta(payload.get("meta", payload))
+    except FileNotFoundError:
+        meta = FALLBACK_STRATEGY_METAS.get(config.key)
+        if meta is None:
+            raise
+        return canonicalize_meta(meta)
 
 
 def load_strategy_curves() -> dict[str, pd.DataFrame]:
@@ -695,7 +1338,7 @@ def _fetch_eastmoney_kline(secid: str) -> pd.DataFrame:
         "https://push2his.eastmoney.com/api/qt/stock/kline/get"
         f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
         "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-        f"&klt=101&fqt=1&beg=20050101&end={end_date}&lmt=10000"
+        f"&klt=101&fqt=1&beg=20050101&end={end_date}&lmt={ONLINE_FETCH_LOOKBACK_BARS}"
     )
     data = _get_json(url, timeout=12, headers={"Referer": "https://quote.eastmoney.com/"})
     inner = data.get("data") if isinstance(data, dict) else None
@@ -725,7 +1368,7 @@ def _fetch_sina_kline(asset: str) -> pd.DataFrame:
     symbol = CN_SINA_SYMBOLS[asset]
     url = (
         "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php"
-        f"/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen=10000"
+        f"/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={ONLINE_FETCH_LOOKBACK_BARS}"
     )
     text = _get_text(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}, encoding="gbk")
     data = json.loads(text)
@@ -751,7 +1394,7 @@ def _fetch_sina_kline(asset: str) -> pd.DataFrame:
 
 def _fetch_tencent_kline(asset: str) -> pd.DataFrame:
     symbol = CN_TENCENT_SYMBOLS[asset]
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,10000,qfq"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{ONLINE_FETCH_LOOKBACK_BARS},qfq"
     data = _get_json(
         url,
         timeout=15,
@@ -790,7 +1433,7 @@ def _secid_to_sohu_index(secid: str) -> str:
     return "zs_" + code
 
 
-def _fetch_csindex_amount(secid: str, *, beg: str = "20050101", lmt: int = 10000) -> pd.DataFrame:
+def _fetch_csindex_amount(secid: str, *, beg: str = "20050101", lmt: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
     index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
     if not index_code:
         raise ValueError(f"no CSIndex amount mapping for {secid}")
@@ -812,12 +1455,13 @@ def _fetch_csindex_amount(secid: str, *, beg: str = "20050101", lmt: int = 10000
             sess.get(detail_url, timeout=8, headers=headers)
         except Exception:
             pass
-        resp = sess.get(url, timeout=15, headers=headers)
+        resp = sess.get(url, timeout=8, headers=headers)
+        if resp.status_code == 403:
+            raise RuntimeError("CSIndex 403")
+        resp.raise_for_status()
         data = resp.json()
-        if resp.status_code != 403:
-            resp.raise_for_status()
     else:
-        data = _get_json(url, timeout=15, headers=headers)
+        data = _get_json(url, timeout=8, headers=headers)
     rows = []
     for item in data.get("data", []) if isinstance(data, dict) else []:
         if not item:
@@ -1303,6 +1947,47 @@ def _live_metric_overlay_state(
     }
 
 
+def _metric_gate_series(
+    section: dict,
+    panel: pd.DataFrame,
+    long_asset: str,
+    short_asset: str,
+    metric: str,
+) -> tuple[pd.Series, pd.Series]:
+    family = str(section.get("family") or "")
+    window = int(section.get("window") or 1)
+    threshold = float(_threshold_from_section(section))
+    confirm_days = int(section.get("confirm_days") or 1)
+    long_col = f"{long_asset}_{metric}"
+    short_col = f"{short_asset}_{metric}"
+
+    if family in {"high_pair", "low_pair"}:
+        if long_col not in panel.columns or short_col not in panel.columns:
+            return pd.Series(dtype=float), pd.Series(dtype=float)
+        raw = pd.to_numeric(panel[long_col], errors="coerce") / pd.to_numeric(panel[short_col], errors="coerce").replace(0, math.nan)
+    else:
+        metric_asset = long_asset
+        series_name = str(section.get("series") or section.get("feature") or "").lower()
+        for asset in CN_ASSET_NAMES:
+            if f"{asset}_amount" in series_name or f"{asset}_volume" in series_name or asset in series_name:
+                metric_asset = asset
+                break
+        metric_col = f"{metric_asset}_{metric}"
+        if metric_col not in panel.columns:
+            return pd.Series(dtype=float), pd.Series(dtype=float)
+        raw = pd.to_numeric(panel[metric_col], errors="coerce")
+
+    raw = pd.to_numeric(raw, errors="coerce").dropna().sort_index()
+    if len(raw) < max(window, 2):
+        return pd.Series(dtype=float), pd.Series(dtype=float)
+    ratio = raw / raw.rolling(window).mean().replace(0, math.nan)
+    if family.startswith("high_"):
+        gate = ratio >= threshold
+    else:
+        gate = _consecutive_true_live(ratio <= threshold) >= confirm_days
+    return ratio, gate.astype(float)
+
+
 def _live_amount_state(
     meta: dict,
     panel: pd.DataFrame,
@@ -1422,41 +2107,43 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     out[short_asset] = price[short_asset]
     out["spread_close"] = close
     out["score"] = score
+    score_threshold = float(signal.get("score_threshold") or 0.0)
+    out["score_strength"] = (score - score_threshold).clip(lower=0.0)
+    out["raw_signal"] = _online_target_series(close, score, meta)
     for asset in legs:
         amount_col = f"{asset}_amount"
         if amount_col in panel.columns:
             out[amount_col] = pd.to_numeric(panel[amount_col], errors="coerce").reindex(out.index)
+        volume_col = f"{asset}_volume"
+        if volume_col in panel.columns:
+            out[volume_col] = pd.to_numeric(panel[volume_col], errors="coerce").reindex(out.index)
     amount_a = f"{long_asset}_amount"
     amount_b = f"{short_asset}_amount"
     ratio_col = f"amount_ratio_{long_asset}_{short_asset}"
     if amount_a in out.columns and amount_b in out.columns:
         out[ratio_col] = out[amount_a] / out[amount_b].replace(0, math.nan)
-    amount_state = _live_amount_state(meta, panel, long_asset, short_asset)
-    if amount_state.get("available"):
-        amount_section = _amount_overlay_section(meta)
-        family = str(amount_section.get("family") or "")
-        metric = "volume" if "volume" in family else "amount"
-        online_state = _live_metric_overlay_state(amount_section, panel, long_asset, short_asset, None, metric)
-        if online_state.get("available") and online_state.get("date"):
-            state_date = pd.Timestamp(str(online_state["date"]))
-            if state_date in out.index:
-                out.loc[state_date, "amount_gate"] = 1.0 if online_state.get("gate") else 0.0
-                out.loc[state_date, "amount_ma_ratio"] = online_state.get("value", math.nan)
+    amount_section = _amount_overlay_section(meta)
+    if amount_section:
+        series_name = str(amount_section.get("series") or amount_section.get("feature") or "").lower()
+        metric = "volume" if "volume" in series_name else "amount"
+        ratio_series, gate_series = _metric_gate_series(amount_section, panel, long_asset, short_asset, metric)
+        if not ratio_series.empty:
+            out["amount_gate"] = gate_series.reindex(out.index)
+            out["amount_ma_ratio"] = ratio_series.reindex(out.index)
     for section in _volume_overlay_sections(meta):
-        online_state = _live_metric_overlay_state(section, panel, long_asset, short_asset, None, "volume")
-        if online_state.get("available") and online_state.get("date"):
-            state_date = pd.Timestamp(str(online_state["date"]))
-            if state_date in out.index:
-                key = str(section.get("_meta_key") or "volume_overlay")
-                if key == "layer10_volume_overlay":
-                    out.loc[state_date, "layer10_volume_gate"] = 1.0 if online_state.get("gate") else 0.0
-                    out.loc[state_date, "layer10_volume_ma_ratio"] = online_state.get("value", math.nan)
-                elif key == "final_ridge_overlay":
-                    out.loc[state_date, "final_ridge_gate"] = 1.0 if online_state.get("gate") else 0.0
-                    out.loc[state_date, "final_ridge_indicator"] = online_state.get("value", math.nan)
-                else:
-                    out.loc[state_date, "volume_gate"] = 1.0 if online_state.get("gate") else 0.0
-                    out.loc[state_date, "volume_ma_ratio"] = online_state.get("value", math.nan)
+        ratio_series, gate_series = _metric_gate_series(section, panel, long_asset, short_asset, "volume")
+        if ratio_series.empty:
+            continue
+        key = str(section.get("_meta_key") or "volume_overlay")
+        if key == "layer10_volume_overlay":
+            out["layer10_volume_gate"] = gate_series.reindex(out.index)
+            out["layer10_volume_ma_ratio"] = ratio_series.reindex(out.index)
+        elif key == "final_ridge_overlay":
+            out["final_ridge_gate"] = gate_series.reindex(out.index)
+            out["final_ridge_indicator"] = ratio_series.reindex(out.index)
+        else:
+            out["volume_gate"] = gate_series.reindex(out.index)
+            out["volume_ma_ratio"] = ratio_series.reindex(out.index)
     vol = _vol_overlay_section(meta)
     if vol.get("enabled") and vol.get("window") not in (None, ""):
         vol_series = close.pct_change().rolling(int(vol.get("window"))).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
@@ -1464,7 +2151,7 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
             out[col] = vol_series
         if vol.get("kind") == "downonly_tv":
             cap = vol_series.apply(_downonly_tv_scale_from_realized_vol, args=(vol,))
-            mult = cap.shift(1).fillna(1.0)
+            mult = cap.fillna(1.0)
             gate = (mult < 0.999).astype(float)
             out["overheat_scale"] = mult
             out["volhot_scale"] = mult
@@ -1517,7 +2204,8 @@ def _online_target_vol_scale(
     if not math.isfinite(rv) or rv <= 1e-12:
         raw = 1.0
     else:
-        raw = min(max(float(target) / rv, 0.0), max_leverage)
+        min_leverage = _safe_float(_first_section_value(target_vol, ("min_leverage", "min_scale", "floor")), 0.0)
+        raw = min(max(float(target) / rv, min_leverage), max_leverage)
     prev_scale = _first_numeric(prev_row, ("target_vol_scale", "base_target_vol_scale"))
     if not math.isfinite(prev_scale) or prev_scale <= 1e-12:
         prev_scale = raw
@@ -1546,10 +2234,13 @@ def _online_gate_and_multiplier(
     curve_so_far: pd.DataFrame,
 ) -> float:
     multiplier = 1.0
+    state_idx = signal_frame.index[signal_frame.index < idx]
+    as_of = pd.Timestamp(state_idx[-1] if len(state_idx) else idx)
+    state_row = signal_frame.loc[as_of] if as_of in signal_frame.index else pd.Series(dtype=float)
 
     nav = meta.get("nav_defense", {}) if isinstance(meta.get("nav_defense", {}), dict) else {}
     if nav.get("enabled"):
-        dd, _nav_col = _nav_drawdown_for_row(curve_so_far, row)
+        dd, _nav_col = _nav_drawdown_value(curve_so_far)
         gate = math.isfinite(dd) and dd <= -abs(_safe_float(_threshold_from_section(nav), 0.0))
         row["nav_defense_gate"] = 1.0 if gate else 0.0
         row["base_nav_defense_gate"] = row["nav_defense_gate"]
@@ -1560,11 +2251,11 @@ def _online_gate_and_multiplier(
     if vol.get("enabled"):
         current = math.nan
         for col in ("overheat_indicator", "volhot_indicator", "vol_indicator", "realized_vol", "base_realized_vol"):
-            if col in row and math.isfinite(float(row[col])):
-                current = float(row[col])
+            if col in state_row.index and pd.notna(state_row[col]) and math.isfinite(float(state_row[col])):
+                current = float(state_row[col])
                 break
         if vol.get("kind") == "downonly_tv":
-            scale = _first_numeric(row, ("overheat_scale", "volhot_scale", "vol_scale"))
+            scale = _first_numeric(state_row, ("overheat_scale", "volhot_scale", "vol_scale"))
             if not math.isfinite(scale):
                 scale = _downonly_tv_scale_from_realized_vol(current, vol)
             gate = math.isfinite(scale) and abs(scale - 1.0) > 1e-12
@@ -1585,30 +2276,38 @@ def _online_gate_and_multiplier(
 
     amount = _amount_overlay_section(meta)
     if amount:
-        gate_value = row.get("amount_gate", 0.0)
+        gate_value = state_row.get("amount_gate", 0.0)
         try:
             gate = math.isfinite(float(gate_value)) and float(gate_value) != 0.0
         except (TypeError, ValueError):
             gate = False
+        row["amount_gate"] = 1.0 if gate else 0.0
+        if "amount_ma_ratio" in state_row.index:
+            row["amount_ma_ratio"] = state_row.get("amount_ma_ratio")
         if gate:
             multiplier *= _scale_from_section(amount)
 
     for volume in _volume_overlay_sections(meta):
         gate = False
         for col in volume.get("_gate_cols", ()):
-            gate_value = row.get(col, 0.0)
+            gate_value = state_row.get(col, 0.0)
             try:
                 if math.isfinite(float(gate_value)) and float(gate_value) != 0.0:
                     gate = True
                     break
             except (TypeError, ValueError):
                 continue
+        for col in volume.get("_gate_cols", ()):
+            row[col] = 1.0 if gate else 0.0
+        for col in volume.get("_value_cols", ()):
+            if col in state_row.index:
+                row[col] = state_row.get(col)
         if gate:
             multiplier *= _scale_from_section(volume)
 
     scorehot = meta.get("score_overheat", {}) if isinstance(meta.get("score_overheat", {}), dict) else {}
     if scorehot.get("enabled"):
-        score_value = float(row.get("score", math.nan))
+        score_value = float(state_row.get("score", math.nan))
         gate = math.isfinite(score_value) and score_value >= float(_scorehot_threshold(scorehot) or math.inf)
         row["scorehot_gate"] = 1.0 if gate else 0.0
         row["scorehot_indicator"] = score_value
@@ -1618,8 +2317,6 @@ def _online_gate_and_multiplier(
 
     decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
     if decay.get("enabled"):
-        signal_idx = signal_frame.index[signal_frame.index < idx]
-        as_of = signal_idx[-1] if len(signal_idx) else idx
         _apply_online_decay_state(row, signal_frame, pd.Timestamp(as_of), meta)
         gate = _safe_float(row.get("decay_gate"))
         mult = _safe_float(row.get("decay_mult", row.get("decay_scale")))
@@ -1636,18 +2333,42 @@ def _fill_online_execution_row(
     meta: dict,
     signal_frame: pd.DataFrame,
 ) -> dict:
-    if idx not in signal_frame.index or curve_so_far.empty:
+    if idx not in signal_frame.index:
         return row
+    spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
+    target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta)
+    target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
+    tv_window = int(target_vol.get("target_vol_window") or 20)
+    vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+    if curve_so_far.empty:
+        row["target"] = 0.0
+        row["exec_signal"] = 0.0
+        row["base_gross_exposure"] = 0.0
+        row["base_nav"] = 1.0
+        row["nav_decay_nav"] = 1.0
+        row["base_target_vol_raw_scale"] = 1.0
+        row["target_vol_raw_scale"] = 1.0
+        row["base_target_vol_scale"] = 1.0
+        row["target_vol_scale"] = 1.0
+        row["base_target_vol_deadband_suppressed"] = 0.0
+        row["target_vol_deadband_suppressed"] = 0.0
+        row["base_realized_vol"] = math.nan
+        row["realized_vol"] = math.nan
+        row["gross_exposure"] = 0.0
+        row["gross_return"] = 0.0
+        row["cost"] = 0.0
+        row["turnover"] = 0.0
+        row["return"] = 0.0
+        row["nav"] = 1.0
+        return row
+
     prev_idx = curve_so_far.index[-1]
     prev_row = curve_so_far.iloc[-1]
-    spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
     if idx not in spread.index or prev_idx not in spread.index:
         return row
     spread_ret = float(spread.loc[idx] / spread.loc[prev_idx] - 1.0)
-    target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta)
     signal_date = prev_idx if prev_idx in target_series.index else target_series.loc[target_series.index < idx].index[-1]
     target = float(target_series.loc[signal_date]) if signal_date in target_series.index else 0.0
-    vol_series = spread.pct_change().rolling(int((meta.get("target_vol", {}) or {}).get("target_vol_window") or 20)).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
     raw_scale, target_scale, suppressed = _online_target_vol_scale(pd.Series(row), prev_row, meta, signal_date, vol_series)
     base_exposure = target * target_scale
     prev_base_exposure = _first_numeric(prev_row, ("base_gross_exposure", "gross_exposure"))
@@ -1777,98 +2498,23 @@ def _build_curves_from_online_prices(
             continue
 
         spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
-        score = pd.to_numeric(signal_frame.get("score", pd.Series(index=signal_frame.index, dtype=float)), errors="coerce")
-        target_series = _online_target_series(spread, score, meta)
-        decay_state_frame = _online_decay_state_frame(signal_frame, meta)
-        target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
-        tv_window = int(target_vol.get("target_vol_window") or 20)
-        vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
         valid_index = signal_frame.loc[spread.notna()].index
-        tail_index = list(valid_index if full_history else valid_index[-2:])
-        rows: list[tuple[pd.Timestamp, dict]] = []
-        prev_exposure = 0.0
-        prev_target_scale = 1.0
-        prev_nav = 1.0
-        cost_rate = _cost_rate_from_meta(meta)
+        tail_index = list(valid_index if full_history else valid_index[-ONLINE_REBUILD_LOOKBACK_BARS:])
+        rows: list[tuple[pd.Timestamp, dict]] = [] if full_history else _snapshot_seed_rows(config, signal_frame)
+        if rows:
+            seed_date = rows[-1][0]
+            tail_index = [idx for idx in tail_index if pd.Timestamp(idx) > seed_date]
         for idx in tail_index:
             signal_row = signal_frame.loc[idx]
             row = signal_row.to_dict()
             is_provisional = provisional_date is not None and pd.Timestamp(idx).normalize() == provisional_date
-            signal_idx = signal_frame.index[signal_frame.index < idx]
-            exec_signal_idx = signal_idx[-1] if len(signal_idx) else idx
-            target = (
-                float(target_series.loc[exec_signal_idx])
-                if exec_signal_idx in target_series.index and pd.notna(target_series.loc[exec_signal_idx])
-                else 0.0
+            row["online_rebuilt_bar"] = 1.0
+            row["online_provisional_bar"] = 1.0 if is_provisional else 0.0
+            curve_so_far = pd.DataFrame(
+                [prior for _, prior in rows],
+                index=pd.DatetimeIndex([date for date, _ in rows]),
             )
-            raw_scale = 1.0
-            target_scale = 1.0
-            suppressed = 0.0
-            if target_vol.get("enabled"):
-                rv = (
-                    float(vol_series.loc[exec_signal_idx])
-                    if exec_signal_idx in vol_series.index and pd.notna(vol_series.loc[exec_signal_idx])
-                    else math.nan
-                )
-                max_leverage = float(target_vol.get("max_leverage") or 1.0)
-                target_vol_value = target_vol.get("target_vol")
-                if target_vol_value not in (None, "") and math.isfinite(rv) and rv > 1e-12:
-                    raw_scale = min(max(float(target_vol_value) / rv, 0.0), max_leverage)
-                    target_scale = raw_scale
-                    gate = target_vol.get("gate")
-                    if gate not in (None, "") and raw_scale > (1.0 - float(gate)):
-                        target_scale = 1.0
-                        suppressed = 1.0 if abs(raw_scale - target_scale) > 1e-12 else 0.0
-                    if (
-                        target > 0.0
-                        and prev_exposure > 1e-12
-                        and _target_vol_deadband_suppressed(raw_scale, prev_target_scale, target_vol)
-                    ):
-                        target_scale = prev_target_scale
-                        suppressed = 1.0
-            base_exposure = target * target_scale
-            spread_ret = 0.0
-            if len(signal_idx) and exec_signal_idx in spread.index and idx in spread.index:
-                prev_spread = float(spread.loc[exec_signal_idx])
-                curr_spread = float(spread.loc[idx])
-                if math.isfinite(prev_spread) and abs(prev_spread) > 1e-12 and math.isfinite(curr_spread):
-                    spread_ret = curr_spread / prev_spread - 1.0
-            row.update(
-                {
-                    "target": target,
-                    "raw_signal": target,
-                    "exec_signal": target,
-                    "base_gross_exposure": base_exposure,
-                    "target_vol_raw_scale": raw_scale,
-                    "base_target_vol_raw_scale": raw_scale,
-                    "target_vol_scale": target_scale,
-                    "base_target_vol_scale": target_scale,
-                    "target_vol_deadband_suppressed": suppressed,
-                    "base_target_vol_deadband_suppressed": suppressed,
-                    "base_realized_vol": float(vol_series.loc[exec_signal_idx]) if exec_signal_idx in vol_series.index and pd.notna(vol_series.loc[exec_signal_idx]) else math.nan,
-                    "realized_vol": float(vol_series.loc[exec_signal_idx]) if exec_signal_idx in vol_series.index and pd.notna(vol_series.loc[exec_signal_idx]) else math.nan,
-                    "gross_exposure": base_exposure,
-                    "online_rebuilt_bar": 1.0,
-                    "online_provisional_bar": 1.0 if is_provisional else 0.0,
-                }
-            )
-            _apply_online_decay_state(row, signal_frame, pd.Timestamp(exec_signal_idx), meta, decay_state_frame)
-            multiplier = _current_overlay_multiplier(pd.Series(row), meta, None)
-            if math.isfinite(multiplier):
-                row["gross_exposure"] = base_exposure * multiplier
-            exposure = float(row.get("gross_exposure", 0.0) or 0.0)
-            turnover = abs(exposure - prev_exposure)
-            gross_return = exposure * spread_ret
-            cost = turnover * cost_rate
-            net_return = gross_return - cost
-            prev_nav *= 1.0 + net_return
-            row["gross_return"] = gross_return
-            row["cost"] = cost
-            row["turnover"] = turnover
-            row["return"] = net_return
-            row["nav"] = prev_nav
-            prev_exposure = exposure
-            prev_target_scale = target_scale
+            row = _fill_online_execution_row(pd.Timestamp(idx), row, curve_so_far, meta, signal_frame)
             rows.append((pd.Timestamp(idx), row))
 
         curves[config.key] = pd.DataFrame(
@@ -1878,30 +2524,57 @@ def _build_curves_from_online_prices(
     return curves
 
 
+def _snapshot_seed_rows(config: StrategyConfig, signal_frame: pd.DataFrame) -> list[tuple[pd.Timestamp, dict]]:
+    snapshot = STATE_SNAPSHOT.get(config.key, {})
+    as_of = snapshot.get("as_of")
+    values = snapshot.get("values")
+    if not as_of or not isinstance(values, dict):
+        return []
+    seed_idx = pd.Timestamp(str(as_of))
+    row = {k: float(v) for k, v in values.items() if isinstance(v, (int, float)) and math.isfinite(float(v))}
+    if seed_idx in signal_frame.index:
+        for col, value in signal_frame.loc[seed_idx].items():
+            if col not in row and pd.notna(value):
+                try:
+                    row[col] = float(value)
+                except (TypeError, ValueError):
+                    pass
+    row["state_snapshot_seed"] = 1.0
+    row["online_rebuilt_bar"] = 0.0
+    row["online_provisional_bar"] = 0.0
+    row.setdefault("return", 0.0)
+    row.setdefault("gross_return", 0.0)
+    row.setdefault("cost", 0.0)
+    row.setdefault("turnover", 0.0)
+    if "nav" in row and "nav_high" not in row:
+        row["nav_high"] = row["nav"]
+    if "base_nav" in row and "base_nav_high" not in row:
+        row["base_nav_high"] = row["base_nav"]
+    if "gross_exposure" in row and "base_gross_exposure" not in row:
+        row["base_gross_exposure"] = row["gross_exposure"]
+    return [(seed_idx, row)]
+
+
 def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.DataFrame], dict[str, dict], dict[str, object]]:
     metas = load_strategy_metas()
     online: dict[str, object] = {"ok": False, "error": None, "probes": {}}
     curves: dict[str, pd.DataFrame] = {}
     local_error: Optional[str] = None
-    try:
-        curves = load_strategy_curves()
-    except Exception as exc:
-        local_error = str(exc)
+    if not POE_ONLINE_ONLY:
+        try:
+            curves = load_strategy_curves()
+        except Exception as exc:
+            local_error = str(exc)
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=include_realtime)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
         else:
-            if not ALLOW_ONLINE_REBUILD:
-                raise RuntimeError(
-                    "formal daily artifacts are unavailable; refusing unverified online full-history rebuild "
-                    "(set POE_ADK_ALLOW_ONLINE_REBUILD=1 for diagnostic use only)"
-                )
-            curves = _build_curves_from_online_prices(metas, panel, full_history=True)
-            data_mode = "online_rebuild"
+            curves = _build_curves_from_online_prices(metas, panel, full_history=False)
+            data_mode = "online_rebuild_recent_realtime" if include_realtime else "online_rebuild_recent"
         probes = {
-            config.key: _live_probe_for_strategy(config, metas[config.key], panel, seed_curve=curves[config.key])
+            config.key: _live_probe_for_strategy(config, metas[config.key], panel, seed_curve=curves.get(config.key))
             for config in STRATEGIES
         }
         online = {**online_meta, "ok": True, "error": None, "probes": probes, "data_mode": data_mode}
@@ -1926,23 +2599,19 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
 
     metas = load_strategy_metas()
     curves: dict[str, pd.DataFrame] = {}
-    try:
-        curves = load_strategy_curves()
-    except Exception:
-        curves = {}
+    if not POE_ONLINE_ONLY:
+        try:
+            curves = load_strategy_curves()
+        except Exception:
+            curves = {}
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=False)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
         else:
-            if not ALLOW_ONLINE_REBUILD:
-                raise RuntimeError(
-                    "formal daily artifacts are unavailable; refusing unverified online full-history rebuild "
-                    "(set POE_ADK_ALLOW_ONLINE_REBUILD=1 for diagnostic use only)"
-                )
-            curves = _build_curves_from_online_prices(metas, panel, full_history=True)
-            data_mode = "online_rebuild_full"
+            curves = _build_curves_from_online_prices(metas, panel, full_history=False)
+            data_mode = "online_rebuild_recent_performance"
         online = {**online_meta, "ok": True, "error": None, "data_mode": data_mode}
     except Exception as exc:
         if not curves:
@@ -2138,14 +2807,16 @@ def render_performance(query: str, combo: bool = False) -> str:
         note = f"{len(STRATEGIES)}个子策略按在线重建日收益统计；各子策略保留自身正式样本起点。"
 
     start, end, label = parse_date_range(query, shared_index)
+    if label == "全样本" and str(online.get("data_mode", "")).startswith("online_rebuild_recent"):
+        label = f"Poe最近窗口（约{ONLINE_REBUILD_LOOKBACK_BARS}个交易日）"
     rows = [(display, metrics_for_curve(_slice_curve(curves_to_report[key], start, end))) for key, display in order]
     lines = [heading, "", f"- 查询区间: **{label}** ({start:%Y-%m-%d} 至 {end:%Y-%m-%d})", f"- 口径: {note}"]
     if online.get("ok"):
         latest = max((df.index.max() for df in curves.values() if not df.empty), default=end)
         lines.append(f"- 在线刷新: **成功**（{online.get('mode', 'daily')}，最新 {latest:%Y-%m-%d}，抓取 {online.get('fetched_at', 'N/A')}）")
-        if online.get("data_mode") == "online_rebuild_full":
-            lines.append("- 数据来源: Poe 在线重建（Sina/EastMoney/Tencent 公开指数日线 + 脚本内嵌参数 metadata），不读取本地文件。")
-            lines.append("- 注意: 该口径用于 Poe 在线展示；若本地正式 artifacts 有额外人工固化字段，结果可能有小幅差异。")
+        if str(online.get("data_mode", "")).startswith("online_rebuild_recent"):
+            lines.append("- 数据来源: Poe 在线最近窗口重建（Sina/EastMoney/Tencent 公开指数日线 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
+            lines.append("- 注意: 该口径用于 Poe 在线展示，不代表本地正式长期回测。")
     elif online.get("error"):
         lines.append(f"- 在线刷新: **失败**；原因: `{online.get('error')}`")
     lines.append("")
@@ -2413,6 +3084,8 @@ def _pct_abs_threshold(value: object) -> str:
 
 def _confirm_days(section: dict) -> object:
     value = section.get("confirm_days") if isinstance(section, dict) else None
+    if value in (None, "") and isinstance(section, dict):
+        value = section.get("warmup_days")
     return 1 if value in (None, "") else value
 
 
@@ -2570,16 +3243,22 @@ def _nav_drawdown_value(curve: pd.DataFrame) -> tuple[float, str]:
         if col not in curve.columns:
             continue
         series = pd.to_numeric(curve[col], errors="coerce").dropna()
-        if len(series) >= 2:
+        high_col = f"{col}_high"
+        if len(series) >= 2 or high_col in curve.columns:
             candidates.append((len(series), -len(candidates), col, series))
     if not candidates:
         return math.nan, "nav"
     max_len = max(item[0] for item in candidates)
-    min_len = max(2, int(max_len * 0.8))
+    min_len = 1 if max_len < 2 else max(2, int(max_len * 0.8))
     _, _, nav_col, nav = max((item for item in candidates if item[0] >= min_len), key=lambda item: item[1])
     if nav.empty:
         return math.nan, nav_col
     high = float(nav.cummax().iloc[-1])
+    high_col = f"{nav_col}_high"
+    if high_col in curve.columns:
+        high_series = pd.to_numeric(curve[high_col], errors="coerce").dropna()
+        if not high_series.empty:
+            high = max(high, float(high_series.iloc[-1]))
     last = float(nav.iloc[-1])
     if high <= 0:
         return math.nan, nav_col
@@ -2611,13 +3290,68 @@ def _score_peak_decay_ratio(curve: pd.DataFrame, row: pd.Series) -> float:
     series = _score_history_series(curve, row)
     if series.empty:
         return math.nan
-    current = _score_current_value(curve, row)
-    if not math.isfinite(current):
-        current = float(series.iloc[-1])
-    peak = float(series.cummax().iloc[-1])
-    if peak <= 1e-12:
+    frame = pd.DataFrame({"score": series})
+    if "raw_signal" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["raw_signal"], errors="coerce").reindex(frame.index)
+    elif "target" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["target"], errors="coerce").reindex(frame.index)
+    elif "exec_signal" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["exec_signal"], errors="coerce").reindex(frame.index)
+    else:
+        frame["active"] = 1.0
+    if getattr(row, "name", None) in frame.index:
+        frame = frame.loc[frame.index <= row.name]
+
+    peak = math.nan
+    last_ratio = math.nan
+    for _, item in frame.iterrows():
+        active = _safe_float(item.get("active"), 0.0) > 0.5
+        current = _safe_float(item.get("score"))
+        if (not active) or (not math.isfinite(current)):
+            peak = math.nan
+            last_ratio = math.nan
+            continue
+        if current <= 0.0:
+            peak = math.nan
+            last_ratio = 0.0
+            continue
+        peak = current if not math.isfinite(peak) else max(peak, current)
+        ratio = current / peak if peak > 1e-12 else math.nan
+        if math.isfinite(ratio):
+            last_ratio = max(0.0, ratio)
+    return last_ratio
+
+
+def _score_strength_peak_decay_ratio(curve: pd.DataFrame, row: pd.Series) -> float:
+    if "score_strength" not in curve.columns:
         return math.nan
-    return current / peak
+    frame = pd.DataFrame({"strength": pd.to_numeric(curve["score_strength"], errors="coerce")})
+    if "raw_signal" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["raw_signal"], errors="coerce")
+    elif "target" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["target"], errors="coerce")
+    elif "exec_signal" in curve.columns:
+        frame["active"] = pd.to_numeric(curve["exec_signal"], errors="coerce")
+    else:
+        frame["active"] = 1.0
+    if getattr(row, "name", None) in frame.index:
+        frame = frame.loc[frame.index <= row.name]
+    if frame.empty:
+        return math.nan
+
+    peak = math.nan
+    last_ratio = math.nan
+    for _, item in frame.iterrows():
+        active = _safe_float(item.get("active"), 0.0) > 0.5
+        strength = _safe_float(item.get("strength"))
+        if (not active) or (not math.isfinite(strength)) or strength <= 0.0:
+            peak = math.nan
+            continue
+        peak = strength if not math.isfinite(peak) else max(peak, strength)
+        ratio = strength / peak if peak > 0 else math.nan
+        if math.isfinite(ratio):
+            last_ratio = ratio
+    return last_ratio
 
 
 def _strict_active_decay_state(
@@ -2744,7 +3478,49 @@ def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.Data
     if not decay.get("enabled") or "score" not in signal_frame.columns:
         return pd.DataFrame(index=signal_frame.index)
     score = pd.to_numeric(signal_frame["score"], errors="coerce")
-    if "decay_ratio" in decay:
+    if "score_strength" in signal_frame.columns:
+        strength = pd.to_numeric(signal_frame["score_strength"], errors="coerce")
+        if "raw_signal" in signal_frame.columns:
+            active = pd.to_numeric(signal_frame["raw_signal"], errors="coerce").fillna(0.0)
+        elif "target" in signal_frame.columns:
+            active = pd.to_numeric(signal_frame["target"], errors="coerce").fillna(0.0)
+        elif "exec_signal" in signal_frame.columns:
+            active = pd.to_numeric(signal_frame["exec_signal"], errors="coerce").fillna(0.0)
+        else:
+            active = _online_decay_active_series(signal_frame, meta)
+        decay_ratio = _safe_float(_decay_threshold(decay))
+        recovery_ratio = _safe_float(_decay_recovery_threshold(decay))
+        warmup_days = int(_safe_float(decay.get("warmup_days", decay.get("confirm_days", 1.0)), 1.0))
+        scale = _scale_from_section(decay)
+        peak = math.nan
+        active_days = 0
+        in_decay = False
+        ratios = []
+        gates = []
+        mults = []
+        for idx in signal_frame.index:
+            is_active = _safe_float(active.get(idx), 0.0) > 0.5
+            cur_strength = _safe_float(strength.get(idx))
+            ratio = math.nan
+            if (not is_active) or (not math.isfinite(cur_strength)) or cur_strength <= 0.0:
+                peak = math.nan
+                active_days = 0
+                in_decay = False
+            else:
+                active_days += 1
+                peak = cur_strength if not math.isfinite(peak) else max(peak, cur_strength)
+                ratio = cur_strength / peak if peak > 0 else math.nan
+                if active_days >= max(warmup_days, 1):
+                    if in_decay:
+                        if math.isfinite(ratio) and ratio >= recovery_ratio:
+                            in_decay = False
+                            peak = cur_strength
+                    elif math.isfinite(ratio) and ratio <= decay_ratio:
+                        in_decay = True
+            ratios.append(ratio)
+            gates.append(1.0 if in_decay else 0.0)
+            mults.append(scale if in_decay else 1.0)
+    elif "decay_ratio" in decay:
         active = _online_decay_active_series(signal_frame, meta)
         decay_ratio = _safe_float(_decay_threshold(decay))
         recovery_ratio = _safe_float(_decay_recovery_threshold(decay))
@@ -2939,13 +3715,16 @@ def _overlay_detail_rows(
     score_threshold = _safe_float(signal.get("score_threshold"))
     if math.isfinite(score_threshold):
         score_pass = math.isfinite(score_value) and score_value > score_threshold
-        parts = [
-            _pass_text(score_pass),
-            f"Score {num(score_value, 3)} / 阈值 {num(score_threshold, 3)}",
-        ]
         abs_day = _signal_abs_day(signal)
         abs_threshold = _safe_float(signal.get("abs_threshold"))
         abs_mom = _safe_float(probe.get("abs_mom") if probe else math.nan)
+        abs_pass = True
+        if math.isfinite(abs_threshold):
+            abs_pass = math.isfinite(abs_mom) and abs_mom > abs_threshold
+        parts = [
+            _pass_text(score_pass and abs_pass),
+            f"Score {num(score_value, 3)} / 阈值 {num(score_threshold, 3)}",
+        ]
         if math.isfinite(abs_threshold):
             if math.isfinite(abs_mom):
                 parts.append(f"AbsMom{abs_day} {pct(abs_mom)} / 阈值 {pct(abs_threshold)}")
@@ -3059,8 +3838,9 @@ def _overlay_detail_rows(
         current_cols = ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux")
         has_current_decay_col = any(col in row.index for col in current_cols)
         current = _first_numeric(row, current_cols) if has_current_decay_col else _first_numeric_with_history(curve, row, current_cols)
-        if not math.isfinite(current) and not has_current_decay_col:
-            current = _score_peak_decay_ratio(curve, row)
+        if not math.isfinite(current):
+            strength_ratio = _score_strength_peak_decay_ratio(curve, row)
+            current = strength_ratio if math.isfinite(strength_ratio) else _score_peak_decay_ratio(curve, row)
         scale = _scale_from_section(decay)
         mult = _first_numeric_with_history(curve, row, ("decay_mult", "decay_scale"))
         if not math.isfinite(gate) and math.isfinite(mult):
@@ -3321,13 +4101,16 @@ def _strategy_signal_snapshot(
         overlay_multiplier = _current_overlay_multiplier(row, meta, amount_gate_override)
     if not math.isfinite(overlay_multiplier):
         overlay_multiplier = math.nan
+    current_overlay_multiplier = _current_overlay_multiplier(row, meta, amount_gate_override)
+    if not math.isfinite(current_overlay_multiplier):
+        current_overlay_multiplier = overlay_multiplier
 
     post_close_tv_scale = _first_numeric(row, ("target_vol_raw_scale", "raw_scale", "target_vol_scale", "base_target_vol_scale", "target_vol_applied_scale", "applied_scale", "scale"))
     if not math.isfinite(post_close_tv_scale):
         post_close_tv_scale = tv_scale if math.isfinite(tv_scale) else 1.0
     if not tv.get("enabled"):
         post_close_tv_scale = 1.0
-    post_close_overlay = overlay_multiplier if math.isfinite(overlay_multiplier) else 1.0
+    post_close_overlay = current_overlay_multiplier if math.isfinite(current_overlay_multiplier) else 1.0
     post_close_exposure = (
         base_signal_exposure * post_close_tv_scale * post_close_overlay
         if math.isfinite(base_signal_exposure) and math.isfinite(post_close_tv_scale) and math.isfinite(post_close_overlay)
@@ -3343,7 +4126,13 @@ def _strategy_signal_snapshot(
     else:
         formula = f"收益期基础 {pct(exec_base_signal_exposure, 1)}；收益期敞口 {pct(exposure, 1)}"
     if math.isfinite(post_close_exposure):
-        formula += f"；收盘执行后 {pct(post_close_exposure, 1)}"
+        if math.isfinite(base_signal_exposure) and math.isfinite(post_close_tv_scale) and math.isfinite(post_close_overlay):
+            formula += (
+                f"；收盘执行后 {pct(post_close_exposure, 1)}"
+                f"（信号 {pct(base_signal_exposure, 1)} × TV {num(post_close_tv_scale, 3)} × 叠加 {num(post_close_overlay, 3)}）"
+            )
+        else:
+            formula += f"；收盘执行后 {pct(post_close_exposure, 1)}"
 
     tv_text = "未启用"
     if tv.get("enabled"):
@@ -3413,9 +4202,22 @@ def render_signal(live: bool = False) -> str:
         lines.append(f'- Data source mode: {online.get("mode", "daily")}')
         if online.get("fetched_at"):
             lines.append(f'- Data fetched at: {online.get("fetched_at")}')
+        if str(online.get("data_mode", "")).startswith("online_rebuild"):
+            lines.append("- Data source: Poe 在线重建（公开指数日线/实时快照 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
+            lines.append("- Usage: 用于 Poe 实时信号展示；与本地正式回测 artifacts 可能存在小幅差异。")
     else:
         lines.append("- Data source: unavailable")
     lines.append("")
+
+    required = [config.key for config in STRATEGIES]
+    missing = [key for key in required if key not in curves or curves[key].empty or key not in metas]
+    if missing:
+        return (
+            f"{title}\n\n"
+            f"- 在线重建失败: `{online.get('error', 'unknown')}`\n"
+            f"- 缺失策略数: {len(missing)} / {len(required)}\n"
+            "- 当前 Poe 版本不读取本地正式 artifacts；需要在线行情成功后才能生成信号。\n"
+        )
 
     configs = {config.key: config for config in STRATEGIES}
     for _pair_key, pair_display, forward_key, reverse_key in PAIR_DEFS:
@@ -3511,10 +4313,7 @@ def _section_meta_detail(section: dict) -> str:
     return ", ".join(parts) if parts else str(section)
 
 def render_params(live: bool = False) -> str:
-    if live:
-        curves, metas, online = load_strategy_context(include_realtime=True)
-    else:
-        metas = load_strategy_metas()
+    metas = load_strategy_metas()
     title = "## 实时参数" if live else "## 参数"
     lines = [title, ""]
     configs = {config.key: config for config in STRATEGIES}
@@ -3558,11 +4357,17 @@ def render_params(live: bool = False) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 def render_signal_history(query: str) -> str:
-    curves = load_strategy_curves()
-    if not curves:
-        return "No signal data available."
+    curves, _metas, online = load_strategy_context(include_realtime=True)
+    if not curves or not any(not curve.empty for curve in curves.values()):
+        return (
+            "## 信号历史不可用\n\n"
+            f"- 在线重建失败: `{online.get('error', 'unknown')}`\n"
+        )
 
     lines = ["## 信号历史", ""]
+    if online.get("ok") and str(online.get("data_mode", "")).startswith("online_rebuild"):
+        lines.append("- 数据来源: Poe 在线重建最近 5 个交易日；不读取本地正式 artifacts。")
+        lines.append("")
     for config in STRATEGIES:
         curve = curves[config.key]
         if curve.empty:
@@ -3585,6 +4390,8 @@ def render_nav_chart(query: str, combo: bool = False) -> str:
 def render_query(query: str) -> str:
     normalized = _normalize_query(query)
     compact = normalized.replace(" ", "")
+    if "历史" in compact and "信号" in compact:
+        return render_signal_history(normalized)
     if "参数" in compact and "实时" in compact:
         return render_params(live=True)
     if "参数" in compact:
@@ -3593,13 +4400,9 @@ def render_query(query: str) -> str:
         return render_performance(normalized, combo=True)
     if "表现" in compact:
         return render_performance(normalized, combo=False)
-    if "实时" in compact and "信号" in compact:
-        return render_signal(live=True)
     if "信号" in compact:
-        return render_signal(live=False)
-    if "历史" in compact and "信号" in compact:
-        return render_signal_history(normalized)
-    return render_signal(live=False)
+        return render_signal(live=True)
+    return render_signal(live=True)
 
 def _write_query_response(msg, query: str) -> None:
     rendered = render_query(str(query))
@@ -3625,12 +4428,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not query:
         query_obj = getattr(poe, "query", None)
         query = getattr(query_obj, "text", "") if query_obj is not None else ""
-    query = str(query).strip() or "??"
+    query = str(query).strip() or "信号"
     with poe.start_message() as msg:
         try:
             _write_query_response(msg, query)
         except Exception as exc:
-            msg.write("## 閺屻儴顕楁径杈Е\n\n")
+            msg.write("## 查询失败\n\n")
             msg.write(f"`{exc}`\n")
     return 0
 
@@ -3638,12 +4441,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 def run() -> int:
     query_obj = getattr(poe, "query", None)
     query = getattr(query_obj, "text", "") if query_obj is not None else ""
-    query = str(query).strip() or "螤螘螉螘"
+    query = str(query).strip() or "信号"
     with poe.start_message() as msg:
         try:
             _write_query_response(msg, query)
         except Exception as exc:
-            msg.write("## 鏌ヨ澶辫触\n\n")
+            msg.write("## 查询失败\n\n")
             msg.write(f"`{exc}`\n")
     return 0
 
