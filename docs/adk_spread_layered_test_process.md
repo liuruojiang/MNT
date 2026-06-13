@@ -1,16 +1,22 @@
 # ADK Spread Layered Test Process
 
-Updated: 2026-06-09
+Updated: 2026-06-12
 
 This document is the required workflow for standalone ADK spread research lines such as `long SZ50 / short CYB`, `long CYB / short SZ50`, and other two-index spread sleeves. It exists to prevent layer-order mistakes and to keep every candidate comparable.
+
+This document extends `docs/new_strategy_test_standard_process.md`; if the two documents differ, use the stricter rule.
 
 ## Hard Rules
 
 - Test one layer at a time. After each layer, write artifacts, run the strict checker, summarize the layer, and stop for user confirmation.
 - Do not skip the layer order. A later overlay can be run only as a clearly labeled side diagnostic, not as the formal next layer.
-- Every reported candidate table must include annualized return and max drawdown for `full`, `last_10y`, `last_5y`, `last_3y`, and `last_1y`.
+- Every user-facing display, report, layer summary, and reported candidate table must include annualized return and max drawdown for `full`, `last_10y`, `last_5y`, `last_3y`, and `last_1y`.
 - When comparing a candidate with the original baseline or previous-layer baseline, always show the complete window set: `full`, `last_10y`, `last_5y`, `last_3y`, and `last_1y`, with annualized return and max drawdown for every row.
-- Do not pick an edge-of-grid maximum if a sufficiently wide secondary ridge exists. Report ridge/neighbor width before recommending a tuple.
+- Every layer summary must compare each displayed candidate against the exact same-line baseline for that layer. The baseline is normally the previous formal layer's carried candidate; for Layer 0/1 it is the explicit no-signal or always-on baseline used by that scan. Do not show candidate metrics alone.
+- For every displayed window, include both the candidate values and the deltas versus baseline: annualized-return delta in percentage points and max-drawdown improvement in percentage points. A positive return delta means the candidate beat the baseline; a positive drawdown delta means the candidate had a shallower max drawdown.
+- If table width is tight, keep the baseline comparison by using compact cells such as `candidate ann/DD (delta ann, delta DD)` for each window. Do not drop the delta columns to save width.
+- Do not pick a thin or edge-of-grid maximum if a sufficiently wide secondary ridge exists. If the top candidate's width is insufficient, keep searching for a width-supported secondary point and report it beside the headline maximum.
+- Report ridge/neighbor width before recommending a tuple. A next-layer primary candidate should be width-supported; a higher-return but thin candidate may be carried only as a watchlist line unless the user explicitly approves it.
 - Carry at least one primary line, one nearby confirmation line, and any user-requested return-heavy line until the user explicitly drops it.
 - Every layer must state data source, formal start/end dates, row count, direction, execution timing, cost model, and whether the result is formal, quasi-formal, or diagnostic.
 
@@ -29,6 +35,7 @@ Required checks:
 Outputs:
 - Best family and tuple.
 - Family-level width or ridge support.
+- If the best full-sample tuple is not width-supported, identify and display the best width-supported secondary tuple before stopping or recommending the next layer.
 - Full/10Y/5Y/3Y/1Y return and drawdown table.
 
 ### Layer 1 Dense Patch - Signal Parameter Width
@@ -40,6 +47,7 @@ Typical parameters:
 
 Required decision:
 - Select a non-edge, width-supported anchor if available.
+- If the highest-return or highest-Sharpe point is thin, edge-bound, or locally unsupported, do not use it as the primary anchor; instead find the best width-supported secondary ridge and carry the thin point only as a watchlist.
 - Keep a nearby confirmation tuple.
 - Exclude edge-bound global maxima unless explicitly approved.
 
@@ -179,6 +187,7 @@ Every `record.md` must include:
 - execution timing and cost model.
 - layer inputs and exact anchor tuples.
 - full/10Y/5Y/3Y/1Y return and drawdown table.
+- same-line baseline comparison table, including annualized-return delta and max-drawdown improvement delta for every window.
 - width/ridge summary.
 - decision and next-layer carry list.
 - verification commands and strict checker result.

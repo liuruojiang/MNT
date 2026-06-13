@@ -28,3 +28,7 @@ This repo-local file is the active guidance for the A-share / US momentum combo 
 ## Local Verification
 
 - If `tests/` is absent or intentionally cleaned, run the smallest real verification available, usually `python -m py_compile "mnt_bot V X.Y plus.py"` plus `git diff --check` on touched docs/code.
+
+## New Strategy Test Standard
+
+- New strategy tests and candidate promotions must follow `docs/new_strategy_test_standard_process.md`; every display/report must include full sample, 10Y, 5Y, 3Y, and 1Y annualized return plus max drawdown, or explicit `N/A` reasons.

@@ -427,6 +427,10 @@ CN_DK_SAME_SIDE_OVERHEAT_ENABLED = True
 CN_DK_SAME_SIDE_OVERHEAT_ENTER = 0.22
 CN_DK_SAME_SIDE_OVERHEAT_EXIT = 0.18
 CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
+CN_DK_DD_WARNING_ORIGINAL_THRESHOLD = 0.07
+CN_DK_DD_WARNING_ORIGINAL_COOLDOWN_DAYS = 3
+CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD = 0.05
+CN_DK_DD_WARNING_CONSENSUS16_COOLDOWN_DAYS = 8
 
 
 def _dk_score_decay_status_text():
@@ -3105,7 +3109,144 @@ def _microcap_direct_volume_status(expected_date=None):
         status = _annotate_status_freshness(status, expected_date, "microcap_volume_warning")
     return status
 
-def _write_volume_warning_panel(msg, compact=False):
+def _adk_drawdown_watch_status(result, threshold, cooldown_days, label):
+    if result is None or len(result) == 0 or "nav" not in result.columns:
+        return {
+            "label": label,
+            "available": False,
+            "error": "missing ADK nav series",
+            "threshold": float(threshold),
+            "cooldown_days": int(cooldown_days),
+        }
+    nav = pd.to_numeric(result["nav"], errors="coerce").dropna().sort_index()
+    if nav.empty:
+        return {
+            "label": label,
+            "available": False,
+            "error": "empty ADK nav series",
+            "threshold": float(threshold),
+            "cooldown_days": int(cooldown_days),
+        }
+    running_peak = nav.cummax()
+    dd = nav / running_peak - 1.0
+    latest_date = dd.index[-1]
+    peak_date = nav.loc[:latest_date].idxmax()
+    current_dd = float(dd.iloc[-1])
+    threshold = float(abs(threshold))
+    cooldown_days = int(cooldown_days)
+    armed = True
+    last_cross_date = None
+    last_cross_pos = None
+    for i, (_dt, _dd) in enumerate(dd.items()):
+        if pd.isna(_dd):
+            continue
+        cur_dd = float(_dd)
+        if cur_dd > -threshold:
+            armed = True
+        elif armed:
+            last_cross_date = _dt
+            last_cross_pos = i
+            armed = False
+    cooldown_start_date = None
+    cooldown_elapsed_days = 0
+    cooldown_pending_start = False
+    if last_cross_pos is not None:
+        start_pos = last_cross_pos + 1
+        if start_pos < len(dd):
+            cooldown_start_date = dd.index[start_pos]
+            cooldown_elapsed_days = min(max(len(dd) - start_pos, 0), cooldown_days)
+        else:
+            cooldown_pending_start = True
+    cooldown_remaining_days = max(cooldown_days - cooldown_elapsed_days, 0)
+    cooldown_active = bool(cooldown_elapsed_days > 0 and cooldown_elapsed_days < cooldown_days)
+    cooldown_completed = bool(last_cross_pos is not None and cooldown_elapsed_days >= cooldown_days)
+    return {
+        "label": label,
+        "available": True,
+        "date": latest_date,
+        "peak_date": peak_date,
+        "current_dd": current_dd,
+        "threshold": threshold,
+        "cooldown_days": cooldown_days,
+        "triggered": last_cross_date is not None and current_dd <= -threshold,
+        "last_cross_date": last_cross_date,
+        "cooldown_start_date": cooldown_start_date,
+        "cooldown_elapsed_days": int(cooldown_elapsed_days),
+        "cooldown_remaining_days": int(cooldown_remaining_days),
+        "cooldown_active": cooldown_active,
+        "cooldown_completed": cooldown_completed,
+        "cooldown_pending_start": cooldown_pending_start,
+        "rearmed": bool(armed),
+        "policy": "warning_only",
+    }
+
+
+def _format_adk_drawdown_watch_line(status):
+    label = status.get("label", "ADK")
+    threshold = float(status.get("threshold", 0.0))
+    cooldown_days = int(status.get("cooldown_days", 0))
+    if not status.get("available", False):
+        return (
+            f"- {label}回撤警示: **UNKNOWN** | 无法确认回撤穿越参考条件"
+            f"（阈值 {threshold:.0%} / 参考空仓{cooldown_days}个交易日）。"
+            f"原因: {status.get('error', 'unknown')}；仅警示，不改变ADK仓位、收益和净值曲线。\n"
+        )
+    mark = "🔴 警示触发" if status.get("triggered", False) else "未触发"
+    if status.get("triggered", False):
+        if status.get("cooldown_pending_start", False):
+            action = f"参考动作: 下一交易日起停止交易{cooldown_days}个交易日，当前已停止0/{cooldown_days}天"
+        elif status.get("cooldown_active", False):
+            action = (
+                f"参考动作: 停止交易{cooldown_days}个交易日，"
+                f"当前已停止{int(status.get('cooldown_elapsed_days', 0))}/{cooldown_days}天，"
+                f"剩余{int(status.get('cooldown_remaining_days', 0))}天"
+            )
+        else:
+            action = (
+                f"参考动作: 本轮停止交易{cooldown_days}个交易日已结束，"
+                f"当前已停止{int(status.get('cooldown_elapsed_days', 0))}/{cooldown_days}天；"
+                f"需DD回到-{threshold:.0%}上方后才会重新进入可触发状态"
+            )
+    else:
+        action = f"参考动作: 继续观察（未从上方跌破-{threshold:.0%}）"
+    date = status["date"].strftime("%Y-%m-%d")
+    peak_date = status["peak_date"].strftime("%Y-%m-%d")
+    cross = status.get("last_cross_date")
+    cross_text = f"；最近跌破日 {cross.strftime('%Y-%m-%d')}" if cross is not None else ""
+    return (
+        f"- {label}回撤警示: **{mark}** | 当前DD {status['current_dd']:.1%} / "
+        f"触发阈值 -{threshold:.0%}；峰值日 {peak_date}，最新日 {date}{cross_text}。"
+        f"{action}；仅警示，不改变ADK仓位、收益和净值曲线。\n"
+    )
+
+
+def _write_adk_drawdown_warning_panel(msg, cn_dk_result, compact=False, consensus16_result=None):
+    w = msg.write
+    w("### ADK回撤穿越参考提醒\n")
+    if not compact:
+        w(
+            "定位: 下面两条只进警示板，不进入正式ADK仓位、收益或净值曲线；"
+            "用于提示回撤穿越候选规则是否需要人工复核。\n"
+        )
+    original_status = _adk_drawdown_watch_status(
+        cn_dk_result,
+        CN_DK_DD_WARNING_ORIGINAL_THRESHOLD,
+        CN_DK_DD_WARNING_ORIGINAL_COOLDOWN_DAYS,
+        "原始ADK",
+    )
+    w(_format_adk_drawdown_watch_line(original_status))
+    w(
+        "- 16腿叠加ADK回撤警示: 口径为V7.7 ADK Top-1信号 + 16腿横向一致性否决"
+        "（做多端不能被其他腿做空，做空端不能被其他腿做多）；"
+        f"参考阈值 -{CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD:.0%} / "
+        f"从上方跌破后参考停止交易{CN_DK_DD_WARNING_CONSENSUS16_COOLDOWN_DAYS}个交易日；"
+        f"当前已停止天数需按16腿叠加净值单独复核；"
+        f"冷却结束后可恢复交易，需DD回到-{CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD:.0%}上方后才会重新进入可触发状态；"
+        "仅警示，不改变ADK仓位、收益和净值曲线。\n"
+    )
+
+
+def _write_volume_warning_panel(msg, compact=False, cn_dk_result=None, consensus16_result=None):
     w = msg.write
     expected_date = _warning_feature_expected_date()
     w("### 成交额风险提醒\n")
@@ -3182,6 +3323,12 @@ def _write_volume_warning_panel(msg, compact=False):
     except Exception as exc:
         suffix = "" if compact else f" 原因: {_short_error(exc)}"
         w(f"- 微盘成交额参考提示: **UNKNOWN** | 本次未取到中证2000/创业板成交额，无法确认参考提示条件。{suffix}\n")
+    _write_adk_drawdown_warning_panel(
+        msg,
+        cn_dk_result,
+        compact=compact,
+        consensus16_result=consensus16_result,
+    )
     w("\n---\n\n")
 
 def _write_suba_non_momentum_threshold_alert(msg, cn_result, idx=-1, prefix=""):
@@ -10418,7 +10565,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_volume_warning_panel(msg, compact=True)
+            _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
             _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w(f"### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n")
@@ -11009,7 +11156,7 @@ class CombinedStrategyV77(CombinedStrategyBase):
                         w(f" | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)")
                     w("\n")
             w("\n---\n\n")
-            _write_volume_warning_panel(msg, compact=False)
+            _write_volume_warning_panel(msg, compact=False, cn_dk_result=cn_dk_result)
             _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
             us_close_bj = beijing_time_str(us_date, "US", "close")
             w(f"### Sub-B: 官方宏观门控{SUBB_V75_OFFICIAL_WEIGHT:.0%} + EMA同池候选{SUBB_V75_EMA_WEIGHT:.0%}(EWMA波动率)\n")
