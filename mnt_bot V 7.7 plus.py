@@ -429,8 +429,6 @@ CN_DK_SAME_SIDE_OVERHEAT_EXIT = 0.18
 CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
 CN_DK_DD_WARNING_ORIGINAL_THRESHOLD = 0.07
 CN_DK_DD_WARNING_ORIGINAL_COOLDOWN_DAYS = 3
-CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD = 0.05
-CN_DK_DD_WARNING_CONSENSUS16_COOLDOWN_DAYS = 8
 
 
 def _dk_score_decay_status_text():
@@ -3235,15 +3233,6 @@ def _write_adk_drawdown_warning_panel(msg, cn_dk_result, compact=False, consensu
         "原始ADK",
     )
     w(_format_adk_drawdown_watch_line(original_status))
-    w(
-        "- 16腿叠加ADK回撤警示: 口径为V7.7 ADK Top-1信号 + 16腿横向一致性否决"
-        "（做多端不能被其他腿做空，做空端不能被其他腿做多）；"
-        f"参考阈值 -{CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD:.0%} / "
-        f"从上方跌破后参考停止交易{CN_DK_DD_WARNING_CONSENSUS16_COOLDOWN_DAYS}个交易日；"
-        f"当前已停止天数需按16腿叠加净值单独复核；"
-        f"冷却结束后可恢复交易，需DD回到-{CN_DK_DD_WARNING_CONSENSUS16_THRESHOLD:.0%}上方后才会重新进入可触发状态；"
-        "仅警示，不改变ADK仓位、收益和净值曲线。\n"
-    )
 
 
 def _write_volume_warning_panel(msg, compact=False, cn_dk_result=None, consensus16_result=None):

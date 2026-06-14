@@ -24,6 +24,14 @@ from typing import Iterable, Optional, Union
 
 import pandas as pd
 
+
+class _OnlineSignalFrameRef:
+    def __init__(self, frame: pd.DataFrame) -> None:
+        self.frame = frame
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
 try:
     import requests
 except Exception:  # pragma: no cover - Poe/local environments without requests
@@ -113,8 +121,19 @@ BJ_TZ = timezone(timedelta(hours=8))
 ANNUAL_DAYS = 242.0
 ONE_WAY_COST_BPS = 5
 EXECUTION_TIMING = "T收盘信号 -> T+1按收盘到收盘价差收益执行，已含单边5bps成本"
-ONLINE_FETCH_LOOKBACK_BARS = 420
+ONLINE_FETCH_LOOKBACK_BARS = 5000
 ONLINE_REBUILD_LOOKBACK_BARS = 260
+MIN_ANNUALIZED_METRIC_ROWS = 60
+SNAPSHOT_SCORE_ABS_TOL = 0.5
+SNAPSHOT_SCORE_REL_TOL = 0.10
+LEGACY_RELATIVE_SCORE_KEYS = {
+    "forward_zz1000_hs300",
+    "reverse_hs300_zz1000",
+    "forward_cyb_hs300",
+    "reverse_hs300_cyb",
+    "forward_zz1000_sz50",
+    "reverse_sz50_zz1000",
+}
 
 STATE_SNAPSHOT = {
     "forward_zz1000_hs300": {"as_of": "2026-06-12", "values": {"nav": 2.774600617908, "nav_high": 2.932931431918, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -26.297305895275}},
@@ -675,7 +694,7 @@ FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overhe
                                              'family': 'low_abs',
                                              'scale': 0.5,
                                              'series': 'zz1000_amount',
-                                             'source': 'D:\\动量策略\\A股美股动量组合策略\\outputs\\adk_zz1000_hs300_amount_csindex.csv',
+                                             'source': 'CSIndex official amount export',
                                              'threshold': 1.0,
                                              'timing': 'T close amount condition shifted to T+1 execution',
                                              'window': 40},
@@ -776,6 +795,7 @@ FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overhe
                         'direction': 'long ZZ500 / short SZ50',
                         'formal_start': '2007-01-15',
                         'momentum_decay': {'decay_threshold': 0.45,
+                                           'basis': 'score',
                                            'enabled': True,
                                            'recovery_threshold': 0.9,
                                            'scale': 0.0,
@@ -809,6 +829,7 @@ FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overhe
                        'display_name': '沪深300/创业板 反向',
                        'formal_start': '2010-06-01',
                        'momentum_decay': {'decay_threshold': 0.7,
+                                          'basis': 'score',
                                           'enabled': True,
                                           'recovery_threshold': 0.8,
                                           'scale': 0.0,
@@ -888,6 +909,7 @@ FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overhe
                       'direction': 'long SZ50 / short CYB',
                       'formal_start': '2010-06-01',
                       'momentum_decay': {'decay_threshold': 0.3,
+                                         'basis': 'score',
                                          'enabled': True,
                                          'recovery_threshold': 0.8,
                                          'scale': 0.0,
@@ -981,6 +1003,7 @@ FALLBACK_STRATEGY_METAS: dict[str, dict] = {'forward_cyb_hs300': {'amount_overhe
                         'direction': 'long SZ50 / short ZZ500',
                         'formal_start': '2007-01-15',
                         'momentum_decay': {'decay_threshold': 0.3,
+                                           'basis': 'score_strength',
                                            'enabled': True,
                                            'recovery_threshold': 0.8,
                                            'scale': 0.25,
@@ -1204,7 +1227,7 @@ def _embedded_artifacts() -> dict[str, bytes]:
     return out
 
 _BOT_SETTINGS = SettingsResponse(
-    allow_attachments=True,
+    allow_attachments=False,
     introduction_message="POE ADK spread bot (live/official signals for forward/reverse pairs)."
 )
 poe.update_settings(_BOT_SETTINGS)
@@ -1264,18 +1287,35 @@ def canonicalize_meta(meta: dict) -> dict:
     if "volhot_overlay" in out and "vol_overheat" not in out:
         out["vol_overheat"] = dict(out["volhot_overlay"]) if isinstance(out["volhot_overlay"], dict) else out["volhot_overlay"]
 
+    decay = out.get("momentum_decay")
+    if isinstance(decay, dict):
+        decay = dict(decay)
+        if "basis" not in decay:
+            strategy_id = str(out.get("strategy_id") or "")
+            timing = str(decay.get("timing") or "").lower()
+            if strategy_id == "final_sz50_zz500_score0_abs80_tv16_decay030_scorehot18_zz500amthot_w60_thr1p2_scale0p25":
+                decay["basis"] = "score_strength"
+            elif "score-strength" in timing or "score strength" in timing:
+                decay["basis"] = "score_strength"
+            elif "score-peak" in timing or "score peak" in timing:
+                decay["basis"] = "score"
+        out["momentum_decay"] = decay
+
     return out
 
 
 def load_meta(config: StrategyConfig) -> dict:
     try:
         payload = json.loads(_artifact_bytes(config.metrics_file).decode("utf-8"))
-        return canonicalize_meta(payload.get("meta", payload))
+        meta = canonicalize_meta(payload.get("meta", payload))
     except FileNotFoundError:
         meta = FALLBACK_STRATEGY_METAS.get(config.key)
         if meta is None:
             raise
-        return canonicalize_meta(meta)
+        meta = canonicalize_meta(meta)
+    if "score_formula" not in meta:
+        meta["score_formula"] = "legacy_relative_slope_10000" if config.key in LEGACY_RELATIVE_SCORE_KEYS else "weighted_slope"
+    return meta
 
 
 def load_strategy_curves() -> dict[str, pd.DataFrame]:
@@ -1820,6 +1860,28 @@ def _bias_momentum_for_live(close: pd.Series, bias_ma: int, mom_day: int, weight
     denom = sum(w * (v - x_bar) ** 2 for w, v in zip(weights, x))
     values: list[float] = []
     for end in range(len(bias)):
+        window = bias.iloc[end - int(mom_day) + 1 : end + 1]
+        if len(window) < int(mom_day) or window.isna().any() or denom <= 0:
+            values.append(math.nan)
+            continue
+        y = [float(v) for v in window]
+        y_bar = sum(w * v for w, v in zip(weights, y)) / weight_sum
+        slope = sum(w * (xv - x_bar) * (yv - y_bar) for w, xv, yv in zip(weights, x, y)) / denom
+        values.append(slope * int(mom_day) * 100.0)
+    return pd.Series(values, index=close.index)
+
+
+def _legacy_bias_momentum_for_live(close: pd.Series, bias_ma: int, mom_day: int, weight_end: float) -> pd.Series:
+    close = pd.to_numeric(close, errors="coerce").sort_index()
+    ma = close.rolling(int(bias_ma)).mean()
+    bias = close / ma.replace(0, math.nan)
+    weights = [1.0 + (float(weight_end) - 1.0) * i / max(int(mom_day) - 1, 1) for i in range(int(mom_day))]
+    weight_sum = sum(weights)
+    x = list(range(int(mom_day)))
+    x_bar = sum(w * v for w, v in zip(weights, x)) / weight_sum
+    denom = sum(w * (v - x_bar) ** 2 for w, v in zip(weights, x))
+    values: list[float] = []
+    for end in range(len(bias)):
         if end + 1 < int(bias_ma) + int(mom_day):
             values.append(math.nan)
             continue
@@ -1831,6 +1893,46 @@ def _bias_momentum_for_live(close: pd.Series, bias_ma: int, mom_day: int, weight
         y_bar = sum(w * v for w, v in zip(weights, y)) / weight_sum
         slope = sum(w * (xv - x_bar) * (yv - y_bar) for w, xv, yv in zip(weights, x, y)) / denom
         values.append(slope / float(window.iloc[0]) * 10000.0)
+    return pd.Series(values, index=close.index)
+
+
+def _score_formula(meta: dict) -> str:
+    signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
+    value = signal.get("score_formula") or meta.get("score_formula")
+    if value in (None, ""):
+        return "weighted_slope"
+    return str(value)
+
+
+def _bias_momentum_score_for_live(close: pd.Series, bias_ma: int, mom_day: int, weight_end: float, meta: dict) -> pd.Series:
+    if _score_formula(meta) == "legacy_relative_slope_10000":
+        return _legacy_bias_momentum_for_live(close, bias_ma=bias_ma, mom_day=mom_day, weight_end=weight_end)
+    return _bias_momentum_for_live(close, bias_ma=bias_ma, mom_day=mom_day, weight_end=weight_end)
+
+
+def _bias_momentum_r2_for_live(close: pd.Series, bias_ma: int, mom_day: int, weight_end: float) -> pd.Series:
+    close = pd.to_numeric(close, errors="coerce").sort_index()
+    ma = close.rolling(int(bias_ma)).mean()
+    bias = close / ma.replace(0, math.nan)
+    weights = [1.0 + (float(weight_end) - 1.0) * i / max(int(mom_day) - 1, 1) for i in range(int(mom_day))]
+    weight_sum = sum(weights)
+    x = list(range(int(mom_day)))
+    x_bar = sum(w * v for w, v in zip(weights, x)) / weight_sum
+    var_x = sum(w * (v - x_bar) ** 2 for w, v in zip(weights, x)) / weight_sum
+    values: list[float] = []
+    for end in range(len(bias)):
+        window = bias.iloc[end - int(mom_day) + 1 : end + 1]
+        if len(window) < int(mom_day) or window.isna().any() or var_x <= 0:
+            values.append(math.nan)
+            continue
+        y = [float(v) for v in window]
+        y_bar = sum(w * v for w, v in zip(weights, y)) / weight_sum
+        cov = sum(w * (xv - x_bar) * (yv - y_bar) for w, xv, yv in zip(weights, x, y)) / weight_sum
+        var_y = sum(w * (yv - y_bar) ** 2 for w, yv in zip(weights, y)) / weight_sum
+        if var_y <= 0:
+            values.append(math.nan)
+            continue
+        values.append(min(max((cov * cov) / (var_x * var_y), 0.0), 1.0))
     return pd.Series(values, index=close.index)
 
 
@@ -2038,9 +2140,11 @@ def _live_probe_for_strategy(
     mom_day = int(signal.get("mom_day") or 20)
     weight_end = float(signal.get("weight_end") or 1.0)
     score_threshold = float(signal.get("score_threshold") or 0.0)
-    score = _bias_momentum_for_live(close, bias_ma=bias_ma, mom_day=mom_day, weight_end=weight_end)
+    score = _bias_momentum_score_for_live(close, bias_ma=bias_ma, mom_day=mom_day, weight_end=weight_end, meta=meta)
+    r2 = _bias_momentum_r2_for_live(close, bias_ma=bias_ma, mom_day=mom_day, weight_end=weight_end)
     latest_date = score.dropna().index[-1] if not score.dropna().empty else close.index[-1]
     latest_score = float(score.reindex(close.index).iloc[-1]) if pd.notna(score.reindex(close.index).iloc[-1]) else math.nan
+    latest_r2 = float(r2.reindex(close.index).iloc[-1]) if pd.notna(r2.reindex(close.index).iloc[-1]) else math.nan
     abs_day = _signal_abs_day(signal)
     abs_threshold = signal.get("abs_threshold")
     abs_mom = math.nan
@@ -2053,7 +2157,9 @@ def _live_probe_for_strategy(
         else:
             abs_pass = False
     score_pass = math.isfinite(latest_score) and latest_score > score_threshold
-    target = 1.0 if score_pass and abs_pass else 0.0
+    r2_threshold = _signal_r2_threshold(signal)
+    r2_pass = True if r2_threshold is None else math.isfinite(latest_r2) and latest_r2 >= r2_threshold
+    target = 1.0 if score_pass and r2_pass and abs_pass else 0.0
     vol_section = _vol_overlay_section(meta)
     vol_window = vol_section.get("window")
     vol_value = math.nan
@@ -2071,6 +2177,8 @@ def _live_probe_for_strategy(
         "short_asset": short_asset,
         "score": latest_score,
         "score_threshold": score_threshold,
+        "r2": latest_r2,
+        "r2_threshold": r2_threshold if r2_threshold is not None else math.nan,
         "abs_mom": abs_mom,
         "abs_threshold": float(abs_threshold) if abs_threshold not in (None, "") else math.nan,
         "target": target,
@@ -2096,7 +2204,14 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     ratio = price[long_asset] / price[short_asset]
     close = ratio / float(ratio.iloc[0])
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
-    score = _bias_momentum_for_live(
+    score = _bias_momentum_score_for_live(
+        close,
+        bias_ma=int(signal.get("bias_ma") or 60),
+        mom_day=int(signal.get("mom_day") or 20),
+        weight_end=float(signal.get("weight_end") or 1.0),
+        meta=meta,
+    )
+    r2 = _bias_momentum_r2_for_live(
         close,
         bias_ma=int(signal.get("bias_ma") or 60),
         mom_day=int(signal.get("mom_day") or 20),
@@ -2107,9 +2222,10 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     out[short_asset] = price[short_asset]
     out["spread_close"] = close
     out["score"] = score
+    out["r2"] = r2
     score_threshold = float(signal.get("score_threshold") or 0.0)
     out["score_strength"] = (score - score_threshold).clip(lower=0.0)
-    out["raw_signal"] = _online_target_series(close, score, meta)
+    out["raw_signal"] = _online_target_series(close, score, meta, r2=r2)
     for asset in legs:
         amount_col = f"{asset}_amount"
         if amount_col in panel.columns:
@@ -2167,10 +2283,84 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     return out
 
 
-def _online_target_series(close: pd.Series, score: pd.Series, meta: dict) -> pd.Series:
+def snapshot_score_diffs(
+    panel: pd.DataFrame,
+    metas: Optional[dict[str, dict]] = None,
+    *,
+    tolerance: Optional[float] = None,
+) -> list[dict[str, object]]:
+    metas = metas or load_strategy_metas()
+    rows: list[dict[str, object]] = []
+    for config in STRATEGIES:
+        snapshot = STATE_SNAPSHOT.get(config.key, {})
+        values = snapshot.get("values", {}) if isinstance(snapshot.get("values", {}), dict) else {}
+        if "score" not in values:
+            continue
+        meta = metas[config.key] if config.key in metas else load_meta(config)
+        as_of_raw = snapshot.get("as_of")
+        snapshot_score = _safe_float(values.get("score"))
+        base_row: dict[str, object] = {
+            "key": config.key,
+            "display_name": config.display_name,
+            "as_of": str(as_of_raw or ""),
+            "score_formula": _score_formula(meta),
+            "snapshot_score": snapshot_score,
+            "recomputed_score": math.nan,
+            "abs_diff": math.nan,
+            "status": "missing_as_of",
+        }
+        if not as_of_raw:
+            rows.append(base_row)
+            continue
+        signal_frame = _online_signal_frame_for_strategy(config, meta, panel)
+        if signal_frame.empty or "score" not in signal_frame.columns:
+            base_row["status"] = "missing_signal"
+            rows.append(base_row)
+            continue
+        as_of = pd.Timestamp(as_of_raw).normalize()
+        index = pd.DatetimeIndex(signal_frame.index)
+        matches = index[index.normalize() == as_of]
+        if len(matches) == 0:
+            base_row["status"] = "as_of_not_in_panel"
+            rows.append(base_row)
+            continue
+        recomputed_score = _safe_float(signal_frame.loc[matches[-1], "score"])
+        abs_diff = abs(recomputed_score - snapshot_score) if math.isfinite(recomputed_score) and math.isfinite(snapshot_score) else math.nan
+        effective_tolerance = (
+            float(tolerance)
+            if tolerance is not None
+            else max(SNAPSHOT_SCORE_ABS_TOL, SNAPSHOT_SCORE_REL_TOL * abs(snapshot_score if math.isfinite(snapshot_score) else 0.0))
+        )
+        base_row.update(
+            {
+                "recomputed_score": recomputed_score,
+                "abs_diff": abs_diff,
+                "status": "ok" if math.isfinite(abs_diff) and abs_diff <= effective_tolerance else "mismatch",
+            }
+        )
+        rows.append(base_row)
+    return rows
+
+
+def _signal_r2_threshold(signal: dict) -> Optional[float]:
+    if not isinstance(signal, dict) or signal.get("r2_filter") is False:
+        return None
+    value = signal.get("r2_threshold")
+    if value in (None, ""):
+        return None
+    return float(value)
+
+
+def _online_target_series(close: pd.Series, score: pd.Series, meta: dict, r2: Optional[pd.Series] = None) -> pd.Series:
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
     threshold = float(signal.get("score_threshold") or 0.0)
     target = score > threshold
+    r2_threshold = _signal_r2_threshold(signal)
+    if r2_threshold is not None:
+        if r2 is None:
+            target &= False
+        else:
+            target &= pd.to_numeric(r2, errors="coerce") >= r2_threshold
     abs_day = _signal_abs_day(signal)
     abs_threshold = signal.get("abs_threshold")
     if abs_day not in (None, "") and abs_threshold not in (None, ""):
@@ -2232,6 +2422,7 @@ def _online_gate_and_multiplier(
     meta: dict,
     signal_frame: pd.DataFrame,
     curve_so_far: pd.DataFrame,
+    decay_state_frame: Optional[pd.DataFrame] = None,
 ) -> float:
     multiplier = 1.0
     state_idx = signal_frame.index[signal_frame.index < idx]
@@ -2240,7 +2431,9 @@ def _online_gate_and_multiplier(
 
     nav = meta.get("nav_defense", {}) if isinstance(meta.get("nav_defense", {}), dict) else {}
     if nav.get("enabled"):
-        dd, _nav_col = _nav_drawdown_value(curve_so_far)
+        dd = _nav_drawdown_from_state_row(prev_row)
+        if not math.isfinite(dd):
+            dd, _nav_col = _nav_drawdown_value(curve_so_far)
         gate = math.isfinite(dd) and dd <= -abs(_safe_float(_threshold_from_section(nav), 0.0))
         row["nav_defense_gate"] = 1.0 if gate else 0.0
         row["base_nav_defense_gate"] = row["nav_defense_gate"]
@@ -2317,7 +2510,7 @@ def _online_gate_and_multiplier(
 
     decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
     if decay.get("enabled"):
-        _apply_online_decay_state(row, signal_frame, pd.Timestamp(as_of), meta)
+        _apply_online_decay_state(row, signal_frame, pd.Timestamp(as_of), meta, state_frame=decay_state_frame)
         gate = _safe_float(row.get("decay_gate"))
         mult = _safe_float(row.get("decay_mult", row.get("decay_scale")))
         if math.isfinite(gate) and abs(gate) > 1e-12 and math.isfinite(mult):
@@ -2332,20 +2525,28 @@ def _fill_online_execution_row(
     curve_so_far: pd.DataFrame,
     meta: dict,
     signal_frame: pd.DataFrame,
+    decay_state_frame: Optional[pd.DataFrame] = None,
+    target_series: Optional[pd.Series] = None,
+    vol_series: Optional[pd.Series] = None,
 ) -> dict:
     if idx not in signal_frame.index:
         return row
     spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
-    target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta)
+    if target_series is None:
+        r2_series = pd.to_numeric(signal_frame["r2"], errors="coerce") if "r2" in signal_frame.columns else None
+        target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta, r2=r2_series)
     target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
     tv_window = int(target_vol.get("target_vol_window") or 20)
-    vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+    if vol_series is None:
+        vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
     if curve_so_far.empty:
         row["target"] = 0.0
         row["exec_signal"] = 0.0
         row["base_gross_exposure"] = 0.0
         row["base_nav"] = 1.0
+        row["base_nav_high"] = 1.0
         row["nav_decay_nav"] = 1.0
+        row["nav_decay_nav_high"] = 1.0
         row["base_target_vol_raw_scale"] = 1.0
         row["target_vol_raw_scale"] = 1.0
         row["base_target_vol_scale"] = 1.0
@@ -2360,6 +2561,7 @@ def _fill_online_execution_row(
         row["turnover"] = 0.0
         row["return"] = 0.0
         row["nav"] = 1.0
+        row["nav_high"] = 1.0
         return row
 
     prev_idx = curve_so_far.index[-1]
@@ -2380,9 +2582,15 @@ def _fill_online_execution_row(
     if not math.isfinite(prev_base_nav):
         prev_base_nav = 1.0
     base_nav = prev_base_nav * (1.0 + base_return)
+    prev_base_nav_high = _first_numeric(prev_row, ("base_nav_high", "nav_decay_nav_high", "nav_high", "base_nav", "nav_decay_nav", "nav"))
+    if not math.isfinite(prev_base_nav_high):
+        prev_base_nav_high = prev_base_nav
+    base_nav_high = max(prev_base_nav_high, base_nav)
     row["base_gross_exposure"] = base_exposure
     row["base_nav"] = base_nav
+    row["base_nav_high"] = base_nav_high
     row["nav_decay_nav"] = base_nav
+    row["nav_decay_nav_high"] = base_nav_high
     row["base_target_vol_raw_scale"] = raw_scale
     row["target_vol_raw_scale"] = raw_scale
     row["base_target_vol_scale"] = target_scale
@@ -2392,7 +2600,7 @@ def _fill_online_execution_row(
     row["base_realized_vol"] = _previous_online_value(vol_series, idx + pd.Timedelta(nanoseconds=1))
     row["realized_vol"] = row["base_realized_vol"]
 
-    multiplier = _online_gate_and_multiplier(idx, row, prev_row, meta, signal_frame, curve_so_far)
+    multiplier = _online_gate_and_multiplier(idx, row, prev_row, meta, signal_frame, curve_so_far, decay_state_frame=decay_state_frame)
     exposure = base_exposure * multiplier
     prev_exposure = _first_numeric(prev_row, ("gross_exposure",))
     if not math.isfinite(prev_exposure):
@@ -2403,12 +2611,16 @@ def _fill_online_execution_row(
     prev_nav = _first_numeric(prev_row, ("nav",))
     if not math.isfinite(prev_nav):
         prev_nav = 1.0
+    prev_nav_high = _first_numeric(prev_row, ("nav_high", "nav"))
+    if not math.isfinite(prev_nav_high):
+        prev_nav_high = prev_nav
     row["gross_exposure"] = exposure
     row["gross_return"] = gross_return
     row["cost"] = cost
     row["turnover"] = abs(exposure - prev_exposure)
     row["return"] = net_return
     row["nav"] = prev_nav * (1.0 + net_return)
+    row["nav_high"] = max(prev_nav_high, row["nav"])
     return row
 
 
@@ -2433,6 +2645,7 @@ def _extend_curves_with_online_prices(
         if price.empty or curve.empty:
             refreshed[config.key] = curve
             continue
+        decay_state_frame = _online_decay_state_frame(online_signal, metas.get(config.key, {}))
         last_date = pd.Timestamp(curve.index[-1]).normalize()
         price = price.loc[price.index >= last_date]
         if len(price) < 2 or pd.Timestamp(price.index[-1]).normalize() <= last_date:
@@ -2472,10 +2685,12 @@ def _extend_curves_with_online_prices(
                 [curve, pd.DataFrame([r for _, r in rows], index=pd.DatetimeIndex([d for d, _ in rows]))],
                 axis=0,
             ).sort_index()
-            row = _fill_online_execution_row(idx, row, curve_so_far, metas.get(config.key, {}), online_signal)
+            row = _fill_online_execution_row(idx, row, curve_so_far, metas.get(config.key, {}), online_signal, decay_state_frame=decay_state_frame)
             rows.append((idx, row))
         extra = pd.DataFrame([row for _, row in rows], index=pd.DatetimeIndex([idx for idx, _ in rows]))
-        refreshed[config.key] = pd.concat([curve, extra], axis=0).sort_index()
+        rebuilt = pd.concat([curve, extra], axis=0).sort_index()
+        rebuilt.attrs["online_signal_frame"] = _OnlineSignalFrameRef(online_signal)
+        refreshed[config.key] = rebuilt
     return refreshed
 
 
@@ -2496,31 +2711,53 @@ def _build_curves_from_online_prices(
         if signal_frame.empty or "spread_close" not in signal_frame.columns:
             curves[config.key] = pd.DataFrame()
             continue
+        decay_state_frame = _online_decay_state_frame(signal_frame, meta)
 
         spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
+        r2_series = pd.to_numeric(signal_frame["r2"], errors="coerce") if "r2" in signal_frame.columns else None
+        target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta, r2=r2_series)
+        target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
+        tv_window = int(target_vol.get("target_vol_window") or 20)
+        vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
         valid_index = signal_frame.loc[spread.notna()].index
         tail_index = list(valid_index if full_history else valid_index[-ONLINE_REBUILD_LOOKBACK_BARS:])
         rows: list[tuple[pd.Timestamp, dict]] = [] if full_history else _snapshot_seed_rows(config, signal_frame)
         if rows:
             seed_date = rows[-1][0]
             tail_index = [idx for idx in tail_index if pd.Timestamp(idx) > seed_date]
+        prev_date: Optional[pd.Timestamp] = rows[-1][0] if rows else None
+        prev_row: Optional[dict] = rows[-1][1] if rows else None
         for idx in tail_index:
             signal_row = signal_frame.loc[idx]
             row = signal_row.to_dict()
             is_provisional = provisional_date is not None and pd.Timestamp(idx).normalize() == provisional_date
             row["online_rebuilt_bar"] = 1.0
             row["online_provisional_bar"] = 1.0 if is_provisional else 0.0
-            curve_so_far = pd.DataFrame(
-                [prior for _, prior in rows],
-                index=pd.DatetimeIndex([date for date, _ in rows]),
+            if prev_date is None or prev_row is None:
+                curve_so_far = pd.DataFrame()
+            else:
+                curve_so_far = pd.DataFrame([prev_row], index=pd.DatetimeIndex([prev_date]))
+            row = _fill_online_execution_row(
+                pd.Timestamp(idx),
+                row,
+                curve_so_far,
+                meta,
+                signal_frame,
+                decay_state_frame=decay_state_frame,
+                target_series=target_series,
+                vol_series=vol_series,
             )
-            row = _fill_online_execution_row(pd.Timestamp(idx), row, curve_so_far, meta, signal_frame)
-            rows.append((pd.Timestamp(idx), row))
+            idx = pd.Timestamp(idx)
+            rows.append((idx, row))
+            prev_date = idx
+            prev_row = row
 
-        curves[config.key] = pd.DataFrame(
+        built = pd.DataFrame(
             [row for _, row in rows],
             index=pd.DatetimeIndex([idx for idx, _ in rows]),
         ).sort_index()
+        built.attrs["online_signal_frame"] = _OnlineSignalFrameRef(signal_frame)
+        curves[config.key] = built
     return curves
 
 
@@ -2610,8 +2847,8 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
         else:
-            curves = _build_curves_from_online_prices(metas, panel, full_history=False)
-            data_mode = "online_rebuild_recent_performance"
+            curves = _build_curves_from_online_prices(metas, panel, full_history=True)
+            data_mode = "online_rebuild_full_performance"
         online = {**online_meta, "ok": True, "error": None, "data_mode": data_mode}
     except Exception as exc:
         if not curves:
@@ -2702,11 +2939,17 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
     rows = int(len(returns))
     final_nav = float(nav.iloc[-1])
     period_return = final_nav - 1.0
-    ann_return = final_nav ** (ANNUAL_DAYS / max(rows, 1)) - 1.0
-    ann_vol = float(returns.std(ddof=0) * math.sqrt(ANNUAL_DAYS)) if rows > 1 else 0.0
     max_dd = float(drawdown(nav).min())
-    sharpe = ann_return / ann_vol if ann_vol > 1e-12 else math.nan
-    calmar = ann_return / abs(max_dd) if abs(max_dd) > 1e-12 else math.nan
+    if rows >= MIN_ANNUALIZED_METRIC_ROWS:
+        ann_return = final_nav ** (ANNUAL_DAYS / max(rows, 1)) - 1.0
+        ann_vol = float(returns.std(ddof=0) * math.sqrt(ANNUAL_DAYS)) if rows > 1 else math.nan
+        sharpe = ann_return / ann_vol if ann_vol > 1e-12 else math.nan
+        calmar = ann_return / abs(max_dd) if abs(max_dd) > 1e-12 else math.nan
+    else:
+        ann_return = math.nan
+        ann_vol = math.nan
+        sharpe = math.nan
+        calmar = math.nan
     return {
         "start": curve.index[0].strftime("%Y-%m-%d"),
         "end": curve.index[-1].strftime("%Y-%m-%d"),
@@ -2807,16 +3050,20 @@ def render_performance(query: str, combo: bool = False) -> str:
         note = f"{len(STRATEGIES)}个子策略按在线重建日收益统计；各子策略保留自身正式样本起点。"
 
     start, end, label = parse_date_range(query, shared_index)
-    if label == "全样本" and str(online.get("data_mode", "")).startswith("online_rebuild_recent"):
-        label = f"Poe最近窗口（约{ONLINE_REBUILD_LOOKBACK_BARS}个交易日）"
+    if label == "全样本":
+        data_mode = str(online.get("data_mode", ""))
+        if data_mode.startswith("online_rebuild_recent"):
+            label = f"Poe最近窗口（约{ONLINE_REBUILD_LOOKBACK_BARS}个交易日）"
+        elif data_mode == "online_rebuild_full_performance":
+            label = f"Poe在线价格窗口（约{ONLINE_FETCH_LOOKBACK_BARS}个交易日）"
     rows = [(display, metrics_for_curve(_slice_curve(curves_to_report[key], start, end))) for key, display in order]
     lines = [heading, "", f"- 查询区间: **{label}** ({start:%Y-%m-%d} 至 {end:%Y-%m-%d})", f"- 口径: {note}"]
     if online.get("ok"):
         latest = max((df.index.max() for df in curves.values() if not df.empty), default=end)
         lines.append(f"- 在线刷新: **成功**（{online.get('mode', 'daily')}，最新 {latest:%Y-%m-%d}，抓取 {online.get('fetched_at', 'N/A')}）")
-        if str(online.get("data_mode", "")).startswith("online_rebuild_recent"):
-            lines.append("- 数据来源: Poe 在线最近窗口重建（Sina/EastMoney/Tencent 公开指数日线 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
-            lines.append("- 注意: 该口径用于 Poe 在线展示，不代表本地正式长期回测。")
+        if str(online.get("data_mode", "")).startswith("online_rebuild"):
+            lines.append("- 数据来源: Poe 在线窗口重建（Sina/EastMoney/Tencent 公开指数日线 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
+            lines.append("- 注意: 该口径用于 Poe 在线展示，不代表本地正式长期回测；NAV 在在线窗口起点重置为 1.0。")
     elif online.get("error"):
         lines.append(f"- 在线刷新: **失败**；原因: `{online.get('error')}`")
     lines.append("")
@@ -3265,6 +3512,17 @@ def _nav_drawdown_value(curve: pd.DataFrame) -> tuple[float, str]:
     return last / high - 1.0, nav_col
 
 
+def _nav_drawdown_from_state_row(row: pd.Series) -> float:
+    for nav_col in ("base_nav", "nav_decay_nav", "nav"):
+        nav = _safe_float(row.get(nav_col))
+        high = _safe_float(row.get(f"{nav_col}_high"))
+        if not math.isfinite(high):
+            high = _safe_float(row.get("nav_high"))
+        if math.isfinite(nav) and math.isfinite(high) and high > 0:
+            return nav / high - 1.0
+    return math.nan
+
+
 def _score_history_series(curve: pd.DataFrame, row: pd.Series) -> pd.Series:
     for col in ("score", "base_score", "signal_score"):
         if col not in curve.columns:
@@ -3354,115 +3612,109 @@ def _score_strength_peak_decay_ratio(curve: pd.DataFrame, row: pd.Series) -> flo
     return last_ratio
 
 
-def _strict_active_decay_state(
-    score: pd.Series,
-    active: pd.Series,
-    as_of: pd.Timestamp,
-    decay: dict,
-) -> tuple[float, float, float]:
-    decay_ratio = _safe_float(_decay_threshold(decay))
-    recovery_ratio = _safe_float(_decay_recovery_threshold(decay))
-    confirm_days = int(_safe_float(decay.get("confirm_days"), 1.0))
-    scale = _scale_from_section(decay)
-    if not math.isfinite(decay_ratio) or not math.isfinite(recovery_ratio):
-        return math.nan, math.nan, scale
+def _series_until_row(series: pd.Series, row: pd.Series) -> pd.Series:
+    series = pd.to_numeric(series, errors="coerce")
+    row_name = getattr(row, "name", None)
+    if row_name is None or row_name not in series.index:
+        return series
+    try:
+        loc = series.index.get_loc(row_name)
+    except (KeyError, TypeError):
+        return series
+    if isinstance(loc, slice):
+        return series.iloc[: loc.stop]
+    if isinstance(loc, int):
+        return series.iloc[: loc + 1]
+    return series
 
-    frame = pd.DataFrame({"score": pd.to_numeric(score, errors="coerce"), "active": active.astype(float)})
-    frame = frame.loc[frame.index <= as_of]
-    if frame.empty:
-        return math.nan, math.nan, scale
 
-    peak = math.nan
-    in_decay = False
-    need_new_peak = False
-    below_count = 0
-    last_ratio = math.nan
+def _positive_peak_ratio_for_display(series: pd.Series, row: pd.Series) -> float:
+    history = _series_until_row(series, row).dropna()
+    if history.empty:
+        return math.nan
+    current = _safe_float(history.iloc[-1])
+    if not math.isfinite(current):
+        return math.nan
+    positive = history[history > 0.0]
+    if positive.empty or current <= 0.0:
+        return 0.0
+    peak = _safe_float(positive.max())
+    if not math.isfinite(peak) or peak <= 1e-12:
+        return math.nan
+    return max(0.0, current / peak)
 
-    for _, item in frame.iterrows():
-        is_active = _safe_float(item.get("active"), 0.0) > 0.5
-        cur_score = _safe_float(item.get("score"))
-        if (not is_active) or (not math.isfinite(cur_score)) or cur_score <= 0.0:
-            peak = math.nan
-            in_decay = False
-            need_new_peak = False
-            below_count = 0
-            continue
 
-        if not math.isfinite(peak):
-            peak = cur_score
-            in_decay = False
-            need_new_peak = False
-            below_count = 0
-        elif cur_score > peak:
-            peak = cur_score
-            if need_new_peak:
-                need_new_peak = False
-
-        ratio = cur_score / peak if peak > 0 else math.nan
-        if math.isfinite(ratio):
-            last_ratio = ratio
-
-        if in_decay:
-            if ratio >= recovery_ratio:
-                in_decay = False
-                need_new_peak = True
-                below_count = 0
-        elif not need_new_peak:
-            if ratio <= decay_ratio:
-                below_count += 1
-            else:
-                below_count = 0
-            if below_count >= max(confirm_days, 1):
-                in_decay = True
+def _realtime_decay_ratio_for_display(curve: pd.DataFrame, row: pd.Series, meta: dict) -> float:
+    decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
+    if not decay.get("enabled"):
+        return math.nan
+    source = curve.attrs.get("online_signal_frame") if isinstance(getattr(curve, "attrs", None), dict) else None
+    if isinstance(source, _OnlineSignalFrameRef):
+        source = source.frame
+    frame = source if isinstance(source, pd.DataFrame) and not source.empty else curve
+    mode = _online_decay_mode(frame, decay)
+    if mode == "score_strength":
+        if "score_strength" in frame.columns:
+            strength = pd.to_numeric(frame["score_strength"], errors="coerce")
         else:
-            below_count = 0
+            score = pd.to_numeric(frame["score"], errors="coerce").dropna() if "score" in frame.columns else _score_history_series(curve, row)
+            threshold = _safe_float((meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}).get("score_threshold"))
+            if score.empty or not math.isfinite(threshold):
+                return math.nan
+            strength = (score - threshold).clip(lower=0.0)
+        return _positive_peak_ratio_for_display(strength, row)
 
-    gate = 1.0 if in_decay else 0.0
-    mult = scale if in_decay else 1.0
-    return last_ratio, gate, mult
+    score = pd.to_numeric(frame["score"], errors="coerce").dropna() if "score" in frame.columns else _score_history_series(curve, row)
+    return _positive_peak_ratio_for_display(score, row)
 
 
-def _generic_score_peak_decay_state(score: pd.Series, as_of: pd.Timestamp, decay: dict) -> tuple[float, float, float]:
-    decay_threshold = _safe_float(_decay_threshold(decay))
-    recovery_threshold = _safe_float(_decay_recovery_threshold(decay))
-    scale = _scale_from_section(decay)
-    if not math.isfinite(decay_threshold):
-        return math.nan, math.nan, scale
-    if not math.isfinite(recovery_threshold):
-        recovery_threshold = decay_threshold
+def _online_decay_state_for_display(curve: pd.DataFrame, row: pd.Series, meta: dict) -> tuple[float, float, float, bool]:
+    source = curve.attrs.get("online_signal_frame") if isinstance(getattr(curve, "attrs", None), dict) else None
+    if isinstance(source, _OnlineSignalFrameRef):
+        source = source.frame
+    frame = source if isinstance(source, pd.DataFrame) and not source.empty else curve
+    if frame.empty:
+        return math.nan, math.nan, math.nan, True
+    try:
+        states = _online_decay_state_frame(frame, meta)
+    except Exception:
+        return math.nan, math.nan, math.nan, True
+    row_name = getattr(row, "name", None)
+    if states.empty or row_name is None:
+        return math.nan, math.nan, math.nan, True
+    if row_name in states.index:
+        state_row = states.loc[row_name]
+    elif isinstance(states.index, pd.DatetimeIndex):
+        prior_idx = states.index[states.index <= row_name]
+        if len(prior_idx) == 0:
+            return math.nan, math.nan, math.nan, True
+        state_row = states.loc[prior_idx[-1]]
+    else:
+        return math.nan, math.nan, math.nan, True
+    active = True
+    if row_name in frame.index:
+        active_value = _first_numeric(frame.loc[row_name], ("raw_signal", "target", "exec_signal"))
+        if math.isfinite(active_value):
+            active = active_value > 0.5
+    return _safe_float(state_row.get("ratio")), _safe_float(state_row.get("gate")), _safe_float(state_row.get("mult")), active
 
-    hist = pd.to_numeric(score.loc[score.index <= as_of], errors="coerce").dropna()
-    if hist.empty:
-        return math.nan, math.nan, scale
 
-    score_peak: Optional[float] = None
-    derisk_next = False
-    waiting_for_new_peak = False
-    rearm_peak: Optional[float] = None
-    last_ratio = math.nan
-
-    for value in hist:
-        cur_score = float(value)
-        score_peak = cur_score if score_peak is None else max(score_peak, cur_score)
-        ratio = cur_score / score_peak if score_peak is not None and score_peak > 1e-12 else math.nan
-        if math.isfinite(ratio):
-            last_ratio = ratio
-
-        if waiting_for_new_peak and rearm_peak is not None and score_peak is not None and score_peak > rearm_peak + 1e-12:
-            waiting_for_new_peak = False
-            rearm_peak = None
-
-        if derisk_next:
-            if math.isfinite(ratio) and ratio >= recovery_threshold:
-                derisk_next = False
-                waiting_for_new_peak = True
-                rearm_peak = score_peak
-        elif not waiting_for_new_peak and math.isfinite(ratio) and ratio <= decay_threshold:
-            derisk_next = True
-
-    gate = 1.0 if derisk_next else 0.0
-    mult = scale if derisk_next else 1.0
-    return last_ratio, gate, mult
+def _online_decay_ratio_for_display(curve: pd.DataFrame, row: pd.Series, meta: dict) -> float:
+    try:
+        states = _online_decay_state_frame(curve, meta)
+    except Exception:
+        return math.nan
+    if states.empty or "ratio" not in states.columns:
+        return math.nan
+    row_name = getattr(row, "name", None)
+    if row_name in states.index:
+        return _safe_float(states.loc[row_name, "ratio"])
+    if row_name is not None:
+        prior = states.loc[states.index <= row_name, "ratio"] if isinstance(states.index, pd.DatetimeIndex) else pd.Series(dtype=float)
+    else:
+        prior = states["ratio"]
+    prior = pd.to_numeric(prior, errors="coerce").dropna()
+    return float(prior.iloc[-1]) if not prior.empty else math.nan
 
 
 def _online_decay_active_series(signal_frame: pd.DataFrame, meta: dict) -> pd.Series:
@@ -3470,7 +3722,26 @@ def _online_decay_active_series(signal_frame: pd.DataFrame, meta: dict) -> pd.Se
         return pd.Series(1.0, index=signal_frame.index)
     spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
     score = pd.to_numeric(signal_frame["score"], errors="coerce")
-    return _online_target_series(spread, score, meta)
+    r2 = pd.to_numeric(signal_frame["r2"], errors="coerce") if "r2" in signal_frame.columns else None
+    return _online_target_series(spread, score, meta, r2=r2)
+
+
+def _online_decay_mode(signal_frame: pd.DataFrame, decay: dict) -> str:
+    basis = str(decay.get("basis") or decay.get("peak_basis") or "").strip().lower()
+    if basis in {"score_strength", "strength"}:
+        return "score_strength"
+    if basis in {"score", "raw_score", "score_peak"}:
+        return "score_peak_warmup"
+    if any(key in decay for key in ("decay_ratio", "recovery_ratio", "derisk_scale")):
+        return "strict_score_peak"
+    timing = str(decay.get("timing") or "").lower()
+    if "score-strength" in timing or "score strength" in timing:
+        return "score_strength"
+    if "score-peak" in timing or "score peak" in timing:
+        return "score_peak_warmup"
+    if "score_strength" in signal_frame.columns and "warmup_days" in decay:
+        return "score_strength"
+    return "generic_score_peak"
 
 
 def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.DataFrame:
@@ -3478,7 +3749,8 @@ def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.Data
     if not decay.get("enabled") or "score" not in signal_frame.columns:
         return pd.DataFrame(index=signal_frame.index)
     score = pd.to_numeric(signal_frame["score"], errors="coerce")
-    if "score_strength" in signal_frame.columns:
+    mode = _online_decay_mode(signal_frame, decay)
+    if mode == "score_strength":
         strength = pd.to_numeric(signal_frame["score_strength"], errors="coerce")
         if "raw_signal" in signal_frame.columns:
             active = pd.to_numeric(signal_frame["raw_signal"], errors="coerce").fillna(0.0)
@@ -3520,16 +3792,18 @@ def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.Data
             ratios.append(ratio)
             gates.append(1.0 if in_decay else 0.0)
             mults.append(scale if in_decay else 1.0)
-    elif "decay_ratio" in decay:
+    elif mode in {"strict_score_peak", "score_peak_warmup"}:
         active = _online_decay_active_series(signal_frame, meta)
         decay_ratio = _safe_float(_decay_threshold(decay))
         recovery_ratio = _safe_float(_decay_recovery_threshold(decay))
         confirm_days = int(_safe_float(decay.get("confirm_days"), 1.0))
+        warmup_days = int(_safe_float(decay.get("warmup_days", confirm_days), float(confirm_days)))
         scale = _scale_from_section(decay)
         peak = math.nan
         in_decay = False
         need_new_peak = False
         below_count = 0
+        active_days = 0
         ratios: list[float] = []
         gates: list[float] = []
         mults: list[float] = []
@@ -3542,32 +3816,45 @@ def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.Data
                 in_decay = False
                 need_new_peak = False
                 below_count = 0
+                active_days = 0
             else:
                 if not math.isfinite(peak):
                     peak = cur_score
                     in_decay = False
                     need_new_peak = False
                     below_count = 0
+                    active_days = 0
                 elif cur_score > peak:
                     peak = cur_score
                     if need_new_peak:
                         need_new_peak = False
                 ratio = cur_score / peak if peak > 0 else math.nan
 
-                if in_decay:
-                    if ratio >= recovery_ratio:
-                        in_decay = False
-                        need_new_peak = True
-                        below_count = 0
-                elif not need_new_peak:
-                    if ratio <= decay_ratio:
-                        below_count += 1
+                if mode == "score_peak_warmup":
+                    active_days += 1
+                    if active_days >= max(warmup_days, 1):
+                        if in_decay:
+                            if ratio >= recovery_ratio:
+                                in_decay = False
+                                # Warmup score-peak scans re-arm on the recovery bar; strict decay_ratio configs wait for a fresh peak.
+                                peak = cur_score
+                        elif ratio <= decay_ratio:
+                            in_decay = True
+                else:
+                    if in_decay:
+                        if ratio >= recovery_ratio:
+                            in_decay = False
+                            need_new_peak = True
+                            below_count = 0
+                    elif not need_new_peak:
+                        if ratio <= decay_ratio:
+                            below_count += 1
+                        else:
+                            below_count = 0
+                        if below_count >= max(confirm_days, 1):
+                            in_decay = True
                     else:
                         below_count = 0
-                    if below_count >= max(confirm_days, 1):
-                        in_decay = True
-                else:
-                    below_count = 0
             ratios.append(ratio)
             gates.append(1.0 if in_decay else 0.0)
             mults.append(scale if in_decay else 1.0)
@@ -3776,8 +4063,11 @@ def _overlay_detail_rows(
             and dd_value > -abs(threshold_value)
         ):
             note = "当前NAV仅参考"
+        gate_text = _gate_text(gate) if math.isfinite(gate) else "静态未导出"
+        if note:
+            gate_text = "执行期触发"
         parts = [
-            _gate_text(gate) if math.isfinite(gate) else "静态未导出",
+            gate_text,
             f"回撤 {pct(dd_value)} / 条件 ≤ -{_pct_abs_threshold(_threshold_from_section(nav))}",
             f"{_effect_text(gate, scale)}",
             note,
@@ -3835,23 +4125,49 @@ def _overlay_detail_rows(
     decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
     if decay.get("enabled"):
         gate = _first_numeric_with_history(curve, row, ("decay_gate", "base_decay_gate", "decay_on"))
+        decision_ratio, state_gate, _state_mult, state_active = _online_decay_state_for_display(curve, row, meta)
         current_cols = ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux")
         has_current_decay_col = any(col in row.index for col in current_cols)
-        current = _first_numeric(row, current_cols) if has_current_decay_col else _first_numeric_with_history(curve, row, current_cols)
-        if not math.isfinite(current):
-            strength_ratio = _score_strength_peak_decay_ratio(curve, row)
-            current = strength_ratio if math.isfinite(strength_ratio) else _score_peak_decay_ratio(curve, row)
+        reference_ratio = _realtime_decay_ratio_for_display(curve, row, meta)
+        exported_ratio = _first_numeric(row, current_cols) if has_current_decay_col else _first_numeric_with_history(curve, row, current_cols)
+        if not math.isfinite(decision_ratio) and not math.isfinite(reference_ratio):
+            decision_ratio = exported_ratio
+        if not math.isfinite(decision_ratio) and not math.isfinite(reference_ratio):
+            state_ratio = _online_decay_ratio_for_display(curve, row, meta)
+            if math.isfinite(state_ratio):
+                decision_ratio = state_ratio
+            else:
+                strength_ratio = _score_strength_peak_decay_ratio(curve, row)
+                reference_ratio = strength_ratio if math.isfinite(strength_ratio) else _score_peak_decay_ratio(curve, row)
         scale = _scale_from_section(decay)
         mult = _first_numeric_with_history(curve, row, ("decay_mult", "decay_scale"))
+        display_ratio = reference_ratio if math.isfinite(reference_ratio) else decision_ratio
+        if state_active and math.isfinite(display_ratio):
+            gate = _infer_gate_from_threshold(display_ratio, _decay_threshold(decay), "<=")
+            mult = _scale_from_section(decay) if _gate_triggered(gate) else 1.0
+        elif not state_active:
+            gate = 0.0
+            mult = 1.0
         if not math.isfinite(gate) and math.isfinite(mult):
             gate = 0.0 if abs(mult - 1.0) < 1e-12 else 1.0
         if not math.isfinite(gate):
-            gate = _infer_gate_from_threshold(current, _decay_threshold(decay), "<=")
+            gate_basis = display_ratio if math.isfinite(display_ratio) else math.nan
+            gate = _infer_gate_from_threshold(gate_basis, _decay_threshold(decay), "<=")
+        ratio_parts: list[str] = []
+        if math.isfinite(display_ratio):
+            ratio_parts.append(f"动量衰减比 {num(display_ratio, 3)}")
+        else:
+            ratio_parts.append("动量衰减比不可计算")
+        if not state_active:
+            ratio_parts.append("基础信号未激活")
+        gate_text = "静态未导出"
+        if math.isfinite(gate):
+            gate_text = "未触发" if abs(gate) <= 1e-12 else "执行期触发"
         rows.append((
             "动量衰减",
             _detail_join([
-                _gate_text(gate) if math.isfinite(gate) else "静态未导出",
-                f"当前 {num(current, 3)}",
+                gate_text,
+                *ratio_parts,
                 f"衰减 {num(_decay_threshold(decay), 3)} / 恢复 {num(_decay_recovery_threshold(decay), 3)}",
                 f"d{_confirm_days(decay)}",
                 _effect_text(gate, scale),
@@ -4050,6 +4366,38 @@ def _amount_gate_override_from_probe(probe: Optional[dict]) -> Optional[bool]:
     return None
 
 
+def _row_with_current_decay_display(curve: pd.DataFrame, row: pd.Series, meta: dict) -> pd.Series:
+    out = row.copy()
+    decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
+    if not decay.get("enabled"):
+        return out
+    state_ratio, _state_gate, _state_mult, active = _online_decay_state_for_display(curve, row, meta)
+    ratio = _realtime_decay_ratio_for_display(curve, row, meta)
+    if not math.isfinite(ratio):
+        ratio = state_ratio
+    if not active:
+        for col in ("decay_gate", "base_decay_gate", "decay_on"):
+            out[col] = 0.0
+        for col in ("decay_mult", "decay_scale"):
+            out[col] = 1.0
+        if math.isfinite(ratio):
+            for col in ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux"):
+                out[col] = ratio
+        return out
+    gate = _infer_gate_from_threshold(ratio, _decay_threshold(decay), "<=")
+    mult = _scale_from_section(decay) if _gate_triggered(gate) else 1.0
+    if math.isfinite(gate):
+        for col in ("decay_gate", "base_decay_gate", "decay_on"):
+            out[col] = gate
+    if math.isfinite(mult):
+        for col in ("decay_mult", "decay_scale"):
+            out[col] = mult
+    if math.isfinite(ratio):
+        for col in ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux"):
+            out[col] = ratio
+    return out
+
+
 def _strategy_signal_snapshot(
     config: StrategyConfig,
     curve: pd.DataFrame,
@@ -4068,6 +4416,7 @@ def _strategy_signal_snapshot(
         candidate = online.get("probes", {}).get(config.key)  # type: ignore[assignment]
         if isinstance(candidate, dict):
             probe = candidate
+    display_row = _row_with_current_decay_display(confirmed_curve, row, meta)
 
     sample_end = confirmed_curve.index[-1].strftime("%Y-%m-%d")
     sample_start = confirmed_curve.index[0].strftime("%Y-%m-%d")
@@ -4098,10 +4447,10 @@ def _strategy_signal_snapshot(
     if math.isfinite(base_after_tv) and abs(base_after_tv) > 1e-12:
         overlay_multiplier = exposure / base_after_tv
     if not math.isfinite(overlay_multiplier):
-        overlay_multiplier = _current_overlay_multiplier(row, meta, amount_gate_override)
+        overlay_multiplier = _current_overlay_multiplier(display_row, meta, amount_gate_override)
     if not math.isfinite(overlay_multiplier):
         overlay_multiplier = math.nan
-    current_overlay_multiplier = _current_overlay_multiplier(row, meta, amount_gate_override)
+    current_overlay_multiplier = _current_overlay_multiplier(display_row, meta, amount_gate_override)
     if not math.isfinite(current_overlay_multiplier):
         current_overlay_multiplier = overlay_multiplier
 
@@ -4144,7 +4493,7 @@ def _strategy_signal_snapshot(
         if _target_vol_deadband(tv) not in (None, ""):
             tv_text += f"；deadband {'触发' if math.isfinite(suppressed) and suppressed > 0 else '未触发'}"
 
-    detail_rows = _overlay_detail_rows(confirmed_curve, row, meta, probe=probe, live=live)
+    detail_rows = _overlay_detail_rows(confirmed_curve, display_row, meta, probe=probe, live=live)
     detail_lines = [f"{name}：{detail}" for name, detail in detail_rows]
     target_label = "本期target"
     signal_label = "本期信号"
@@ -4160,7 +4509,7 @@ def _strategy_signal_snapshot(
         "basic_exec": f"上期执行：**{effective_status}**；{signal_label}：**{signal_status}**；本期执行：**{post_close_status}**",
         "tv": tv_text,
         "formula": formula,
-        "overlay_summary": _overlay_summary(row, amount_gate_override),
+        "overlay_summary": _overlay_summary(display_row, amount_gate_override),
         "overlay_detail": "；".join(detail_lines),
         "overlay_rows": detail_rows,
     }
@@ -4211,21 +4560,40 @@ def render_signal(live: bool = False) -> str:
 
     required = [config.key for config in STRATEGIES]
     missing = [key for key in required if key not in curves or curves[key].empty or key not in metas]
-    if missing:
+    available_pair_count = sum(
+        1
+        for _pair_key, _pair_display, forward_key, reverse_key in PAIR_DEFS
+        if forward_key not in missing and reverse_key not in missing
+    )
+    if missing and available_pair_count == 0:
         return (
             f"{title}\n\n"
             f"- 在线重建失败: `{online.get('error', 'unknown')}`\n"
             f"- 缺失策略数: {len(missing)} / {len(required)}\n"
             "- 当前 Poe 版本不读取本地正式 artifacts；需要在线行情成功后才能生成信号。\n"
         )
+    if missing:
+        lines.append(f"- 部分策略缺失: {len(missing)} / {len(required)}；以下仅显示可在线重建的组合。")
+        if online.get("error"):
+            lines.append(f"- 缺失原因: `{online.get('error')}`")
+        lines.append("")
 
     configs = {config.key: config for config in STRATEGIES}
     for _pair_key, pair_display, forward_key, reverse_key in PAIR_DEFS:
+        pair_title = pair_display.replace(" 正反50/50", "")
+        pair_missing = [key for key in (forward_key, reverse_key) if key in missing]
+        if pair_missing:
+            lines.extend([
+                f"### {pair_title}",
+                "",
+                f"- 暂不可用: 缺失 `{', '.join(pair_missing)}`",
+                "",
+            ])
+            continue
         forward_config = configs[forward_key]
         reverse_config = configs[reverse_key]
         forward = _strategy_signal_snapshot(forward_config, curves[forward_key], metas[forward_key], online, live)
         reverse = _strategy_signal_snapshot(reverse_config, curves[reverse_key], metas[reverse_key], online, live)
-        pair_title = pair_display.replace(" 正反50/50", "")
         lines.extend([
             f"### {pair_title}",
             "",

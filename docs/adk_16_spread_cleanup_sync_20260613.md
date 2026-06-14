@@ -64,17 +64,18 @@
 
 - File under repair: `poe_adk_16_spread_v1_0_bot.py`.
 - Regression test file retained: `tests/test_poe_adk_16_spread_decay.py`.
-- Main goal: make the Poe version usable as an online-only recent-window signal bot without reading stale local artifacts, while preserving enough long-state seed data to avoid signal/state drift.
+- Main goal: make the Poe version usable as an online-only signal/performance bot without reading stale local artifacts, while preserving enough long-state seed data to avoid signal/state drift.
 
 ### Poe Routing And Online Rebuild
 
 - Default query and plain `信号` now route to `render_signal(live=True)`.
 - `历史信号` is routed before the plain signal branch and also uses the online context.
 - `POE_ONLINE_ONLY=True` means Poe signal/performance paths do not use local generated artifacts as their primary context.
-- Online rebuild uses a recent window rather than full-history rebuild:
-  - fetch lookback: `ONLINE_FETCH_LOOKBACK_BARS = 420`
+- Online rebuild uses public Sina/EastMoney/Tencent index data rather than local daily artifacts:
+  - fetch lookback: `ONLINE_FETCH_LOOKBACK_BARS = 5000` as of the 2026-06-14 10Y retest
   - rebuild lookback: `ONLINE_REBUILD_LOOKBACK_BARS = 260`
-- `load_performance_curves()` uses recent online rebuild and labels the report as `Poe最近窗口（约260个交易日）`, not full sample.
+- `load_strategy_context()` uses the recent online rebuild plus snapshot seed rows for live/signal display.
+- `load_performance_curves()` uses full available online price history without snapshot seed rows; the NAV is reset to `1.0` at the online window start and is not the local formal artifact NAV.
 
 ### Snapshot Seed Rows
 
@@ -150,6 +151,87 @@ Important signal correction:
 | 5Y | 23.88% / -14.05% | 16.88% / -11.67% | 14.73% / -14.37% | 17.83% / -10.90% |
 | 3Y | 25.35% / -14.05% | 18.07% / -11.67% | 17.66% / -12.94% | 19.28% / -10.90% |
 | 1Y | 23.97% / -14.05% | 22.11% / -10.80% | 24.24% / -9.23% | 25.95% / -10.90% |
+
+### V7.7 Plus Poe Online-5000 Overlay Rerun - 2026-06-14
+
+The Poe online fetch window was raised from `420` bars to `5000` bars and the online rebuild loop was optimized to avoid rebuilding the full curve on every bar. The practical measured price coverage became:
+
+- Common price window: `2014-10-17` to `2026-06-12`, `2833` common rows.
+- Constraint: `ZZ1000` starts on `2014-10-17`, so this is the correct full five-index formal start.
+- Price sources in this run: Sina `sh000852`, `sh000300`, `sz399006`, `sh000016`, `sh000905`, all ending `2026-06-12`.
+- V7.7 baseline source: `outputs/adk_v77_12_substrategy_overlay_pair_conflict_flat_20260612/v77_adk_before_daily.csv`.
+- V7.7 baseline sample used for overlay comparison: `2015-04-20` to `2026-06-12`, `2710` rows.
+
+Output folder:
+
+```text
+outputs/adk_v77_16_overlay_poe_online5000_20260614
+```
+
+Retest headline metrics:
+
+| Window | V7.7 baseline Ann / MaxDD | direct16 Ann / MaxDD | transitive16 Ann / MaxDD | consensus16 Ann / MaxDD |
+|---|---:|---:|---:|---:|
+| Full | 18.09% / -21.32% | 15.59% / -15.31% | 17.15% / -17.74% | 15.36% / -15.30% |
+| 10Y | 20.11% / -15.49% | 17.59% / -11.53% | 19.51% / -13.74% | 17.86% / -9.96% |
+| 5Y | 23.88% / -14.05% | 17.13% / -9.59% | 18.65% / -13.74% | 16.22% / -8.05% |
+| 3Y | 25.35% / -14.05% | 19.63% / -7.99% | 23.88% / -10.98% | 18.50% / -7.78% |
+| 1Y | 23.97% / -14.05% | 26.78% / -7.78% | 31.53% / -7.54% | 32.75% / -7.78% |
+
+Definitions:
+
+- `direct16`: for each forward/reverse directed pair, allow the active side; if both sides are active, keep the side with larger `gross_exposure`; ties are flat.
+- `transitive16`: start from `direct16` edges, then apply transitive closure across `SZ50 / HS300 / ZZ500 / ZZ1000 / CYB`. If `A > B` and `B > C`, allow `A > C`.
+- `consensus16`: start from `direct16` edges, but allow held leg `A/B` only if no other active edge shorts `A` and no other active edge longs `B`.
+
+#### Transitive-Consensus Hybrid
+
+The 2026-06-14 hybrid test combines the two concepts instead of treating them as mutually exclusive:
+
+1. Use `transitive16` to expand the candidate allowed legs.
+2. Apply a consensus-style veto to each candidate `A/B`: block it if another active edge shorts `A` or longs `B`.
+
+Two implementations were checked:
+
+- `tc_direct_veto`: transitive candidates plus veto from original `direct16` edges.
+- `tc_closure_veto`: transitive candidates plus veto from the transitive closure itself.
+
+For the actual V7.7 held legs in this run, both variants produced the same result: `1090` blocked days.
+
+Hybrid output files:
+
+- `window_metrics_with_transitive_consensus.csv`
+- `transitive_consensus_direct_veto_allowed_daily.csv`
+- `transitive_consensus_closure_veto_allowed_daily.csv`
+- `v77_adk_after_transitive_consensus_direct_veto_daily.csv`
+- `v77_adk_after_transitive_consensus_closure_veto_daily.csv`
+
+Hybrid headline metrics:
+
+| Window | V7.7 baseline Ann / MaxDD | transitive16 Ann / MaxDD | consensus16 Ann / MaxDD | transitive-consensus Ann / MaxDD |
+|---|---:|---:|---:|---:|
+| Full | 18.09% / -21.32% | 17.15% / -17.74% | 15.36% / -15.30% | 16.62% / -16.66% |
+| 10Y | 20.11% / -15.49% | 19.51% / -13.74% | 17.86% / -9.96% | 19.53% / -11.19% |
+| 5Y | 23.88% / -14.05% | 18.65% / -13.74% | 16.22% / -8.05% | 17.30% / -11.19% |
+| 3Y | 25.35% / -14.05% | 23.88% / -10.98% | 18.50% / -7.78% | 22.06% / -9.86% |
+| 1Y | 23.97% / -14.05% | 31.53% / -7.54% | 32.75% / -7.78% | 37.66% / -6.58% |
+
+Interpretation:
+
+- Raising Poe online fetch to `5000` makes the online 16-leg overlay testable across Full / 10Y / 5Y / 3Y / 1Y windows, with the formal five-index start constrained by `ZZ1000`.
+- Long-window overlays primarily reduce drawdown while sacrificing annualized return versus the V7.7 baseline.
+- The 1Y window is materially different: all tested overlays improve both annualized return and max drawdown versus baseline.
+- The transitive-consensus hybrid is a plausible next research candidate because it preserves more of `transitive16`'s return than pure `consensus16`, while tightening drawdown relative to pure `transitive16` in the recent windows.
+
+Verification on 2026-06-14:
+
+```powershell
+python -m pytest tests/test_poe_adk_16_spread_decay.py -q
+python -m py_compile "poe_adk_16_spread_v1_0_bot.py"
+git diff --check
+```
+
+Observed result after test cleanup: `51 passed, 1 warning`; `py_compile` passed; `git diff --check` passed with LF/CRLF normalization warnings only.
 
 ### Net-NAV Drawdown Cooldown Retest
 
