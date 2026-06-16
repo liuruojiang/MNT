@@ -1,0 +1,7 @@
+window,start,end,rows,available,ann_return,max_drawdown,total_return,volatility,sharpe_like,reason
+Full formal,2023-08-11,2026-06-12,685.0,True,0.6645422026243459,-0.11284228484013448,3.243102956537551,0.2942614185214218,2.258339560665063,
+Last 10Y,2016-06-12,2026-06-12,,False,,,,,,formal sample starts 2023-08-11 due to latest required publication/availability date
+Last 5Y,2021-06-12,2026-06-12,,False,,,,,,formal sample starts 2023-08-11 due to latest required publication/availability date
+Last 3Y,2023-06-12,2026-06-12,,False,,,,,,formal sample starts 2023-08-11 due to latest required publication/availability date
+Last 1Y,2025-06-12,2026-06-12,244.0,True,0.9480881943745705,-0.11284228484013448,0.947199225707779,0.25431059611098944,3.7280719280796064,
+Diagnostic output-full (not formal),2015-02-10,2026-06-12,2754.0,True,0.3355097559258511,-0.24727071056124938,25.556575424401462,0.22413901539045333,,diagnostic only: includes windows before one or more publication dates / possible vendor backfill

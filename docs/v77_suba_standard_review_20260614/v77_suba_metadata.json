@@ -1,0 +1,170 @@
+{
+  "script": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.7 plus.py",
+  "generated_at": "2026-06-14T18:31:57",
+  "formal_start": "2023-08-11",
+  "formal_end": "2026-06-12",
+  "latest_required_publication_date": "2023-08-11",
+  "publication_dates": {
+    "1.930955": "2017-05-26",
+    "0.399006": "2010-06-01",
+    "1.000016": "2004-01-02",
+    "1.000852": "2014-10-17",
+    "1.000905": "2007-01-15",
+    "1.H11077": "2013-03-07",
+    "2.932000": "2023-08-11"
+  },
+  "params": {
+    "CN_BIAS_N": 60,
+    "CN_MOM_DAY": 20,
+    "CN_R2_WINDOW": 20,
+    "CN_R2_THRESHOLD": 0.15,
+    "CN_BIAS_MOM_WEIGHT_END": 3.0,
+    "CN_ABS_MOM_DAY": 20,
+    "CN_ABS_MOM_THRESHOLD": 0.02,
+    "CN_TARGET_VOL": 0.3,
+    "CN_VOL_WINDOW": 80,
+    "CN_MAX_LEV": 1.5,
+    "CN_MIN_LEV": 0.1,
+    "CN_COMMISSION": 0.001,
+    "CN_SA_CASH_OVERLAY_ENABLED": false,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENABLED": true,
+    "CN_SA_SAME_SIDE_OVERHEAT_ENTER": 0.27,
+    "CN_SA_SAME_SIDE_OVERHEAT_EXIT": 0.24,
+    "CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE": 0.0,
+    "CN_SA_VOLUME_OVERLAY_ENABLED": true,
+    "CN_SA_VOLUME_RULE_NAME": "Sub-A amount OR: ZZ2000<MA20x3 or CYB<MA20x4; scale=0.00"
+  },
+  "data_availability": [
+    {
+      "code": "1.930955",
+      "name": "中证红利低波100",
+      "source": "csindex:930955",
+      "first_data": "2005-01-01",
+      "last_data": "2026-06-12",
+      "rows": 4966,
+      "publication_date": "2017-05-26"
+    },
+    {
+      "code": "0.399006",
+      "name": "创业板",
+      "source": "Sina",
+      "first_data": "2010-06-01",
+      "last_data": "2026-06-12",
+      "rows": 3892,
+      "publication_date": "2010-06-01"
+    },
+    {
+      "code": "1.000016",
+      "name": "上证50",
+      "source": "Sina",
+      "first_data": "2004-01-02",
+      "last_data": "2026-06-12",
+      "rows": 5449,
+      "publication_date": "2004-01-02"
+    },
+    {
+      "code": "1.000852",
+      "name": "中证1000",
+      "source": "Sina",
+      "first_data": "2014-10-17",
+      "last_data": "2026-06-12",
+      "rows": 2833,
+      "publication_date": "2014-10-17"
+    },
+    {
+      "code": "1.000905",
+      "name": "中证500",
+      "source": "Sina",
+      "first_data": "2005-01-04",
+      "last_data": "2026-06-12",
+      "rows": 5206,
+      "publication_date": "2007-01-15"
+    },
+    {
+      "code": "1.H11077",
+      "name": "10Y国债",
+      "source": "fetch_cn_kline via _add_cn_bond_column",
+      "first_data": "2014-10-17",
+      "last_data": "2026-06-12",
+      "rows": 2834,
+      "publication_date": "2013-03-07"
+    }
+  ],
+  "volume_meta": {
+    "error": null,
+    "formal_volume_ok": true,
+    "formal_error": null,
+    "first_feature": "2000-01-01",
+    "last_feature": "2026-06-12",
+    "rows": 3891,
+    "partial_unavailable_any": false,
+    "combined_unresolved_any": false,
+    "zz2000_source": "CSIndex official amount",
+    "cyb_source": "Sohu amount",
+    "zz2000_publication_date": "2023-08-11",
+    "cyb_publication_date": "2010-06-01"
+  },
+  "windows": [
+    {
+      "window": "Full formal",
+      "start": "2023-08-11",
+      "end": "2026-06-12",
+      "rows": 685,
+      "available": true,
+      "ann_return": 0.6645422026243459,
+      "max_drawdown": -0.11284228484013448,
+      "total_return": 3.243102956537551,
+      "volatility": 0.2942614185214218,
+      "sharpe_like": 2.258339560665063
+    },
+    {
+      "window": "Last 10Y",
+      "start": "2016-06-12",
+      "end": "2026-06-12",
+      "available": false,
+      "reason": "formal sample starts 2023-08-11 due to latest required publication/availability date"
+    },
+    {
+      "window": "Last 5Y",
+      "start": "2021-06-12",
+      "end": "2026-06-12",
+      "available": false,
+      "reason": "formal sample starts 2023-08-11 due to latest required publication/availability date"
+    },
+    {
+      "window": "Last 3Y",
+      "start": "2023-06-12",
+      "end": "2026-06-12",
+      "available": false,
+      "reason": "formal sample starts 2023-08-11 due to latest required publication/availability date"
+    },
+    {
+      "window": "Last 1Y",
+      "start": "2025-06-12",
+      "end": "2026-06-12",
+      "rows": 244,
+      "available": true,
+      "ann_return": 0.9480881943745705,
+      "max_drawdown": -0.11284228484013448,
+      "total_return": 0.947199225707779,
+      "volatility": 0.25431059611098944,
+      "sharpe_like": 3.7280719280796064
+    }
+  ],
+  "diagnostic": {
+    "window": "Diagnostic output-full (not formal)",
+    "start": "2015-02-10",
+    "end": "2026-06-12",
+    "available": true,
+    "reason": "diagnostic only: includes windows before one or more publication dates / possible vendor backfill",
+    "rows": 2754,
+    "ann_return": 0.3355097559258511,
+    "max_drawdown": -0.24727071056124938,
+    "total_return": 25.556575424401462,
+    "volatility": 0.22413901539045333
+  },
+  "fetch_messages": [
+    "  10Y国债: 2026-06-12 [csindex+Sina-proxy:1.000012]\n"
+  ],
+  "command": "inline import official mnt_bot V 7.7 plus.py and execute Sub-A chain from _run_strategies"
+}
