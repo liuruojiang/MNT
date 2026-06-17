@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +10,37 @@ def load_v78_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_fetch_us_yahoo_daily_dates_are_parsed_in_utc():
+    module = load_v78_module()
+    source = inspect.getsource(module._fetch_us_yahoo)
+
+    assert 'pd.Timestamp.fromtimestamp(ts, tz="UTC")' in source
+    assert "pd.Timestamp.fromtimestamp(ts).strftime" not in source
+
+
+def test_sp500_risk_regime_has_no_embedded_numeric_fallback(monkeypatch):
+    module = load_v78_module()
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_sp500_risk_regime_live_snapshot",
+        lambda: (_ for _ in ()).throw(RuntimeError("live unavailable")),
+    )
+
+    try:
+        module._load_sp500_risk_regime_snapshot(
+            search_paths=[],
+            live_fetch=True,
+            allow_embedded=True,
+        )
+    except RuntimeError as exc:
+        text = str(exc)
+    else:
+        raise AssertionError("embedded S&P risk snapshot should not provide stale numeric fallback")
+
+    assert "live unavailable" in text
 
 
 def test_realtime_cn_snapshot_stale_uses_v77_warning_instead_of_raising():
