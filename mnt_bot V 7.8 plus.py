@@ -597,7 +597,7 @@ V78_SUBB_BIAS_LABEL = "New B bias-level + SPY volume"
 V78_SUBB_LOGVOL_LABEL = "New B log-weighted vol-hot + SPY volume"
 V78_SUBA_EXECUTION_MODE = "component_net"
 V78_ADK_EXECUTION_MODE = "component_net_with_net_exposure_display"
-V78_SUBB_EXECUTION_MODE = "component_net_with_volreg_overlay"
+V78_SUBB_EXECUTION_MODE = "component_net_with_volreg_and_dbc_profit_guard"
 V78_SUBB_SPY_VOLUME_FAIL_MODE = "fail_closed"  # warn_open / fail_closed / raise
 V78_ADK_NEW_SCORE_HOT_ENTER = 80.0
 V78_ADK_NEW_SCORE_HOT_EXIT = 20.0
@@ -624,6 +624,14 @@ US_ROT_VOLREG_SHORT_W = 10      # 短期波动率窗口(交易日)
 US_ROT_VOLREG_LONG_W = 250      # 长期波动率窗口(交易日)
 US_ROT_VOLREG_THRESHOLD = 2.0   # 短/长波动率比进入阈值
 US_ROT_VOLREG_EXIT_THRESHOLD = 1.6  # 短/长波动率比退出阈值
+SUBB_DBC_PROFIT_GUARD_ENABLED = True
+SUBB_DBC_PROFIT_GUARD_ASSET = "DBC"
+SUBB_DBC_PROFIT_GUARD_CASH_ASSET = "BIL"
+SUBB_DBC_PROFIT_GUARD_RETAIN_L1 = 0.50
+SUBB_DBC_PROFIT_GUARD_RETAIN_L2 = 0.25
+SUBB_DBC_PROFIT_GUARD_SCALE_L1 = 0.67
+SUBB_DBC_PROFIT_GUARD_SCALE_L2 = 0.00
+SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT = 1e-6
 US_ROT_VOLREG_BACKTEST_NOTE = (
     "VolReg回测口径: 当前为整日cash/model return近似，"
     "尚未拆成旧仓隔夜+新仓日内open execution。"
@@ -3716,16 +3724,29 @@ def _fetch_us_yahoo(ticker, start_date="2003-01-01"):
     timestamps = result.get("timestamp", [])
     if not timestamps:
         raise ValueError("No timestamps")
-    quote = result["indicators"]["quote"][0]
-    adj = result["indicators"].get("adjclose", [{}])[0]
+    indicators = result["indicators"]
+    quote = indicators["quote"][0]
+    adj_blocks = indicators.get("adjclose")
+    if not adj_blocks or not adj_blocks[0]:
+        raise ValueError(f"{ticker} Yahoo adjusted close missing")
+    adj_close = adj_blocks[0].get("adjclose")
+    if adj_close is None:
+        raise ValueError(f"{ticker} Yahoo adjusted close missing")
+    if len(adj_close) != len(timestamps):
+        raise ValueError(
+            f"{ticker} Yahoo adjusted close length mismatch: "
+            f"adjusted={len(adj_close)}, timestamps={len(timestamps)}"
+        )
     rows = []
     for i, ts in enumerate(timestamps):
         dt = pd.Timestamp.fromtimestamp(ts, tz="UTC").strftime("%Y-%m-%d")
         c = quote["close"][i]
         o = quote["open"][i] if "open" in quote else None
-        ac = adj.get("adjclose", [None] * len(timestamps))[i] if adj else c
+        if c is None:
+            continue
+        ac = adj_close[i]
         if ac is None:
-            ac = c
+            raise ValueError(f"{ticker} Yahoo adjusted close missing at {dt}")
         if c is not None and ac is not None:
             # 用复权因子调整开盘价: adj_open = open * (adj_close / raw_close)
             adj_o = None
@@ -8348,6 +8369,55 @@ def _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, idx):
     w(f"\n假设今日是Sub-B调仓日，按上表目标执行；单边调整合计约 **{turnover:.1%}**。非信号日仅作参考，不生成正式调仓指令。\n")
 
 
+def _subb_guard_pct_text(value, signed=False):
+    if pd.isna(value):
+        return "N/A"
+    try:
+        value = float(value)
+    except Exception:
+        return "N/A"
+    return f"{value:+.2%}" if signed else f"{value:.2%}"
+
+
+def _write_subb_dbc_profit_guard_status(w, us_rot_result, idx=-1):
+    if (
+        not SUBB_DBC_PROFIT_GUARD_ENABLED
+        or us_rot_result is None
+        or len(us_rot_result) == 0
+        or "dbc_profit_guard_next_scale" not in us_rot_result.columns
+    ):
+        return
+    try:
+        row = us_rot_result.loc[idx] if idx in us_rot_result.index else us_rot_result.iloc[idx]
+    except Exception:
+        return
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    profit = row.get("dbc_profit_guard_profit", np.nan)
+    peak = row.get("dbc_profit_guard_peak_profit", np.nan)
+    retain = row.get("dbc_profit_guard_retain_ratio", np.nan)
+    today_scale = float(row.get("dbc_profit_guard_scale_today", 1.0) or 1.0)
+    next_scale = float(row.get("dbc_profit_guard_next_scale", today_scale) or today_scale)
+    raw_weight = float(row.get(f"pre_dbc_profit_guard_w_{asset}", row.get(f"w_{asset}", 0.0)) or 0.0)
+    final_weight = float(row.get(f"w_{asset}", 0.0) or 0.0)
+    target_weight = float(row.get(f"target_w_{asset}", final_weight) or 0.0)
+    target_shift = float(row.get("dbc_profit_guard_target_removed_weight", 0.0) or 0.0)
+    action = str(row.get("dbc_profit_guard_action", "") or "")
+    if action:
+        action_text = f" | action {action}"
+    elif next_scale < 1.0 - 1e-9:
+        action_text = " | action guard_on"
+    else:
+        action_text = " | action normal"
+    w(
+        f"**DBC/PDBC profit guard:** {_subb_dbc_profit_guard_rule_text()}; "
+        f"profit {_subb_guard_pct_text(profit, signed=True)}, peak {_subb_guard_pct_text(peak, signed=True)}, "
+        f"retain {_subb_guard_pct_text(retain)}; raw {raw_weight:.1%}, today scale {today_scale:.2f}, "
+        f"next scale {next_scale:.2f}, final {final_weight:.1%}, target {target_weight:.1%}, "
+        f"{cash_asset} shift {target_shift:.1%}{action_text}\n"
+    )
+
+
 def _write_v78_subb_param_tables(w):
     n_etfs = len(US_ROT_ASSETS)
     etf_labels = [f"{k}({v['label']})" for k, v in US_ROT_ASSETS.items()]
@@ -8363,6 +8433,8 @@ def _write_v78_subb_param_tables(w):
     w(f"| 目标年化波动率/最大杠杆 | **{US_ROT_TARGET_VOL:.0%} / {US_ROT_MAX_LEV:.1f}x** | 各腿按自己的波动率口径计算scale |\n")
     w(f"| 交易成本 | **{US_ROT_COMMISSION:.1%}** | 单边手续费 |\n")
     w(f"| 信号频率 | **周度** | 每周最后一个交易日(≤周四) |\n")
+    if SUBB_DBC_PROFIT_GUARD_ENABLED:
+        w(f"| DBC/PDBC profit guard | **on** | {_subb_dbc_profit_guard_rule_text()} |\n")
     if US_ROT_VOLREG_ENABLED:
         w(f"| VolReg风控 | **开启** | SPY短/长波动率比>{US_ROT_VOLREG_THRESHOLD}时转现金，低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
 
@@ -8905,6 +8977,350 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
     result["volreg_ratio"] = vol_ratio        # 当日收盘的ratio(未shift), 用于信号展示
     result["volreg_cash"]  = mask             # 当日是否因昨日信号已转现金
     return result
+
+
+def _subb_dbc_profit_guard_rule_text():
+    live = _ROT_PROXY_TO_LIVE.get(SUBB_DBC_PROFIT_GUARD_ASSET, SUBB_DBC_PROFIT_GUARD_ASSET)
+    return (
+        f"{live}/{SUBB_DBC_PROFIT_GUARD_ASSET}: retain<="
+        f"{SUBB_DBC_PROFIT_GUARD_RETAIN_L1:.0%} -> scale "
+        f"{SUBB_DBC_PROFIT_GUARD_SCALE_L1:.2f}; retain<="
+        f"{SUBB_DBC_PROFIT_GUARD_RETAIN_L2:.0%} -> scale "
+        f"{SUBB_DBC_PROFIT_GUARD_SCALE_L2:.2f}; moved weight -> "
+        f"{SUBB_DBC_PROFIT_GUARD_CASH_ASSET}"
+    )
+
+
+def _subb_dbc_profit_guard_scale_from_retain(retain_ratio):
+    if pd.isna(retain_ratio):
+        return 1.0, 0
+    retain_ratio = float(retain_ratio)
+    tol = 1e-9
+    if retain_ratio <= SUBB_DBC_PROFIT_GUARD_RETAIN_L2 + tol:
+        return SUBB_DBC_PROFIT_GUARD_SCALE_L2, 2
+    if retain_ratio <= SUBB_DBC_PROFIT_GUARD_RETAIN_L1 + tol:
+        return SUBB_DBC_PROFIT_GUARD_SCALE_L1, 1
+    return 1.0, 0
+
+
+def _subb_dbc_profit_guard_level_from_scale(scale):
+    try:
+        scale = float(scale)
+    except Exception:
+        return 0
+    if abs(scale - SUBB_DBC_PROFIT_GUARD_SCALE_L2) <= 1e-9:
+        return 2
+    if abs(scale - SUBB_DBC_PROFIT_GUARD_SCALE_L1) <= 1e-9:
+        return 1
+    return 0
+
+
+def _subb_price_return(asset, prev_prices, curr_prices):
+    if asset is None:
+        return 0.0
+    prev_px = prev_prices.get(asset, np.nan)
+    curr_px = curr_prices.get(asset, np.nan)
+    if pd.isna(prev_px) or pd.isna(curr_px) or float(prev_px) == 0.0:
+        return 0.0
+    return float(curr_px) / float(prev_px) - 1.0
+
+
+def _subb_price_value(asset, prices):
+    value = prices.get(asset, np.nan)
+    if pd.isna(value):
+        return np.nan
+    try:
+        return float(value)
+    except Exception:
+        return np.nan
+
+
+def _subb_weights_from_prefixes(row, prefixes, assets):
+    weights = {}
+    for asset in assets:
+        value = np.nan
+        for prefix in prefixes:
+            raw = row.get(f"{prefix}{asset}", np.nan)
+            if pd.notna(raw):
+                value = raw
+                break
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+
+def _apply_subb_dbc_profit_guard_scale_to_weights(weights, scale):
+    out = dict(weights or {})
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED:
+        return out
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    try:
+        scale = float(scale)
+    except Exception:
+        scale = 1.0
+    asset_weight = float(out.get(asset, 0.0) or 0.0)
+    if asset_weight <= 1e-12:
+        return out
+    final_weight = asset_weight * max(scale, 0.0)
+    removed_weight = asset_weight - final_weight
+    out[asset] = final_weight
+    out[cash_asset] = float(out.get(cash_asset, 0.0) or 0.0) + removed_weight
+    return out
+
+
+def _subb_dbc_profit_guard_latest_next_scale(us_rot_result):
+    if (
+        not SUBB_DBC_PROFIT_GUARD_ENABLED
+        or us_rot_result is None
+        or len(us_rot_result) == 0
+        or "dbc_profit_guard_next_scale" not in us_rot_result.columns
+    ):
+        return 1.0
+    value = us_rot_result["dbc_profit_guard_next_scale"].iloc[-1]
+    if pd.isna(value):
+        return 1.0
+    return float(value)
+
+
+def _subb_dbc_profit_guard_display_target_weights(us_rot_result, row_key=-1):
+    if (
+        not SUBB_DBC_PROFIT_GUARD_ENABLED
+        or us_rot_result is None
+        or len(us_rot_result) == 0
+        or "dbc_profit_guard_next_scale" not in us_rot_result.columns
+    ):
+        return None
+    try:
+        row = us_rot_result.loc[row_key] if row_key in us_rot_result.index else us_rot_result.iloc[row_key]
+    except Exception:
+        return None
+    assets = _weight_columns_assets(us_rot_result, prefixes=("target_w_", "w_", "actual_w_", "effective_w_"))
+    weights = _row_prefixed_weights(row, "target_w_", assets)
+    if not any(abs(v) > 1e-12 for v in weights.values()):
+        weights = _row_prefixed_weights(row, "w_", assets)
+    return weights
+
+
+def _subb_dbc_profit_guard_pending(row):
+    if row is None:
+        return False
+    try:
+        today = float(row.get("dbc_profit_guard_scale_today", 1.0) or 1.0)
+        nxt = float(row.get("dbc_profit_guard_next_scale", today) or today)
+        current_removed = float(row.get("dbc_profit_guard_removed_weight", 0.0) or 0.0)
+        target_removed = float(row.get("dbc_profit_guard_target_removed_weight", 0.0) or 0.0)
+    except Exception:
+        return False
+    return abs(nxt - today) > 1e-9 or abs(target_removed - current_removed) > 0.005
+
+
+def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None):
+    if (
+        not SUBB_DBC_PROFIT_GUARD_ENABLED
+        or us_rot_result is None
+        or len(us_rot_result) == 0
+        or close_df is None
+    ):
+        return us_rot_result
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    if asset not in close_df.columns:
+        return us_rot_result
+
+    result = us_rot_result.copy()
+    close_aligned = close_df.reindex(result.index)
+    assets = _weight_columns_assets(
+        result,
+        prefixes=("w_", "actual_w_", "target_w_", "model_w_", "effective_w_"),
+    )
+    for required_asset in (asset, cash_asset):
+        if required_asset not in assets:
+            assets.append(required_asset)
+    assets = sorted(assets)
+
+    base_return = pd.to_numeric(result["return"], errors="coerce").fillna(0.0)
+    scale_today = 1.0
+    prev_scale = 1.0
+    prev_pre_asset_weight = 0.0
+    wave_entry = np.nan
+    wave_peak_profit = 0.0
+
+    final_returns = []
+    pre_current_records = []
+    final_current_records = []
+    pre_target_records = []
+    final_target_records = []
+    scale_today_records = []
+    next_scale_records = []
+    level_today_records = []
+    next_level_records = []
+    entry_records = []
+    profit_records = []
+    peak_records = []
+    retain_records = []
+    removed_records = []
+    target_removed_records = []
+    turnover_records = []
+    cost_records = []
+    pending_records = []
+    action_records = []
+
+    for i, dt in enumerate(result.index):
+        row = result.iloc[i]
+        pre_current = _subb_weights_from_prefixes(row, ("w_", "effective_w_", "actual_w_"), assets)
+        pre_target = _subb_weights_from_prefixes(row, ("target_w_", "w_", "effective_w_", "actual_w_"), assets)
+        pre_asset_weight = max(float(pre_current.get(asset, 0.0) or 0.0), 0.0)
+
+        guard_turnover = 0.0
+        guard_cost = 0.0
+        adjusted_return = float(base_return.iloc[i])
+        if i > 0:
+            prev_dt = result.index[i - 1]
+            prev_close = close_aligned.loc[prev_dt]
+            cur_open = _us_open_row(dt, assets, us_open, close_aligned)
+            cur_close = close_aligned.loc[dt]
+            overnight_removed = max(prev_pre_asset_weight, 0.0) * max(1.0 - prev_scale, 0.0)
+            intraday_removed = pre_asset_weight * max(1.0 - scale_today, 0.0)
+            overnight_delta = overnight_removed * (
+                _subb_price_return(cash_asset, prev_close, cur_open)
+                - _subb_price_return(asset, prev_close, cur_open)
+            )
+            intraday_delta = intraday_removed * (
+                _subb_price_return(cash_asset, cur_open, cur_close)
+                - _subb_price_return(asset, cur_open, cur_close)
+            )
+            guard_turnover = pre_asset_weight * abs(scale_today - prev_scale)
+            guard_cost = guard_turnover * US_ROT_COMMISSION
+            adjusted_return = (1.0 + adjusted_return + overnight_delta + intraday_delta) * (1.0 - guard_cost) - 1.0
+
+        final_current = _apply_subb_dbc_profit_guard_scale_to_weights(pre_current, scale_today)
+        removed_weight = pre_asset_weight - float(final_current.get(asset, 0.0) or 0.0)
+
+        if pre_asset_weight <= 1e-12:
+            wave_entry = np.nan
+            wave_peak_profit = 0.0
+            profit = np.nan
+            retain_ratio = np.nan
+            next_scale = 1.0
+            next_level = 0
+        else:
+            cur_open = _us_open_row(dt, assets, us_open, close_aligned)
+            cur_close = close_aligned.loc[dt]
+            if pd.isna(wave_entry):
+                wave_entry = _subb_price_value(asset, cur_open)
+                if pd.isna(wave_entry) or wave_entry <= 0.0:
+                    wave_entry = _subb_price_value(asset, cur_close)
+            close_price = _subb_price_value(asset, cur_close)
+            profit = close_price / wave_entry - 1.0 if pd.notna(close_price) and pd.notna(wave_entry) and wave_entry > 0.0 else np.nan
+            if pd.notna(profit):
+                wave_peak_profit = max(wave_peak_profit, float(profit))
+            if wave_peak_profit > SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT and pd.notna(profit):
+                retain_ratio = float(profit) / wave_peak_profit
+                next_scale, next_level = _subb_dbc_profit_guard_scale_from_retain(retain_ratio)
+            else:
+                retain_ratio = np.nan
+                next_scale = 1.0
+                next_level = 0
+
+        final_target = _apply_subb_dbc_profit_guard_scale_to_weights(pre_target, next_scale)
+        pre_target_asset_weight = max(float(pre_target.get(asset, 0.0) or 0.0), 0.0)
+        target_removed_weight = pre_target_asset_weight - float(final_target.get(asset, 0.0) or 0.0)
+        pending = abs(next_scale - scale_today) > 1e-9 or abs(target_removed_weight - removed_weight) > 0.005
+        if next_scale < scale_today - 1e-9:
+            action = f"derisk_l{next_level}"
+        elif next_scale > scale_today + 1e-9:
+            action = "restore"
+        elif scale_today < 1.0 - 1e-9:
+            action = f"hold_l{_subb_dbc_profit_guard_level_from_scale(scale_today)}"
+        else:
+            action = ""
+
+        final_returns.append(adjusted_return)
+        pre_current_records.append(pre_current)
+        final_current_records.append(final_current)
+        pre_target_records.append(pre_target)
+        final_target_records.append(final_target)
+        scale_today_records.append(scale_today)
+        next_scale_records.append(next_scale)
+        level_today_records.append(_subb_dbc_profit_guard_level_from_scale(scale_today))
+        next_level_records.append(next_level)
+        entry_records.append(wave_entry)
+        profit_records.append(profit)
+        peak_records.append(wave_peak_profit if wave_peak_profit > 0.0 else np.nan)
+        retain_records.append(retain_ratio)
+        removed_records.append(removed_weight)
+        target_removed_records.append(target_removed_weight)
+        turnover_records.append(guard_turnover)
+        cost_records.append(guard_cost)
+        pending_records.append(pending)
+        action_records.append(action)
+
+        prev_scale = scale_today
+        scale_today = next_scale
+        prev_pre_asset_weight = pre_asset_weight
+
+    index = result.index
+    pre_current_df = pd.DataFrame.from_records(pre_current_records, index=index).reindex(columns=assets).fillna(0.0)
+    final_current_df = pd.DataFrame.from_records(final_current_records, index=index).reindex(columns=assets).fillna(0.0)
+    pre_target_df = pd.DataFrame.from_records(pre_target_records, index=index).reindex(columns=assets).fillna(0.0)
+    final_target_df = pd.DataFrame.from_records(final_target_records, index=index).reindex(columns=assets).fillna(0.0)
+
+    for a in assets:
+        result[f"pre_dbc_profit_guard_w_{a}"] = pre_current_df[a]
+        result[f"pre_dbc_profit_guard_target_w_{a}"] = pre_target_df[a]
+        result[f"w_{a}"] = final_current_df[a]
+        result[f"actual_w_{a}"] = final_current_df[a]
+        result[f"effective_w_{a}"] = final_current_df[a]
+        result[f"target_w_{a}"] = final_target_df[a]
+
+    guard_return = pd.Series(final_returns, index=index, dtype=float)
+    guard_turnover = pd.Series(turnover_records, index=index, dtype=float)
+    guard_cost = pd.Series(cost_records, index=index, dtype=float)
+    result["return_before_dbc_profit_guard"] = base_return
+    result["dbc_profit_guard_overlay_return_delta"] = guard_return - base_return
+    result["dbc_profit_guard_enabled"] = True
+    result["dbc_profit_guard_scale_today"] = pd.Series(scale_today_records, index=index, dtype=float)
+    result["dbc_profit_guard_next_scale"] = pd.Series(next_scale_records, index=index, dtype=float)
+    result["dbc_profit_guard_level"] = pd.Series(level_today_records, index=index, dtype=int)
+    result["dbc_profit_guard_next_level"] = pd.Series(next_level_records, index=index, dtype=int)
+    result["dbc_profit_guard_entry_price"] = pd.Series(entry_records, index=index, dtype=float)
+    result["dbc_profit_guard_profit"] = pd.Series(profit_records, index=index, dtype=float)
+    result["dbc_profit_guard_peak_profit"] = pd.Series(peak_records, index=index, dtype=float)
+    result["dbc_profit_guard_retain_ratio"] = pd.Series(retain_records, index=index, dtype=float)
+    result["dbc_profit_guard_removed_weight"] = pd.Series(removed_records, index=index, dtype=float)
+    result["dbc_profit_guard_target_removed_weight"] = pd.Series(target_removed_records, index=index, dtype=float)
+    result["dbc_profit_guard_turnover"] = guard_turnover
+    result["dbc_profit_guard_cost"] = guard_cost
+    result["dbc_profit_guard_pending"] = pd.Series(pending_records, index=index, dtype=bool)
+    result["dbc_profit_guard_action"] = pd.Series(action_records, index=index, dtype=object)
+    result["dbc_profit_guard_active"] = result["dbc_profit_guard_scale_today"] < 1.0 - 1e-9
+    result["dbc_profit_guard_rebalanced"] = guard_turnover.abs() > 1e-9
+
+    prior_turnover = pd.to_numeric(
+        result.get("subb_effective_turnover", pd.Series(0.0, index=index)),
+        errors="coerce",
+    ).fillna(0.0)
+    prior_cost = pd.to_numeric(
+        result.get("subb_effective_cost", pd.Series(0.0, index=index)),
+        errors="coerce",
+    ).fillna(0.0)
+    prior_effective_rebalanced = result.get("effective_rebalanced", pd.Series(False, index=index)).fillna(False).astype(bool)
+    result["subb_effective_turnover"] = prior_turnover + guard_turnover
+    result["subb_effective_cost"] = prior_cost + guard_cost
+    result["effective_rebalanced"] = prior_effective_rebalanced | result["dbc_profit_guard_rebalanced"]
+    result["return"] = guard_return
+    result["nav"] = (1.0 + result["return"].fillna(0.0)).cumprod()
+    result.attrs["dbc_profit_guard"] = {
+        "asset": asset,
+        "cash_asset": cash_asset,
+        "retain_l1": SUBB_DBC_PROFIT_GUARD_RETAIN_L1,
+        "retain_l2": SUBB_DBC_PROFIT_GUARD_RETAIN_L2,
+        "scale_l1": SUBB_DBC_PROFIT_GUARD_SCALE_L1,
+        "scale_l2": SUBB_DBC_PROFIT_GUARD_SCALE_L2,
+        "score_decay": False,
+    }
+    return result
+
 
 def make_abs_mom_signals(monthly_prices, lookback=6):
     ret_n = monthly_prices / monthly_prices.shift(lookback) - 1
@@ -11654,6 +12070,12 @@ class CombinedStrategyBase:
         us_rot_result = blend_v78_subb_results(us_rot_v77_result, us_rot_bias_result, us_rot_logvol_result)
         if US_ROT_VOLREG_ENABLED and "SPY" in us_rot_close.columns:
             us_rot_result = apply_vol_regime_overlay(us_rot_result, us_rot_close["SPY"])
+        if SUBB_DBC_PROFIT_GUARD_ENABLED:
+            us_rot_result = apply_subb_dbc_profit_guard_overlay(
+                us_rot_result,
+                us_rot_close,
+                us_open=getattr(self, "_us_open", None),
+            )
         prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
         if _subc_enabled():
             prod_monthly = us_prod_daily.resample("M").last()
@@ -11777,6 +12199,10 @@ class CombinedStrategyBase:
             hypo_us_w["CASH"] = 1.0
         else:
             hypo_us_w = dict(blended_hypo_us_w)
+            hypo_us_w = _apply_subb_dbc_profit_guard_scale_to_weights(
+                hypo_us_w,
+                _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
+            )
         if is_us_signal:
             rebalanced_b = _subb_model_rebalanced_value(us_rot_result.iloc[-1])
             rloc = len(us_rot_result) - 1
@@ -12780,6 +13206,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
                 if _vr_cash_next and not _vr_cash:
                     w("📌 VolReg后实际执行目标: **CASH 100%**\n")
+            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
             else:
@@ -12805,6 +13232,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 _us_prev_w,
                 force_cash=_force_volreg_cash_display,
             )
+            if not _force_volreg_cash_display and len(us_rot_result) > 0:
+                _guard_row = us_rot_result.iloc[-1]
+                if _subb_dbc_profit_guard_pending(_guard_row):
+                    _guard_target_w = _subb_dbc_profit_guard_display_target_weights(us_rot_result, -1)
+                    if _guard_target_w:
+                        _us_display_w = _guard_target_w
+                        _us_prev_w = dict(current_us_w)
+                        _us_all_etfs = set(_us_all_etfs) | set(_us_display_w) | set(_us_prev_w)
+                        _us_rebalanced = True
             _us_display_turnover = sum(abs(_us_display_w.get(e, 0) - _us_prev_w.get(e, 0)) for e in _us_all_etfs if e not in ("BIL", "CASH"))
             _us_schedule = _coerce_session_index(getattr(self, "_us_open", None))
             if _us_schedule is None:
@@ -12835,7 +13271,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w("📋 **调仓信号**\n\n")
                     else:
                         w("📋 维持原仓位\n\n")
-                us_sig_text = "; ".join(f"{_ROT_PROXY_TO_LIVE.get(e,e)} {_us_sig_w.get(e,0):.0%}" for e in sorted(_us_all_etfs) if _us_sig_w.get(e, 0) > 0.005)
+                us_sig_text = "; ".join(f"{_ROT_PROXY_TO_LIVE.get(e,e)} {_us_display_w.get(e,0):.0%}" for e in sorted(_us_all_etfs) if _us_display_w.get(e, 0) > 0.005)
                 signal_info["Sub-B"] = {"is_signal": False, "signal_text": f"当前实际:{us_sig_text}",
                                         "note": f"上次{beijing_time_str(_last_us_sig_date, 'US', 'close')}" if _last_us_sig_date else ""}
             else:
@@ -12852,7 +13288,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w("📋 **调仓信号**\n\n")
                     else:
                         w("📋 调仓幅度未达阈值，**维持原仓位**\n\n")
-                us_sig_text = "; ".join(f"{_ROT_PROXY_TO_LIVE.get(e,e)} {_us_sig_w.get(e,0):.0%}" for e in sorted(_us_all_etfs) if _us_sig_w.get(e, 0) > 0.005)
+                us_sig_text = "; ".join(f"{_ROT_PROXY_TO_LIVE.get(e,e)} {_us_display_w.get(e,0):.0%}" for e in sorted(_us_all_etfs) if _us_display_w.get(e, 0) > 0.005)
                 signal_info["Sub-B"] = {"is_signal": False, "signal_text": f"当前实际:{us_sig_text}",
                                         "note": f"上次{beijing_time_str(_last_us_sig_date, 'US', 'close')}" if _last_us_sig_date else ""}
             _cap_config = _scan_capital_config(poe.default_chat)
@@ -13390,6 +13826,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             w("\n")
+            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             _us_live_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
             _us_live_gate = _subb_inflation_gate_context(us_rot_close, -1)
             _us_mix_live = _us_mix_display_context(
@@ -13603,6 +14040,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
                           f"次日全仓转现金(return=0)；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
                 w(f"   - {US_ROT_VOLREG_BACKTEST_NOTE}\n")
+            if SUBB_DBC_PROFIT_GUARD_ENABLED:
+                w(f"8. DBC/PDBC profit guard: price-only, no score decay; {_subb_dbc_profit_guard_rule_text()}. Applied after VolReg with next-open execution.\n")
             w("\n**执行方式:** 美股因时差无法收盘价执行 → 次日开盘价执行（回测用收盘价对收盘价，shift(1)近似）\n")
             w("\n---\n\n### 组合\n\n| 参数 | 值 |\n|:-|:-|\n")
             for _cname in COMBINED_DISPLAY_ORDER:
@@ -13824,6 +14263,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     w(f"🟢 **VolReg风控:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             # 信号日状态
+            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
