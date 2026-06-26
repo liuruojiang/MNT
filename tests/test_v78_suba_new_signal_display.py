@@ -159,6 +159,55 @@ def test_v78_suba_signal_display_pre_trade_uses_previous_v77_and_current_newa():
     assert "NewA: NEWNEW 0.40x" in state["target_display"]
 
 
+def test_v78_suba_blend_table_uses_pre_trade_v77_holding_on_signal_day():
+    module = load_v78_module()
+    dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
+    v77 = pd.DataFrame(
+        {
+            "return": [0.0, 0.0],
+            "holding": ["OLDV77", "cash"],
+            "target": [None, "cash"],
+            "weight": [1.5, 0.0],
+            "target_weight": [1.5, 0.0],
+            "is_signal": [False, True],
+        },
+        index=dates,
+    )
+    new = pd.DataFrame(
+        {
+            "return": [0.0, 0.0],
+            "holding": ["OLDNEW", "OLDNEW"],
+            "target": [None, "cash"],
+            "weight": [1.0, 1.0],
+            "target_weight": [1.0, 0.0],
+            "is_signal": [False, True],
+        },
+        index=dates,
+    )
+    out = module.blend_v78_suba_results(v77, new)
+    chunks = []
+
+    module._write_v78_suba_blend_table(chunks.append, out, -1)
+    text = "".join(chunks)
+
+    assert "OLDV77" in text
+    assert "1.50x" in text
+    assert "OLDNEW" in text
+    assert "**1.25x**" in text
+    assert "cash | 0.00x" not in text
+
+
+def test_v78_suba_signal_exposure_lines_use_display_snapshot():
+    module = load_v78_module()
+    signal_source = inspect.getsource(module.CombinedStrategyV78._handle_signal)
+    live_source = inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
+    live_params_source = inspect.getsource(module.CombinedStrategyV78._handle_live_params)
+
+    assert "_v78_suba_display_leg_snapshot(cn_result, _cn_display_idx)" in signal_source
+    assert "_v78_suba_display_leg_snapshot(cn_result, -1)" in live_source
+    assert "_v78_suba_display_leg_snapshot(cn_result, _cn_display_idx_lp)" in live_params_source
+
+
 def test_v78_suba_signal_info_does_not_suppress_weight_only_signals():
     module = load_v78_module()
     source = inspect.getsource(module.CombinedStrategyV78._handle_signal)

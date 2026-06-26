@@ -7866,18 +7866,46 @@ def _write_v78_suba_leg_signal_tables(w, cn_result, idx, bias_mom, r2, abs_mom, 
     _write_v78_suba_new_leg_signal_table(w, cn_result, idx)
 
 
+def _v78_suba_display_leg_snapshot(cn_result, idx):
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    row = cn_result.iloc[pos]
+    v77_row = cn_result.iloc[pos - 1] if bool(row.get("is_signal", False)) and pos > 0 else row
+
+    def _to_float(value, default=0.0):
+        try:
+            return float(value)
+        except Exception:
+            return float(default)
+
+    v77_h = v77_row.get("v78_suba_v77_holding", row.get("v78_suba_v77_holding", "cash"))
+    new_h = row.get("v78_suba_new_holding", "cash")
+    v77_w = _to_float(v77_row.get("v78_suba_v77_weight", row.get("v78_suba_v77_weight", 0.0)))
+    new_w = _to_float(row.get("v78_suba_new_weight", 0.0))
+    return {
+        "v77_holding": v77_h,
+        "new_holding": new_h,
+        "v77_weight": v77_w,
+        "new_weight": new_w,
+        "final_exposure": V78_SUBA_V77_WEIGHT * v77_w + V78_SUBA_NEW_TV10_WEIGHT * new_w,
+    }
+
+
 def _write_v78_suba_blend_table(w, cn_result, idx):
     if "v78_suba_v77_holding" not in cn_result.columns:
         return
-    row = cn_result.iloc[idx]
-    v77_h = row.get("v78_suba_v77_holding", "cash")
-    new_h = row.get("v78_suba_new_holding", "cash")
+    display = _v78_suba_display_leg_snapshot(cn_result, idx)
+    v77_h = display["v77_holding"]
+    new_h = display["new_holding"]
+    v77_w = display["v77_weight"]
+    new_w = display["new_weight"]
     w("\n**V7.8 Sub-A混合腿拆分（沿用7.7展示样式）**\n\n")
     w("| 腿 | 组合权重 | 当前持仓 | 腿内敞口 | 组合贡献 |\n")
     w("|:-|------:|:-|------:|------:|\n")
-    w(f"| V7.7A原版 | {V78_SUBA_V77_WEIGHT:.0%} | {CN_NAMES.get(v77_h, v77_h)} | {_fmt_v78_x(row.get('v78_suba_v77_weight', 0.0))} | {_fmt_v78_x(V78_SUBA_V77_WEIGHT * float(row.get('v78_suba_v77_weight', 0.0)))} |\n")
-    w(f"| {V78_SUBA_NEW_LABEL} | {V78_SUBA_NEW_TV10_WEIGHT:.0%} | {CN_NAMES.get(new_h, new_h)} | {_fmt_v78_x(row.get('v78_suba_new_weight', 0.0))} | {_fmt_v78_x(V78_SUBA_NEW_TV10_WEIGHT * float(row.get('v78_suba_new_weight', 0.0)))} |\n")
-    w(f"| **V7.8最终** | **100%** | - | - | **{_fmt_v78_x(row.get('v78_suba_final_exposure', 0.0))}** |\n")
+    w(f"| V7.7A原版 | {V78_SUBA_V77_WEIGHT:.0%} | {CN_NAMES.get(v77_h, v77_h)} | {_fmt_v78_x(v77_w)} | {_fmt_v78_x(V78_SUBA_V77_WEIGHT * v77_w)} |\n")
+    w(f"| {V78_SUBA_NEW_LABEL} | {V78_SUBA_NEW_TV10_WEIGHT:.0%} | {CN_NAMES.get(new_h, new_h)} | {_fmt_v78_x(new_w)} | {_fmt_v78_x(V78_SUBA_NEW_TV10_WEIGHT * new_w)} |\n")
+    w(f"| **V7.8最终** | **100%** | - | - | **{_fmt_v78_x(display['final_exposure'])}** |\n")
 
 
 def _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label="当前配对/方向"):
@@ -13008,11 +13036,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             if "weight" in cn_result.columns:
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 if "v78_suba_final_exposure" in cn_result.columns:
-                    _cn_row_rt = cn_result.iloc[_cn_display_idx]
+                    _cn_display_parts = _v78_suba_display_leg_snapshot(cn_result, _cn_display_idx)
                     w(
-                        f"**Sub-A最终敞口:** **{float(_cn_row_rt.get('v78_suba_final_exposure', 0.0)):.2f}x** "
-                        f"= {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_row_rt.get('v78_suba_v77_weight', 0.0)):.2f}x) "
-                        f"+ {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_row_rt.get('v78_suba_new_weight', 0.0)):.2f}x)\n"
+                        f"**Sub-A最终敞口:** **{float(_cn_display_parts['final_exposure']):.2f}x** "
+                        f"= {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_display_parts['v77_weight']):.2f}x) "
+                        f"+ {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_display_parts['new_weight']):.2f}x)\n"
                     )
                 else:
                     _cn_sc_raw_rt = cn_result["scale_raw"].iloc[_cn_display_idx] if "scale_raw" in cn_result.columns else _cn_sc_rt
@@ -13652,11 +13680,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
                 if "v78_suba_final_exposure" in cn_result.columns:
-                    _cn_row_rt3 = cn_result.iloc[-1]
+                    _cn_display_parts3 = _v78_suba_display_leg_snapshot(cn_result, -1)
                     w(
-                        f"**Sub-A最终敞口:** **{float(_cn_row_rt3.get('v78_suba_final_exposure', 0.0)):.2f}x** "
-                        f"= {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_row_rt3.get('v78_suba_v77_weight', 0.0)):.2f}x) "
-                        f"+ {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_row_rt3.get('v78_suba_new_weight', 0.0)):.2f}x)\n"
+                        f"**Sub-A最终敞口:** **{float(_cn_display_parts3['final_exposure']):.2f}x** "
+                        f"= {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_display_parts3['v77_weight']):.2f}x) "
+                        f"+ {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_display_parts3['new_weight']):.2f}x)\n"
                     )
                 else:
                     _cn_sc_raw_rt3 = cn_result["scale_raw"].iloc[-1] if "scale_raw" in cn_result.columns else _cn_sc_rt3
@@ -14134,13 +14162,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 )
                 _cn_sc_p = cn_result["weight"].iloc[_cn_display_idx_lp]
                 if "v78_suba_final_exposure" in cn_result.columns:
-                    _cn_row_p = cn_result.iloc[_cn_display_idx_lp]
+                    _cn_display_parts_p = _v78_suba_display_leg_snapshot(cn_result, _cn_display_idx_lp)
                     w("\n**1. V7.8 Sub-A component exposure**\n\n")
                     w("| Metric | Value |\n")
                     w("|:-|------:|\n")
-                    w(f"| Final exposure | **{float(_cn_row_p.get('v78_suba_final_exposure', 0.0)):.2f}x** |\n")
-                    w(f"| V7.7A leg exposure | {float(_cn_row_p.get('v78_suba_v77_weight', 0.0)):.2f}x × {V78_SUBA_V77_WEIGHT:.0%} |\n")
-                    w(f"| NewA leg exposure | {float(_cn_row_p.get('v78_suba_new_weight', 0.0)):.2f}x × {V78_SUBA_NEW_TV10_WEIGHT:.0%} |\n")
+                    w(f"| Final exposure | **{float(_cn_display_parts_p['final_exposure']):.2f}x** |\n")
+                    w(f"| V7.7A leg exposure | {float(_cn_display_parts_p['v77_weight']):.2f}x × {V78_SUBA_V77_WEIGHT:.0%} |\n")
+                    w(f"| NewA leg exposure | {float(_cn_display_parts_p['new_weight']):.2f}x × {V78_SUBA_NEW_TV10_WEIGHT:.0%} |\n")
                     w("| Execution basis | component-net blend; final exposure is weighted leg sum |\n")
                 else:
                     _cn_sc_raw_p = cn_result["scale_raw"].iloc[_cn_display_idx_lp] if "scale_raw" in cn_result.columns else _cn_sc_p
