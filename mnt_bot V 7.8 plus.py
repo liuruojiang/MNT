@@ -8351,18 +8351,35 @@ def _v78_subb_volume_warning(us_rot_result):
     return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 本次未执行（fail-open：本次未降权）。"
 
 
-def _v78_subb_current_vs_hypothetical_rows(us_rot_result, idx, min_weight=0.0005):
+def _v78_subb_current_vs_hypothetical_rows(
+    us_rot_result,
+    idx,
+    min_weight=0.0005,
+    current_weights=None,
+    target_weights=None,
+):
     if us_rot_result is None or len(us_rot_result) == 0:
         return []
     idx, _date = _v78_resolve_display_idx_date(us_rot_result, idx)
     if idx is None:
         return []
     row = us_rot_result.iloc[idx]
-    assets = sorted(_weight_columns_assets(us_rot_result, prefixes=("actual_w_", "target_w_", "w_")))
+    assets = set(_weight_columns_assets(us_rot_result, prefixes=("actual_w_", "target_w_", "w_")))
+    if current_weights is not None:
+        assets.update(current_weights.keys())
+    if target_weights is not None:
+        assets.update(target_weights.keys())
+    assets = sorted(assets)
     rows = []
     for asset in assets:
-        current = row.get(f"actual_w_{asset}", row.get(f"w_{asset}", 0.0))
-        target = row.get(f"target_w_{asset}", current)
+        if current_weights is not None:
+            current = current_weights.get(asset, 0.0)
+        else:
+            current = row.get(f"actual_w_{asset}", row.get(f"w_{asset}", 0.0))
+        if target_weights is not None:
+            target = target_weights.get(asset, 0.0)
+        else:
+            target = row.get(f"target_w_{asset}", current)
         current = float(current) if pd.notna(current) else 0.0
         target = float(target) if pd.notna(target) else 0.0
         diff = target - current
@@ -8379,8 +8396,21 @@ def _v78_subb_current_vs_hypothetical_rows(us_rot_result, idx, min_weight=0.0005
     return rows
 
 
-def _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, idx):
-    rows = _v78_subb_current_vs_hypothetical_rows(us_rot_result, idx)
+def _write_v78_subb_current_vs_hypothetical_table(
+    w,
+    us_rot_result,
+    idx,
+    min_weight=0.0005,
+    current_weights=None,
+    target_weights=None,
+):
+    rows = _v78_subb_current_vs_hypothetical_rows(
+        us_rot_result,
+        idx,
+        min_weight=min_weight,
+        current_weights=current_weights,
+        target_weights=target_weights,
+    )
     if not rows:
         return
     w("\n**V7.8 Sub-B 当前持有 vs 假设今日调仓**\n\n")
@@ -13906,7 +13936,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("\n")
             _write_v78_subb_component_leg_tables(w, us_rot_result, -1)
             _write_v78_subb_blend_table(w, us_rot_result, -1)
-            _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, -1)
+            _write_v78_subb_current_vs_hypothetical_table(
+                w,
+                us_rot_result,
+                -1,
+                current_weights=current_us_w,
+                target_weights=hypo_us_w,
+            )
             if is_us_signal:
                 w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
                 w("V7.8 Sub-B 以“四腿综合目标”表为唯一目标权重。\n")
@@ -14326,6 +14362,53 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 threshold=US_ROT_REBALANCE_THRESHOLD,
                 reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + "(通胀off参考)") for code in US_ROT_MACRO_POOL],
             )
+            _model_hypo_us_w_p, _, _ = _us_mix_snapshot(
+                us_rot_close,
+                -1,
+                _us_params_ranking_codes,
+                us_scale,
+                prev_risky_by_lb=_hypo_prev_mix_risky_by_lb_p,
+                threshold=US_ROT_REBALANCE_THRESHOLD,
+            )
+            _ema_hypo_us_w_p, _, _ = _subb_v75_ema_snapshot(
+                us_rot_close,
+                -1,
+                _subb_v75_ema_scale_from_result(us_rot_result),
+                ranking_codes=US_ROT_POOL,
+                prev_risky=_hypo_prev_ema_risky_p,
+                threshold=US_ROT_REBALANCE_THRESHOLD,
+            )
+            _v77_hypo_us_w_p = _blend_subb_v75_weight_dicts(_model_hypo_us_w_p, _ema_hypo_us_w_p)
+            _bias_hypo_us_w_p = _v78_subb_new_line_hypo_weights_from_blend(
+                us_rot_close,
+                us_rot_result,
+                line="bias",
+                row_idx=-1,
+            )
+            _logvol_hypo_us_w_p = _v78_subb_new_line_hypo_weights_from_blend(
+                us_rot_close,
+                us_rot_result,
+                line="logvol",
+                row_idx=-1,
+            )
+            _blended_hypo_us_w_p = _blend_v78_subb_weight_dicts(
+                _v77_hypo_us_w_p,
+                _bias_hypo_us_w_p,
+                _logvol_hypo_us_w_p,
+            )
+            _vr_cash_next_p = _volreg_next_cash_state(_vr_cash_p, _vr_p) if US_ROT_VOLREG_ENABLED else False
+            if US_ROT_VOLREG_ENABLED and _vr_cash_next_p:
+                _hypo_us_w_p = {
+                    asset: 0.0
+                    for asset in set(_blended_hypo_us_w_p) | set(current_us_w) | {"CASH"}
+                }
+                _hypo_us_w_p["CASH"] = 1.0
+            else:
+                _hypo_us_w_p = dict(_blended_hypo_us_w_p)
+                _hypo_us_w_p = _apply_subb_dbc_profit_guard_scale_to_weights(
+                    _hypo_us_w_p,
+                    _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
+                )
             _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
             w(f"**① 官方腿分窗口动量排名（{_subb_window_label_for_display('/')}）:**\n\n")
             w("下表只对应官方腿；EMA/Bias/LogVol腿在后续子策略腿状态表中单独展示。\n\n")
@@ -14394,7 +14477,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
             _write_v78_subb_component_leg_tables(w, us_rot_result, -1)
             _write_v78_subb_blend_table(w, us_rot_result, -1)
-            _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, -1)
+            _write_v78_subb_current_vs_hypothetical_table(
+                w,
+                us_rot_result,
+                -1,
+                current_weights=current_us_w,
+                target_weights=_hypo_us_w_p,
+            )
             hist_us = pd.to_numeric(
                 us_rot_result["official_return"] if "official_return" in us_rot_result.columns else us_rot_result["return"],
                 errors="coerce",
@@ -14421,13 +14510,17 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 _rloc_p = len(us_rot_result) - 1
                 if _rloc_p > 0:
                     _prev_us_w_p = {c.replace("w_", ""): us_rot_result.iloc[_rloc_p - 1][c] for c in rot_w_cols_p}
-                _all_etfs_p = set(list(current_us_w.keys()) + list(_prev_us_w_p.keys()))
-                _turnover_p = sum(abs(current_us_w.get(e, 0) - _prev_us_w_p.get(e, 0)) for e in _all_etfs_p if e not in ("BIL", "CASH"))
+                if not _prev_us_w_p:
+                    _prev_us_w_p = {"CASH": 1.0}
+                _all_etfs_p = set(list(_hypo_us_w_p.keys()) + list(_prev_us_w_p.keys()))
+                _turnover_p = sum(abs(_hypo_us_w_p.get(e, 0) - _prev_us_w_p.get(e, 0)) for e in _all_etfs_p if e not in ("BIL", "CASH"))
             else:
-                _turnover_p = 0.0
+                _all_etfs_p = set(list(_hypo_us_w_p.keys()) + list(current_us_w.keys()))
+                _turnover_p = sum(abs(_hypo_us_w_p.get(e, 0) - current_us_w.get(e, 0)) for e in _all_etfs_p if e not in ("BIL", "CASH"))
             w(f"\n**⑤ 调仓幅度:** {_turnover_p:.1%}")
             if _subb_should_rebalance(_turnover_p, US_ROT_MIN_TURNOVER):
-                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n")
+                prefix = "如为信号日" if not is_us_signal_p else ""
+                w(f" 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，{prefix}**会调仓**\n")
             else:
                 suffix = "（非信号日不调仓）" if not is_us_signal_p else ""
                 w(f" ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**{suffix}\n")
