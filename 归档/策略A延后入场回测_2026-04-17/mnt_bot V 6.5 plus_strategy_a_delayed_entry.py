@@ -533,7 +533,7 @@ def _fetch_cn_realtime_close(secid):
     """从东方财富实时行情API获取指数/ETF最新收盘价(收盘后)或现价(盘中)。
     返回 float(收盘价) 或 None(失败/非交易日)。
     仅在日K线API缺失当天数据时用于补充。"""
-    
+
     # 如果有对应的价格指数代理，则使用代理代码获取实时数据
     proxy_secid = CN_H_PROXY_SECIDS.get(secid)
     if proxy_secid:
