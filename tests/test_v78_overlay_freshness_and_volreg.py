@@ -136,6 +136,38 @@ def test_subb_strict_open_row_rejects_close_fallback():
         )
 
 
+def test_subb_emxc_strict_open_uses_eem_proxy_before_emxc_live_history():
+    module = load_v78_module()
+    pre_live = pd.Timestamp("2009-05-29")
+    switch = module.US_ROT_EMXC_BT_START
+    post_live = switch + pd.Timedelta(days=1)
+    dates = pd.to_datetime([pre_live, switch, post_live])
+    us_raw = {
+        "EEM": pd.DataFrame(
+            {"open": [20.0, 25.0, 27.5], "close": [21.0, 26.0, 28.0]},
+            index=dates,
+        ),
+        "EMXC": pd.DataFrame(
+            {"open": [np.nan, 10.0, 12.0], "close": [np.nan, 11.0, 13.0]},
+            index=dates,
+        ),
+    }
+    us_open = module._build_us_open_execution_dict(us_raw)
+    close_df = pd.DataFrame({"EMXC": [21.0, 26.0, 31.2]}, index=dates)
+
+    pre_row = module._us_open_row(
+        pre_live,
+        ["EMXC"],
+        us_open,
+        close_df,
+        strict=True,
+        context="Sub-B official rotation",
+    )
+
+    assert pre_row["EMXC"] == 20.0
+    assert us_open["EMXC"].loc[post_live] == 30.0
+
+
 def test_subb_rotation_mix_strict_open_execution_rejects_missing_open(monkeypatch):
     module = load_v78_module()
     dates = pd.bdate_range("2026-06-01", periods=6)

@@ -3803,31 +3803,55 @@ def fetch_yahoo(ticker, start_date="2003-01-01"):
 def _fetch_us_realtime_close(ticker):
     """从Yahoo Finance实时行情API获取美股ETF/BTC最新价。
     盘中返回现价，盘后返回收盘价。
-    返回 (float(价格), str(交易日date 'YYYY-MM-DD')) 或 (None, None)。"""
+    返回 (float(价格), str(交易日date 'YYYY-MM-DD'), float(开盘价)|None) 或 (None, None, None)。"""
     try:
         url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
                f"?range=1d&interval=1d&includePrePost=false")
         resp = _session.get(url, timeout=10)
         if resp.status_code != 200:
-            return None, None
+            return None, None, None
         data = resp.json()
         result = data.get("chart", {}).get("result", [None])[0]
         if result is None:
-            return None, None
+            return None, None, None
         meta = result.get("meta", {})
         price = meta.get("regularMarketPrice")
+        open_price = meta.get("regularMarketOpen")
+        if open_price is None:
+            quote_blocks = result.get("indicators", {}).get("quote") or []
+            quote = quote_blocks[0] if quote_blocks else {}
+            quote_open = quote.get("open")
+            if isinstance(quote_open, (list, tuple)):
+                quote_open = next((v for v in reversed(quote_open) if v is not None), None)
+            if quote_open is not None:
+                open_price = quote_open
         # regularMarketTime 是 Unix timestamp (美东交易日的时间)
         mkt_ts = meta.get("regularMarketTime")
         if price is None or mkt_ts is None:
-            return None, None
+            return None, None, None
         trade_date = (
             pd.Timestamp.fromtimestamp(mkt_ts, tz="UTC")
             .tz_convert("America/New_York")
             .strftime("%Y-%m-%d")
         )
-        return float(price), trade_date
+        open_value = float(open_price) if open_price is not None else None
+        return float(price), trade_date, open_value
     except _DATA_FETCH_ERRORS:
-        return None, None
+        return None, None, None
+
+
+def _coerce_us_realtime_close_result(result):
+    if result is None:
+        return None, None, None
+    try:
+        values = tuple(result)
+    except TypeError:
+        return None, None, None
+    if len(values) >= 3:
+        return values[0], values[1], values[2]
+    if len(values) == 2:
+        return values[0], values[1], None
+    return None, None, None
 
 
 def _supplement_us_today_close(us_raw, us_tickers, msg=None):
@@ -3845,7 +3869,9 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
 
     # 先用一个代表性ticker(SPY或第一个)探测: 实时API的交易日是否比K线新
     probe = "SPY" if "SPY" in us_raw else _stock_tickers[0]
-    probe_price, probe_trade_date = _fetch_us_realtime_close(probe)
+    probe_price, probe_trade_date, _probe_open = _coerce_us_realtime_close_result(
+        _fetch_us_realtime_close(probe)
+    )
     if probe_price is None or probe_trade_date is None:
         return
 
@@ -3858,14 +3884,19 @@ def _supplement_us_today_close(us_raw, us_tickers, msg=None):
         df_last = df.index[-1].strftime("%Y-%m-%d")
         if df_last >= probe_trade_date:
             continue  # 该ticker已有最新数据(如BTC 24h交易可能已更新)
-        rt_price, rt_date = _fetch_us_realtime_close(ticker)
+        rt_price, rt_date, rt_open = _coerce_us_realtime_close_result(
+            _fetch_us_realtime_close(ticker)
+        )
         if rt_price is None or rt_date is None:
             continue
         if rt_date <= df_last:
             continue
         # 补充新行
         new_ts = pd.Timestamp(rt_date)
-        new_row = pd.DataFrame([{"close": rt_price}],
+        new_payload = {"close": rt_price}
+        if rt_open is not None:
+            new_payload["open"] = rt_open
+        new_row = pd.DataFrame([new_payload],
                                index=pd.DatetimeIndex([new_ts], name=df.index.name))
         # P2-1修复: 标记实时补价行
         new_row['is_live_bar'] = True
@@ -3910,6 +3941,50 @@ def build_ibit_spliced(frame, proxy_ticker="BTC-USD", live_ticker="IBIT"):
     post_listing = live.loc[switch_mask].ffill()
     proxy.loc[switch_mask] = post_listing * scale_factor
     return proxy
+
+
+def _build_proxy_live_spliced_series(proxy_series, live_series=None, switch_start=None, name=None):
+    proxy = pd.to_numeric(proxy_series, errors="coerce").astype(float).copy()
+    if name is not None:
+        proxy = proxy.rename(name)
+    if live_series is None:
+        return proxy
+    live = pd.to_numeric(live_series, errors="coerce").astype(float).reindex(proxy.index)
+    switch_mask = pd.Series(True, index=proxy.index)
+    if switch_start is not None:
+        switch_mask = proxy.index >= pd.Timestamp(switch_start)
+    overlap = pd.concat(
+        [proxy.loc[switch_mask].rename("proxy"), live.loc[switch_mask].rename("live")],
+        axis=1,
+    ).dropna()
+    if overlap.empty:
+        return proxy
+    switch_date = overlap.index[0]
+    live_base = float(overlap.loc[switch_date, "live"])
+    if abs(live_base) < 1e-12:
+        return proxy
+    scale_factor = float(overlap.loc[switch_date, "proxy"]) / live_base
+    proxy.loc[switch_mask] = live.loc[switch_mask] * scale_factor
+    return proxy
+
+
+def _build_us_open_execution_dict(us_raw):
+    us_open = {}
+    for ticker, df in (us_raw or {}).items():
+        if df is not None and "open" in df.columns:
+            us_open[ticker] = df["open"]
+    if (
+        "EMXC" in US_ROT_POOL
+        and US_ROT_EMXC_BT_PROXY in us_open
+    ):
+        emxc_open = us_open.get("EMXC")
+        us_open["EMXC"] = _build_proxy_live_spliced_series(
+            us_open[US_ROT_EMXC_BT_PROXY],
+            emxc_open,
+            switch_start=US_ROT_EMXC_BT_START,
+            name="EMXC",
+        )
+    return us_open
 
 
 def _cn_signal_days(close_df, start_idx):
@@ -12022,11 +12097,7 @@ class CombinedStrategyBase:
             include_us_live_snapshot=include_us_live_snapshot,
         )
         # 构建T+1开盘价查找表: 调仓记录用(信号日T收盘→T+1开盘执行)
-        _us_open_dict = {}
-        for _t, _df in us_raw.items():
-            if "open" in _df.columns:
-                _us_open_dict[_t] = _df["open"]
-        self._us_open = _us_open_dict
+        self._us_open = _build_us_open_execution_dict(us_raw)
         us_date = us_rot_close.index[-1]
         us_close_bj = beijing_time_str(us_date, "US", "close")
         msg.write(f"  美股: {len(us_raw)}个ETF | 收盘: {us_close_bj}\n")
@@ -13112,6 +13183,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w = msg.write
                 w("## 📊 操作信号（收盘确认）\n\n")
                 w(f"⚠️ 信号计算/展示失败: {_short_error(exc)}\n")
+                if DEBUG_MODE:
+                    import traceback
+                    w("```text\n")
+                    w(traceback.format_exc())
+                    w("\n```\n")
                 w("请重新发送“信号”；如果仍失败，请开启调试模式查看完整堆栈。\n")
             return
         cn_date = d["cn_date"]
@@ -13737,6 +13813,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w = msg.write
                 w("## ⚡ 实时信号\n\n")
                 w(f"⚠️ 实时信号计算/展示失败: {_short_error(exc)}\n")
+                if DEBUG_MODE:
+                    import traceback
+                    w("```text\n")
+                    w(traceback.format_exc())
+                    w("\n```\n")
                 w("请重新发送“实时信号”；如果仍失败，请开启调试模式查看完整堆栈。\n")
             return
         cn_date = d["cn_date"]

@@ -405,6 +405,33 @@ def test_signal_handler_reports_compute_errors_instead_of_bubbling(monkeypatch, 
     assert "Sub-B display boom" in out
 
 
+def test_live_signal_handler_prints_traceback_in_debug_mode(monkeypatch, capfd):
+    module = load_v78_module()
+    bot = module.CombinedStrategyV78()
+    monkeypatch.setattr(module, "DEBUG_MODE", True)
+    monkeypatch.setattr(
+        bot,
+        "_cached_fetch_data",
+        lambda msg, include_cn_live_snapshot=False, include_us_live_snapshot=False: (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+        ),
+    )
+
+    def fail_compute(*_args, **_kwargs):
+        raise RuntimeError("Sub-B display boom")
+
+    monkeypatch.setattr(bot, "_compute_signal_data", fail_compute)
+
+    bot._handle_live_signal()
+    out = capfd.readouterr().out
+
+    assert "Traceback" in out
+    assert "Sub-B display boom" in out
+
+
 def test_us_live_supplement_updates_individual_stale_tickers_when_probe_is_not_newer(monkeypatch):
     module = load_v78_module()
     fresh = pd.DataFrame(
@@ -423,9 +450,9 @@ def test_us_live_supplement_updates_individual_stale_tickers_when_probe_is_not_n
     }
 
     def fake_realtime(ticker):
-        return {"SPY": (101.0, "2026-06-15"), "GLD": (205.0, "2026-06-15"), "AGG": (200.0, "2026-06-15")}.get(
+        return {"SPY": (101.0, "2026-06-15", 100.5), "GLD": (205.0, "2026-06-15", 203.0), "AGG": (200.0, "2026-06-15", 199.0)}.get(
             ticker,
-            (None, None),
+            (None, None, None),
         )
 
     monkeypatch.setattr(module, "_fetch_us_realtime_close", fake_realtime)
@@ -434,6 +461,47 @@ def test_us_live_supplement_updates_individual_stale_tickers_when_probe_is_not_n
 
     assert us_raw["GLD"].index[-1] == pd.Timestamp("2026-06-15")
     assert float(us_raw["GLD"]["close"].iloc[-1]) == 205.0
+    assert float(us_raw["GLD"]["open"].iloc[-1]) == 203.0
     assert bool(us_raw["GLD"]["is_live_bar"].iloc[-1]) is True
     assert us_raw["AGG"].index[-1] == pd.Timestamp("2026-06-15")
     assert float(us_raw["AGG"]["close"].iloc[-1]) == 200.0
+    assert float(us_raw["AGG"]["open"].iloc[-1]) == 199.0
+
+
+def test_us_realtime_close_reads_open_from_chart_quote(monkeypatch):
+    module = load_v78_module()
+    market_time = int(pd.Timestamp("2026-06-15 20:00:00", tz="UTC").timestamp())
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
+                                "regularMarketPrice": 205.0,
+                                "regularMarketTime": market_time,
+                            },
+                            "indicators": {
+                                "quote": [
+                                    {
+                                        "open": [203.0],
+                                        "close": [205.0],
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                }
+            }
+
+    monkeypatch.setattr(module._session, "get", lambda *_args, **_kwargs: FakeResponse())
+
+    price, trade_date, open_price = module._fetch_us_realtime_close("GLD")
+
+    assert price == 205.0
+    assert trade_date == "2026-06-15"
+    assert open_price == 203.0
