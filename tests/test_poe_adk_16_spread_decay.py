@@ -821,7 +821,7 @@ def test_realtime_params_do_not_load_strategy_context(monkeypatch):
     assert "target-vol" in bot.render_params(live=True)
 
 
-def test_default_signal_query_uses_realtime_path(monkeypatch):
+def test_plain_signal_query_uses_daily_path_and_default_stays_realtime(monkeypatch):
     bot = load_bot_module()
     calls = []
 
@@ -831,9 +831,10 @@ def test_default_signal_query_uses_realtime_path(monkeypatch):
 
     monkeypatch.setattr(bot, "render_signal", fake_render_signal)
 
-    assert bot.render_query("信号") == "live=True"
+    assert bot.render_query("信号") == "live=False"
+    assert bot.render_query("实时信号") == "live=True"
     assert bot.render_query("") == "live=True"
-    assert calls == [True, True]
+    assert calls == [False, True, True]
 
 
 def test_history_signal_query_routes_before_plain_signal(monkeypatch):
@@ -1359,6 +1360,75 @@ def test_full_online_performance_label_is_price_window_not_full_sample(monkeypat
     assert f"Poe在线价格窗口（约{bot.ONLINE_FETCH_LOOKBACK_BARS}个交易日）" in output
     assert "不代表本地正式长期回测" in output
     assert "NAV 在在线窗口起点重置为 1.0" in output
+
+
+def test_parse_date_range_supports_chinese_past_year_to_date_and_explicit_ranges():
+    bot = load_bot_module()
+    index = pd.bdate_range("2020-01-01", "2026-06-26")
+
+    start, end, label = bot.parse_date_range("表现 过去三年", index)
+    assert label == "最近3年"
+    assert start == pd.Timestamp("2023-06-26")
+    assert end == pd.Timestamp("2026-06-26")
+
+    start, end, label = bot.parse_date_range("表现 今年", index)
+    assert label == "今年"
+    assert start == pd.Timestamp("2026-01-01")
+    assert end == pd.Timestamp("2026-06-26")
+
+    start, end, label = bot.parse_date_range("表现 2025-01 到 2026-06", index)
+    assert label == "2025-01-01 至 2026-06-26"
+    assert start == pd.Timestamp("2025-01-01")
+    assert end == pd.Timestamp("2026-06-26")
+
+    start, end, label = bot.parse_date_range("表现 2025-01-15 到 2026-02-20", index)
+    assert label == "2025-01-15 至 2026-02-20"
+    assert start == pd.Timestamp("2025-01-15")
+    assert end == pd.Timestamp("2026-02-20")
+
+
+def test_nav_chart_queries_route_before_default_signal(monkeypatch):
+    bot = load_bot_module()
+    calls = []
+
+    def fake_nav_chart(query, combo=False):
+        calls.append((query, combo))
+        return f"nav combo={combo}"
+
+    def fail_signal(live=False):
+        raise AssertionError("nav chart query should not fall through to signal")
+
+    monkeypatch.setattr(bot, "render_nav_chart", fake_nav_chart)
+    monkeypatch.setattr(bot, "render_signal", fail_signal)
+
+    assert bot.render_query("净值曲线 最近一年") == "nav combo=False"
+    assert bot.render_query("组合净值曲线 最近一年") == "nav combo=True"
+    assert calls == [("净值曲线 最近一年", False), ("组合净值曲线 最近一年", True)]
+
+
+def test_render_performance_uses_query_scoped_loader(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=80, freq="D")
+    curves = {
+        config.key: pd.DataFrame({"return": [0.0] * len(index), "nav": [1.0] * len(index)}, index=index)
+        for config in bot.STRATEGIES
+    }
+    calls = []
+
+    def fake_scoped_loader(query):
+        calls.append(query)
+        return curves, {"ok": True, "mode": "daily", "data_mode": "online_rebuild_recent_performance"}
+
+    def fail_full_loader():
+        raise AssertionError("render_performance should use query-scoped loader")
+
+    monkeypatch.setattr(bot, "_load_performance_curves_for_query", fake_scoped_loader, raising=False)
+    monkeypatch.setattr(bot, "load_performance_curves", fail_full_loader)
+
+    output = bot.render_performance("表现 最近1年", combo=False)
+
+    assert calls == ["表现 最近1年"]
+    assert "Poe最近窗口" in output
 
 
 def test_online_rebuild_precomputes_decay_state_once(monkeypatch):

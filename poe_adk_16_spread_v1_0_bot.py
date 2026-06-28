@@ -1372,13 +1372,13 @@ def _get_text(url: str, *, timeout: int, headers: dict[str, str], encoding: str 
         return resp.read().decode(encoding, errors="replace")
 
 
-def _fetch_eastmoney_kline(secid: str) -> pd.DataFrame:
+def _fetch_eastmoney_kline(secid: str, lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
     end_date = (beijing_now() + timedelta(days=30)).strftime("%Y%m%d")
     url = (
         "https://push2his.eastmoney.com/api/qt/stock/kline/get"
         f"?secid={secid}&fields1=f1,f2,f3,f4,f5,f6"
         "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-        f"&klt=101&fqt=1&beg=20050101&end={end_date}&lmt={ONLINE_FETCH_LOOKBACK_BARS}"
+        f"&klt=101&fqt=1&beg=20050101&end={end_date}&lmt={int(lookback_bars)}"
     )
     data = _get_json(url, timeout=12, headers={"Referer": "https://quote.eastmoney.com/"})
     inner = data.get("data") if isinstance(data, dict) else None
@@ -1404,11 +1404,11 @@ def _fetch_eastmoney_kline(secid: str) -> pd.DataFrame:
     return frame.dropna(subset=["close"]).set_index("date").sort_index()
 
 
-def _fetch_sina_kline(asset: str) -> pd.DataFrame:
+def _fetch_sina_kline(asset: str, lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
     symbol = CN_SINA_SYMBOLS[asset]
     url = (
         "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php"
-        f"/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={ONLINE_FETCH_LOOKBACK_BARS}"
+        f"/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen={int(lookback_bars)}"
     )
     text = _get_text(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"}, encoding="gbk")
     data = json.loads(text)
@@ -1432,9 +1432,9 @@ def _fetch_sina_kline(asset: str) -> pd.DataFrame:
     return frame.dropna(subset=["close"]).set_index("date").sort_index()
 
 
-def _fetch_tencent_kline(asset: str) -> pd.DataFrame:
+def _fetch_tencent_kline(asset: str, lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
     symbol = CN_TENCENT_SYMBOLS[asset]
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{ONLINE_FETCH_LOOKBACK_BARS},qfq"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{int(lookback_bars)},qfq"
     data = _get_json(
         url,
         timeout=15,
@@ -1562,26 +1562,30 @@ def _fetch_sohu_amount(secid: str, *, beg: str = "20050101", lmt: int = 10000) -
     return frame.dropna(subset=["close"]).set_index("date").sort_index().tail(int(lmt))
 
 
-def _fetch_sina_volume_proxy(asset: str) -> pd.DataFrame:
-    frame = _fetch_sina_kline(asset).copy()
+def _fetch_sina_volume_proxy(asset: str, lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
+    frame = _fetch_sina_kline(asset, lookback_bars=lookback_bars).copy()
     frame["amount"] = pd.to_numeric(frame.get("volume"), errors="coerce")
     return frame
 
 
-def _fetch_tencent_volume_proxy(asset: str) -> pd.DataFrame:
-    frame = _fetch_tencent_kline(asset).copy()
+def _fetch_tencent_volume_proxy(asset: str, lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS) -> pd.DataFrame:
+    frame = _fetch_tencent_kline(asset, lookback_bars=lookback_bars).copy()
     frame["amount"] = pd.to_numeric(frame.get("volume"), errors="coerce")
     return frame
 
 
-def _fetch_amount_history_with_fallback(asset: str, secid: str) -> tuple[pd.DataFrame, str, list[str]]:
+def _fetch_amount_history_with_fallback(
+    asset: str,
+    secid: str,
+    lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS,
+) -> tuple[pd.DataFrame, str, list[str]]:
     attempts: list[str] = []
     sources = (
-        ("EastMoney amount", lambda: _fetch_eastmoney_kline(secid)),
-        ("CSIndex official amount", lambda: _fetch_csindex_amount(secid)),
-        ("Sohu amount", lambda: _fetch_sohu_amount(secid)),
-        ("Sina volume proxy", lambda: _fetch_sina_volume_proxy(asset)),
-        ("Tencent volume proxy", lambda: _fetch_tencent_volume_proxy(asset)),
+        ("EastMoney amount", lambda: _fetch_eastmoney_kline(secid, lookback_bars=lookback_bars)),
+        ("CSIndex official amount", lambda: _fetch_csindex_amount(secid, lmt=lookback_bars)),
+        ("Sohu amount", lambda: _fetch_sohu_amount(secid, lmt=lookback_bars)),
+        ("Sina volume proxy", lambda: _fetch_sina_volume_proxy(asset, lookback_bars=lookback_bars)),
+        ("Tencent volume proxy", lambda: _fetch_tencent_volume_proxy(asset, lookback_bars=lookback_bars)),
     )
     for source_name, fetcher in sources:
         try:
@@ -1682,10 +1686,14 @@ def _fetch_tencent_realtime_snapshot(asset: str) -> Optional[dict[str, float]]:
         return None
 
 
-def _fetch_price_history_with_fallback(asset: str, secid: str) -> tuple[pd.DataFrame, str, list[str]]:
+def _fetch_price_history_with_fallback(
+    asset: str,
+    secid: str,
+    lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS,
+) -> tuple[pd.DataFrame, str, list[str]]:
     attempts: list[str] = []
     try:
-        frame = _fetch_sina_kline(asset)
+        frame = _fetch_sina_kline(asset, lookback_bars=lookback_bars)
         if len(frame) > 50:
             return frame, f"Sina {CN_SINA_SYMBOLS[asset]}", attempts
         attempts.append(f"Sina {CN_SINA_SYMBOLS[asset]}: too few rows ({len(frame)})")
@@ -1693,7 +1701,7 @@ def _fetch_price_history_with_fallback(asset: str, secid: str) -> tuple[pd.DataF
         attempts.append(f"Sina {CN_SINA_SYMBOLS[asset]}: {exc}")
 
     try:
-        frame = _fetch_eastmoney_kline(secid)
+        frame = _fetch_eastmoney_kline(secid, lookback_bars=lookback_bars)
         if len(frame) > 50:
             return frame, f"EastMoney {secid}", attempts
         attempts.append(f"EastMoney {secid}: too few rows ({len(frame)})")
@@ -1701,7 +1709,7 @@ def _fetch_price_history_with_fallback(asset: str, secid: str) -> tuple[pd.DataF
         attempts.append(f"EastMoney {secid}: {exc}")
 
     try:
-        frame = _fetch_tencent_kline(asset)
+        frame = _fetch_tencent_kline(asset, lookback_bars=lookback_bars)
         if len(frame) > 50:
             return frame, f"Tencent {CN_TENCENT_SYMBOLS[asset]}", attempts
         attempts.append(f"Tencent {CN_TENCENT_SYMBOLS[asset]}: too few rows ({len(frame)})")
@@ -1737,7 +1745,10 @@ def _fetch_realtime_snapshot_with_fallback(
     return None, None
 
 
-def _fetch_online_price_panel(include_realtime: bool) -> tuple[pd.DataFrame, dict[str, object]]:
+def _fetch_online_price_panel(
+    include_realtime: bool,
+    lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS,
+) -> tuple[pd.DataFrame, dict[str, object]]:
     if ONLINE_DISABLED:
         raise RuntimeError("online fetch disabled by POE_ADK_DISABLE_ONLINE")
 
@@ -1756,7 +1767,11 @@ def _fetch_online_price_panel(include_realtime: bool) -> tuple[pd.DataFrame, dic
 
     for asset, secid in CN_PRICE_SECIDS.items():
         try:
-            frame, source_name, attempts = _fetch_price_history_with_fallback(asset, secid)
+            frame, source_name, attempts = _fetch_price_history_with_fallback(
+                asset,
+                secid,
+                lookback_bars=lookback_bars,
+            )
             if attempts:
                 fallbacks[asset] = " -> ".join(attempts)
             frame["is_live_bar"] = False
@@ -1800,7 +1815,11 @@ def _fetch_online_price_panel(include_realtime: bool) -> tuple[pd.DataFrame, dic
             current_amount = pd.to_numeric(frame.get("amount", pd.Series(index=frame.index, dtype=float)), errors="coerce")
             if int(current_amount.dropna().shape[0]) <= 50:
                 try:
-                    amount_frame, amount_source, amount_attempts = _fetch_amount_history_with_fallback(asset, secid)
+                    amount_frame, amount_source, amount_attempts = _fetch_amount_history_with_fallback(
+                        asset,
+                        secid,
+                        lookback_bars=lookback_bars,
+                    )
                     amount_value = pd.to_numeric(amount_frame.get("amount"), errors="coerce")
                     merged_index = frame.index.union(amount_value.index)
                     frame = frame.reindex(merged_index)
@@ -1846,6 +1865,7 @@ def _fetch_online_price_panel(include_realtime: bool) -> tuple[pd.DataFrame, dic
     panel.attrs["live_assets"] = live_assets
     panel.attrs["fetched_at"] = bj.strftime("%Y-%m-%d %H:%M:%S")
     panel.attrs["mode"] = "intraday" if live_assets else "daily"
+    panel.attrs["lookback_bars"] = int(lookback_bars)
     return panel, dict(panel.attrs)
 
 
@@ -2824,6 +2844,7 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
 
 
 _PERFORMANCE_CONTEXT_CACHE: dict[str, object] = {}
+_PERFORMANCE_QUERY_CONTEXT_CACHE: dict[str, dict[str, object]] = {}
 _PERFORMANCE_CONTEXT_TTL_SECONDS = 180.0
 
 
@@ -2857,6 +2878,70 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
     value = (curves, online)
     _PERFORMANCE_CONTEXT_CACHE.clear()
     _PERFORMANCE_CONTEXT_CACHE.update({"cached_at": now, "value": value})
+    return value
+
+
+def _performance_query_years(query: str) -> Optional[float]:
+    raw = str(query or "")
+    explicit = _parse_explicit_date_range(raw)
+    if explicit is not None:
+        start, end = explicit
+        if end > pd.Timestamp("2100-01-01"):
+            end = pd.Timestamp(beijing_now().date())
+        days = max(1, int((end.normalize() - start.normalize()).days))
+        return max(0.25, days / 365.25)
+    q = raw.upper()
+    if "今年" in raw or "YTD" in q or "YEAR_TO_DATE" in q:
+        return 1.0
+    natural = _parse_natural_relative_window(raw)
+    if natural is not None:
+        return float(natural[1])
+    if "10Y" in q or "TEN_Y" in q or "最近10年" in raw or "最近十年" in raw:
+        return 10.0
+    if "5Y" in q or "FIVE_Y" in q or "最近5年" in raw or "最近五年" in raw:
+        return 5.0
+    if "3Y" in q or "THREE_Y" in q or "最近3年" in raw or "最近三年" in raw:
+        return 3.0
+    if "1Y" in q or "ONE_Y" in q or "最近1年" in raw or "最近一年" in raw:
+        return 1.0
+    return None
+
+
+def _performance_query_lookback_bars(query: str) -> Optional[int]:
+    years = _performance_query_years(query)
+    if years is None or years <= 0:
+        return None
+    warmup_bars = max(ONLINE_REBUILD_LOOKBACK_BARS, 420)
+    bars = int(math.ceil(float(years) * ANNUAL_DAYS)) + warmup_bars
+    return min(ONLINE_FETCH_LOOKBACK_BARS, max(ONLINE_REBUILD_LOOKBACK_BARS, bars))
+
+
+def _load_performance_curves_for_query(query: str) -> tuple[dict[str, pd.DataFrame], dict[str, object]]:
+    lookback_bars = _performance_query_lookback_bars(query)
+    if lookback_bars is None or not POE_ONLINE_ONLY:
+        return load_performance_curves()
+
+    cache_key = str(int(lookback_bars))
+    now = time.monotonic()
+    cached = _PERFORMANCE_QUERY_CONTEXT_CACHE.get(cache_key)
+    if cached:
+        cached_at = float(cached.get("cached_at", 0.0) or 0.0)
+        value = cached.get("value")
+        if value is not None and now - cached_at <= _PERFORMANCE_CONTEXT_TTL_SECONDS:
+            return value  # type: ignore[return-value]
+
+    metas = load_strategy_metas()
+    panel, online_meta = _fetch_online_price_panel(include_realtime=False, lookback_bars=lookback_bars)
+    curves = _build_curves_from_online_prices(metas, panel, full_history=True)
+    online = {
+        **online_meta,
+        "ok": True,
+        "error": None,
+        "data_mode": "online_rebuild_recent_performance",
+        "performance_lookback_bars": int(lookback_bars),
+    }
+    value = (curves, online)
+    _PERFORMANCE_QUERY_CONTEXT_CACHE[cache_key] = {"cached_at": now, "value": value}
     return value
 
 
@@ -2972,22 +3057,86 @@ def _normalize_query(query: str) -> str:
     return q
 
 
-_CN_NUM_MAP = {}
+_CN_NUM_MAP = {
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+}
 
 
 def _parse_natural_number(text: str) -> Optional[float]:
     token = str(text or "").strip()
     if not token:
         return None
-    if token.isdigit():
-        return float(int(token))
+    if re.fullmatch(r"\d+(?:\.\d+)?", token):
+        return float(token)
     normalized = _CN_NUM_MAP.get(token)
     if normalized is not None:
         return float(normalized)
+    if "十" in token:
+        left, right = token.split("十", 1)
+        tens = _CN_NUM_MAP.get(left, 1) if left else 1
+        ones = _CN_NUM_MAP.get(right, 0) if right else 0
+        return float(tens * 10 + ones)
     return None
 
+
 def _parse_natural_relative_window(q: str) -> Optional[tuple[str, float]]:
+    pattern = r"(?:最近|过去|近)\s*([0-9]+(?:\.[0-9]+)?|[零一二两三四五六七八九十]+)\s*年"
+    match = re.search(pattern, str(q or ""))
+    if not match:
+        return None
+    years = _parse_natural_number(match.group(1))
+    if years is None or years <= 0:
+        return None
+    years_label = int(years) if float(years).is_integer() else years
+    return f"最近{years_label}年", float(years)
+
+
+def _parse_query_date_token(token: str, *, end_of_period: bool) -> Optional[pd.Timestamp]:
+    raw = str(token or "").strip()
+    match = re.fullmatch(r"(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?", raw)
+    if not match:
+        return None
+    year = int(match.group(1))
+    month_text = match.group(2)
+    day_text = match.group(3)
+    try:
+        if month_text is None:
+            return pd.Timestamp(year, 12, 31) if end_of_period else pd.Timestamp(year, 1, 1)
+        month = int(month_text)
+        if day_text is None:
+            first = pd.Timestamp(year, month, 1)
+            return first + pd.offsets.MonthEnd(0) if end_of_period else first
+        return pd.Timestamp(year, month, int(day_text))
+    except ValueError:
+        return None
+
+
+def _parse_explicit_date_range(query: str) -> Optional[tuple[pd.Timestamp, pd.Timestamp]]:
+    token = r"\d{4}(?:-\d{1,2}(?:-\d{1,2})?)?"
+    match = re.search(rf"({token})\s*(?:到|至|~|～|--|—|－)\s*({token})", str(query or ""))
+    if match:
+        start = _parse_query_date_token(match.group(1), end_of_period=False)
+        end = _parse_query_date_token(match.group(2), end_of_period=True)
+        if start is not None and end is not None:
+            return start, end
+    match = re.search(rf"({token})\s*(?:至今|到今|以来)", str(query or ""))
+    if match:
+        start = _parse_query_date_token(match.group(1), end_of_period=False)
+        if start is not None:
+            return start, pd.Timestamp.max.normalize()
     return None
+
 
 def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp, pd.Timestamp, str]:
     q = str(query or "").upper()
@@ -2995,22 +3144,41 @@ def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp,
     end = pd.Timestamp(index.max()).normalize()
     start = pd.Timestamp(index.min()).normalize()
     label = "全样本"
+    min_date = pd.Timestamp(index.min()).normalize()
+    max_date = pd.Timestamp(index.max()).normalize()
 
-    if "10Y" in q or "TEN_Y" in q or "最近10年" in raw or "最近十年" in raw:
-        start = end - pd.DateOffset(years=10)
-        label = "最近10年"
-    elif "5Y" in q or "FIVE_Y" in q or "最近5年" in raw or "最近五年" in raw:
-        start = end - pd.DateOffset(years=5)
-        label = "最近5年"
-    elif "3Y" in q or "THREE_Y" in q or "最近3年" in raw or "最近三年" in raw:
-        start = end - pd.DateOffset(years=3)
-        label = "最近3年"
-    elif "1Y" in q or "ONE_Y" in q or "最近1年" in raw or "最近一年" in raw:
-        start = end - pd.DateOffset(years=1)
-        label = "最近1年"
+    explicit = _parse_explicit_date_range(raw)
+    if explicit is not None:
+        start, end = explicit
+        start = max(min_date, start.normalize())
+        end = min(max_date, end.normalize())
+        if start > end:
+            start = end
+        return start, end, f"{start:%Y-%m-%d} 至 {end:%Y-%m-%d}"
 
-    start = max(pd.Timestamp(index.min()).normalize(), start)
-    end = min(pd.Timestamp(index.max()).normalize(), end)
+    if "今年" in raw or "YTD" in q or "YEAR_TO_DATE" in q:
+        start = pd.Timestamp(end.year, 1, 1)
+        label = "今年"
+    else:
+        natural = _parse_natural_relative_window(raw)
+        if natural is not None:
+            label, years = natural
+            start = end - pd.DateOffset(years=years)
+        elif "10Y" in q or "TEN_Y" in q or "最近10年" in raw or "最近十年" in raw:
+            start = end - pd.DateOffset(years=10)
+            label = "最近10年"
+        elif "5Y" in q or "FIVE_Y" in q or "最近5年" in raw or "最近五年" in raw:
+            start = end - pd.DateOffset(years=5)
+            label = "最近5年"
+        elif "3Y" in q or "THREE_Y" in q or "最近3年" in raw or "最近三年" in raw:
+            start = end - pd.DateOffset(years=3)
+            label = "最近3年"
+        elif "1Y" in q or "ONE_Y" in q or "最近1年" in raw or "最近一年" in raw:
+            start = end - pd.DateOffset(years=1)
+            label = "最近1年"
+
+    start = max(min_date, start)
+    end = min(max_date, end)
     return start, end, label
 
 
@@ -3034,7 +3202,7 @@ def _metric_table(rows: list[tuple[str, dict]]) -> list[str]:
 
 
 def render_performance(query: str, combo: bool = False) -> str:
-    curves, online = load_performance_curves()
+    curves, online = _load_performance_curves_for_query(query)
     if combo:
         curves_to_report = build_combo_curves(curves)
         order = [(pair_key, label) for pair_key, label, _forward_key, _reverse_key in PAIR_DEFS]
@@ -3053,7 +3221,8 @@ def render_performance(query: str, combo: bool = False) -> str:
     if label == "全样本":
         data_mode = str(online.get("data_mode", ""))
         if data_mode.startswith("online_rebuild_recent"):
-            label = f"Poe最近窗口（约{ONLINE_REBUILD_LOOKBACK_BARS}个交易日）"
+            lookback = int(online.get("performance_lookback_bars", ONLINE_REBUILD_LOOKBACK_BARS) or ONLINE_REBUILD_LOOKBACK_BARS)
+            label = f"Poe最近窗口（约{lookback}个交易日）"
         elif data_mode == "online_rebuild_full_performance":
             label = f"Poe在线价格窗口（约{ONLINE_FETCH_LOOKBACK_BARS}个交易日）"
     rows = [(display, metrics_for_curve(_slice_curve(curves_to_report[key], start, end))) for key, display in order]
@@ -3061,6 +3230,9 @@ def render_performance(query: str, combo: bool = False) -> str:
     if online.get("ok"):
         latest = max((df.index.max() for df in curves.values() if not df.empty), default=end)
         lines.append(f"- 在线刷新: **成功**（{online.get('mode', 'daily')}，最新 {latest:%Y-%m-%d}，抓取 {online.get('fetched_at', 'N/A')}）")
+        if str(online.get("data_mode", "")).startswith("online_rebuild_recent"):
+            lookback = int(online.get("performance_lookback_bars", ONLINE_REBUILD_LOOKBACK_BARS) or ONLINE_REBUILD_LOOKBACK_BARS)
+            lines.append(f"- 在线重建窗口: Poe最近窗口（约{lookback}个交易日）")
         if str(online.get("data_mode", "")).startswith("online_rebuild"):
             lines.append("- 数据来源: Poe 在线窗口重建（Sina/EastMoney/Tencent 公开指数日线 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
             lines.append("- 注意: 该口径用于 Poe 在线展示，不代表本地正式长期回测；NAV 在在线窗口起点重置为 1.0。")
@@ -4553,7 +4725,8 @@ def render_signal(live: bool = False) -> str:
             lines.append(f'- Data fetched at: {online.get("fetched_at")}')
         if str(online.get("data_mode", "")).startswith("online_rebuild"):
             lines.append("- Data source: Poe 在线重建（公开指数日线/实时快照 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
-            lines.append("- Usage: 用于 Poe 实时信号展示；与本地正式回测 artifacts 可能存在小幅差异。")
+            usage = "实时信号展示" if live else "运行信号（日线收盘口径）展示"
+            lines.append(f"- Usage: 用于 Poe {usage}；与本地正式回测 artifacts 可能存在小幅差异。")
     else:
         lines.append("- Data source: unavailable")
     lines.append("")
@@ -4758,6 +4931,8 @@ def render_nav_chart(query: str, combo: bool = False) -> str:
 def render_query(query: str) -> str:
     normalized = _normalize_query(query)
     compact = normalized.replace(" ", "")
+    if "净值" in compact or "NAV" in normalized.upper():
+        return render_nav_chart(normalized, combo=("组合" in compact))
     if "历史" in compact and "信号" in compact:
         return render_signal_history(normalized)
     if "参数" in compact and "实时" in compact:
@@ -4769,7 +4944,7 @@ def render_query(query: str) -> str:
     if "表现" in compact:
         return render_performance(normalized, combo=False)
     if "信号" in compact:
-        return render_signal(live=True)
+        return render_signal(live=("实时" in compact))
     return render_signal(live=True)
 
 def _write_query_response(msg, query: str) -> None:
