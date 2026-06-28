@@ -633,8 +633,8 @@ SUBB_DBC_PROFIT_GUARD_SCALE_L1 = 0.67
 SUBB_DBC_PROFIT_GUARD_SCALE_L2 = 0.00
 SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT = 1e-6
 US_ROT_VOLREG_BACKTEST_NOTE = (
-    "VolReg回测口径: 当前为整日cash/model return近似，"
-    "尚未拆成旧仓隔夜+新仓日内open execution。"
+    "VolReg回测口径: T日收盘信号 -> T+1调整后开盘执行；"
+    "转现金日保留旧仓隔夜收益，恢复日只计算新仓日内收益。"
 )
 
 # ─────────────────────────────────────────────
@@ -7083,7 +7083,8 @@ def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_A
                         threshold=US_ROT_REBALANCE_THRESHOLD,
                         us_open=None,
                         ranking_code_selector=None,
-                        weight_assets=None):
+                        weight_assets=None,
+                        strict_open_execution=False):
     close_df = _apply_subb_btc_start_filter(close_df)
     momentum_by_lb = {lb: close_df.div(close_df.shift(lb)).sub(1) for lb in US_ROT_LBS}
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
@@ -7104,7 +7105,15 @@ def run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_A
             rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
             scale = min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
         if pending_act is not None:
-            open_row = _us_open_row(close_df.index[i], w_assets, us_open, close_df)
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(
+                close_df.index[i],
+                open_assets,
+                us_open,
+                close_df,
+                strict=strict_open_execution,
+                context="Sub-B official rotation",
+            )
             overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
             intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
             gross_adj = (1 + overnight) * (1 + intraday) - 1
@@ -7202,7 +7211,8 @@ def run_subb_v75_ema_base7_rotation(
         min_turnover=US_ROT_MIN_TURNOVER,
         threshold=US_ROT_REBALANCE_THRESHOLD,
         us_open=None,
-        weight_assets=None):
+        weight_assets=None,
+        strict_open_execution=False):
     """V7.7 EMA leg: full US_ROT_POOL ranking with EWMA target-vol scaling."""
     close_df = _apply_subb_btc_start_filter(close_df)
     ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_POOL)
@@ -7223,7 +7233,15 @@ def run_subb_v75_ema_base7_rotation(
     for i in range(start_idx, len(close_df)):
         scale = _subb_v75_ema_scale_from_hist(hist)
         if pending_act is not None:
-            open_row = _us_open_row(close_df.index[i], w_assets, us_open, close_df)
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(
+                close_df.index[i],
+                open_assets,
+                us_open,
+                close_df,
+                strict=strict_open_execution,
+                context="Sub-B EMA rotation",
+            )
             overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
             intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
             gross_adj = (1 + overnight) * (1 + intraday) - 1
@@ -7484,7 +7502,7 @@ def _v78_target_from_scores(score_row, vol_row, scale, top_n=3, abs_threshold=0.
     return _apply_subb_btc_cap(_us_model_b(raw_w, scale))
 
 
-def run_v78_subb_new_line(close_df, line="bias", us_open=None):
+def run_v78_subb_new_line(close_df, line="bias", us_open=None, strict_open_execution=False):
     close_df = _apply_subb_btc_start_filter(close_df)
     w_assets = list(dict.fromkeys(US_ROT_POOL + ["BIL"]))
     if line == "bias":
@@ -7517,7 +7535,15 @@ def run_v78_subb_new_line(close_df, line="bias", us_open=None):
             rv = np.nan
             scale = 1.0
         if pending_act is not None:
-            open_row = _us_open_row(dt, w_assets, us_open, close_df)
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(
+                dt,
+                open_assets,
+                us_open,
+                close_df,
+                strict=strict_open_execution,
+                context=f"Sub-B V7.8 {line} rotation",
+            )
             overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
             intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
             gross = (1.0 + overnight) * (1.0 + intraday) - 1.0
@@ -8718,24 +8744,54 @@ def _us_weighted_return(weights, prev_prices, curr_prices):
         pr += w * (curr_px / prev_px - 1)
     return pr
 
-def _us_open_row(date, assets, us_open, close_df):
+def _active_weight_assets(*weight_dicts, min_abs=1e-12):
+    assets = set()
+    for weights in weight_dicts:
+        for asset, raw_weight in (weights or {}).items():
+            try:
+                weight = float(raw_weight or 0.0)
+            except Exception:
+                weight = 0.0
+            if abs(weight) > min_abs:
+                assets.add(asset)
+    return sorted(assets)
+
+
+def _us_open_row(date, assets, us_open, close_df, *, strict=False, context="US open execution"):
     prices = {}
+    missing = []
+    fallback_assets = []
     for a in assets:
         px = np.nan
         if us_open is not None and a in us_open:
             s = us_open[a]
             if date in s.index:
                 px = s.loc[date]
-        if pd.isna(px) and a in close_df.columns:
-            px = close_df.loc[date, a]
+        if pd.isna(px):
+            if strict:
+                missing.append(a)
+            elif close_df is not None and a in close_df.columns and date in close_df.index:
+                px = close_df.loc[date, a]
+                fallback_assets.append(a)
         prices[a] = px
-    return pd.Series(prices)
+    if missing:
+        dt = pd.Timestamp(date).date().isoformat()
+        assets_text = ", ".join(sorted(missing))
+        raise ValueError(
+            f"{context}: missing T+1 adjusted open price on {dt} for {assets_text}. "
+            "Formal Sub-B execution requires T+1 adjusted open; refusing close fallback."
+        )
+    row = pd.Series(prices)
+    if fallback_assets:
+        row.attrs["open_price_close_fallback_assets"] = tuple(sorted(fallback_assets))
+    return row
 
 def run_us_rotation(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_THRESHOLD,
                     min_turnover=US_ROT_MIN_TURNOVER,
                     threshold=US_ROT_REBALANCE_THRESHOLD,
                     btc_ticker=None, btc_start=None, btc_max_w=None,
-                    us_open=None):
+                    us_open=None,
+                    strict_open_execution=False):
     if btc_ticker and btc_start is not None and btc_ticker in close_df.columns:
         close_df = close_df.copy()
         close_df.loc[close_df.index < btc_start, btc_ticker] = np.nan
@@ -8756,7 +8812,15 @@ def run_us_rotation(close_df, ranking_codes, top_n=3, abs_threshold=US_ROT_ABS_T
             rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
             scale = min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
         if pending_act is not None:
-            open_row = _us_open_row(close_df.index[i], w_assets, us_open, close_df)
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(
+                close_df.index[i],
+                open_assets,
+                us_open,
+                close_df,
+                strict=strict_open_execution,
+                context="Sub-B legacy rotation",
+            )
             overnight = _us_weighted_return(holdings, close_df.iloc[i-1], open_row)
             intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
             adj = (1 + overnight) * (1 + intraday) * (1 - pending_comm) - 1
@@ -8932,7 +8996,8 @@ def _is_v78_subb_blend(result):
     )
 
 
-def apply_vol_regime_overlay(us_rot_result, spy_close):
+def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=None,
+                             strict_open_execution=False):
     """VolReg风控: SPY短期/长期vol超过进入阈值转现金，低于退出阈值恢复。
     在us_rot_result上新增 volreg_ratio / volreg_cash 两列用于信号展示。"""
     spy_ret = spy_close.pct_change()
@@ -8948,6 +9013,7 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         mask_values.append(cash_state)
     mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
     result = us_rot_result.copy()
+    close_aligned = close_df.reindex(result.index) if close_df is not None else None
     is_v78_blend = _is_v78_subb_blend(result)
     pre_volreg_return = pd.to_numeric(result["return"], errors="coerce").fillna(0.0)
     if is_v78_blend:
@@ -8968,11 +9034,12 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
     prev_effective = None
     turnovers = []
     costs = []
+    gross_returns = []
     final_returns = []
     volreg_actions = []
     model_records = []
     effective_records = []
-    for dt in result.index:
+    for pos, dt in enumerate(result.index):
         row = result.loc[dt]
         model_w = _prefixed_weight_dict(row, "actual_w_", assets)
         if not any(abs(v) > 1e-12 for v in model_w.values()):
@@ -8984,7 +9051,6 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         else:
             effective_w = {asset: float(model_w.get(asset, 0.0) or 0.0) for asset in assets}
             effective_w["CASH"] = 0.0
-            gross_ret = float(base_ret.loc[dt])
         if prev_effective is None:
             turnover = 0.0
             prev_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
@@ -8995,11 +9061,43 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
                 turnover = 0.0
             else:
                 turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH", "BIL"))
+        cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
+        has_open_execution_prices = close_aligned is not None and prev_effective is not None and (
+            us_open is not None or strict_open_execution
+        )
+        if has_open_execution_prices and cur_cash != prev_cash:
+            if cur_cash:
+                open_assets = _active_weight_assets(prev_effective)
+                open_row = _us_open_row(
+                    dt,
+                    open_assets,
+                    us_open,
+                    close_aligned,
+                    strict=strict_open_execution,
+                    context="Sub-B VolReg cash entry",
+                )
+                prev_close = close_aligned.iloc[pos - 1] if pos > 0 else close_aligned.loc[dt]
+                gross_ret = _us_weighted_return(prev_effective, prev_close, open_row)
+            else:
+                open_assets = _active_weight_assets(effective_w)
+                open_row = _us_open_row(
+                    dt,
+                    open_assets,
+                    us_open,
+                    close_aligned,
+                    strict=strict_open_execution,
+                    context="Sub-B VolReg cash exit",
+                )
+                gross_ret = _us_weighted_return(effective_w, open_row, close_aligned.loc[dt])
+        elif cur_cash:
+            gross_ret = 0.0
+        else:
+            gross_ret = float(base_ret.loc[dt])
         cost = turnover * US_ROT_COMMISSION
+        gross_returns.append(gross_ret)
         final_returns.append((1.0 + gross_ret) * (1.0 - cost) - 1.0)
         turnovers.append(turnover)
         costs.append(cost)
-        cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
         if cur_cash and not prev_cash:
             volreg_actions.append("enter_cash")
         elif prev_cash and not cur_cash:
@@ -9016,7 +9114,8 @@ def apply_vol_regime_overlay(us_rot_result, spy_close):
         result[f"effective_w_{asset}"] = effective_df[asset]
         result[f"w_{asset}"] = effective_df[asset]
     result["pre_volreg_return"] = pre_volreg_return
-    result["gross_return_before_volreg_cost"] = base_ret
+    result["gross_return_before_volreg_cost"] = pd.Series(gross_returns, index=result.index, dtype=float)
+    result["model_full_day_return_before_volreg"] = base_ret
     result["return_before_volreg"] = pre_volreg_return
     result["volreg_action"] = pd.Series(volreg_actions, index=result.index, dtype=object)
     result["subb_effective_turnover"] = pd.Series(turnovers, index=result.index, dtype=float)
@@ -9172,7 +9271,8 @@ def _subb_dbc_profit_guard_pending(row):
     return abs(nxt - today) > 1e-9 or abs(target_removed - current_removed) > 0.005
 
 
-def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None):
+def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None,
+                                        strict_open_execution=False):
     if (
         not SUBB_DBC_PROFIT_GUARD_ENABLED
         or us_rot_result is None
@@ -9235,10 +9335,20 @@ def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None):
         if i > 0:
             prev_dt = result.index[i - 1]
             prev_close = close_aligned.loc[prev_dt]
-            cur_open = _us_open_row(dt, assets, us_open, close_aligned)
-            cur_close = close_aligned.loc[dt]
             overnight_removed = max(prev_pre_asset_weight, 0.0) * max(1.0 - prev_scale, 0.0)
             intraday_removed = pre_asset_weight * max(1.0 - scale_today, 0.0)
+            return_split_assets = [asset]
+            if overnight_removed > 1e-12 or intraday_removed > 1e-12:
+                return_split_assets.append(cash_asset)
+            cur_open = _us_open_row(
+                dt,
+                return_split_assets,
+                us_open,
+                close_aligned,
+                strict=strict_open_execution,
+                context="Sub-B DBC profit guard return split",
+            )
+            cur_close = close_aligned.loc[dt]
             overnight_delta = overnight_removed * (
                 _subb_price_return(cash_asset, prev_close, cur_open)
                 - _subb_price_return(asset, prev_close, cur_open)
@@ -9262,7 +9372,14 @@ def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None):
             next_scale = 1.0
             next_level = 0
         else:
-            cur_open = _us_open_row(dt, assets, us_open, close_aligned)
+            cur_open = _us_open_row(
+                dt,
+                [asset],
+                us_open,
+                close_aligned,
+                strict=strict_open_execution,
+                context="Sub-B DBC profit guard entry price",
+            )
             cur_close = close_aligned.loc[dt]
             if pd.isna(wave_entry):
                 wave_entry = _subb_price_value(asset, cur_open)
@@ -11970,7 +12087,8 @@ class CombinedStrategyBase:
         return cache[key]
 
     def _cached_run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily,
-                               allow_unresolved_suba_volume=False):
+                               allow_unresolved_suba_volume=False,
+                               strict_subb_open_execution=True):
         cache = getattr(self, "_request_strategy_cache", None)
         if cache is None:
             cache = {}
@@ -11981,6 +12099,7 @@ class CombinedStrategyBase:
             id(us_rot_close),
             id(us_prod_daily),
             bool(allow_unresolved_suba_volume),
+            bool(strict_subb_open_execution),
         )
         if key not in cache:
             cache[key] = self._run_strategies(
@@ -11989,11 +12108,13 @@ class CombinedStrategyBase:
                 us_rot_close,
                 us_prod_daily,
                 allow_unresolved_suba_volume=allow_unresolved_suba_volume,
+                strict_subb_open_execution=strict_subb_open_execution,
             )
         return cache[key]
 
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily,
-                        allow_unresolved_suba_volume=False):
+                        allow_unresolved_suba_volume=False,
+                        strict_subb_open_execution=True):
         # v6.1: Sub-A uses bias momentum + R² + bond ETF
         cn_close_with_bond = _add_cn_bond_column(cn_close, context="Sub-A国债避险")
         suba_single_gate = (
@@ -12106,12 +12227,14 @@ class CombinedStrategyBase:
             us_open=getattr(self, "_us_open", None),
             ranking_code_selector=_subb_active_ranking_codes,
             weight_assets=US_ROT_POOL,
+            strict_open_execution=strict_subb_open_execution,
         )
         us_rot_ema = run_subb_v75_ema_base7_rotation(
             us_rot_close,
             base_codes=US_ROT_POOL,
             us_open=getattr(self, "_us_open", None),
             weight_assets=US_ROT_POOL,
+            strict_open_execution=strict_subb_open_execution,
         )
         us_rot_result = blend_subb_v75_results(us_rot_official, us_rot_ema)
         us_rot_v77_result = us_rot_result
@@ -12119,20 +12242,29 @@ class CombinedStrategyBase:
             us_rot_close,
             line="bias",
             us_open=getattr(self, "_us_open", None),
+            strict_open_execution=strict_subb_open_execution,
         )
         us_rot_logvol_result = run_v78_subb_new_line(
             us_rot_close,
             line="logvol",
             us_open=getattr(self, "_us_open", None),
+            strict_open_execution=strict_subb_open_execution,
         )
         us_rot_result = blend_v78_subb_results(us_rot_v77_result, us_rot_bias_result, us_rot_logvol_result)
         if US_ROT_VOLREG_ENABLED and "SPY" in us_rot_close.columns:
-            us_rot_result = apply_vol_regime_overlay(us_rot_result, us_rot_close["SPY"])
+            us_rot_result = apply_vol_regime_overlay(
+                us_rot_result,
+                us_rot_close["SPY"],
+                close_df=us_rot_close,
+                us_open=getattr(self, "_us_open", None),
+                strict_open_execution=strict_subb_open_execution,
+            )
         if SUBB_DBC_PROFIT_GUARD_ENABLED:
             us_rot_result = apply_subb_dbc_profit_guard_overlay(
                 us_rot_result,
                 us_rot_close,
                 us_open=getattr(self, "_us_open", None),
+                strict_open_execution=strict_subb_open_execution,
             )
         prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
         if _subc_enabled():
@@ -14102,11 +14234,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("5. Sub-B 纳入 BTC/IBIT；历史段使用 BTC-USD 代理，实盘展示与下单使用 IBIT\n")
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
-                          f"次日全仓转现金(return=0)；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
+                          f"次日开盘转现金；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
                 w(f"   - {US_ROT_VOLREG_BACKTEST_NOTE}\n")
             if SUBB_DBC_PROFIT_GUARD_ENABLED:
                 w(f"8. DBC/PDBC profit guard: price-only, no score decay; {_subb_dbc_profit_guard_rule_text()}. Applied after VolReg with next-open execution.\n")
-            w("\n**执行方式:** 美股因时差无法收盘价执行 → 次日开盘价执行（回测用收盘价对收盘价，shift(1)近似）\n")
+            w("\n**执行方式:** 美股因时差无法收盘价执行 -> T+1 adjusted open 执行；回测按旧仓隔夜 + 新仓日内拆分，缺少 required open 时中止。\n")
             w("\n---\n\n### 组合\n\n| 参数 | 值 |\n|:-|:-|\n")
             for _cname in COMBINED_DISPLAY_ORDER:
                 _cw = COMBINED_WEIGHTS[_cname]

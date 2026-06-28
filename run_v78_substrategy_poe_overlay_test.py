@@ -105,6 +105,26 @@ def shift_bool_frame(frame: pd.DataFrame, periods: int) -> pd.DataFrame:
     return frame.shift(periods).fillna(False).astype(bool)
 
 
+def _date_label(value) -> str:
+    return pd.Timestamp(value).date().isoformat()
+
+
+def _align_external_bool_gate(frame: pd.DataFrame, index: pd.Index, label: str) -> pd.DataFrame:
+    target = pd.DatetimeIndex(index)
+    if target.empty:
+        return frame.reindex(index).ffill().fillna(False).astype(bool)
+    if frame.empty:
+        raise ValueError(f"{label} source is empty; target index ends at {_date_label(target.max())}")
+    source_end = pd.Timestamp(frame.index.max())
+    target_end = pd.Timestamp(target.max())
+    if source_end < target_end:
+        raise ValueError(
+            f"{label} source ends at {_date_label(source_end)} before target index ends at "
+            f"{_date_label(target_end)}; refusing to forward-fill stale external gate"
+        )
+    return frame.reindex(index).ffill().fillna(False).astype(bool)
+
+
 def suba_active_frame(cn_long, index: pd.Index, signal_shift_days: int = 0) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, str]]:
     curves, _combo, source_map, _errors = cn_long.load_all_curves(progress=None, include_realtime=False)
     active = pd.DataFrame(index=index)
@@ -386,7 +406,7 @@ def recalc_subb_same_engine(result: pd.DataFrame, close: pd.DataFrame, us_open: 
 def subb_active_frame(index: pd.Index) -> pd.DataFrame:
     active_path = ROOT / "outputs" / "subb_v77_us_long_poe_gate_20260612" / "poe_us_long_active_by_sleeve.csv"
     active = pd.read_csv(active_path, parse_dates=["date"]).set_index("date").sort_index()
-    return active.reindex(index).ffill().fillna(False).astype(bool)
+    return _align_external_bool_gate(active, index, "Sub-B active")
 
 
 def run_subb_overlay(v78, us_close: pd.DataFrame, baseline: pd.DataFrame, out_dir: Path) -> pd.DataFrame:
@@ -537,7 +557,7 @@ def run_adk_overlay(v78, baseline: pd.DataFrame, out_dir: Path, signal_shift_day
     outputs = {}
     for mode, filename in allowed_files.items():
         allowed = pd.read_csv(ADK_ALLOWED_DIR / filename, parse_dates=["date"]).set_index("date").sort_index()
-        allowed = allowed.reindex(common).ffill().fillna(False).astype(bool)
+        allowed = _align_external_bool_gate(allowed, common, f"ADK {mode} allowed")
         allowed = shift_bool_frame(allowed, signal_shift_days)
         comp_after = {name: recompute_adk_allowed(v78, df.reindex(common), allowed, mode) for name, df in components.items()}
         after = baseline.reindex(common).copy()
