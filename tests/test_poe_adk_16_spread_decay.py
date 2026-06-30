@@ -27,6 +27,34 @@ def make_strategy(bot, key, display_name=None):
     )
 
 
+def make_required_price_panel(bot, index):
+    panel = pd.DataFrame(index=index)
+    for offset, asset in enumerate(bot.CN_PRICE_SECIDS, start=1):
+        panel[asset] = 1000.0 + offset * 100.0 + pd.Series(range(len(index)), index=index) * (offset + 1)
+        panel[f"{asset}_amount"] = 1_000_000_000.0 + offset * 10_000_000.0
+        panel[f"{asset}_volume"] = 10_000_000.0 + offset * 100_000.0
+    panel.attrs["mode"] = "daily"
+    return panel
+
+
+def make_return_curves(bot, index, daily_return=0.0):
+    returns = [daily_return] * len(index)
+    nav = (1.0 + pd.Series(returns, index=index)).cumprod()
+    return {
+        config.key: pd.DataFrame(
+            {
+                "return": returns,
+                "gross_return": returns,
+                "nav": nav,
+                "gross_exposure": [0.0] * len(index),
+                "score": [0.0] * len(index),
+            },
+            index=index,
+        )
+        for config in bot.STRATEGIES
+    }
+
+
 def test_score_strength_decay_state_uses_active_peak_and_warmup():
     bot = load_bot_module()
     index = pd.date_range("2026-01-01", periods=4, freq="D")
@@ -656,18 +684,69 @@ def test_post_close_exposure_uses_current_overlay_multiplier():
     assert "叠加 0.623" in snapshot["formula"]
 
 
+def test_post_close_exposure_uses_applied_target_vol_scale_not_raw():
+    bot = load_bot_module()
+    index = pd.DatetimeIndex([pd.Timestamp("2026-06-12")])
+    curve = pd.DataFrame(
+        {
+            "target": [1.0],
+            "raw_signal": [1.0],
+            "score": [12.0],
+            "gross_exposure": [1.0],
+            "base_gross_exposure": [1.0],
+            "target_vol_scale": [1.0],
+            "target_vol_raw_scale": [0.5],
+        },
+        index=index,
+    )
+    meta = {
+        "signal": {"score_threshold": 0.0},
+        "target_vol": {"enabled": True, "target_vol": 0.16, "target_vol_window": 20},
+    }
+
+    snapshot = bot._strategy_signal_snapshot(bot.STRATEGIES[0], curve, meta, {"ok": True, "probes": {}}, live=False)
+
+    assert snapshot["formula"].count("TV 1.000") >= 2
+    assert "TV 0.500" not in snapshot["formula"]
+
+
+def test_signal_snapshot_details_include_r2_threshold_and_realized_vol():
+    bot = load_bot_module()
+    index = pd.DatetimeIndex([pd.Timestamp("2026-06-12")])
+    curve = pd.DataFrame(
+        {
+            "target": [1.0],
+            "raw_signal": [1.0],
+            "score": [12.0],
+            "r2": [0.04],
+            "gross_exposure": [0.8],
+            "base_gross_exposure": [0.8],
+            "target_vol_scale": [0.8],
+            "target_vol_raw_scale": [0.7],
+            "realized_vol": [0.2],
+        },
+        index=index,
+    )
+    meta = {
+        "signal": {"score_threshold": 0.0, "r2_threshold": 0.05},
+        "target_vol": {"enabled": True, "target_vol": 0.16, "target_vol_window": 20},
+    }
+
+    snapshot = bot._strategy_signal_snapshot(bot.STRATEGIES[0], curve, meta, {"ok": True, "probes": {}}, live=False)
+
+    assert "R2" in snapshot["overlay_detail"]
+    assert "0.040" in snapshot["overlay_detail"]
+    assert "0.050" in snapshot["overlay_detail"]
+    assert "RV 20.00%" in snapshot["overlay_detail"]
+
+
 def test_realtime_context_rebuilds_online_without_embedded_artifacts(tmp_path, monkeypatch):
     bot = load_bot_module()
     bot.OUTPUT_DIR = tmp_path / "missing_outputs"
     bot._EMBEDDED_ARTIFACT_CACHE = None
 
     index = pd.bdate_range("2025-01-01", periods=400)
-    panel = pd.DataFrame(index=index)
-    for offset, asset in enumerate(("zz1000", "hs300", "cyb", "sz50", "zz500"), start=1):
-        panel[asset] = 1000.0 + offset * 100.0 + pd.Series(range(len(index)), index=index) * (offset + 1)
-        panel[f"{asset}_amount"] = 1_000_000_000.0 + offset * 10_000_000.0
-        panel[f"{asset}_volume"] = 10_000_000.0 + offset * 100_000.0
-    panel.attrs["mode"] = "daily"
+    panel = make_required_price_panel(bot, index)
 
     def fake_fetch_online_price_panel(include_realtime=False):
         return panel, {"mode": "daily", "fetched_at": "2026-01-01 15:00:00"}
@@ -687,13 +766,28 @@ def test_realtime_context_rebuilds_online_without_embedded_artifacts(tmp_path, m
     assert len(curves["forward_zz1000_hs300"]) < len(panel)
 
 
+def test_realtime_context_fails_closed_when_required_online_asset_missing(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range("2026-01-01", periods=120)
+    panel = make_required_price_panel(bot, index).drop(columns=["cyb", "cyb_amount", "cyb_volume"])
+
+    def fake_fetch_online_price_panel(include_realtime=False):
+        return panel, {"mode": "daily", "errors": {"cyb": "network timeout"}}
+
+    monkeypatch.setattr(bot, "_fetch_online_price_panel", fake_fetch_online_price_panel)
+
+    curves, _metas, online = bot.load_strategy_context(include_realtime=True)
+
+    assert curves == {}
+    assert online["ok"] is False
+    assert "missing required online assets" in online["error"]
+    assert "cyb" in online["error"]
+
+
 def test_realtime_context_does_not_full_history_rebuild(monkeypatch):
     bot = load_bot_module()
     index = pd.bdate_range("2025-01-01", periods=180)
-    panel = pd.DataFrame(index=index)
-    for offset, asset in enumerate(("zz1000", "hs300", "cyb", "sz50", "zz500"), start=1):
-        panel[asset] = 1000.0 + offset * 100.0 + pd.Series(range(len(index)), index=index)
-    panel.attrs["mode"] = "daily"
+    panel = make_required_price_panel(bot, index)
     calls = []
 
     monkeypatch.setattr(bot, "load_strategy_curves", lambda: {})
@@ -875,6 +969,29 @@ def test_signal_history_uses_online_context_when_artifacts_are_missing(monkeypat
     assert "2026-01-02" in output
 
 
+def test_signal_history_reports_missing_curves_without_keyerror(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=2, freq="D")
+    curves = {
+        bot.STRATEGIES[0].key: pd.DataFrame(
+            {"gross_exposure": [0.0, 1.0], "score": [1.0, 2.0]},
+            index=index,
+        )
+    }
+
+    monkeypatch.setattr(
+        bot,
+        "load_strategy_context",
+        lambda include_realtime=False: (curves, {}, {"ok": True, "data_mode": "online_rebuild_realtime"}),
+    )
+
+    output = bot.render_signal_history("history")
+
+    assert "2026-01-02" in output
+    assert "missing curve" in output
+    assert bot.STRATEGIES[1].key in output
+
+
 def test_fallback_meta_is_canonicalized_for_online_rebuild(monkeypatch):
     bot = load_bot_module()
 
@@ -935,8 +1052,8 @@ def test_online_recent_rebuild_reuses_execution_fill(monkeypatch):
 def test_performance_rebuild_uses_full_history_without_snapshot_seed(monkeypatch):
     bot = load_bot_module()
     bot._PERFORMANCE_CONTEXT_CACHE.clear()
-    index = pd.date_range("2025-01-01", periods=80, freq="D")
-    panel = pd.DataFrame(index=index)
+    index = pd.date_range("2025-01-01", periods=160, freq="D")
+    panel = make_required_price_panel(bot, index)
     calls = []
 
     monkeypatch.setattr(bot, "load_strategy_curves", lambda: {})
@@ -1002,6 +1119,36 @@ def test_online_signal_applies_r2_threshold(monkeypatch):
 
     assert frame["r2"].tolist() == [0.01, 0.01, 0.10, 0.10]
     assert frame["raw_signal"].tolist() == [0.0, 0.0, 1.0, 1.0]
+
+
+def test_online_signal_frame_clamps_to_required_publication_start_when_meta_lacks_common_start(monkeypatch):
+    bot = load_bot_module()
+    config = next(config for config in bot.STRATEGIES if config.key == "forward_zz1000_hs300")
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2014-10-15"),
+            pd.Timestamp("2014-10-16"),
+            pd.Timestamp("2014-10-17"),
+            pd.Timestamp("2014-10-20"),
+        ]
+    )
+    panel = make_required_price_panel(bot, index)
+
+    monkeypatch.setattr(
+        bot,
+        "_bias_momentum_score_for_live",
+        lambda close, bias_ma, mom_day, weight_end, meta: pd.Series([10.0] * len(close), index=close.index),
+    )
+    monkeypatch.setattr(
+        bot,
+        "_bias_momentum_r2_for_live",
+        lambda close, bias_ma, mom_day, weight_end: pd.Series([1.0] * len(close), index=close.index),
+        raising=False,
+    )
+
+    frame = bot._online_signal_frame_for_strategy(config, {"signal": {"score_threshold": 0.0}}, panel)
+
+    assert frame.index.min() >= pd.Timestamp("2014-10-17")
 
 
 def test_live_bias_momentum_score_matches_formal_weighted_slope_formula():
@@ -1429,6 +1576,65 @@ def test_render_performance_uses_query_scoped_loader(monkeypatch):
 
     assert calls == ["表现 最近1年"]
     assert "Poe最近窗口" in output
+
+
+def test_render_performance_includes_standard_windows_and_na_reasons(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range("2020-01-02", "2026-01-02")
+    curves = make_return_curves(bot, index, daily_return=0.0001)
+
+    monkeypatch.setattr(
+        bot,
+        "_load_performance_curves_for_query",
+        lambda query: (curves, {"ok": True, "mode": "daily", "data_mode": "online_rebuild_recent_performance"}),
+        raising=False,
+    )
+
+    output = bot.render_performance("performance", combo=False)
+
+    assert "Standard windows" in output
+    for label in ("Full", "10Y", "5Y", "3Y", "1Y"):
+        assert f"| {label} |" in output
+    assert "history starts" in output
+
+
+def test_combo_performance_reports_missing_leg_as_na_not_keyerror(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range("2020-01-02", "2026-01-02")
+    curves = make_return_curves(bot, index, daily_return=0.0001)
+    missing_key = "reverse_hs300_zz1000"
+    del curves[missing_key]
+
+    monkeypatch.setattr(
+        bot,
+        "_load_performance_curves_for_query",
+        lambda query: (curves, {"ok": True, "mode": "daily", "data_mode": "online_rebuild_recent_performance"}),
+        raising=False,
+    )
+
+    output = bot.render_performance("combo performance", combo=True)
+
+    assert "N/A" in output
+    assert f"missing curve {missing_key}" in output
+
+
+def test_nav_chart_falls_back_to_performance_standard_windows(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range("2020-01-02", "2026-01-02")
+    curves = make_return_curves(bot, index, daily_return=0.0001)
+
+    monkeypatch.setattr(
+        bot,
+        "_load_performance_curves_for_query",
+        lambda query: (curves, {"ok": True, "mode": "daily", "data_mode": "online_rebuild_recent_performance"}),
+        raising=False,
+    )
+
+    output = bot.render_nav_chart("NAV", combo=False)
+
+    assert "NAV chart unavailable" in output
+    assert "Standard windows" in output
+    assert "| 10Y |" in output
 
 
 def test_online_rebuild_precomputes_decay_state_once(monkeypatch):

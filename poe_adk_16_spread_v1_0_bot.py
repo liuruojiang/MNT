@@ -407,6 +407,15 @@ CN_ASSET_NAMES = {
     "zz500": "中证500",
 }
 
+CN_ASSET_PUBLICATION_DATES = {
+    "sz50": pd.Timestamp("2004-01-02"),
+    "hs300": pd.Timestamp("2005-04-08"),
+    "zz500": pd.Timestamp("2007-01-15"),
+    "cyb": pd.Timestamp("2010-06-01"),
+    "zz1000": pd.Timestamp("2014-10-17"),
+}
+
+
 STRATEGY_LEGS = {
     "forward_zz1000_hs300": ("zz1000", "hs300"),
     "reverse_hs300_zz1000": ("hs300", "zz1000"),
@@ -425,6 +434,47 @@ STRATEGY_LEGS = {
     "forward_cyb_zz500": ("cyb", "zz500"),
     "reverse_zz500_cyb": ("zz500", "cyb"),
 }
+
+
+def _coerce_timestamp(value: object) -> Optional[pd.Timestamp]:
+    if value in (None, ""):
+        return None
+    try:
+        ts = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    return ts.normalize()
+
+
+def _required_formal_start_for_strategy(config: "StrategyConfig") -> Optional[pd.Timestamp]:
+    dates = [
+        CN_ASSET_PUBLICATION_DATES[asset]
+        for asset in STRATEGY_LEGS.get(config.key, ())
+        if asset in CN_ASSET_PUBLICATION_DATES
+    ]
+    if not dates:
+        return None
+    return max(pd.Timestamp(item).normalize() for item in dates)
+
+
+def _effective_online_start(config: "StrategyConfig", meta: dict, fallback: object) -> pd.Timestamp:
+    candidates = []
+    fallback_ts = _coerce_timestamp(fallback)
+    if fallback_ts is not None:
+        candidates.append(fallback_ts)
+    for key in ("common_start", "formal_start"):
+        ts = _coerce_timestamp(meta.get(key) if isinstance(meta, dict) else None)
+        if ts is not None:
+            candidates.append(ts)
+    required = _required_formal_start_for_strategy(config)
+    if required is not None:
+        candidates.append(required)
+    if not candidates:
+        return pd.Timestamp.min.normalize()
+    return max(candidates)
+
 
 ONLINE_DISABLED = os.environ.get("POE_ADK_DISABLE_ONLINE", "").strip().lower() in {"1", "true", "yes", "on"}
 POE_MODE = "poe_online_rebuild"
@@ -1866,6 +1916,7 @@ def _fetch_online_price_panel(
     panel.attrs["fetched_at"] = bj.strftime("%Y-%m-%d %H:%M:%S")
     panel.attrs["mode"] = "intraday" if live_assets else "daily"
     panel.attrs["lookback_bars"] = int(lookback_bars)
+    _validate_online_price_panel(panel)
     return panel, dict(panel.attrs)
 
 
@@ -2149,7 +2200,7 @@ def _live_probe_for_strategy(
         return None
     long_asset, short_asset = legs
     pair = panel[[long_asset, short_asset]].dropna().copy()
-    start = pd.Timestamp(meta.get("common_start", pair.index.min()))
+    start = _effective_online_start(config, meta, pair.index.min())
     pair = pair.loc[pair.index >= start]
     if len(pair) < 100:
         return None
@@ -2217,7 +2268,7 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     price = panel[[long_asset, short_asset]].dropna().copy()
     if price.empty:
         return pd.DataFrame()
-    start = pd.Timestamp(meta.get("common_start", price.index.min()))
+    start = _effective_online_start(config, meta, price.index.min())
     price = price.loc[price.index >= start]
     if price.empty:
         return pd.DataFrame()
@@ -2824,6 +2875,7 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
             local_error = str(exc)
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=include_realtime)
+        _validate_online_price_panel(panel, metas)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
@@ -2864,6 +2916,7 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
             curves = {}
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=False)
+        _validate_online_price_panel(panel, metas)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
@@ -2932,6 +2985,7 @@ def _load_performance_curves_for_query(query: str) -> tuple[dict[str, pd.DataFra
 
     metas = load_strategy_metas()
     panel, online_meta = _fetch_online_price_panel(include_realtime=False, lookback_bars=lookback_bars)
+    _validate_online_price_panel(panel, metas)
     curves = _build_curves_from_online_prices(metas, panel, full_history=True)
     online = {
         **online_meta,
@@ -2954,14 +3008,59 @@ def _nav_from_returns(returns: pd.Series) -> pd.Series:
     return (1.0 + returns.fillna(0.0)).cumprod()
 
 
+def _unavailable_curve(reason: str) -> pd.DataFrame:
+    frame = pd.DataFrame()
+    frame.attrs["unavailable_reason"] = reason
+    return frame
+
+
+def _curve_unavailable_reason(curves: dict[str, pd.DataFrame], key: str) -> Optional[str]:
+    curve = curves.get(key)
+    if curve is None:
+        return f"missing curve {key}"
+    if curve.empty:
+        return f"empty curve {key}"
+    if "return" not in curve.columns:
+        return f"missing return column {key}"
+    returns = pd.to_numeric(curve["return"], errors="coerce").dropna()
+    if returns.empty:
+        return f"empty return series {key}"
+    return None
+
+
+def _aligned_numeric_column(frame: pd.DataFrame, index: pd.Index, column: str, default: float = 0.0) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(default, index=index, dtype=float)
+    return pd.to_numeric(frame.loc[index, column], errors="coerce").fillna(default).astype(float)
+
+
 def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     combos: dict[str, pd.DataFrame] = {}
     pair_returns: dict[str, pd.Series] = {}
+    unavailable_pairs: list[str] = []
 
     for pair_key, _label, forward_key, reverse_key in PAIR_DEFS:
+        missing = [
+            reason
+            for reason in (
+                _curve_unavailable_reason(curves, forward_key),
+                _curve_unavailable_reason(curves, reverse_key),
+            )
+            if reason
+        ]
+        if missing:
+            reason = "; ".join(missing)
+            combos[pair_key] = _unavailable_curve(reason)
+            unavailable_pairs.append(f"{pair_key}: {reason}")
+            continue
         fwd = curves[forward_key]
         rev = curves[reverse_key]
         pair_return = _blend_returns([fwd["return"].rename("forward"), rev["return"].rename("reverse")])
+        if pair_return.empty:
+            reason = f"no overlapping return dates {forward_key}/{reverse_key}"
+            combos[pair_key] = _unavailable_curve(reason)
+            unavailable_pairs.append(f"{pair_key}: {reason}")
+            continue
         idx = pair_return.index
         frame = pd.DataFrame(index=idx)
         frame["forward_return"] = fwd.loc[idx, "return"].astype(float)
@@ -2969,22 +3068,33 @@ def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
         frame["return"] = pair_return.astype(float)
         frame["gross_return"] = frame["return"]
         frame["cost"] = (
-            pd.to_numeric(fwd.loc[idx].get("cost", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("cost", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "cost") * 0.5
+            + _aligned_numeric_column(rev, idx, "cost") * 0.5
         )
         frame["turnover"] = (
-            pd.to_numeric(fwd.loc[idx].get("turnover", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("turnover", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "turnover") * 0.5
+            + _aligned_numeric_column(rev, idx, "turnover") * 0.5
         )
         frame["gross_exposure"] = (
-            pd.to_numeric(fwd.loc[idx].get("gross_exposure", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("gross_exposure", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "gross_exposure") * 0.5
+            + _aligned_numeric_column(rev, idx, "gross_exposure") * 0.5
         )
         frame["nav"] = _nav_from_returns(frame["return"])
         combos[pair_key] = frame
         pair_returns[pair_key] = frame["return"].rename(pair_key)
 
+    if unavailable_pairs or len(pair_returns) != len(PAIR_DEFS):
+        reason = "missing pair curves: " + "; ".join(unavailable_pairs)
+        combos["all_pair_equal_weight"] = _unavailable_curve(reason)
+        return combos
+    if not pair_returns:
+        combos["all_pair_equal_weight"] = _unavailable_curve("missing pair curves")
+        return combos
+
     total_return = _blend_returns(pair_returns.values())
+    if total_return.empty:
+        combos["all_pair_equal_weight"] = _unavailable_curve("no overlapping pair return dates")
+        return combos
     total = pd.DataFrame(index=total_return.index)
     for pair_key, _label, _forward_key, _reverse_key in PAIR_DEFS:
         total[f"{pair_key}_return"] = combos[pair_key].loc[total.index, "return"].astype(float)
@@ -3007,6 +3117,7 @@ def drawdown(nav: pd.Series) -> pd.Series:
 
 def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
     if curve.empty:
+        reason = str(curve.attrs.get("unavailable_reason") or "N/A")
         return {
             "start": "",
             "end": "",
@@ -3018,7 +3129,12 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
             "sharpe": math.nan,
             "calmar": math.nan,
             "final_nav": math.nan,
+            "reason": reason,
         }
+    if "return" not in curve.columns:
+        reason = str(curve.attrs.get("unavailable_reason") or "missing return column")
+        unavailable = _unavailable_curve(reason)
+        return metrics_for_curve(unavailable)
     returns = pd.to_numeric(curve["return"], errors="coerce").fillna(0.0)
     nav = _nav_from_returns(returns)
     rows = int(len(returns))
@@ -3046,6 +3162,7 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         "sharpe": sharpe,
         "calmar": calmar,
         "final_nav": final_nav,
+        "reason": "",
     }
 
 
@@ -3183,6 +3300,8 @@ def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp,
 
 
 def _slice_curve(curve: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    if curve.empty:
+        return curve.copy()
     return curve.loc[(curve.index >= start) & (curve.index <= end)].copy()
 
 
@@ -3192,13 +3311,103 @@ def _metric_table(rows: list[tuple[str, dict]]) -> list[str]:
         "|:-|------:|------:|------:|------:|------:|------:|------:|:-|",
     ]
     for label, metrics in rows:
+        if int(metrics.get("rows", 0) or 0) <= 0:
+            reason = str(metrics.get("reason") or "N/A")
+            period_text = f"N/A / 0 ({reason})"
+        else:
+            period_text = f"{metrics['start']}~{metrics['end']} / {metrics['rows']}"
         out.append(
             f"| {label} | {pct(metrics['period_return'])} | {pct(metrics['ann_return'])} | "
             f"{pct(metrics['ann_vol'])} | {pct(metrics['max_dd'])} | {num(metrics['sharpe'])} | "
             f"{num(metrics['calmar'])} | {num(metrics['final_nav'], 4)} | "
-            f"{metrics['start']}~{metrics['end']} / {metrics['rows']} |"
+            f"{period_text} |"
         )
     return out
+
+
+STANDARD_PERFORMANCE_WINDOWS: tuple[tuple[str, Optional[int]], ...] = (
+    ("Full", None),
+    ("10Y", 10),
+    ("5Y", 5),
+    ("3Y", 3),
+    ("1Y", 1),
+)
+
+
+def _combined_report_index(curves_to_report: dict[str, pd.DataFrame], order: list[tuple[str, str]]) -> pd.DatetimeIndex:
+    indexes = [
+        pd.DatetimeIndex(curves_to_report[key].index)
+        for key, _label in order
+        if key in curves_to_report and not curves_to_report[key].empty
+    ]
+    if not indexes:
+        return pd.DatetimeIndex([])
+    values: set[pd.Timestamp] = set()
+    for index in indexes:
+        values.update(pd.Timestamp(item) for item in index)
+    return pd.DatetimeIndex(sorted(values))
+
+
+def _with_unavailable_reason(reason: str) -> dict[str, Union[float, int, str]]:
+    return metrics_for_curve(_unavailable_curve(reason))
+
+
+def _standard_window_metrics(curve: pd.DataFrame, label: str, years: Optional[int], end: pd.Timestamp) -> dict[str, Union[float, int, str]]:
+    if curve.empty:
+        return metrics_for_curve(curve)
+    if "return" not in curve.columns:
+        return _with_unavailable_reason("missing return column")
+    curve_end = min(pd.Timestamp(curve.index.max()).normalize(), pd.Timestamp(end).normalize())
+    if years is None:
+        metrics = metrics_for_curve(curve.loc[curve.index <= curve_end])
+    else:
+        requested_start = curve_end - pd.DateOffset(years=years)
+        first_available = pd.Timestamp(curve.index.min()).normalize()
+        if first_available > requested_start + pd.Timedelta(days=7):
+            return _with_unavailable_reason(
+                f"history starts {first_available:%Y-%m-%d} after {label} start {requested_start:%Y-%m-%d}"
+            )
+        sliced = _slice_curve(curve, requested_start, curve_end)
+        if len(sliced) < MIN_ANNUALIZED_METRIC_ROWS:
+            return _with_unavailable_reason(f"insufficient rows for {label}: {len(sliced)}/{MIN_ANNUALIZED_METRIC_ROWS}")
+        metrics = metrics_for_curve(sliced)
+    if not math.isfinite(float(metrics.get("ann_return", math.nan))):
+        reason = str(metrics.get("reason") or f"insufficient rows for annualized metrics: {metrics.get('rows', 0)}/{MIN_ANNUALIZED_METRIC_ROWS}")
+        metrics = dict(metrics)
+        metrics["reason"] = reason
+    return metrics
+
+
+def _standard_window_metric_table(
+    curves_to_report: dict[str, pd.DataFrame],
+    order: list[tuple[str, str]],
+    shared_index: pd.DatetimeIndex,
+) -> list[str]:
+    if shared_index.empty:
+        return ["### Standard windows", "", "- N/A: no return curves available"]
+    end = pd.Timestamp(shared_index.max()).normalize()
+    lines = [
+        "### Standard windows",
+        "",
+        "| Window | Strategy | Ann Return | Max DD | Start/End/Rows | Reason |",
+        "|:-|:-|------:|------:|:-|:-|",
+    ]
+    for window_label, years in STANDARD_PERFORMANCE_WINDOWS:
+        for key, display in order:
+            curve = curves_to_report.get(key, _unavailable_curve(f"missing curve {key}"))
+            metrics = _standard_window_metrics(curve, window_label, years, end)
+            rows = int(metrics.get("rows", 0) or 0)
+            if rows > 0:
+                period = f"{metrics['start']}~{metrics['end']} / {rows}"
+            else:
+                period = "N/A / 0"
+            reason = str(metrics.get("reason") or "")
+            if rows > 0 and not math.isfinite(float(metrics.get("ann_return", math.nan))):
+                reason = reason or "annualized metric N/A"
+            lines.append(
+                f"| {window_label} | {display} | {pct(metrics['ann_return'])} | {pct(metrics['max_dd'])} | {period} | {reason} |"
+            )
+    return lines
 
 
 def render_performance(query: str, combo: bool = False) -> str:
@@ -3207,15 +3416,30 @@ def render_performance(query: str, combo: bool = False) -> str:
         curves_to_report = build_combo_curves(curves)
         order = [(pair_key, label) for pair_key, label, _forward_key, _reverse_key in PAIR_DEFS]
         order.append(("all_pair_equal_weight", f"{len(PAIR_DEFS)}组再等权总组合"))
-        shared_index = curves_to_report["all_pair_equal_weight"].index
+        shared_index = _combined_report_index(curves_to_report, order)
         heading = "## 组合表现"
         note = f"{len(PAIR_DEFS)}组正反50/50，再将{len(PAIR_DEFS)}组等权；组合层不额外收费。"
     else:
         curves_to_report = curves
         order = [(config.key, config.display_name) for config in STRATEGIES]
-        shared_index = pd.DatetimeIndex(sorted(set.union(*(set(curves[k].index) for k, _ in order))))
+        shared_index = _combined_report_index(curves_to_report, order)
         heading = "## ADK价差子策略表现"
         note = f"{len(STRATEGIES)}个子策略按在线重建日收益统计；各子策略保留自身正式样本起点。"
+
+    if shared_index.empty:
+        today = pd.Timestamp(beijing_now().date())
+        rows = [
+            (display, metrics_for_curve(curves_to_report.get(key, _unavailable_curve(f"missing curve {key}"))))
+            for key, display in order
+        ]
+        lines = [heading, "", "- Query window: **N/A**", f"- 口径: {note}", "- N/A: no return curves available"]
+        if online.get("error"):
+            lines.append(f"- 在线刷新: **失败**；原因 `{online.get('error')}`")
+        lines.append("")
+        lines.extend(_metric_table(rows))
+        lines.append("")
+        lines.extend(_standard_window_metric_table(curves_to_report, order, pd.DatetimeIndex([today])))
+        return "\n".join(lines).rstrip() + "\n"
 
     start, end, label = parse_date_range(query, shared_index)
     if label == "全样本":
@@ -3225,7 +3449,10 @@ def render_performance(query: str, combo: bool = False) -> str:
             label = f"Poe最近窗口（约{lookback}个交易日）"
         elif data_mode == "online_rebuild_full_performance":
             label = f"Poe在线价格窗口（约{ONLINE_FETCH_LOOKBACK_BARS}个交易日）"
-    rows = [(display, metrics_for_curve(_slice_curve(curves_to_report[key], start, end))) for key, display in order]
+    rows = [
+        (display, metrics_for_curve(_slice_curve(curves_to_report.get(key, _unavailable_curve(f"missing curve {key}")), start, end)))
+        for key, display in order
+    ]
     lines = [heading, "", f"- 查询区间: **{label}** ({start:%Y-%m-%d} 至 {end:%Y-%m-%d})", f"- 口径: {note}"]
     if online.get("ok"):
         latest = max((df.index.max() for df in curves.values() if not df.empty), default=end)
@@ -3240,6 +3467,8 @@ def render_performance(query: str, combo: bool = False) -> str:
         lines.append(f"- 在线刷新: **失败**；原因: `{online.get('error')}`")
     lines.append("")
     lines.extend(_metric_table(rows))
+    lines.append("")
+    lines.extend(_standard_window_metric_table(curves_to_report, order, shared_index))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -3307,7 +3536,7 @@ def _extract_signal_for_row(row: pd.Series, probe: Optional[dict[str, object]]) 
                 return value
         except (TypeError, ValueError):
             pass
-    for key in ("target", "exec_signal", "raw_signal"):
+    for key in ("raw_signal", "target", "exec_signal"):
         if key in row.index and pd.notna(row[key]):
             try:
                 value = float(row[key])
@@ -3652,6 +3881,75 @@ def _volume_overlay_sections(meta: dict) -> list[dict]:
 
 def _has_amount_sensitive_overlay(meta: dict) -> bool:
     return bool(_amount_overlay_section(meta) or _volume_overlay_sections(meta))
+
+
+def _panel_column_value_count(panel: pd.DataFrame, column: str) -> int:
+    if column not in panel.columns:
+        return 0
+    return int(pd.to_numeric(panel[column], errors="coerce").dropna().shape[0])
+
+
+def _metric_columns_for_section(section: dict, long_asset: str, short_asset: str, metric: str) -> list[str]:
+    family = str(section.get("family") or "")
+    if family in {"high_pair", "low_pair"}:
+        return [f"{long_asset}_{metric}", f"{short_asset}_{metric}"]
+
+    metric_asset = long_asset
+    series_name = str(section.get("series") or section.get("feature") or "").lower()
+    for asset in CN_ASSET_NAMES:
+        if f"{asset}_amount" in series_name or f"{asset}_volume" in series_name or asset in series_name:
+            metric_asset = asset
+            break
+    return [f"{metric_asset}_{metric}"]
+
+
+def _required_overlay_metric_specs(meta: dict, long_asset: str, short_asset: str) -> list[tuple[str, list[str], int]]:
+    specs: list[tuple[str, list[str], int]] = []
+    amount = _amount_overlay_section(meta)
+    if amount:
+        series_name = str(amount.get("series") or amount.get("feature") or "").lower()
+        metric = "volume" if "volume" in series_name else "amount"
+        min_rows = max(int(amount.get("window") or 1), 2)
+        specs.append((f"amount_overlay:{metric}", _metric_columns_for_section(amount, long_asset, short_asset, metric), min_rows))
+    for volume in _volume_overlay_sections(meta):
+        min_rows = max(int(volume.get("window") or 1), 2)
+        label = str(volume.get("_meta_key") or volume.get("_label") or "volume_overlay")
+        specs.append((label, _metric_columns_for_section(volume, long_asset, short_asset, "volume"), min_rows))
+    return specs
+
+
+def _validate_online_price_panel(panel: pd.DataFrame, metas: Optional[dict[str, dict]] = None) -> None:
+    missing_assets = [
+        asset
+        for asset in CN_PRICE_SECIDS
+        if asset not in panel.columns or _panel_column_value_count(panel, asset) <= 0
+    ]
+    if missing_assets:
+        errors = panel.attrs.get("errors", {}) if isinstance(panel.attrs.get("errors", {}), dict) else {}
+        detail = ", ".join(
+            f"{asset} ({errors.get(asset)})" if errors.get(asset) else asset
+            for asset in missing_assets
+        )
+        raise RuntimeError(f"missing required online assets: {detail}")
+
+    if metas is None:
+        return
+
+    missing_metrics: list[str] = []
+    for config in STRATEGIES:
+        legs = STRATEGY_LEGS.get(config.key)
+        if not legs:
+            continue
+        meta = metas.get(config.key, {}) if isinstance(metas, dict) else {}
+        for label, columns, min_rows in _required_overlay_metric_specs(meta, legs[0], legs[1]):
+            for column in columns:
+                count = _panel_column_value_count(panel, column)
+                if count < min_rows:
+                    missing_metrics.append(f"{config.key}:{label}:{column} rows={count}/{min_rows}")
+    if missing_metrics:
+        preview = "; ".join(missing_metrics[:12])
+        suffix = f"; +{len(missing_metrics) - 12} more" if len(missing_metrics) > 12 else ""
+        raise RuntimeError(f"missing required online overlay metrics: {preview}{suffix}")
 
 
 def _nav_drawdown_value(curve: pd.DataFrame) -> tuple[float, str]:
@@ -4180,10 +4478,15 @@ def _overlay_detail_rows(
         abs_pass = True
         if math.isfinite(abs_threshold):
             abs_pass = math.isfinite(abs_mom) and abs_mom > abs_threshold
+        r2_threshold = _signal_r2_threshold(signal)
+        r2_value = _safe_float(probe.get("r2") if probe else row.get("r2", math.nan))
+        r2_pass = True if r2_threshold is None else math.isfinite(r2_value) and r2_value >= r2_threshold
         parts = [
-            _pass_text(score_pass and abs_pass),
+            _pass_text(score_pass and abs_pass and r2_pass),
             f"Score {num(score_value, 3)} / 阈值 {num(score_threshold, 3)}",
         ]
+        if r2_threshold is not None:
+            parts.append(f"R2 {num(r2_value, 3)} / threshold {num(r2_threshold, 3)}")
         if math.isfinite(abs_threshold):
             if math.isfinite(abs_mom):
                 parts.append(f"AbsMom{abs_day} {pct(abs_mom)} / 阈值 {pct(abs_threshold)}")
@@ -4203,6 +4506,9 @@ def _overlay_detail_rows(
         ]
         if math.isfinite(raw_scale):
             parts.append(f"raw {num(raw_scale, 3)}")
+        realized_vol = _first_numeric(row, ("realized_vol", "base_realized_vol"))
+        if math.isfinite(realized_vol):
+            parts.append(f"RV {pct(realized_vol)}")
         deadband = _target_vol_deadband(tv)
         if deadband not in (None, ""):
             deadband_status = "触发" if math.isfinite(suppressed) and suppressed > 0 else "未触发"
@@ -4626,7 +4932,7 @@ def _strategy_signal_snapshot(
     if not math.isfinite(current_overlay_multiplier):
         current_overlay_multiplier = overlay_multiplier
 
-    post_close_tv_scale = _first_numeric(row, ("target_vol_raw_scale", "raw_scale", "target_vol_scale", "base_target_vol_scale", "target_vol_applied_scale", "applied_scale", "scale"))
+    post_close_tv_scale = _first_numeric(row, ("target_vol_scale", "base_target_vol_scale", "target_vol_applied_scale", "applied_scale", "scale", "target_vol_raw_scale", "raw_scale"))
     if not math.isfinite(post_close_tv_scale):
         post_close_tv_scale = tv_scale if math.isfinite(tv_scale) else 1.0
     if not tv.get("enabled"):
@@ -4882,8 +5188,10 @@ def render_params(live: bool = False) -> str:
             scorehot = meta.get("score_overheat", {}) if isinstance(meta.get("score_overheat", {}), dict) else {}
             decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
             abs_day = _signal_abs_day(signal)
+            r2_threshold = _signal_r2_threshold(signal)
+            r2_detail = "disabled" if r2_threshold is None else _format_meta_value(r2_threshold)
             snapshots.append({
-                "signal": f"bias_ma={signal.get('bias_ma')}, mom_day={signal.get('mom_day')}, weight_end={signal.get('weight_end')}, score_threshold={signal.get('score_threshold')}, abs_mom_day={abs_day}, abs_threshold={signal.get('abs_threshold')}",
+                "signal": f"bias_ma={signal.get('bias_ma')}, mom_day={signal.get('mom_day')}, weight_end={signal.get('weight_end')}, score_threshold={signal.get('score_threshold')}, r2_threshold={r2_detail}, abs_mom_day={abs_day}, abs_threshold={signal.get('abs_threshold')}",
                 "target-vol": _target_vol_detail(tv),
                 "NAV-defense": _section_meta_detail(nav),
                 "vol-overlay": _section_meta_detail(vol),
@@ -4910,8 +5218,14 @@ def render_signal_history(query: str) -> str:
         lines.append("- 数据来源: Poe 在线重建最近 5 个交易日；不读取本地正式 artifacts。")
         lines.append("")
     for config in STRATEGIES:
-        curve = curves[config.key]
+        curve = curves.get(config.key)
+        if curve is None:
+            lines.append(f"### {config.display_name}")
+            lines.append(f"- missing curve: {config.key}")
+            continue
         if curve.empty:
+            lines.append(f"### {config.display_name}")
+            lines.append(f"- empty curve: {config.key}")
             continue
         records = curve.tail(5)[["gross_exposure", "score"]] if set(["gross_exposure", "score"]).issubset(curve.columns) else curve.tail(5)
         lines.append(f"### {config.display_name}")
@@ -4926,7 +5240,8 @@ def render_signal_history(query: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 def render_nav_chart(query: str, combo: bool = False) -> str:
-    return "## NAV 曲线\n\n当前环境不再生成图表。"
+    fallback = render_performance(query, combo=combo)
+    return "## NAV curve\n\nNAV chart unavailable in the current Poe environment; metrics fallback below.\n\n" + fallback
 
 def render_query(query: str) -> str:
     normalized = _normalize_query(query)

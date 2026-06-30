@@ -378,6 +378,13 @@ CN_DK_ZZ500_SECID = "1.000905"
 CN_DK_CYB_SECID = "0.399006"
 # v6.1: 多配对Top-1 + 乖离动量 + VolScaling (替代v5.4单配对+冷却期)
 CN_DK_COLS = ["DK_ZZ1000", "DK_SZ50", "DK_HS300", "DK_ZZ500", "DK_CYB"]
+CN_DK_PUBLICATION_DATES = {
+    "DK_SZ50": pd.Timestamp("2004-01-02"),
+    "DK_HS300": pd.Timestamp("2005-04-08"),
+    "DK_ZZ500": pd.Timestamp("2007-01-15"),
+    "DK_CYB": pd.Timestamp("2010-06-01"),
+    "DK_ZZ1000": pd.Timestamp("2014-10-17"),
+}
 CN_DK_NAMES = {
     "DK_ZZ1000": "中证1000", "DK_SZ50": "上证50",
     "DK_HS300": "沪深300", "DK_ZZ500": "中证500", "DK_CYB": "创业板",
@@ -724,6 +731,14 @@ COMBINED_WEIGHTS = ACTIVE_COMBINED_WEIGHTS
 COMBINED_DISPLAY_ORDER = ["Sub-A", "Sub-A-DK", "Microcap", "Sub-D", "Sub-B"]
 PERFORMANCE_COMBO_ORDER = ["Sub-A", "Sub-A-DK", "Sub-B"]
 PERFORMANCE_COLUMNS = PERFORMANCE_COMBO_ORDER + ["Combined"]
+PERFORMANCE_STANDARD_WINDOWS = (
+    ("Full", None),
+    ("10Y", pd.DateOffset(years=10)),
+    ("5Y", pd.DateOffset(years=5)),
+    ("3Y", pd.DateOffset(years=3)),
+    ("1Y", pd.DateOffset(years=1)),
+)
+PERFORMANCE_STANDARD_MIN_DAILY_ROWS = 20
 
 
 def _combined_weight_label():
@@ -1273,19 +1288,34 @@ def _check_microcap_cache_latest(ret, expected_latest_date=None, source_label="m
 
 def _load_microcap_daily_ret(msg=None, expected_latest_date=None):
     microcap_root = os.path.join(os.path.dirname(_repo_base_dir()), "微盘股对冲策略")
-    v20_nav_path = os.path.join(
-        microcap_root,
-        "outputs",
-        "microcap_top100_mom16_targetvol25_max1p5_v2_0_costed_nav.csv",
-    )
-    if not os.path.exists(v20_nav_path):
-        raise poe.BotError("V7.7微盘股 v2.0 target-vol 独立模块缓存缺失: " + v20_nav_path)
+    v20_nav_candidates = [
+        os.path.join(
+            microcap_root,
+            "outputs",
+            "microcap_top100_mom16_targetvol15_max1p5_v2_0_costed_nav.csv",
+        ),
+        os.path.join(
+            microcap_root,
+            "outputs",
+            "microcap_top100_mom16_targetvol25_max1p5_v2_0_costed_nav.csv",
+        ),
+    ]
+    v20_nav_path = next((path for path in v20_nav_candidates if os.path.exists(path)), None)
+    if v20_nav_path is None:
+        raise poe.BotError("V7.8微盘股 v2.0 target-vol 独立模块缓存缺失: " + " / ".join(v20_nav_candidates))
     try:
         net = pd.read_csv(v20_nav_path, parse_dates=["date"]).sort_values("date").set_index("date")
         ret = net["return_net"].dropna()
         if ret.empty:
             raise ValueError("empty microcap return series")
-        _check_microcap_cache_latest(ret, expected_latest_date, "v2.0 mom16_targetvol25_max1p5 costed_nav", msg)
+        v20_nav_file = os.path.basename(v20_nav_path)
+        if "targetvol15" in v20_nav_file:
+            source_label = "v2.0 mom16_targetvol15_max1p5 costed_nav"
+        elif "targetvol25" in v20_nav_file:
+            source_label = "v2.0 mom16_targetvol25_max1p5 costed_nav"
+        else:
+            source_label = f"v2.0 {v20_nav_file}"
+        _check_microcap_cache_latest(ret, expected_latest_date, source_label, msg)
         if msg is not None:
             msg.write(
                 f"  微盘股独立脚本 v2.0 target-vol: {ret.index[0].strftime('%Y-%m-%d')}~"
@@ -2670,7 +2700,9 @@ def _build_cn_dk_close_frame(dk_dfs):
         _price_column_frame(dk_dfs[col], col, col)
         for col in CN_DK_COLS
     ]
-    return pd.concat(frames, axis=1).ffill().dropna(subset=CN_DK_COLS)
+    out = pd.concat(frames, axis=1).ffill().dropna(subset=CN_DK_COLS)
+    formal_start = max(CN_DK_PUBLICATION_DATES[col] for col in CN_DK_COLS)
+    return out.loc[out.index >= formal_start]
 
 def _fetch_cn_dk_price_index(idx_code, secid):
     attempts = []
@@ -3968,6 +4000,31 @@ def _build_proxy_live_spliced_series(proxy_series, live_series=None, switch_star
     return proxy
 
 
+def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=None, live_close=None, name=None):
+    proxy = pd.to_numeric(proxy_open, errors="coerce").astype(float).copy()
+    if name is not None:
+        proxy = proxy.rename(name)
+    if live_open is None or live_close is None:
+        return proxy
+    proxy_close = pd.to_numeric(proxy_close, errors="coerce").astype(float).reindex(proxy.index)
+    live_open = pd.to_numeric(live_open, errors="coerce").astype(float).reindex(proxy.index)
+    live_close = pd.to_numeric(live_close, errors="coerce").astype(float).reindex(proxy.index)
+    overlap = pd.concat(
+        [proxy_close.rename("proxy_close"), live_close.rename("live_close")],
+        axis=1,
+    ).dropna()
+    if overlap.empty:
+        return proxy
+    switch_date = overlap.index[0]
+    live_close_base = float(overlap.loc[switch_date, "live_close"])
+    if abs(live_close_base) < 1e-12:
+        return proxy
+    scale_factor = float(overlap.loc[switch_date, "proxy_close"]) / live_close_base
+    switch_mask = proxy.index >= switch_date
+    proxy.loc[switch_mask] = live_open.loc[switch_mask] * scale_factor
+    return proxy
+
+
 def _build_us_open_execution_dict(us_raw):
     us_open = {}
     for ticker, df in (us_raw or {}).items():
@@ -3983,6 +4040,14 @@ def _build_us_open_execution_dict(us_raw):
             emxc_open,
             switch_start=US_ROT_EMXC_BT_START,
             name="EMXC",
+        )
+    if US_ROT_BTC_TICKER in us_open and "IBIT" in us_open:
+        us_open[US_ROT_BTC_TICKER] = _build_proxy_live_open_spliced_series(
+            us_open[US_ROT_BTC_TICKER],
+            us_raw[US_ROT_BTC_TICKER]["close"],
+            us_open["IBIT"],
+            us_raw["IBIT"]["close"],
+            name=US_ROT_BTC_TICKER,
         )
     return us_open
 
@@ -7530,18 +7595,32 @@ def _v78_fetch_spy_volume(index, timeout=20):
 
 
 def _v78_spy_volume_gate(index):
-    spy_volume, source = _v78_fetch_spy_volume(index)
+    target_index = pd.DatetimeIndex(index)
+    spy_volume, source = _v78_fetch_spy_volume(target_index)
+    mode = str(globals().get("V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open") or "warn_open").lower()
+    def _volume_unavailable_gate(reason):
+        if mode == "warn_open":
+            return pd.Series(False, index=target_index, dtype=bool), reason
+        if mode == "fail_closed":
+            return pd.Series(True, index=target_index, dtype=bool), f"{reason}; fail_closed"
+        if mode == "raise":
+            raise RuntimeError(f"SPY volume unavailable: {reason}")
+        raise ValueError(f"Unsupported V78_SUBB_SPY_VOLUME_FAIL_MODE: {mode}")
+
     if spy_volume.dtype == bool:
-        mode = str(globals().get("V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open") or "warn_open").lower()
-        if str(source).startswith("unavailable"):
-            if mode == "warn_open":
-                return spy_volume.astype(bool), source
-            if mode == "fail_closed":
-                return pd.Series(True, index=index, dtype=bool), f"{source}; fail_closed"
-            if mode == "raise":
-                raise RuntimeError(f"SPY volume unavailable: {source}")
-            raise ValueError(f"Unsupported V78_SUBB_SPY_VOLUME_FAIL_MODE: {mode}")
-        return spy_volume.astype(bool), source
+        if str(source).startswith(("unavailable", "stale")):
+            return _volume_unavailable_gate(source)
+        return spy_volume.reindex(target_index).fillna(False).astype(bool), source
+    valid_volume = spy_volume.dropna()
+    if valid_volume.empty:
+        return _volume_unavailable_gate(f"{source}; empty")
+    latest_volume_date = pd.Timestamp(valid_volume.index.max()).normalize()
+    latest_target_date = pd.Timestamp(target_index.max()).normalize()
+    if latest_volume_date < latest_target_date:
+        return _volume_unavailable_gate(
+            f"{source}; stale latest {latest_volume_date.date().isoformat()} < target {latest_target_date.date().isoformat()}"
+        )
+    spy_volume = spy_volume.reindex(target_index).ffill()
     ratio = spy_volume / spy_volume.rolling(60).mean()
     gate = (ratio >= 1.5).fillna(False).astype(bool)
     return gate, source
@@ -8584,7 +8663,7 @@ def _write_v78_subb_param_tables(w):
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
     w(f"| 四腿混合 | **官方腿25% / EMA腿25% / Bias腿25% / LogVol腿25%** | 四腿分别计算目标，再汇总为V7.8综合执行目标 |\n")
     w(f"| 混合后波动口径 | **不二次归一** | {SUBB_BLEND_VOL_NOTE} |\n")
-    w("| V7.8 NAV成本口径 | **component-net** | Each leg charges its own turnover before blending; the displayed aggregate target is for execution review and may have lower account-level net turnover. |\n")
+    w("| V7.8 NAV成本口径 | **component-net** | V7.7 official+EMA account-level blend is pre-netted before entering V7.8 as the 50% V7.7 component; Bias/LogVol are separately netted V7.8 components. Displayed aggregate target is for execution review and may have lower account-level net turnover. |\n")
     w(f"| SPY量能取数失败 | **{V78_SUBB_SPY_VOLUME_FAIL_MODE}** | fail_closed means Bias/LogVol conservatively derisk QQQ/EMXC/EFA by 0.75 if SPY volume is unavailable; local runs without Yahoo access may be more defensive than Poe/live runs. |\n")
     w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
     w(f"| 调仓保护 | **{US_ROT_REBALANCE_THRESHOLD}x** | 逐窗口挑战者保护；新资产需超过最弱在位者{US_ROT_REBALANCE_THRESHOLD:.2f}x才允许替换 |\n")
@@ -9754,6 +9833,131 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
     return {"annual": annual, "vol": vol, "sharpe": sharpe, "max_dd": dd,
             "calmar": calmar, "win_rate": win_rate, "years": years,
             "total_return": total_return, "yearly": yearly}
+
+def _performance_combined_daily_returns(daily_returns):
+    series_map = {}
+    for name in PERFORMANCE_COMBO_ORDER:
+        s = daily_returns.get(name)
+        if s is None:
+            continue
+        s = pd.to_numeric(pd.Series(s), errors="coerce").dropna().sort_index()
+        if len(s) > 1:
+            series_map[name] = s
+    if len(series_map) < len(PERFORMANCE_COMBO_ORDER):
+        return pd.Series(dtype=float)
+    common_start = max(s.index[0] for s in series_map.values())
+    common_end = min(s.index[-1] for s in series_map.values())
+    if common_end <= common_start:
+        return pd.Series(dtype=float)
+    nav_parts = {}
+    for name, s in series_map.items():
+        period = s[(s.index >= common_start) & (s.index <= common_end)]
+        if len(period) <= 1:
+            return pd.Series(dtype=float)
+        nav = (1.0 + period).cumprod()
+        nav_parts[name] = nav / nav.iloc[0]
+    all_dates = sorted(set().union(*(s.index for s in nav_parts.values())))
+    if len(all_dates) <= 1:
+        return pd.Series(dtype=float)
+    nav_df = pd.DataFrame({
+        name: s.reindex(pd.DatetimeIndex(all_dates)).ffill()
+        for name, s in nav_parts.items()
+    })
+    cw = _performance_combo_weights()
+    weight_df = nav_df.notna().astype(float)
+    for col in weight_df.columns:
+        weight_df[col] *= cw.get(col, 0.0)
+    weight_sum = weight_df.sum(axis=1).replace(0, np.nan)
+    weight_df = weight_df.div(weight_sum, axis=0)
+    nav_comb = (nav_df.fillna(0.0) * weight_df).sum(axis=1)
+    nav_comb = nav_comb / nav_comb.iloc[0]
+    return nav_comb.pct_change().dropna()
+
+def _performance_daily_window_metric(ret_series, requested_start, end_date):
+    s = pd.to_numeric(pd.Series(ret_series), errors="coerce").dropna().sort_index()
+    if len(s) == 0:
+        return {"annual": None, "max_dd": None, "reason": "no data"}
+    end_ts = pd.Timestamp(end_date)
+    s = s[s.index <= end_ts]
+    if len(s) == 0:
+        return {"annual": None, "max_dd": None, "reason": "no data before end date"}
+    if requested_start is not None:
+        requested_start = pd.Timestamp(requested_start)
+        first_available = s.index[0]
+        if first_available > requested_start + pd.Timedelta(days=7):
+            return {
+                "annual": None,
+                "max_dd": None,
+                "reason": (
+                    "insufficient post-start history: "
+                    f"starts {first_available.strftime('%Y-%m-%d')} after required {requested_start.strftime('%Y-%m-%d')}"
+                ),
+            }
+        s = s[s.index >= requested_start]
+    if len(s) < PERFORMANCE_STANDARD_MIN_DAILY_ROWS:
+        return {
+            "annual": None,
+            "max_dd": None,
+            "reason": f"insufficient post-start history: {len(s)} daily rows",
+        }
+    years = (s.index[-1] - s.index[0]).days / 365.25
+    if years <= 0:
+        return {"annual": None, "max_dd": None, "reason": "insufficient post-start history: zero date span"}
+    nav = (1.0 + s).cumprod()
+    annual = (nav.iloc[-1] ** (1.0 / years) - 1.0) * 100.0
+    max_dd = ((nav - nav.cummax()) / nav.cummax()).min() * 100.0
+    return {
+        "annual": float(annual),
+        "max_dd": float(max_dd),
+        "reason": None,
+        "start": s.index[0],
+        "end": s.index[-1],
+    }
+
+def _performance_standard_window_rows(daily_returns, end_date=None, columns=None):
+    if columns is None:
+        columns = PERFORMANCE_COLUMNS
+    cleaned = {}
+    for name, s in dict(daily_returns or {}).items():
+        if s is None:
+            continue
+        ser = pd.to_numeric(pd.Series(s), errors="coerce").dropna().sort_index()
+        if len(ser) > 0:
+            cleaned[name] = ser
+    if end_date is None:
+        latest = [s.index[-1] for s in cleaned.values() if len(s) > 0]
+        end_date = max(latest) if latest else pd.Timestamp.today().normalize()
+    end_ts = pd.Timestamp(end_date)
+    rows = []
+    for label, offset in PERFORMANCE_STANDARD_WINDOWS:
+        requested_start = None if offset is None else end_ts - offset
+        row = {"window": label, "start": requested_start, "end": end_ts, "metrics": {}}
+        for col in columns:
+            row["metrics"][col] = _performance_daily_window_metric(
+                cleaned.get(col, pd.Series(dtype=float)),
+                requested_start,
+                end_ts,
+            )
+        rows.append(row)
+    return rows
+
+def _format_performance_standard_window_cell(metric):
+    if not metric or metric.get("annual") is None or metric.get("max_dd") is None:
+        reason = (metric or {}).get("reason") or "N/A"
+        return f"N/A ({reason})"
+    return f"{metric['annual']:.2f}% / {metric['max_dd']:.2f}%"
+
+def _write_performance_standard_window_table(w, daily_returns, end_date=None):
+    rows = _performance_standard_window_rows(daily_returns, end_date=end_date)
+    w("\n### 标准窗口指标（年化收益 / 最大回撤）\n\n")
+    w("| Window | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘/Sub-D) |\n")
+    w("|:-|------:|------:|------:|------:|\n")
+    for row in rows:
+        cells = []
+        for col in PERFORMANCE_COLUMNS:
+            cells.append(_format_performance_standard_window_cell(row["metrics"].get(col)))
+        w(f"| {row['window']} | " + " | ".join(cells) + " |\n")
+    w("\n")
 
 def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
     period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
@@ -14280,7 +14484,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("3. 选乖离动量最高的资产\n")
             w(f"4. 候选资产需同时满足R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD}、近{CN_ABS_MOM_DAY}日实际收益>{CN_ABS_MOM_THRESHOLD:.0%}，否则持现金\n")
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
-            w("6. 无冷却期限制（T+1已天然保证最少1天间隔）\n")
+            w("6. 无冷却期限制；近收盘信号按当日收盘手工执行，收益状态机用shift(1)避免未来函数\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
             w("\n---\n\n### Sub-A-DK: V7.8双子策略（V7.7正式8配对 + New all10 score-hot）\n\n")
             _write_v78_adk_param_tables(w)
@@ -14301,7 +14505,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f"2. 从正式池选|乖离动量|最大的Top-1配对\n")
             w("3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n")
             w(f"4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n")
-            w("5. 无冷却期（T+1已天然保证最少1天间隔）\n")
+            w("5. 无冷却期；近收盘信号按当日收盘手工执行，收益状态机用shift(1)避免未来函数\n")
             w(f"6. 数据: csindex\n")
             w("\n---\n\n### Sub-B: V7.8四腿综合（官方/EMA/Bias/LogVol各25%）\n\n")
             _write_v78_subb_param_tables(w)
@@ -14432,19 +14636,19 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w(f"| Current final exposure | **{_cn_sc_p:.2f}x** |\n")
                     w(f"| VolScale base leverage | **{float(_cn_sc_raw_p):.2f}x** |\n")
                     w(f"| Position coefficient | **{float(_cn_base_frac_p):.2f}** |\n")
-                    w(f"| Next trading day VolScale | **{_cn_next_scale_p:.2f}x** {'rebalance' if _cn_pending_p else 'hold'} |\n")
+                    w(f"| Close-confirmed VolScale | **{_cn_next_scale_p:.2f}x** {'rebalance' if _cn_pending_p else 'hold'} |\n")
                     if _cn_rv_p is not None and not np.isnan(_cn_rv_p):
                         w(f"| Realized vol | {_cn_rv_p:.1%} |\n")
                     w(f"| Target vol | {CN_TARGET_VOL:.0%} |\n")
                     if CN_SCALE_THRESHOLD > 0:
                         if abs(_cn_next_raw_p - float(_cn_sc_raw_p)) > 0.001:
-                            w(f"| Next theoretical leverage | {_cn_next_raw_p:.2f}x (delta={abs(_cn_next_raw_p - float(_cn_sc_raw_p)):.4f}) |\n")
+                            w(f"| Close-confirmed theoretical leverage | {_cn_next_raw_p:.2f}x (delta={abs(_cn_next_raw_p - float(_cn_sc_raw_p)):.4f}) |\n")
                         else:
                             w(f"| Rebalance threshold | delta >= {CN_SCALE_THRESHOLD:.2f} |\n")
                     if _cn_pending_p:
-                        w(f"\n**VolScale rebalance: {float(_cn_sc_raw_p):.2f}x -> {_cn_next_scale_p:.2f}x; executes before next trading day's open**\n")
+                        w(f"\n**VolScale rebalance: {float(_cn_sc_raw_p):.2f}x -> {_cn_next_scale_p:.2f}x; manual same-day close execution after near-close confirmation**\n")
                     else:
-                        w(f"\n**Final exposure:** **{_cn_sc_p:.2f}x** (hold next trading day)\n")
+                        w(f"\n**Final exposure:** **{_cn_sc_p:.2f}x** (same-day close execution basis)\n")
             w("\n---\n\n### Sub-A-DK: V7.8双子策略（V7.7正式8配对 + New all10 score-hot）\n\n")
             _write_v78_adk_param_tables(w)
             w("\n")
@@ -14774,7 +14978,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._cached_run_strategies(
                 cn_close, cn_dk_close, us_rot_close, us_prod_daily,
-                allow_unresolved_suba_volume=True,
             )
         # v6.1: No MA filter, placeholder for history display
         _cn_market_above_ma = pd.Series(True, index=cn_close.index)
@@ -14970,7 +15173,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._cached_run_strategies(
                 cn_close, cn_dk_close, us_rot_close, us_prod_daily,
-                allow_unresolved_suba_volume=True,
             )
         cn_daily_ret = cn_result["return"]
         dk_daily_ret = cn_dk_result["return"]
@@ -15080,7 +15282,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = \
             self._cached_run_strategies(
                 cn_close, cn_dk_close, us_rot_close, us_prod_daily,
-                allow_unresolved_suba_volume=True,
             )
         cn_daily_period = cn_result["return"][
             (cn_result.index >= start_date) & (cn_result.index <= end_date)]
@@ -15240,6 +15441,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
         all_rebalances.extend([r for r in volreg_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
         all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x["日期"])
+        standard_daily_returns = {
+            "Sub-A": cn_result["return"],
+            "Sub-A-DK": cn_dk_result["return"],
+            "Sub-B": us_rot_result["return"],
+        }
+        standard_daily_returns["Combined"] = _performance_combined_daily_returns(standard_daily_returns)
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         nav_series = {}
@@ -15300,6 +15507,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w(f"- {name}: {s} ~ {e}\n")
                 w("\n")
             w(f"说明: PV/收益查询不合并微盘和Sub-D独立脚本，只展示 Sub-A、Sub-A-DK、Sub-B 及三策略组合（{_performance_combo_weight_label()}）。\n\n")
+            _write_performance_standard_window_table(w, standard_daily_returns, end_date=end_date)
             w("| 指标 | Sub-A | A-DK | Sub-B | PV三策略组合(不含微盘/Sub-D) |\n|:-|------:|------:|------:|-----:|\n")
             metric_labels = [
                 ("年化收益", "annual", "%"), ("波动率", "vol", "%"),
