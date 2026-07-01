@@ -625,12 +625,14 @@ US_ROT_BTC_MAX_W = 0.30
 US_ROT_EMXC_BT_START = pd.Timestamp("2017-08-01")
 US_ROT_EMXC_BT_PROXY = "EEM"
 
-# VolReg 风控: SPY短期/长期波动率比 > 进入阈值时次日转现金，低于退出阈值才恢复
+# VolReg 风控: SPY短期/长期波动率比过热时，次日只削股票指数类暴露，差额进BIL。
 US_ROT_VOLREG_ENABLED = True
 US_ROT_VOLREG_SHORT_W = 10      # 短期波动率窗口(交易日)
 US_ROT_VOLREG_LONG_W = 250      # 长期波动率窗口(交易日)
-US_ROT_VOLREG_THRESHOLD = 2.0   # 短/长波动率比进入阈值
-US_ROT_VOLREG_EXIT_THRESHOLD = 1.6  # 短/长波动率比退出阈值
+US_ROT_VOLREG_THRESHOLD = 1.8   # 短/长波动率比进入阈值
+US_ROT_VOLREG_EXIT_THRESHOLD = 1.4  # 短/长波动率比退出阈值
+US_ROT_VOLREG_DEFENSE_SCALE = 0.00
+US_ROT_VOLREG_SCALE_ASSETS = ("QQQ", "EMXC", "EFA")
 SUBB_DBC_PROFIT_GUARD_ENABLED = True
 SUBB_DBC_PROFIT_GUARD_ASSET = "DBC"
 SUBB_DBC_PROFIT_GUARD_CASH_ASSET = "BIL"
@@ -641,7 +643,7 @@ SUBB_DBC_PROFIT_GUARD_SCALE_L2 = 0.00
 SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT = 1e-6
 US_ROT_VOLREG_BACKTEST_NOTE = (
     "VolReg回测口径: T日收盘信号 -> T+1调整后开盘执行；"
-    "转现金日保留旧仓隔夜收益，恢复日只计算新仓日内收益。"
+    "仅将QQQ/EMXC/EFA目标暴露清零，削减权重转BIL；黄金、债券、商品、CTA、BTC不直接降档。"
 )
 
 # ─────────────────────────────────────────────
@@ -8674,7 +8676,7 @@ def _write_v78_subb_param_tables(w):
     if SUBB_DBC_PROFIT_GUARD_ENABLED:
         w(f"| DBC/PDBC profit guard | **on** | {_subb_dbc_profit_guard_rule_text()} |\n")
     if US_ROT_VOLREG_ENABLED:
-        w(f"| VolReg风控 | **开启** | SPY短/长波动率比>{US_ROT_VOLREG_THRESHOLD}时转现金，低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
+        w(f"| VolReg股票过热 | **开启** | {_subb_volreg_rule_text()}；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
 
     w("\n**官方腿参数**\n\n")
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
@@ -9094,8 +9096,61 @@ def _volreg_next_cash_state(current_cash, ratio):
     return bool(current_cash)
 
 
+def _volreg_scale_for_state(active):
+    return float(US_ROT_VOLREG_DEFENSE_SCALE) if bool(active) else 1.0
+
+
+def _volreg_scaled_assets_in(weights_or_assets):
+    if isinstance(weights_or_assets, dict):
+        assets = set(weights_or_assets)
+    else:
+        assets = set(weights_or_assets or [])
+    return [asset for asset in US_ROT_VOLREG_SCALE_ASSETS if asset in assets]
+
+
+def _prefixed_weight_dict_with_asset_fallback(row, primary_prefix, fallback_prefix, assets):
+    primary = _prefixed_weight_dict(row, primary_prefix, assets)
+    if not any(abs(v) > 1e-12 for v in primary.values()):
+        return _prefixed_weight_dict(row, fallback_prefix, assets)
+    fallback = _prefixed_weight_dict(row, fallback_prefix, assets)
+    out = {}
+    for asset in assets:
+        key = f"{primary_prefix}{asset}"
+        raw = row.get(key, np.nan)
+        out[asset] = fallback.get(asset, 0.0) if pd.isna(raw) else primary.get(asset, 0.0)
+    return out
+
+
+def _apply_subb_volreg_defense_scale_to_weights(weights, active=True):
+    out = {asset: float(weight or 0.0) for asset, weight in dict(weights or {}).items()}
+    if not active:
+        out["CASH"] = 0.0
+        return out, {asset: 0.0 for asset in _volreg_scaled_assets_in(out)}
+    removed = {}
+    for asset in _volreg_scaled_assets_in(out):
+        old = float(out.get(asset, 0.0) or 0.0)
+        new = old * float(US_ROT_VOLREG_DEFENSE_SCALE)
+        out[asset] = new
+        removed[asset] = old - new
+    moved_to_bil = sum(removed.values())
+    out["BIL"] = float(out.get("BIL", 0.0) or 0.0) + moved_to_bil
+    out["CASH"] = 0.0
+    return out, removed
+
+
+def _subb_volreg_rule_text():
+    proxy_assets = "/".join(US_ROT_VOLREG_SCALE_ASSETS)
+    live_assets = "/".join(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_VOLREG_SCALE_ASSETS)
+    live_note = "" if live_assets == proxy_assets else f" (实盘{live_assets})"
+    return (
+        f"SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比 "
+        f">{US_ROT_VOLREG_THRESHOLD:.1f} -> {proxy_assets}{live_note} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}, "
+        f"差额进BIL；低于{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}恢复"
+    )
+
+
 def _should_force_volreg_cash_display(volreg_enabled, volreg_cash_next):
-    return bool(volreg_enabled and volreg_cash_next)
+    return False
 
 
 def _subb_model_rebalanced_value(row):
@@ -9152,121 +9207,126 @@ def _is_v78_subb_blend(result):
 
 def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=None,
                              strict_open_execution=False):
-    """VolReg风控: SPY短期/长期vol超过进入阈值转现金，低于退出阈值恢复。
-    在us_rot_result上新增 volreg_ratio / volreg_cash 两列用于信号展示。"""
+    """VolReg风控: SPY短期/长期vol过热时，只削股票指数类暴露，差额转BIL。"""
     spy_ret = spy_close.pct_change()
     short_vol = spy_ret.rolling(US_ROT_VOLREG_SHORT_W).std() * np.sqrt(US_TRADING_DAYS)
     long_vol  = spy_ret.rolling(US_ROT_VOLREG_LONG_W).std() * np.sqrt(US_TRADING_DAYS)
     vol_ratio = (short_vol / long_vol).reindex(us_rot_result.index).ffill()
     # shift(1): T日收盘计算信号 → T+1日执行
     ratio_shifted = vol_ratio.shift(1)
-    cash_state = False
+    defense_state = False
     mask_values = []
     for value in ratio_shifted:
-        cash_state = _volreg_next_cash_state(cash_state, value)
-        mask_values.append(cash_state)
+        defense_state = _volreg_next_cash_state(defense_state, value)
+        mask_values.append(defense_state)
     mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
     result = us_rot_result.copy()
     close_aligned = close_df.reindex(result.index) if close_df is not None else None
-    is_v78_blend = _is_v78_subb_blend(result)
     pre_volreg_return = pd.to_numeric(result["return"], errors="coerce").fillna(0.0)
-    if is_v78_blend:
-        base_ret = pre_volreg_return
-    else:
-        base_ret = pd.to_numeric(
-            result.get(
-                "return_before_subb_execution_cost",
-                result.get("return_before_execution_cost", result["return"]),
-            ),
-            errors="coerce",
-        ).fillna(0.0)
+    base_ret = pre_volreg_return if _is_v78_subb_blend(result) else pd.to_numeric(
+        result.get(
+            "return_before_subb_execution_cost",
+            result.get("return_before_execution_cost", result["return"]),
+        ),
+        errors="coerce",
+    ).fillna(0.0)
     assets = _weight_columns_assets(result)
     if "BIL" not in assets:
         assets.append("BIL")
     if "CASH" not in assets:
         assets.append("CASH")
     prev_effective = None
+    prev_removed = None
+    prev_defense = False
     turnovers = []
     costs = []
     gross_returns = []
     final_returns = []
     volreg_actions = []
+    moved_to_bil_values = []
     model_records = []
     effective_records = []
     for pos, dt in enumerate(result.index):
         row = result.loc[dt]
-        model_w = _prefixed_weight_dict(row, "actual_w_", assets)
-        if not any(abs(v) > 1e-12 for v in model_w.values()):
-            model_w = _prefixed_weight_dict(row, "w_", assets)
-        if bool(mask.loc[dt]):
-            effective_w = {asset: 0.0 for asset in assets}
-            effective_w["CASH"] = 1.0
-            gross_ret = 0.0
-        else:
-            effective_w = {asset: float(model_w.get(asset, 0.0) or 0.0) for asset in assets}
-            effective_w["CASH"] = 0.0
+        model_w = _prefixed_weight_dict_with_asset_fallback(row, "actual_w_", "w_", assets)
+        defense_active = bool(mask.loc[dt])
+        effective_w, removed_w = _apply_subb_volreg_defense_scale_to_weights(model_w, defense_active)
+        for asset in assets:
+            effective_w.setdefault(asset, 0.0)
+            removed_w.setdefault(asset, 0.0)
+        moved_to_bil_values.append(sum(float(v or 0.0) for v in removed_w.values()))
         if prev_effective is None:
             turnover = 0.0
-            prev_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
         else:
-            prev_cash = bool(prev_effective.get("CASH", 0.0) > 0.999)
-            cur_cash_for_turnover = bool(effective_w.get("CASH", 0.0) > 0.999)
-            if is_v78_blend and cur_cash_for_turnover == prev_cash:
+            if defense_active == prev_defense:
                 turnover = 0.0
             else:
-                turnover = _dict_tradeable_turnover(prev_effective, effective_w, non_tradeable_assets=("CASH", "BIL"))
-        cur_cash = bool(effective_w.get("CASH", 0.0) > 0.999)
+                cur_scale = _volreg_scale_for_state(defense_active)
+                prev_scale = _volreg_scale_for_state(prev_defense)
+                scaled_model_weight = sum(
+                    float(model_w.get(asset, 0.0) or 0.0)
+                    for asset in _volreg_scaled_assets_in(model_w)
+                )
+                turnover = scaled_model_weight * abs(cur_scale - prev_scale)
         has_open_execution_prices = close_aligned is not None and prev_effective is not None and (
             us_open is not None or strict_open_execution
         )
-        if has_open_execution_prices and cur_cash != prev_cash:
-            if cur_cash:
-                open_assets = _active_weight_assets(prev_effective)
+        gross_ret = float(base_ret.loc[dt])
+        if has_open_execution_prices:
+            adjusted_assets = [
+                asset for asset in _volreg_scaled_assets_in(assets)
+                if float((prev_removed or {}).get(asset, 0.0) or 0.0) > 1e-12
+                or float(removed_w.get(asset, 0.0) or 0.0) > 1e-12
+            ]
+            if adjusted_assets:
                 open_row = _us_open_row(
                     dt,
-                    open_assets,
+                    ["BIL", *adjusted_assets],
                     us_open,
                     close_aligned,
                     strict=strict_open_execution,
-                    context="Sub-B VolReg cash entry",
+                    context="Sub-B VolReg equity defense",
                 )
                 prev_close = close_aligned.iloc[pos - 1] if pos > 0 else close_aligned.loc[dt]
-                gross_ret = _us_weighted_return(prev_effective, prev_close, open_row)
-            else:
-                open_assets = _active_weight_assets(effective_w)
-                open_row = _us_open_row(
-                    dt,
-                    open_assets,
-                    us_open,
-                    close_aligned,
-                    strict=strict_open_execution,
-                    context="Sub-B VolReg cash exit",
-                )
-                gross_ret = _us_weighted_return(effective_w, open_row, close_aligned.loc[dt])
-        elif cur_cash:
-            gross_ret = 0.0
-        else:
-            gross_ret = float(base_ret.loc[dt])
+                cur_close = close_aligned.loc[dt]
+                delta = 0.0
+                for asset in adjusted_assets:
+                    prev_removed_weight = float((prev_removed or {}).get(asset, 0.0) or 0.0)
+                    cur_removed_weight = float(removed_w.get(asset, 0.0) or 0.0)
+                    if prev_removed_weight > 1e-12:
+                        delta += prev_removed_weight * (
+                            _subb_price_return("BIL", prev_close, open_row)
+                            - _subb_price_return(asset, prev_close, open_row)
+                        )
+                    if cur_removed_weight > 1e-12:
+                        delta += cur_removed_weight * (
+                            _subb_price_return("BIL", open_row, cur_close)
+                            - _subb_price_return(asset, open_row, cur_close)
+                        )
+                gross_ret += delta
         cost = turnover * US_ROT_COMMISSION
         gross_returns.append(gross_ret)
         final_returns.append((1.0 + gross_ret) * (1.0 - cost) - 1.0)
         turnovers.append(turnover)
         costs.append(cost)
-        if cur_cash and not prev_cash:
-            volreg_actions.append("enter_cash")
-        elif prev_cash and not cur_cash:
-            volreg_actions.append("exit_cash")
+        if defense_active and not prev_defense:
+            volreg_actions.append("enter_defense")
+        elif prev_defense and not defense_active:
+            volreg_actions.append("exit_defense")
         else:
             volreg_actions.append("")
         model_records.append({asset: model_w.get(asset, 0.0) for asset in assets})
         effective_records.append({asset: effective_w.get(asset, 0.0) for asset in assets})
         prev_effective = effective_w
+        prev_removed = removed_w
+        prev_defense = defense_active
     model_df = pd.DataFrame.from_records(model_records, index=result.index).reindex(columns=assets).fillna(0.0)
     effective_df = pd.DataFrame.from_records(effective_records, index=result.index).reindex(columns=assets).fillna(0.0)
     for asset in assets:
         result[f"model_w_{asset}"] = model_df[asset]
         result[f"effective_w_{asset}"] = effective_df[asset]
         result[f"w_{asset}"] = effective_df[asset]
+        result[f"target_w_{asset}"] = effective_df[asset]
     result["pre_volreg_return"] = pre_volreg_return
     result["gross_return_before_volreg_cost"] = pd.Series(gross_returns, index=result.index, dtype=float)
     result["model_full_day_return_before_volreg"] = base_ret
@@ -9278,7 +9338,7 @@ def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=No
     effective_rebalanced = result["subb_effective_turnover"].abs() > 1e-9
     result["model_rebalanced"] = base_rebalanced
     result["effective_rebalanced"] = effective_rebalanced
-    result["volreg_transition"] = result["volreg_action"].isin(["enter_cash", "exit_cash"])
+    result["volreg_transition"] = result["volreg_action"].isin(["enter_defense", "exit_defense"])
     result["volreg_transition_turnover"] = result["subb_effective_turnover"].where(result["volreg_transition"], 0.0)
     result["volreg_transition_cost"] = result["subb_effective_cost"].where(result["volreg_transition"], 0.0)
     result["volreg_rebalanced"] = result["volreg_transition"]
@@ -9286,7 +9346,15 @@ def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=No
     result["return"] = pd.Series(final_returns, index=result.index, dtype=float)
     result["nav"] = (1 + result["return"]).cumprod()
     result["volreg_ratio"] = vol_ratio        # 当日收盘的ratio(未shift), 用于信号展示
-    result["volreg_cash"]  = mask             # 当日是否因昨日信号已转现金
+    result["volreg_defense"] = mask           # 当日是否因昨日信号执行股票指数降档
+    result["volreg_cash"] = False             # V7.8新VolReg不再整腿转现金
+    result["volreg_effective_scale"] = pd.Series(
+        np.where(mask, float(US_ROT_VOLREG_DEFENSE_SCALE), 1.0),
+        index=result.index,
+        dtype=float,
+    )
+    result["volreg_moved_to_bil"] = pd.Series(moved_to_bil_values, index=result.index, dtype=float)
+    result["volreg_scaled_assets"] = ",".join(US_ROT_VOLREG_SCALE_ASSETS)
     return result
 
 
@@ -11403,7 +11471,7 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, si
         if (
             bool(row.get("volreg_cash", False))
             or bool(row.get("volreg_transition", False))
-            or volreg_action in ("enter_cash", "exit_cash")
+            or volreg_action in ("enter_cash", "exit_cash", "enter_defense", "exit_defense")
         ):
             prev_model_weights = current_target
             continue
@@ -12656,18 +12724,18 @@ class CombinedStrategyBase:
             row_idx=-1,
         )
         blended_hypo_us_w = _blend_v78_subb_weight_dicts(v77_hypo_us_w, bias_hypo_us_w, logvol_hypo_us_w)
+        volreg_defense_today = bool(us_rot_result["volreg_defense"].iloc[-1]) if "volreg_defense" in us_rot_result.columns else False
         volreg_cash_today = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
         volreg_ratio_today = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
-        volreg_cash_next = _volreg_next_cash_state(volreg_cash_today, volreg_ratio_today) if US_ROT_VOLREG_ENABLED else False
-        if US_ROT_VOLREG_ENABLED and volreg_cash_next:
-            hypo_us_w = {asset: 0.0 for asset in set(blended_hypo_us_w) | set(current_us_w) | {"CASH"}}
-            hypo_us_w["CASH"] = 1.0
-        else:
-            hypo_us_w = dict(blended_hypo_us_w)
-            hypo_us_w = _apply_subb_dbc_profit_guard_scale_to_weights(
-                hypo_us_w,
-                _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
-            )
+        volreg_defense_next = _volreg_next_cash_state(volreg_defense_today, volreg_ratio_today) if US_ROT_VOLREG_ENABLED else False
+        volreg_cash_next = False
+        hypo_us_w = dict(blended_hypo_us_w)
+        if US_ROT_VOLREG_ENABLED and volreg_defense_next:
+            hypo_us_w, _ = _apply_subb_volreg_defense_scale_to_weights(hypo_us_w, True)
+        hypo_us_w = _apply_subb_dbc_profit_guard_scale_to_weights(
+            hypo_us_w,
+            _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
+        )
         if is_us_signal:
             rebalanced_b = _subb_model_rebalanced_value(us_rot_result.iloc[-1])
             rloc = len(us_rot_result) - 1
@@ -12745,6 +12813,8 @@ class CombinedStrategyBase:
             "volreg_ratio": volreg_ratio_today,
             "volreg_cash_today": volreg_cash_today,
             "volreg_cash_next": volreg_cash_next,
+            "volreg_defense_today": volreg_defense_today,
+            "volreg_defense_next": volreg_defense_next,
         }
 
     def _handle_set_capital(self):
@@ -13655,7 +13725,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
-            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg股票进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
             _subb_volume_warning = _v78_subb_volume_warning(us_rot_result)
             if _subb_volume_warning:
@@ -13663,19 +13733,19 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("下方先展示四腿贡献，再汇总为综合执行目标。\n")
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
-            _vr_cash = d.get("volreg_cash_today", False)
-            _vr_cash_next = d.get("volreg_cash_next", _vr_cash)
+            _vr_defense = d.get("volreg_defense_today", False)
+            _vr_defense_next = d.get("volreg_defense_next", _vr_defense)
             if US_ROT_VOLREG_ENABLED and _vr is not None:
                 if _vr > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
-                elif _vr_cash and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
-                elif _vr_cash:
-                    w(f"🟢 **VolReg风控:** 今日已转现金 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 **VolReg股票过热:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，明日股票指数仓位x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额进BIL\n")
+                elif _vr_defense and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 **VolReg股票过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                elif _vr_defense:
+                    w(f"🟢 **VolReg股票过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg风控:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
-                if _vr_cash_next and not _vr_cash:
-                    w("📌 VolReg后实际执行目标: **CASH 100%**\n")
+                    w(f"🟢 **VolReg股票过热:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
+                if _vr_defense_next and not _vr_defense:
+                    w(f"📌 VolReg后实际执行目标: **QQQ/EMXC/EFA x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
             _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
@@ -13695,7 +13765,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 _us_sig_scale = _subb_official_scale_from_result(us_rot_result, end_loc=_us_rloc)
             _force_volreg_cash_display = _should_force_volreg_cash_display(
                 US_ROT_VOLREG_ENABLED,
-                _vr_cash_next,
+                False,
             )
             _us_display_w, _us_all_etfs = _subb_effective_display_weights(
                 _us_sig_w,
@@ -14282,7 +14352,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
-            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg股票进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
             _subb_volume_warning_live = _v78_subb_volume_warning(us_rot_result)
             if _subb_volume_warning_live:
@@ -14290,14 +14360,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("持仓表展示当前实际持有；四腿表展示假设今日调仓目标，并给出两者差异。\n")
             # VolReg风控 (详细视图)
             _vr_detail = d.get("volreg_ratio")
-            _vr_cash_detail = d.get("volreg_cash_today", False)
+            _vr_defense_detail = d.get("volreg_defense_today", False)
             if US_ROT_VOLREG_ENABLED and _vr_detail is not None:
                 if _vr_detail > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日转现金**\n")
-                elif _vr_cash_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 VolReg: 今日已转现金 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
-                elif _vr_cash_detail:
-                    w(f"🟢 VolReg: 今日已转现金 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日QQQ/EMXC/EFA x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
+                elif _vr_defense_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 VolReg: 今日股票指数已降档 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                elif _vr_defense_detail:
+                    w(f"🟢 VolReg: 今日股票指数已降档 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
                     w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             w("\n")
@@ -14518,8 +14588,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                       f"scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n")
             w("5. Sub-B 纳入 BTC/IBIT；历史段使用 BTC-USD 代理，实盘展示与下单使用 IBIT\n")
             if US_ROT_VOLREG_ENABLED:
-                w(f"7. VolReg风控: SPY {US_ROT_VOLREG_SHORT_W}日vol/{US_ROT_VOLREG_LONG_W}日vol > {US_ROT_VOLREG_THRESHOLD}时，"
-                          f"次日开盘转现金；进入后需低于{US_ROT_VOLREG_EXIT_THRESHOLD}才恢复。T日收盘计算 → T+1日执行\n")
+                w(f"7. VolReg股票过热: {_subb_volreg_rule_text()}。T日收盘计算 → T+1日执行\n")
                 w(f"   - {US_ROT_VOLREG_BACKTEST_NOTE}\n")
             if SUBB_DBC_PROFIT_GUARD_ENABLED:
                 w(f"8. DBC/PDBC profit guard: price-only, no score decay; {_subb_dbc_profit_guard_rule_text()}. Applied after VolReg with next-open execution.\n")
@@ -14733,16 +14802,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f"混合后波动口径: {SUBB_BLEND_VOL_NOTE}\n")
             # VolReg风控状态
             _vr_p = float(us_rot_result["volreg_ratio"].iloc[-1]) if "volreg_ratio" in us_rot_result.columns else None
-            _vr_cash_p = bool(us_rot_result["volreg_cash"].iloc[-1]) if "volreg_cash" in us_rot_result.columns else False
+            _vr_defense_p = bool(us_rot_result["volreg_defense"].iloc[-1]) if "volreg_defense" in us_rot_result.columns else False
             if US_ROT_VOLREG_ENABLED and _vr_p is not None:
                 if _vr_p > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 **VolReg风控:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日转现金**\n")
-                elif _vr_cash_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 **VolReg风控:** 今日已转现金 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续现金\n")
-                elif _vr_cash_p:
-                    w(f"🟢 **VolReg风控:** 今日已转现金 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 **VolReg股票过热:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日QQQ/EMXC/EFA x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
+                elif _vr_defense_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
+                    w(f"🟡 **VolReg股票过热:** 今日股票指数已降档 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                elif _vr_defense_p:
+                    w(f"🟢 **VolReg股票过热:** 今日股票指数已降档 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg风控:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
+                    w(f"🟢 **VolReg股票过热:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             # 信号日状态
             _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
@@ -14813,19 +14882,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 _bias_hypo_us_w_p,
                 _logvol_hypo_us_w_p,
             )
-            _vr_cash_next_p = _volreg_next_cash_state(_vr_cash_p, _vr_p) if US_ROT_VOLREG_ENABLED else False
-            if US_ROT_VOLREG_ENABLED and _vr_cash_next_p:
-                _hypo_us_w_p = {
-                    asset: 0.0
-                    for asset in set(_blended_hypo_us_w_p) | set(current_us_w) | {"CASH"}
-                }
-                _hypo_us_w_p["CASH"] = 1.0
-            else:
-                _hypo_us_w_p = dict(_blended_hypo_us_w_p)
-                _hypo_us_w_p = _apply_subb_dbc_profit_guard_scale_to_weights(
-                    _hypo_us_w_p,
-                    _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
-                )
+            _vr_defense_next_p = _volreg_next_cash_state(_vr_defense_p, _vr_p) if US_ROT_VOLREG_ENABLED else False
+            _hypo_us_w_p = dict(_blended_hypo_us_w_p)
+            if US_ROT_VOLREG_ENABLED and _vr_defense_next_p:
+                _hypo_us_w_p, _ = _apply_subb_volreg_defense_scale_to_weights(_hypo_us_w_p, True)
+            _hypo_us_w_p = _apply_subb_dbc_profit_guard_scale_to_weights(
+                _hypo_us_w_p,
+                _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
+            )
             _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
             w(f"**① 官方腿分窗口动量排名（{_subb_window_label_for_display('/')}）:**\n\n")
             w("下表只对应官方腿；EMA/Bias/LogVol腿在后续子策略腿状态表中单独展示。\n\n")
