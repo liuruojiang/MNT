@@ -530,11 +530,11 @@ US_ROT_TOP_N = 2
 # 调仓阈值（参与交易决策）
 US_ROT_REBALANCE_THRESHOLD = 1.00  # V7.9 Sub-B收益型默认: 不额外加挑战者保护，Top2轮动更及时
 
-# V7.9 Sub-B V77 sleeve: final 40% official + 10% EMA before Bias/LogVol.
+# V7.9 Sub-B V77 sleeve: final 25% official + 25% EMA before Bias/LogVol.
 # The EMA leg ranks the same full pool, including DBMF/KMLM.
 # Its target-vol scale uses 6-month EWMA realized volatility; the official leg remains rolling 40d.
-SUBB_V75_OFFICIAL_WEIGHT = 0.80
-SUBB_V75_EMA_WEIGHT = 0.20
+SUBB_V75_OFFICIAL_WEIGHT = 0.50
+SUBB_V75_EMA_WEIGHT = 0.50
 SUBB_V75_EMA_HALF_LIFE = 100
 SUBB_V75_EMA_ABS_THRESHOLD = 0.16
 SUBB_V75_EMA_VOL_MODE = "ewma6m_1vol"
@@ -627,14 +627,14 @@ US_ROT_BTC_MAX_W = 0.30
 US_ROT_EMXC_BT_START = pd.Timestamp("2017-08-01")
 US_ROT_EMXC_BT_PROXY = "EEM"
 
-# VolReg 风控: SPY短期/长期波动率比过热时，次日只削股票指数类暴露，差额进BIL。
+# VolReg 风控: SPY短期/长期波动率比过热时，次日削指定资产暴露，差额进BIL。
 US_ROT_VOLREG_ENABLED = True
 US_ROT_VOLREG_SHORT_W = 10      # 短期波动率窗口(交易日)
 US_ROT_VOLREG_LONG_W = 250      # 长期波动率窗口(交易日)
 US_ROT_VOLREG_THRESHOLD = 1.8   # 短/长波动率比进入阈值
 US_ROT_VOLREG_EXIT_THRESHOLD = 1.4  # 短/长波动率比退出阈值
 US_ROT_VOLREG_DEFENSE_SCALE = 0.00
-US_ROT_VOLREG_SCALE_ASSETS = ("QQQ", "EMXC")
+US_ROT_VOLREG_SCALE_ASSETS = ("QQQ", "EMXC", "DBC")
 SUBB_DBC_PROFIT_GUARD_ENABLED = True
 SUBB_DBC_PROFIT_GUARD_ASSET = "DBC"
 SUBB_DBC_PROFIT_GUARD_CASH_ASSET = "BIL"
@@ -645,7 +645,7 @@ SUBB_DBC_PROFIT_GUARD_SCALE_L2 = 0.00
 SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT = 1e-6
 US_ROT_VOLREG_BACKTEST_NOTE = (
     "VolReg回测口径: T日收盘信号 -> T+1调整后开盘执行；"
-    "仅将QQQ/EMXC目标暴露清零，削减权重转BIL；黄金、商品、CTA、BTC不直接降档。"
+    f"仅将{'/'.join(US_ROT_VOLREG_SCALE_ASSETS)}目标暴露清零，削减权重转BIL；黄金、CTA、BTC不直接降档。"
 )
 
 # ─────────────────────────────────────────────
@@ -4004,7 +4004,7 @@ def _build_proxy_live_spliced_series(proxy_series, live_series=None, switch_star
     return proxy
 
 
-def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=None, live_close=None, name=None):
+def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=None, live_close=None, name=None, switch_start=None):
     proxy = pd.to_numeric(proxy_open, errors="coerce").astype(float).copy()
     if name is not None:
         proxy = proxy.rename(name)
@@ -4013,8 +4013,11 @@ def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=Non
     proxy_close = pd.to_numeric(proxy_close, errors="coerce").astype(float).reindex(proxy.index)
     live_open = pd.to_numeric(live_open, errors="coerce").astype(float).reindex(proxy.index)
     live_close = pd.to_numeric(live_close, errors="coerce").astype(float).reindex(proxy.index)
+    switch_mask = pd.Series(True, index=proxy.index)
+    if switch_start is not None:
+        switch_mask = proxy.index >= pd.Timestamp(switch_start)
     overlap = pd.concat(
-        [proxy_close.rename("proxy_close"), live_close.rename("live_close")],
+        [proxy_close.loc[switch_mask].rename("proxy_close"), live_close.loc[switch_mask].rename("live_close")],
         axis=1,
     ).dropna()
     if overlap.empty:
@@ -4039,12 +4042,24 @@ def _build_us_open_execution_dict(us_raw):
         and US_ROT_EMXC_BT_PROXY in us_open
     ):
         emxc_open = us_open.get("EMXC")
-        us_open["EMXC"] = _build_proxy_live_spliced_series(
-            us_open[US_ROT_EMXC_BT_PROXY],
-            emxc_open,
-            switch_start=US_ROT_EMXC_BT_START,
-            name="EMXC",
-        )
+        emxc_close = (us_raw or {}).get("EMXC")
+        proxy_close = (us_raw or {}).get(US_ROT_EMXC_BT_PROXY)
+        if emxc_open is not None and emxc_close is not None and proxy_close is not None:
+            us_open["EMXC"] = _build_proxy_live_open_spliced_series(
+                us_open[US_ROT_EMXC_BT_PROXY],
+                proxy_close["close"],
+                emxc_open,
+                emxc_close["close"],
+                name="EMXC",
+                switch_start=US_ROT_EMXC_BT_START,
+            )
+        else:
+            us_open["EMXC"] = _build_proxy_live_spliced_series(
+                us_open[US_ROT_EMXC_BT_PROXY],
+                emxc_open,
+                switch_start=US_ROT_EMXC_BT_START,
+                name="EMXC",
+            )
     if US_ROT_BTC_TICKER in us_open and "IBIT" in us_open:
         us_open[US_ROT_BTC_TICKER] = _build_proxy_live_open_spliced_series(
             us_open[US_ROT_BTC_TICKER],
@@ -8415,7 +8430,7 @@ def _v78_subb_four_leg_weight_rows(us_rot_result, idx, min_weight=0.0005):
     return rows
 
 
-def _v78_subb_component_leg_rows(us_rot_result, idx, include_official=False, min_weight=0.0005):
+def _v78_subb_component_leg_rows(us_rot_result, idx, include_official=True, min_weight=0.0005):
     if us_rot_result is None or len(us_rot_result) == 0:
         return []
     idx, date = _v78_resolve_display_idx_date(us_rot_result, idx)
@@ -8434,7 +8449,7 @@ def _v78_subb_component_leg_rows(us_rot_result, idx, include_official=False, min
         for col in source_row.index:
             if not isinstance(col, str):
                 continue
-            for prefix in ("official_w_", "official_contrib_w_", "ema_w_", "ema_contrib_w_", "w_"):
+            for prefix in ("official_w_", "official_contrib_w_", "ema_w_", "ema_contrib_w_", "target_w_", "w_"):
                 if col.startswith(prefix):
                     assets.add(col[len(prefix):])
     leg_specs = []
@@ -8482,7 +8497,7 @@ def _v78_subb_component_leg_rows(us_rot_result, idx, include_official=False, min
     return rows
 
 
-def _write_v78_subb_component_leg_tables(w, us_rot_result, idx, include_official=False):
+def _write_v78_subb_component_leg_tables(w, us_rot_result, idx, include_official=True):
     rows = _v78_subb_component_leg_rows(us_rot_result, idx, include_official=include_official)
     if not rows:
         return
@@ -8643,8 +8658,8 @@ def _write_subb_dbc_profit_guard_status(w, us_rot_result, idx=-1):
     profit = row.get("dbc_profit_guard_profit", np.nan)
     peak = row.get("dbc_profit_guard_peak_profit", np.nan)
     retain = row.get("dbc_profit_guard_retain_ratio", np.nan)
-    today_scale = float(row.get("dbc_profit_guard_scale_today", 1.0) or 1.0)
-    next_scale = float(row.get("dbc_profit_guard_next_scale", today_scale) or today_scale)
+    today_scale = _subb_row_float(row, "dbc_profit_guard_scale_today", 1.0)
+    next_scale = _subb_row_float(row, "dbc_profit_guard_next_scale", today_scale)
     raw_weight = float(row.get(f"pre_dbc_profit_guard_w_{asset}", row.get(f"w_{asset}", 0.0)) or 0.0)
     final_weight = float(row.get(f"w_{asset}", 0.0) or 0.0)
     target_weight = float(row.get(f"target_w_{asset}", final_weight) or 0.0)
@@ -8665,6 +8680,16 @@ def _write_subb_dbc_profit_guard_status(w, us_rot_result, idx=-1):
     )
 
 
+def _subb_row_float(row, key, default=0.0):
+    try:
+        value = row.get(key, default)
+        if pd.isna(value):
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
 def _write_v78_subb_param_tables(w):
     n_etfs = len(US_ROT_ASSETS)
     etf_labels = [f"{k}({v['label']})" for k, v in US_ROT_ASSETS.items()]
@@ -8673,7 +8698,7 @@ def _write_v78_subb_param_tables(w):
     w(f"| 四腿混合 | **官方腿25% / EMA腿25% / Bias腿25% / LogVol腿25%** | 四腿分别计算目标，再汇总为V7.9综合执行目标 |\n")
     w(f"| 混合后波动口径 | **不二次归一** | {SUBB_BLEND_VOL_NOTE} |\n")
     w("| V7.9 NAV成本口径 | **component-net** | V7.7 official+EMA account-level blend is pre-netted before entering V7.9 as the 50% V7.7 component; Bias/LogVol are separately netted V7.9 components. Displayed aggregate target is for execution review and may have lower account-level net turnover. |\n")
-    w(f"| SPY量能取数失败 | **{V78_SUBB_SPY_VOLUME_FAIL_MODE}** | fail_closed means Bias/LogVol conservatively derisk QQQ/EMXC by 0.75 if SPY volume is unavailable; local runs without Yahoo access may be more defensive than Poe/live runs. |\n")
+    w(f"| SPY量能取数失败 | **{V78_SUBB_SPY_VOLUME_FAIL_MODE}** | fail_closed means Bias/LogVol conservatively derisk {_subb_volreg_scaled_assets_text()} by 0.75 if SPY volume is unavailable; local runs without Yahoo access may be more defensive than Poe/live runs. |\n")
     w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
     w(f"| 调仓保护 | **{US_ROT_REBALANCE_THRESHOLD}x** | 逐窗口挑战者保护；新资产需超过最弱在位者{US_ROT_REBALANCE_THRESHOLD:.2f}x才允许替换 |\n")
     w(f"| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n")
@@ -8683,7 +8708,7 @@ def _write_v78_subb_param_tables(w):
     if SUBB_DBC_PROFIT_GUARD_ENABLED:
         w(f"| DBC/PDBC profit guard | **on** | {_subb_dbc_profit_guard_rule_text()} |\n")
     if US_ROT_VOLREG_ENABLED:
-        w(f"| VolReg股票过热 | **开启** | {_subb_volreg_rule_text()}；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
+        w(f"| VolReg风险过热 | **开启** | {_subb_volreg_rule_text()}；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
 
     w("\n**官方腿参数**\n\n")
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
@@ -8706,15 +8731,15 @@ def _write_v78_subb_param_tables(w):
     w("| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n")
     w("| score口径 | **price/MA160,260,390 = 3/2/1加权** | 按price/MA(lb)-1排名；不是官方腿动量窗口 |\n")
     w("| target-vol / 窗口 / 最大杠杆 | **25% / 40日 / max1.5x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n")
-    w("| 成交量过滤 | **SPY量/MA60≥1.5 -> QQQ/EMXC ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
+    w(f"| 成交量过滤 | **SPY量/MA60≥1.5 -> {_subb_volreg_scaled_assets_text()} ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
 
     w("\n**LogVol腿参数**\n\n")
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
     w("| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n")
     w("| score口径 | **log return 120/200/320 = 60%/30%/10%** | 独立于官方腿160/260/390窗口 |\n")
     w("| target-vol / 窗口 / 最大杠杆 | **30% / 40日 / max1.25x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n")
-    w("| 成交量过滤 | **SPY量/MA60≥1.5 -> QQQ/EMXC ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
-    w("| vol-hot仓位降档 | **rv≥50% -> QQQ/EMXC目标仓位×0.75** | 仅LogVol腿；仅在信号日作用于下一期目标仓位，不做每日强制降仓；差额转BIL，并同步进入target/actual/turnover/cost |\n")
+    w(f"| 成交量过滤 | **SPY量/MA60≥1.5 -> {_subb_volreg_scaled_assets_text()} ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
+    w(f"| vol-hot仓位降档 | **rv≥50% -> {_subb_volreg_scaled_assets_text()}目标仓位×0.75** | 仅LogVol腿；仅在信号日作用于下一期目标仓位，不做每日强制降仓；差额转BIL，并同步进入target/actual/turnover/cost |\n")
     w(f"\n资产池: **{n_etfs}只** | {', '.join(etf_labels)}\n")
 
 
@@ -9145,9 +9170,17 @@ def _apply_subb_volreg_defense_scale_to_weights(weights, active=True):
     return out, removed
 
 
+def _subb_volreg_scaled_assets_text(live=False):
+    assets = [
+        _ROT_PROXY_TO_LIVE.get(asset, asset) if live else asset
+        for asset in US_ROT_VOLREG_SCALE_ASSETS
+    ]
+    return "/".join(assets)
+
+
 def _subb_volreg_rule_text():
-    proxy_assets = "/".join(US_ROT_VOLREG_SCALE_ASSETS)
-    live_assets = "/".join(_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in US_ROT_VOLREG_SCALE_ASSETS)
+    proxy_assets = _subb_volreg_scaled_assets_text()
+    live_assets = _subb_volreg_scaled_assets_text(live=True)
     live_note = "" if live_assets == proxy_assets else f" (实盘{live_assets})"
     return (
         f"SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比 "
@@ -9214,7 +9247,7 @@ def _is_v78_subb_blend(result):
 
 def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=None,
                              strict_open_execution=False):
-    """VolReg风控: SPY短期/长期vol过热时，只削股票指数类暴露，差额转BIL。"""
+    """VolReg风控: SPY短期/长期vol过热时，削指定资产暴露，差额转BIL。"""
     spy_ret = spy_close.pct_change()
     short_vol = spy_ret.rolling(US_ROT_VOLREG_SHORT_W).std() * np.sqrt(US_TRADING_DAYS)
     long_vol  = spy_ret.rolling(US_ROT_VOLREG_LONG_W).std() * np.sqrt(US_TRADING_DAYS)
@@ -9253,13 +9286,26 @@ def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=No
     moved_to_bil_values = []
     model_records = []
     effective_records = []
+    model_target_records = []
+    effective_target_records = []
     for pos, dt in enumerate(result.index):
         row = result.loc[dt]
         model_w = _prefixed_weight_dict_with_asset_fallback(row, "actual_w_", "w_", assets)
         defense_active = bool(mask.loc[dt])
         effective_w, removed_w = _apply_subb_volreg_defense_scale_to_weights(model_w, defense_active)
+        model_target_w = _prefixed_weight_dict_with_asset_fallback(row, "target_w_", "actual_w_", assets)
+        target_defense_active = (
+            _volreg_next_cash_state(defense_active, vol_ratio.loc[dt])
+            if pd.notna(vol_ratio.loc[dt])
+            else defense_active
+        )
+        effective_target_w, _ = _apply_subb_volreg_defense_scale_to_weights(
+            model_target_w,
+            target_defense_active,
+        )
         for asset in assets:
             effective_w.setdefault(asset, 0.0)
+            effective_target_w.setdefault(asset, 0.0)
             removed_w.setdefault(asset, 0.0)
         moved_to_bil_values.append(sum(float(v or 0.0) for v in removed_w.values()))
         if prev_effective is None:
@@ -9324,16 +9370,21 @@ def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=No
             volreg_actions.append("")
         model_records.append({asset: model_w.get(asset, 0.0) for asset in assets})
         effective_records.append({asset: effective_w.get(asset, 0.0) for asset in assets})
+        model_target_records.append({asset: model_target_w.get(asset, 0.0) for asset in assets})
+        effective_target_records.append({asset: effective_target_w.get(asset, 0.0) for asset in assets})
         prev_effective = effective_w
         prev_removed = removed_w
         prev_defense = defense_active
     model_df = pd.DataFrame.from_records(model_records, index=result.index).reindex(columns=assets).fillna(0.0)
     effective_df = pd.DataFrame.from_records(effective_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    model_target_df = pd.DataFrame.from_records(model_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_target_df = pd.DataFrame.from_records(effective_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
     for asset in assets:
         result[f"model_w_{asset}"] = model_df[asset]
+        result[f"model_target_w_{asset}"] = model_target_df[asset]
         result[f"effective_w_{asset}"] = effective_df[asset]
         result[f"w_{asset}"] = effective_df[asset]
-        result[f"target_w_{asset}"] = effective_df[asset]
+        result[f"target_w_{asset}"] = effective_target_df[asset]
     result["pre_volreg_return"] = pre_volreg_return
     result["gross_return_before_volreg_cost"] = pd.Series(gross_returns, index=result.index, dtype=float)
     result["model_full_day_return_before_volreg"] = base_ret
@@ -9491,10 +9542,10 @@ def _subb_dbc_profit_guard_pending(row):
     if row is None:
         return False
     try:
-        today = float(row.get("dbc_profit_guard_scale_today", 1.0) or 1.0)
-        nxt = float(row.get("dbc_profit_guard_next_scale", today) or today)
-        current_removed = float(row.get("dbc_profit_guard_removed_weight", 0.0) or 0.0)
-        target_removed = float(row.get("dbc_profit_guard_target_removed_weight", 0.0) or 0.0)
+        today = _subb_row_float(row, "dbc_profit_guard_scale_today", 1.0)
+        nxt = _subb_row_float(row, "dbc_profit_guard_next_scale", today)
+        current_removed = _subb_row_float(row, "dbc_profit_guard_removed_weight", 0.0)
+        target_removed = _subb_row_float(row, "dbc_profit_guard_target_removed_weight", 0.0)
     except Exception:
         return False
     return abs(nxt - today) > 1e-9 or abs(target_removed - current_removed) > 0.005
@@ -9860,6 +9911,17 @@ def simulate_prod_btc_phased(monthly_ret, sig_a, cash_ret, rebal_month=12,
         return pd.concat(navs), pd.concat(details_list)
     return pd.Series(dtype=float), pd.DataFrame()
 
+def _max_drawdown_pct_from_nav(nav):
+    nav = pd.to_numeric(pd.Series(nav), errors="coerce").dropna()
+    if len(nav) == 0:
+        return np.nan
+    values = pd.concat(
+        [pd.Series([1.0], dtype=float), nav.reset_index(drop=True)],
+        ignore_index=True,
+    )
+    peak = values.cummax()
+    return ((values - peak) / peak).min() * 100
+
 def calc_daily_metrics(ret_series, rf_daily, td):
     nav = (1 + ret_series).cumprod()
     years = (ret_series.index[-1] - ret_series.index[0]).days / 365.25
@@ -9869,8 +9931,7 @@ def calc_daily_metrics(ret_series, rf_daily, td):
     excess = ret_series - rf_daily
     sharpe = excess.mean() / excess.std() * np.sqrt(td) if excess.std() > 0 else 0
     vol = ret_series.std() * np.sqrt(td) * 100
-    peak = nav.cummax()
-    dd = ((nav - peak) / peak).min() * 100
+    dd = _max_drawdown_pct_from_nav(nav)
     calmar = annual / abs(dd) if dd != 0 else 0
     monthly = ret_series.groupby(ret_series.index.to_period("M")).apply(lambda x: (1+x).prod()-1)
     win_rate = (monthly > 0).mean() * 100
@@ -9888,8 +9949,7 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
     n_months = len(ret_series)
     years = n_months / 12
     total_return = (nav.iloc[-1] - 1) * 100
-    peak = nav.cummax()
-    dd = ((nav - peak) / peak).min() * 100
+    dd = _max_drawdown_pct_from_nav(nav)
     win_rate = (ret_series > 0).mean() * 100
     if n_months < 3:
         return {"annual": None, "vol": None, "sharpe": None, "max_dd": dd,
@@ -9929,8 +9989,7 @@ def _performance_combined_daily_returns(daily_returns):
         period = s[(s.index >= common_start) & (s.index <= common_end)]
         if len(period) <= 1:
             return pd.Series(dtype=float)
-        nav = (1.0 + period).cumprod()
-        nav_parts[name] = nav / nav.iloc[0]
+        nav_parts[name] = (1.0 + period).cumprod()
     all_dates = sorted(set().union(*(s.index for s in nav_parts.values())))
     if len(all_dates) <= 1:
         return pd.Series(dtype=float)
@@ -9945,8 +10004,10 @@ def _performance_combined_daily_returns(daily_returns):
     weight_sum = weight_df.sum(axis=1).replace(0, np.nan)
     weight_df = weight_df.div(weight_sum, axis=0)
     nav_comb = (nav_df.fillna(0.0) * weight_df).sum(axis=1)
-    nav_comb = nav_comb / nav_comb.iloc[0]
-    return nav_comb.pct_change().dropna()
+    combined_ret = nav_comb.pct_change()
+    if len(nav_comb) > 0:
+        combined_ret.iloc[0] = nav_comb.iloc[0] - 1.0
+    return combined_ret.dropna()
 
 def _performance_daily_window_metric(ret_series, requested_start, end_date):
     s = pd.to_numeric(pd.Series(ret_series), errors="coerce").dropna().sort_index()
@@ -9980,7 +10041,7 @@ def _performance_daily_window_metric(ret_series, requested_start, end_date):
         return {"annual": None, "max_dd": None, "reason": "insufficient post-start history: zero date span"}
     nav = (1.0 + s).cumprod()
     annual = (nav.iloc[-1] ** (1.0 / years) - 1.0) * 100.0
-    max_dd = ((nav - nav.cummax()) / nav.cummax()).min() * 100.0
+    max_dd = _max_drawdown_pct_from_nav(nav)
     return {
         "annual": float(annual),
         "max_dd": float(max_dd),
@@ -11600,6 +11661,88 @@ def extract_subb_volreg_rebalances(us_rot_result, us_rot_close=None, us_open=Non
                 "日期": date.strftime("%Y-%m-%d"),
                 "北京时间": beijing_time_str(date, "US", "open"),
                 "策略": "Sub-B VolReg",
+                "日期口径": "execution_day",
+                "卖出": "; ".join(sells) if sells else "—",
+                "卖出价格": "; ".join(sell_prices) if sell_prices else None,
+                "买入": "; ".join(buys) if buys else "—",
+                "买入价格": "; ".join(buy_prices) if buy_prices else None,
+                "说明": action,
+            })
+    return records
+
+def extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    records = []
+    if (
+        us_rot_result is None
+        or len(us_rot_result) == 0
+        or "dbc_profit_guard_rebalanced" not in us_rot_result.columns
+    ):
+        return records
+    assets = sorted(_weight_columns_assets(
+        us_rot_result,
+        prefixes=("pre_dbc_profit_guard_w_", "effective_w_", "w_"),
+    ))
+    start_i = 0
+    if since_date is not None and len(us_rot_result) > 0:
+        start_i = int(us_rot_result.index.searchsorted(pd.Timestamp(since_date), side="left"))
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        guard_turnover = row.get("dbc_profit_guard_turnover", 0.0)
+        try:
+            guard_turnover = float(guard_turnover) if pd.notna(guard_turnover) else 0.0
+        except Exception:
+            guard_turnover = 0.0
+        is_rebalanced = bool(row.get("dbc_profit_guard_rebalanced", False)) or guard_turnover > 1e-9
+        if not is_rebalanced:
+            continue
+        date = us_rot_result.index[i]
+        old_weights = _row_prefixed_weights(row, "pre_dbc_profit_guard_w_", assets)
+        if not any(abs(v) > 1e-12 for v in old_weights.values()) and i > 0:
+            prev_row = us_rot_result.iloc[i - 1]
+            old_weights = _row_prefixed_weights(prev_row, "effective_w_", assets)
+            if not any(abs(v) > 1e-12 for v in old_weights.values()):
+                old_weights = _row_prefixed_weights(prev_row, "w_", assets)
+        new_weights = _row_prefixed_weights(row, "effective_w_", assets)
+        if not any(abs(v) > 1e-12 for v in new_weights.values()):
+            new_weights = _row_prefixed_weights(row, "w_", assets)
+        sells, buys = [], []
+        sell_prices, buy_prices = [], []
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0.0)
+            prev = old_weights.get(a, 0.0)
+            diff = cur - prev
+            if abs(diff) <= 0.005:
+                continue
+            if a == "CASH":
+                if diff < 0:
+                    sells.append(f"CASH {prev:.1%}->{cur:.1%}")
+                else:
+                    buys.append(f"CASH {prev:.1%}->{cur:.1%}")
+                continue
+            live = _ROT_PROXY_TO_LIVE.get(a, a)
+            _p = _lookup_open_on_date(a, date, us_open)
+            _p_label = "开"
+            if _p is None and us_rot_close is not None and date in us_rot_close.index:
+                if live in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, live]
+                elif a in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, a]
+                _p_label = "收"
+            _p_str = _rebalance_price_text(_p, _p_label)
+            if diff < 0:
+                sells.append(f"{live} {prev:.1%}->{cur:.1%}")
+                if _p_str:
+                    sell_prices.append(f"{live} {_p_str}")
+            elif diff > 0:
+                buys.append(f"{live} {prev:.1%}->{cur:.1%}")
+                if _p_str:
+                    buy_prices.append(f"{live} {_p_str}")
+        if sells or buys:
+            action = row.get("dbc_profit_guard_action", "")
+            records.append({
+                "日期": date.strftime("%Y-%m-%d"),
+                "北京时间": beijing_time_str(date, "US", "open"),
+                "策略": "Sub-B DBC Guard",
                 "日期口径": "execution_day",
                 "卖出": "; ".join(sells) if sells else "—",
                 "卖出价格": "; ".join(sell_prices) if sell_prices else None,
@@ -13734,7 +13877,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
-            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg股票进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
             _subb_volume_warning = _v78_subb_volume_warning(us_rot_result)
             if _subb_volume_warning:
@@ -13746,15 +13889,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _vr_defense_next = d.get("volreg_defense_next", _vr_defense)
             if US_ROT_VOLREG_ENABLED and _vr is not None:
                 if _vr > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 **VolReg股票过热:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，明日股票指数仓位x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额进BIL\n")
+                    w(f"🟢 **VolReg风险过热:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，明日{_subb_volreg_scaled_assets_text()}仓位x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额进BIL\n")
                 elif _vr_defense and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 **VolReg股票过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                    w(f"🟡 **VolReg风险过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
                 elif _vr_defense:
-                    w(f"🟢 **VolReg股票过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 **VolReg风险过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg股票过热:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
+                    w(f"🟢 **VolReg风险过热:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
                 if _vr_defense_next and not _vr_defense:
-                    w(f"📌 VolReg后实际执行目标: **QQQ/EMXC x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
+                    w(f"📌 VolReg后实际执行目标: **{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
             _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
@@ -14047,6 +14190,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             since_date=cutoff,
         )
         all_rebalances.extend([r for r in volreg_rebs if pd.Timestamp(r["日期"]) >= cutoff])
+        dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(
+            d["us_rot_result"],
+            us_rot_close=us_rot_close,
+            us_open=_us_open,
+            since_date=cutoff,
+        )
+        all_rebalances.extend([r for r in dbc_guard_rebs if pd.Timestamp(r["日期"]) >= cutoff])
         prod_rebs = extract_prod_rebalances(d["prod_details"], d["prod_monthly"], us_prod_daily=us_prod_daily, us_open=_us_open)
         all_rebalances.extend([r for r in prod_rebs if pd.Timestamp(r["日期"]) >= cutoff])
         vs_rebs = extract_subc_vs_rebalances(us_prod_daily, d.get("prod_sig_a"), d.get("prod_sig_b"), us_open=_us_open)
@@ -14361,7 +14511,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             changed = {l: c["proxy"] for l, c in US_ROT_ASSETS.items() if l != c["proxy"]}
             if changed:
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
-            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg股票进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
+            w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
             _subb_volume_warning_live = _v78_subb_volume_warning(us_rot_result)
             if _subb_volume_warning_live:
@@ -14372,11 +14522,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _vr_defense_detail = d.get("volreg_defense_today", False)
             if US_ROT_VOLREG_ENABLED and _vr_detail is not None:
                 if _vr_detail > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日QQQ/EMXC x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
+                    w(f"🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
                 elif _vr_defense_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 VolReg: 今日股票指数已降档 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                    w(f"🟡 VolReg: 今日{_subb_volreg_scaled_assets_text()}已降档 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
                 elif _vr_defense_detail:
-                    w(f"🟢 VolReg: 今日股票指数已降档 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 VolReg: 今日{_subb_volreg_scaled_assets_text()}已降档 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
                     w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             w("\n")
@@ -14597,7 +14747,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                       f"scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n")
             w("5. Sub-B 纳入 BTC/IBIT；历史段使用 BTC-USD 代理，实盘展示与下单使用 IBIT\n")
             if US_ROT_VOLREG_ENABLED:
-                w(f"7. VolReg股票过热: {_subb_volreg_rule_text()}。T日收盘计算 → T+1日执行\n")
+                w(f"7. VolReg风险过热: {_subb_volreg_rule_text()}。T日收盘计算 → T+1日执行\n")
                 w(f"   - {US_ROT_VOLREG_BACKTEST_NOTE}\n")
             if SUBB_DBC_PROFIT_GUARD_ENABLED:
                 w(f"8. DBC/PDBC profit guard: price-only, no score decay; {_subb_dbc_profit_guard_rule_text()}. Applied after VolReg with next-open execution.\n")
@@ -14814,13 +14964,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _vr_defense_p = bool(us_rot_result["volreg_defense"].iloc[-1]) if "volreg_defense" in us_rot_result.columns else False
             if US_ROT_VOLREG_ENABLED and _vr_p is not None:
                 if _vr_p > US_ROT_VOLREG_THRESHOLD:
-                    w(f"🟢 **VolReg股票过热:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日QQQ/EMXC x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
+                    w(f"🟢 **VolReg风险过热:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
                 elif _vr_defense_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f"🟡 **VolReg股票过热:** 今日股票指数已降档 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
+                    w(f"🟡 **VolReg风险过热:** 今日{_subb_volreg_scaled_assets_text()}已降档 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n")
                 elif _vr_defense_p:
-                    w(f"🟢 **VolReg股票过热:** 今日股票指数已降档 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
+                    w(f"🟢 **VolReg风险过热:** 今日{_subb_volreg_scaled_assets_text()}已降档 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n")
                 else:
-                    w(f"🟢 **VolReg股票过热:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
+                    w(f"🟢 **VolReg风险过热:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             # 信号日状态
             _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
@@ -15224,6 +15374,18 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 for rec in volreg_period_rebs:
                     w(f"| {rec['日期']} | {rec.get('卖出', '—')} | {rec.get('买入', '—')} |\n")
                 w("\n")
+            dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
+            dbc_guard_period_rebs = [
+                rec for rec in dbc_guard_rebs
+                if start_date <= pd.Timestamp(rec["日期"]) <= end_date
+            ]
+            if dbc_guard_period_rebs:
+                w(f"**Sub-B DBC Guard 有效仓位切换 ({len(dbc_guard_period_rebs)}次):**\n\n")
+                w("| 日期 | 卖出 | 买入 |\n")
+                w("|:--|:--|:--|\n")
+                for rec in dbc_guard_period_rebs:
+                    w(f"| {rec['日期']} | {rec.get('卖出', '—')} | {rec.get('买入', '—')} |\n")
+                w("\n")
     def _handle_nav_chart(self, query, *, chart_only=False):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
@@ -15377,7 +15539,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _strat_cols = PERFORMANCE_COMBO_ORDER
             _nav_monthly = (1 + aligned[_strat_cols]).cumprod()
             _nav_comb = sum(_nav_monthly[n] * w[n] for n in _strat_cols)
-            _nav_comb = _nav_comb / _nav_comb.iloc[0]
             aligned["Combined"] = _nav_comb.pct_change()
             aligned.loc[aligned.index[0], "Combined"] = _nav_comb.iloc[0] - 1
         else:
@@ -15396,13 +15557,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             metrics["Combined"] = calc_monthly_metrics(filtered["Combined"])
         if len(cn_daily_period) > 1 and "Sub-A" in metrics:
             nav_a = (1 + cn_daily_period).cumprod()
-            metrics["Sub-A"]["max_dd"] = ((nav_a - nav_a.cummax()) / nav_a.cummax()).min() * 100
+            metrics["Sub-A"]["max_dd"] = _max_drawdown_pct_from_nav(nav_a)
         if len(dk_daily_period) > 1 and "Sub-A-DK" in metrics:
             nav_dk = (1 + dk_daily_period).cumprod()
-            metrics["Sub-A-DK"]["max_dd"] = ((nav_dk - nav_dk.cummax()) / nav_dk.cummax()).min() * 100
+            metrics["Sub-A-DK"]["max_dd"] = _max_drawdown_pct_from_nav(nav_dk)
         if len(us_daily_period) > 1 and "Sub-B" in metrics:
             nav_b = (1 + us_daily_period).cumprod()
-            metrics["Sub-B"]["max_dd"] = ((nav_b - nav_b.cummax()) / nav_b.cummax()).min() * 100
+            metrics["Sub-B"]["max_dd"] = _max_drawdown_pct_from_nav(nav_b)
         comb_daily = None
         common_start = start_date
         if len(cn_daily_period) > 0:
@@ -15419,8 +15580,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 ("Sub-B", us_daily_period),
             ]:
                 if len(dret) > 1:
-                    nv = (1 + dret).cumprod()
-                    nav_parts[sname] = nv / nv.iloc[0]
+                    nav_parts[sname] = (1 + dret).cumprod()
             if len(nav_parts) >= 2:
                 cw = _performance_combo_weights()
                 all_daily_dates = sorted(set().union(*(s.index for s in nav_parts.values())))
@@ -15437,31 +15597,31 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     _wdf = _wdf.div(_ws, axis=0)
                     nav_df_filled = nav_df.fillna(0)
                     nav_comb = (nav_df_filled * _wdf).sum(axis=1)
-                    nav_comb = nav_comb / nav_comb.iloc[0]
-                    metrics["Combined"]["max_dd"] = (
-                        (nav_comb - nav_comb.cummax()) / nav_comb.cummax()).min() * 100
-                    comb_daily = nav_comb.pct_change().dropna()
+                    metrics["Combined"]["max_dd"] = _max_drawdown_pct_from_nav(nav_comb)
+                    comb_daily = nav_comb.pct_change()
+                    comb_daily.iloc[0] = nav_comb.iloc[0] - 1.0
+                    comb_daily = comb_daily.dropna()
         for _sname, _dret in [
             ("Sub-A", cn_daily_period), ("Sub-A-DK", dk_daily_period),
             ("Sub-B", us_daily_period),
         ]:
             if _sname in metrics and len(_dret) > 1:
                 _nav_d = (1 + _dret).cumprod()
-                _total = (_nav_d.iloc[-1] / _nav_d.iloc[0] - 1) * 100
+                _total = (_nav_d.iloc[-1] - 1) * 100
                 metrics[_sname]["total_return"] = _total
                 _ndays = (_dret.index[-1] - _dret.index[0]).days
                 if _ndays > 0:
-                    _ann = ((_nav_d.iloc[-1] / _nav_d.iloc[0]) ** (365.25 / _ndays) - 1) * 100
+                    _ann = (_nav_d.iloc[-1] ** (365.25 / _ndays) - 1) * 100
                     metrics[_sname]["annual"] = _ann
                     _mdd = metrics[_sname]["max_dd"]
                     metrics[_sname]["calmar"] = _ann / abs(_mdd) if _mdd != 0 else 0
         if "Combined" in metrics and comb_daily is not None and len(comb_daily) > 1:
             _nav_d = (1 + comb_daily).cumprod()
-            _total = (_nav_d.iloc[-1] / _nav_d.iloc[0] - 1) * 100
+            _total = (_nav_d.iloc[-1] - 1) * 100
             metrics["Combined"]["total_return"] = _total
             _ndays = (comb_daily.index[-1] - comb_daily.index[0]).days
             if _ndays > 0:
-                _ann = ((_nav_d.iloc[-1] / _nav_d.iloc[0]) ** (365.25 / _ndays) - 1) * 100
+                _ann = (_nav_d.iloc[-1] ** (365.25 / _ndays) - 1) * 100
                 metrics["Combined"]["annual"] = _ann
                 _mdd = metrics["Combined"]["max_dd"]
                 metrics["Combined"]["calmar"] = _ann / abs(_mdd) if _mdd != 0 else 0
@@ -15512,6 +15672,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         all_rebalances.extend([r for r in us_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
         volreg_rebs = extract_subb_volreg_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
         all_rebalances.extend([r for r in volreg_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
+        dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
+        all_rebalances.extend([r for r in dbc_guard_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
         all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x["日期"])
         standard_daily_returns = {

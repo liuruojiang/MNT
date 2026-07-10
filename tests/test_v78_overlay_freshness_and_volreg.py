@@ -302,7 +302,7 @@ def test_subb_emxc_strict_open_uses_eem_proxy_before_emxc_live_history():
     )
 
     assert pre_row["EMXC"] == 20.0
-    assert us_open["EMXC"].loc[post_live] == 30.0
+    assert us_open["EMXC"].loc[post_live] == pytest.approx(12.0 * 26.0 / 11.0)
 
 
 def test_subb_btc_ibit_strict_open_uses_spliced_ibit_open_after_listing():
