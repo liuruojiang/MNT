@@ -4,7 +4,14 @@ This workspace contains the A-share / US momentum combo strategy family, includi
 
 ## Current Stage
 
-As of 2026-06-28, the V7.8 audit P0/P1/P2 remediation stage is fixed in commit `dc2bec38`:
+V7.9 is the current production bot. It preserves the formal V7.8 execution and
+freshness rules, while combining the Sub-B official and EMA legs at 50/50.
+The Sub-B overlay scope is:
+
+- VolReg scales `QQQ/EMXC` only and moves the released weight to `BIL`.
+- `DBC/PDBC` is excluded from VolReg and is managed by its own price-only profit guard.
+
+The V7.8 audit P0/P1/P2 remediation baseline remains fixed in commit `dc2bec38`:
 
 - Sub-B formal execution uses `T close signal -> T+1 adjusted open execution -> T+1 close return`.
 - Sub-B formal runs fail if a required T+1 adjusted open price is missing instead of falling back to same-day close.
@@ -14,7 +21,8 @@ As of 2026-06-28, the V7.8 audit P0/P1/P2 remediation stage is fixed in commit `
 
 ## Main Files
 
-- `mnt_bot V 7.8 plus.py`: current V7.8 bot and strategy implementation.
+- `mnt_bot V 7.9 plus.py`: current production bot and strategy implementation.
+- `mnt_bot V 7.8 plus.py`: preserved V7.8 production baseline.
 - `run_v78_substrategy_poe_overlay_test.py`: V7.8 overlay comparison runner.
 - `docs/V7.8_PRODUCTION_SPEC.md`: production assumptions, execution policy, external-gate freshness policy, and manual run checklist.
 - `docs/V7.8_AUDIT_RESOLUTION.md`: P0/P1/P2 audit resolution record and required revalidation commands.
@@ -22,7 +30,14 @@ As of 2026-06-28, the V7.8 audit P0/P1/P2 remediation stage is fixed in commit `
 
 ## Verification
 
-Run these commands after touching V7.8 production behavior:
+Run these commands after touching V7.9 production behavior:
+
+```powershell
+python -m py_compile "mnt_bot V 7.9 plus.py"
+git diff --check
+```
+
+Run these additional commands after touching the V7.8 production baseline:
 
 ```powershell
 python -m py_compile "mnt_bot V 7.8 plus.py" "run_v78_substrategy_poe_overlay_test.py"
