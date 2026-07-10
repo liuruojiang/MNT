@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 def load_bot_module():
@@ -745,13 +746,14 @@ def test_realtime_context_rebuilds_online_without_embedded_artifacts(tmp_path, m
     bot.OUTPUT_DIR = tmp_path / "missing_outputs"
     bot._EMBEDDED_ARTIFACT_CACHE = None
 
-    index = pd.bdate_range("2025-01-01", periods=400)
+    index = pd.bdate_range(end="2026-07-10", periods=400)
     panel = make_required_price_panel(bot, index)
 
     def fake_fetch_online_price_panel(include_realtime=False):
         return panel, {"mode": "daily", "fetched_at": "2026-01-01 15:00:00"}
 
     monkeypatch.setattr(bot, "_fetch_online_price_panel", fake_fetch_online_price_panel)
+    monkeypatch.setattr(bot, "STATE_SNAPSHOT", {})
 
     artifacts = bot._embedded_artifacts()
     curves, metas, online = bot.load_strategy_context(include_realtime=True)
@@ -903,16 +905,28 @@ def test_render_signal_degrades_by_pair_when_some_curves_missing(monkeypatch):
     assert "KeyError" not in output
 
 
-def test_realtime_params_do_not_load_strategy_context(monkeypatch):
+def test_realtime_params_loads_live_context_but_plain_params_do_not(monkeypatch):
     bot = load_bot_module()
-    monkeypatch.setattr(bot, "load_strategy_metas", lambda: {config.key: {} for config in bot.STRATEGIES})
+    index = pd.date_range("2026-07-09", periods=2, freq="D")
+    metas = {config.key: {} for config in bot.STRATEGIES}
+    curves = make_return_curves(bot, index)
+    calls = []
 
-    def fail_load_strategy_context(include_realtime=False):
-        raise AssertionError("params should not rebuild online context")
+    monkeypatch.setattr(bot, "load_strategy_metas", lambda: metas)
 
-    monkeypatch.setattr(bot, "load_strategy_context", fail_load_strategy_context)
+    def fake_load_strategy_context(include_realtime=False):
+        calls.append(include_realtime)
+        return curves, metas, {"ok": True, "mode": "daily", "data_mode": "online_rebuild_recent_realtime"}
 
-    assert "target-vol" in bot.render_params(live=True)
+    monkeypatch.setattr(bot, "load_strategy_context", fake_load_strategy_context)
+
+    plain = bot.render_params(live=False)
+    live = bot.render_params(live=True)
+
+    assert calls == [True]
+    assert "target-vol" in plain
+    assert "target-vol" in live
+    assert "live-state" in live
 
 
 def test_plain_signal_query_uses_daily_path_and_default_stays_realtime(monkeypatch):
@@ -940,7 +954,7 @@ def test_history_signal_query_routes_before_plain_signal(monkeypatch):
     assert bot.render_query("历史信号") == "history"
 
 
-def test_signal_history_uses_online_context_when_artifacts_are_missing(monkeypatch):
+def test_signal_history_uses_confirmed_online_context_when_artifacts_are_missing(monkeypatch):
     bot = load_bot_module()
     index = pd.date_range("2026-01-01", periods=2, freq="D")
     curves = {
@@ -965,7 +979,7 @@ def test_signal_history_uses_online_context_when_artifacts_are_missing(monkeypat
 
     output = bot.render_signal_history("历史信号")
 
-    assert calls == [True]
+    assert calls == [False]
     assert "2026-01-02" in output
 
 
@@ -1669,3 +1683,363 @@ def test_online_rebuild_precomputes_decay_state_once(monkeypatch):
     )
 
     assert calls == [len(signal_frame)]
+
+
+def test_online_signal_frame_exports_formal_spread_return_and_uses_it_for_vol(monkeypatch):
+    bot = load_bot_module()
+    config = bot.STRATEGIES[0]
+    index = pd.date_range("2026-01-01", periods=3, freq="D")
+    panel = pd.DataFrame(
+        {
+            "zz1000": [100.0, 100.0, 100.0],
+            "hs300": [100.0, 90.0, 99.0],
+        },
+        index=index,
+    )
+    monkeypatch.setattr(bot, "_downonly_tv_scale_from_realized_vol", lambda realized_vol, section: 0.5)
+
+    frame = bot._online_signal_frame_for_strategy(
+        config,
+        {
+            "common_start": "2026-01-01",
+            "signal": {"bias_ma": 1, "mom_day": 1, "score_threshold": -999.0},
+            "vol_overheat": {"enabled": True, "kind": "downonly_tv", "window": 2, "target_vol": 0.1},
+        },
+        panel,
+    )
+
+    expected_return = panel["zz1000"].pct_change().fillna(0.0) - panel["hs300"].pct_change().fillna(0.0)
+    pd.testing.assert_series_equal(frame["spread_return"], expected_return, check_names=False)
+    expected_vol = expected_return.rolling(2).std(ddof=0) * math.sqrt(bot.ANNUAL_DAYS)
+    assert math.isclose(frame.loc[index[-1], "realized_vol"], expected_vol.loc[index[-1]])
+
+
+def test_online_execution_row_uses_formal_spread_return_not_ratio_return():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=2, freq="D")
+    signal_frame = pd.DataFrame(
+        {
+            "spread_close": [1.0, 1.0 / 0.9],
+            "spread_return": [0.0, 0.10],
+            "score": [1.0, 1.0],
+            "r2": [1.0, 1.0],
+        },
+        index=index,
+    )
+    curve_so_far = pd.DataFrame(
+        {
+            "nav": [1.0],
+            "base_nav": [1.0],
+            "gross_exposure": [1.0],
+            "base_gross_exposure": [1.0],
+            "target_vol_scale": [1.0],
+        },
+        index=[index[0]],
+    )
+
+    filled = bot._fill_online_execution_row(
+        index[1],
+        signal_frame.loc[index[1]].to_dict(),
+        curve_so_far,
+        {"signal": {"score_threshold": 0.0}},
+        signal_frame,
+    )
+
+    assert math.isclose(filled["gross_return"], 0.10)
+    assert not math.isclose(filled["gross_return"], (1.0 / 0.9) - 1.0)
+
+
+def test_online_incremental_extension_uses_formal_spread_return(monkeypatch):
+    bot = load_bot_module()
+    config = bot.STRATEGIES[0]
+    index = pd.date_range("2026-01-01", periods=2, freq="D")
+    curve = pd.DataFrame(
+        {
+            "return": [0.0],
+            "gross_return": [0.0],
+            "cost": [0.0],
+            "turnover": [0.0],
+            "gross_exposure": [1.0],
+            "nav": [1.0],
+            "score": [1.0],
+        },
+        index=[index[0]],
+    )
+    panel = pd.DataFrame({"zz1000": [100.0, 100.0], "hs300": [100.0, 90.0]}, index=index)
+
+    monkeypatch.setattr(bot, "STRATEGIES", [config])
+    monkeypatch.setattr(bot, "STATE_SNAPSHOT", {})
+    monkeypatch.setattr(bot, "_fill_online_execution_row", lambda idx, row, curve_so_far, meta, signal_frame, **kwargs: row)
+
+    refreshed = bot._extend_curves_with_online_prices(
+        {config.key: curve},
+        {config.key: {"common_start": "2026-01-01", "signal": {"bias_ma": 1, "mom_day": 1, "score_threshold": -999.0}}},
+        panel,
+    )
+
+    assert math.isclose(refreshed[config.key].loc[index[1], "gross_return"], 0.10)
+
+
+def test_two_leg_commission_multiplies_one_way_rate_by_legs():
+    bot = load_bot_module()
+
+    assert bot._cost_rate_from_meta({"cost_model": {"one_way_commission": 0.0005, "legs": 2}}) == 0.001
+    assert bot._cost_rate_from_meta({"cost_model": {"one_way_cost_bps": 5, "legs": 2}}) == 0.001
+
+
+def test_high_metric_gate_requires_confirmation_days():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=4, freq="D")
+    panel = pd.DataFrame(
+        {
+            "zz1000_amount": [100.0, 100.0, 100.0, 200.0],
+            "hs300_amount": [100.0, 100.0, 100.0, 100.0],
+        },
+        index=index,
+    )
+
+    _ratio, gate = bot._metric_gate_series(
+        {"family": "high_pair", "window": 3, "threshold": 1.2, "confirm_days": 3},
+        panel,
+        "zz1000",
+        "hs300",
+        "amount",
+    )
+
+    assert gate.loc[index[-1]] == 0.0
+
+
+def test_suffix_high_metric_family_is_treated_as_high_not_low():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=4, freq="D")
+    panel = pd.DataFrame({"sz50_volume": [100.0, 100.0, 100.0, 100.0]}, index=index)
+
+    _ratio, gate = bot._metric_gate_series(
+        {"family": "sz50_vol_high", "series": "sz50_volume", "window": 3, "threshold": 1.25, "confirm_days": 1},
+        panel,
+        "sz50",
+        "cyb",
+        "volume",
+    )
+
+    assert gate.loc[index[-1]] == 0.0
+
+
+def test_validate_online_price_panel_rejects_nonpositive_prices(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-07-01", periods=3, freq="D")
+    panel = make_required_price_panel(bot, index)
+    panel.loc[index[-1], "zz1000"] = 0.0
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 7, 10, tzinfo=bot.BJ_TZ))
+
+    with pytest.raises(RuntimeError, match="non-positive"):
+        bot._validate_online_price_panel(panel)
+
+
+def test_validate_online_price_panel_rejects_stale_prices(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-06-01", periods=3, freq="D")
+    panel = make_required_price_panel(bot, index)
+    panel.attrs["fetched_at"] = "2026-07-10 15:00:00"
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 7, 10, tzinfo=bot.BJ_TZ))
+
+    with pytest.raises(RuntimeError, match="stale"):
+        bot._validate_online_price_panel(panel)
+
+
+def test_validate_online_price_panel_requires_current_overlay_metric(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-07-01", periods=10, freq="D")
+    panel = make_required_price_panel(bot, index)
+    panel.loc[index[-1], "zz1000_amount"] = math.nan
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 7, 10, tzinfo=bot.BJ_TZ))
+    config = bot.STRATEGIES[0]
+
+    with pytest.raises(RuntimeError, match="latest"):
+        bot._validate_online_price_panel(
+            panel,
+            {config.key: {"amount_overlay": {"enabled": True, "series": "zz1000_amount", "window": 3}}},
+        )
+
+
+def test_amount_history_fallback_does_not_accept_volume_proxy(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=80, freq="D")
+    proxy = pd.DataFrame({"close": [1.0] * 80, "volume": [100.0] * 80, "amount": [100.0] * 80}, index=index)
+
+    monkeypatch.setattr(bot, "_fetch_eastmoney_kline", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(bot, "_fetch_csindex_amount", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(bot, "_fetch_sohu_amount", lambda *args, **kwargs: pd.DataFrame())
+    monkeypatch.setattr(bot, "_fetch_sina_volume_proxy", lambda *args, **kwargs: proxy)
+    monkeypatch.setattr(bot, "_fetch_tencent_volume_proxy", lambda *args, **kwargs: proxy)
+
+    with pytest.raises(RuntimeError):
+        bot._fetch_amount_history_with_fallback("zz1000", "1.000852")
+
+
+def test_snapshot_seed_rows_reject_seed_date_outside_signal_frame(monkeypatch):
+    bot = load_bot_module()
+    config = make_strategy(bot, "future_seed", "Future Seed")
+    signal_frame = pd.DataFrame({"score": [1.0], "spread_close": [1.0]}, index=[pd.Timestamp("2026-01-01")])
+    monkeypatch.setattr(bot, "STATE_SNAPSHOT", {"future_seed": {"as_of": "2027-01-01", "values": {"score": 1.0, "nav": 1.0}}})
+
+    assert bot._snapshot_seed_rows(config, signal_frame) == []
+
+
+def test_load_strategy_context_fails_closed_on_snapshot_score_mismatch(monkeypatch):
+    bot = load_bot_module()
+    config = make_strategy(bot, "snapshot_mismatch", "Snapshot Mismatch")
+    index = pd.to_datetime(["2026-01-02", "2026-01-03"])
+    panel = make_required_price_panel(bot, index)
+    signal = pd.DataFrame({"spread_close": [1.0, 1.1], "spread_return": [0.0, 0.1], "score": [2.0, 2.0]}, index=index)
+
+    monkeypatch.setattr(bot, "STRATEGIES", [config])
+    monkeypatch.setattr(bot, "STRATEGY_LEGS", {"snapshot_mismatch": ("zz1000", "hs300")})
+    monkeypatch.setattr(bot, "STATE_SNAPSHOT", {"snapshot_mismatch": {"as_of": "2026-01-02", "values": {"score": 1.0}}})
+    monkeypatch.setattr(bot, "load_strategy_metas", lambda: {"snapshot_mismatch": {}})
+    monkeypatch.setattr(bot, "load_strategy_curves", lambda: {})
+    monkeypatch.setattr(bot, "_fetch_online_price_panel", lambda include_realtime=False: (panel, {"mode": "daily"}))
+    monkeypatch.setattr(bot, "_online_signal_frame_for_strategy", lambda config, meta, panel: signal)
+
+    _curves, _metas, online = bot.load_strategy_context(include_realtime=False)
+
+    assert online["ok"] is False
+    assert "snapshot" in online["error"]
+
+
+def test_target_vol_deadband_defaults_to_absolute_and_resets_when_signal_off():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=2, freq="D")
+    signal_frame = pd.DataFrame(
+        {
+            "spread_close": [1.0, 1.0],
+            "spread_return": [0.0, 0.0],
+            "score": [0.0, 0.0],
+            "r2": [1.0, 1.0],
+        },
+        index=index,
+    )
+    curve_so_far = pd.DataFrame(
+        {
+            "nav": [1.0],
+            "base_nav": [1.0],
+            "gross_exposure": [0.0],
+            "base_gross_exposure": [0.0],
+            "target_vol_scale": [1.0],
+        },
+        index=[index[0]],
+    )
+    meta = {
+        "signal": {"score_threshold": 1.0},
+        "target_vol": {"enabled": True, "target_vol": 0.8, "target_vol_window": 1, "max_leverage": 1.5, "scale_deadband": 0.3},
+    }
+
+    assert bot._target_vol_deadband_mode(meta["target_vol"]) == "abs"
+    filled = bot._fill_online_execution_row(
+        index[1],
+        signal_frame.loc[index[1]].to_dict(),
+        curve_so_far,
+        meta,
+        signal_frame,
+        vol_series=pd.Series([1.0, 1.0], index=index),
+    )
+
+    assert filled["target_vol_scale"] == 0.0
+    assert filled["base_gross_exposure"] == 0.0
+
+
+def test_metrics_for_curve_does_not_turn_invalid_returns_into_zeroes():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=61, freq="D")
+    curve = pd.DataFrame({"return": [0.01] + [math.nan] * 60}, index=index)
+
+    metrics = bot.metrics_for_curve(curve)
+
+    assert metrics["rows"] == 1
+    assert math.isnan(metrics["ann_return"])
+    assert "invalid" in metrics["reason"]
+
+
+def test_extract_request_query_text_uses_latest_protocol_message():
+    bot = load_bot_module()
+
+    class Message:
+        def __init__(self, content):
+            self.content = content
+
+    class Request:
+        query = [Message("参数"), Message("实时信号")]
+
+    assert bot._extract_request_query_text(Request()) == "实时信号"
+
+
+def test_params_display_includes_alias_thresholds_and_min_scale():
+    bot = load_bot_module()
+
+    nav_detail = bot._section_meta_detail({"enabled": True, "nav_threshold": 0.0875, "defense_scale": 0.5})
+    tv_detail = bot._target_vol_detail({"enabled": True, "target_vol": 0.16, "target_vol_window": 20, "max_leverage": 1.2, "min_scale": 0.25})
+
+    assert "nav_threshold=0.0875" in nav_detail
+    assert "defense_scale=0.5" in nav_detail
+    assert "min_scale=0.25" in tv_detail
+
+
+def test_signal_history_uses_confirmed_daily_rows(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=6, freq="D")
+    calls = []
+    curves = {
+        config.key: pd.DataFrame(
+            {
+                "gross_exposure": [1.0] * 6,
+                "score": list(range(6)),
+                "online_provisional_bar": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            },
+            index=index,
+        )
+        for config in bot.STRATEGIES
+    }
+
+    def fake_context(include_realtime=False):
+        calls.append(include_realtime)
+        return curves, {}, {"ok": True, "data_mode": "online_rebuild_recent"}
+
+    monkeypatch.setattr(bot, "load_strategy_context", fake_context)
+
+    output = bot.render_signal_history("信号历史")
+
+    assert calls == [False]
+    assert "2026-01-06" not in output
+
+
+def test_reversed_explicit_date_range_is_rejected():
+    bot = load_bot_module()
+    index = pd.bdate_range("2025-01-01", "2026-06-30")
+
+    with pytest.raises(ValueError, match="start date is after end date"):
+        bot.parse_date_range("表现 2026-06~2025-01", index)
+
+
+def test_main_sanitizes_internal_errors_and_returns_failure(monkeypatch):
+    bot = load_bot_module()
+    writes = []
+
+    class Message:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def write(self, text):
+            writes.append(text)
+
+    monkeypatch.setattr(bot.poe, "start_message", lambda: Message())
+    monkeypatch.setattr(bot, "_write_query_response", lambda msg, query: (_ for _ in ()).throw(RuntimeError("secret D:/private/path")))
+
+    code = bot.main(["信号"])
+
+    assert code == 1
+    rendered = "".join(writes)
+    assert "secret" not in rendered
+    assert "D:/private/path" not in rendered
