@@ -84,25 +84,41 @@ def test_adk_external_allowed_rejects_source_ending_before_target_index(tmp_path
         overlay.run_adk_overlay(FakeV78(), baseline, out_dir, signal_shift_days=0)
 
 
-def test_subb_volreg_cash_transitions_use_open_execution(monkeypatch):
+def test_subb_volreg_clears_equity_assets_only_and_uses_open_execution(monkeypatch):
     module = load_v78_module()
     dates = pd.to_datetime(
-        ["2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15"]
+        ["2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11", "2026-06-12"]
     )
     result = pd.DataFrame(
         {
-            "return": [0.0, 0.0, 0.0, 0.0, -0.05, 110.0 / 95.0 - 1.0],
-            "actual_w_QQQ": [1.0] * len(dates),
-            "w_QQQ": [1.0] * len(dates),
+            "return": [0.0, 0.0, -0.01, 0.02, 0.01],
+            "actual_w_QQQ": [0.4] * len(dates),
+            "actual_w_EFA": [0.2] * len(dates),
+            "actual_w_GLD": [0.3] * len(dates),
+            "actual_w_BIL": [0.1] * len(dates),
+            "w_QQQ": [0.4] * len(dates),
+            "w_EFA": [0.2] * len(dates),
+            "w_GLD": [0.3] * len(dates),
+            "w_BIL": [0.1] * len(dates),
             "rebalanced": [False] * len(dates),
         },
         index=dates,
     )
-    close_df = pd.DataFrame({"QQQ": [100.0, 100.0, 100.0, 100.0, 95.0, 110.0]}, index=dates)
+    close_df = pd.DataFrame(
+        {
+            "BIL": [100.0] * len(dates),
+            "QQQ": [100.0, 101.0, 99.0, 100.0, 101.0],
+            "EFA": [50.0, 51.0, 49.0, 50.0, 51.0],
+            "GLD": [200.0, 201.0, 202.0, 203.0, 204.0],
+        },
+        index=dates,
+    )
     us_open = {
-        "QQQ": pd.Series([100.0, 100.0, 100.0, 100.0, 90.0, 100.0], index=dates)
+        "BIL": pd.Series([100.0] * len(dates), index=dates),
+        "QQQ": pd.Series([100.0, 101.0, 98.0, 100.5, 100.0], index=dates),
+        "EFA": pd.Series([50.0, 51.0, 48.0, 50.5, 50.0], index=dates),
     }
-    states = iter([False, False, False, False, True, False])
+    states = iter([False, False, True, True, False])
 
     monkeypatch.setattr(module, "US_ROT_COMMISSION", 0.0)
     monkeypatch.setattr(module, "_volreg_next_cash_state", lambda _current_cash, _ratio: next(states))
@@ -114,10 +130,131 @@ def test_subb_volreg_cash_transitions_use_open_execution(monkeypatch):
         us_open=us_open,
     )
 
-    assert out.loc[dates[4], "volreg_action"] == "enter_cash"
-    assert out.loc[dates[5], "volreg_action"] == "exit_cash"
-    assert np.isclose(out.loc[dates[4], "return"], -0.10)
-    assert np.isclose(out.loc[dates[5], "return"], 0.10)
+    assert out.loc[dates[2], "volreg_action"] == "enter_defense"
+    assert out.loc[dates[4], "volreg_action"] == "exit_defense"
+    assert bool(out.loc[dates[2], "volreg_defense"])
+    assert not bool(out.loc[dates[2], "volreg_cash"])
+    assert np.isclose(module.US_ROT_VOLREG_DEFENSE_SCALE, 0.0)
+    assert np.isclose(out.loc[dates[2], "w_QQQ"], 0.0)
+    assert np.isclose(out.loc[dates[2], "w_EFA"], 0.0)
+    assert np.isclose(out.loc[dates[2], "w_GLD"], 0.3)
+    assert np.isclose(out.loc[dates[2], "w_BIL"], 0.1 + 0.4 + 0.2)
+    assert np.isclose(out.loc[dates[2], "w_CASH"], 0.0)
+
+
+def test_subb_volreg_syncs_target_weights_for_signal_display(monkeypatch):
+    module = load_v78_module()
+    dates = pd.to_datetime(["2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11"])
+    result = pd.DataFrame(
+        {
+            "return": [0.0] * len(dates),
+            "actual_w_QQQ": [0.4] * len(dates),
+            "actual_w_EFA": [0.2] * len(dates),
+            "actual_w_GLD": [0.3] * len(dates),
+            "actual_w_BIL": [0.1] * len(dates),
+            "w_QQQ": [0.4] * len(dates),
+            "w_EFA": [0.2] * len(dates),
+            "w_GLD": [0.3] * len(dates),
+            "w_BIL": [0.1] * len(dates),
+            "target_w_QQQ": [0.4] * len(dates),
+            "target_w_EFA": [0.2] * len(dates),
+            "target_w_GLD": [0.3] * len(dates),
+            "target_w_BIL": [0.1] * len(dates),
+            "rebalanced": [False, False, True, False],
+        },
+        index=dates,
+    )
+    close_df = pd.DataFrame(
+        {
+            "BIL": [100.0] * len(dates),
+            "QQQ": [100.0] * len(dates),
+            "EFA": [50.0] * len(dates),
+            "GLD": [200.0] * len(dates),
+        },
+        index=dates,
+    )
+    us_open = {
+        "BIL": pd.Series([100.0] * len(dates), index=dates),
+        "QQQ": pd.Series([100.0] * len(dates), index=dates),
+        "EFA": pd.Series([50.0] * len(dates), index=dates),
+    }
+    states = iter([False, False, True, True])
+
+    monkeypatch.setattr(module, "US_ROT_COMMISSION", 0.0)
+    monkeypatch.setattr(module, "_volreg_next_cash_state", lambda _current_cash, _ratio: next(states))
+
+    out = module.apply_vol_regime_overlay(
+        result,
+        pd.Series([100.0] * len(dates), index=dates),
+        close_df=close_df,
+        us_open=us_open,
+    )
+    display = module._subb_signal_display_source_weights(
+        out,
+        dates[2],
+        ["w_QQQ", "w_EFA", "w_GLD", "w_BIL"],
+    )
+
+    assert np.isclose(out.loc[dates[2], "target_w_QQQ"], 0.0)
+    assert np.isclose(out.loc[dates[2], "target_w_EFA"], 0.0)
+    assert np.isclose(out.loc[dates[2], "target_w_BIL"], 0.7)
+    assert np.isclose(display["QQQ"], 0.0)
+    assert np.isclose(display["EFA"], 0.0)
+    assert np.isclose(display["BIL"], 0.7)
+
+
+def test_subb_volreg_falls_back_per_asset_when_actual_weight_is_partial(monkeypatch):
+    module = load_v78_module()
+    dates = pd.to_datetime(["2026-06-08", "2026-06-09", "2026-06-10"])
+    result = pd.DataFrame(
+        {
+            "return": [0.0] * len(dates),
+            "actual_w_BIL": [0.6] * len(dates),
+            "w_QQQ": [0.4] * len(dates),
+            "w_BIL": [0.6] * len(dates),
+            "rebalanced": [False] * len(dates),
+        },
+        index=dates,
+    )
+    close_df = pd.DataFrame(
+        {
+            "BIL": [100.0] * len(dates),
+            "QQQ": [100.0] * len(dates),
+        },
+        index=dates,
+    )
+    us_open = {
+        "BIL": pd.Series([100.0] * len(dates), index=dates),
+        "QQQ": pd.Series([100.0] * len(dates), index=dates),
+    }
+    states = iter([False, True, True])
+
+    monkeypatch.setattr(module, "US_ROT_COMMISSION", 0.0)
+    monkeypatch.setattr(module, "_volreg_next_cash_state", lambda _current_cash, _ratio: next(states))
+
+    out = module.apply_vol_regime_overlay(
+        result,
+        pd.Series([100.0] * len(dates), index=dates),
+        close_df=close_df,
+        us_open=us_open,
+    )
+
+    assert np.isclose(out.loc[dates[1], "model_w_QQQ"], 0.4)
+    assert np.isclose(out.loc[dates[1], "volreg_moved_to_bil"], 0.4)
+    assert np.isclose(out.loc[dates[1], "w_QQQ"], 0.0)
+    assert np.isclose(out.loc[dates[1], "w_BIL"], 1.0)
+
+
+def test_subb_volreg_rule_text_shows_proxy_scope_and_clear_scale():
+    module = load_v78_module()
+
+    text = module._subb_volreg_rule_text()
+
+    assert "QQQ/EMXC/EFA" in text
+    assert "x0.00" in text
+    assert "BIL" in text
+    assert "1.8" in text
+    assert "1.4" in text
 
 
 def test_subb_strict_open_row_rejects_close_fallback():
@@ -165,7 +302,45 @@ def test_subb_emxc_strict_open_uses_eem_proxy_before_emxc_live_history():
     )
 
     assert pre_row["EMXC"] == 20.0
-    assert us_open["EMXC"].loc[post_live] == 30.0
+    assert us_open["EMXC"].loc[post_live] == pytest.approx(12.0 * 26.0 / 11.0)
+
+
+def test_subb_btc_ibit_strict_open_uses_spliced_ibit_open_after_listing():
+    module = load_v78_module()
+    dates = pd.to_datetime(["2024-01-10", "2024-01-11", "2024-01-12"])
+    us_raw = {
+        "BTC-USD": pd.DataFrame(
+            {"close": [50000.0, 51000.0, 52000.0], "open": [49900.0, 50900.0, 51900.0]},
+            index=dates,
+        ),
+        "IBIT": pd.DataFrame(
+            {"close": [50.0, 51.0, 52.0], "open": [49.5, 50.5, 51.5]},
+            index=dates,
+        ),
+    }
+    us_open = module._build_us_open_execution_dict(us_raw)
+    close_spliced = module.build_ibit_spliced(
+        pd.DataFrame(
+            {
+                "BTC-USD": us_raw["BTC-USD"]["close"],
+                "IBIT": us_raw["IBIT"]["close"],
+            }
+        )
+    )
+    close_df = pd.DataFrame({"BTC-USD": close_spliced}, index=dates)
+
+    row = module._us_open_row(
+        dates[1],
+        ["BTC-USD"],
+        us_open,
+        close_df,
+        strict=True,
+        context="Sub-B official rotation",
+    )
+
+    scale = us_raw["BTC-USD"].loc[dates[0], "close"] / us_raw["IBIT"].loc[dates[0], "close"]
+    assert row["BTC-USD"] == us_raw["IBIT"].loc[dates[1], "open"] * scale
+    assert row["BTC-USD"] != us_raw["BTC-USD"].loc[dates[1], "open"]
 
 
 def test_subb_rotation_mix_strict_open_execution_rejects_missing_open(monkeypatch):
@@ -205,6 +380,49 @@ def test_subb_rotation_mix_strict_open_execution_rejects_missing_open(monkeypatc
             weight_assets=["QQQ", "BIL"],
             strict_open_execution=True,
         )
+
+
+def test_v78_spy_volume_gate_fail_closed_when_volume_source_ends_before_price_index(monkeypatch):
+    module = load_v78_module()
+    index = pd.to_datetime(["2026-06-10", "2026-06-11", "2026-06-12"])
+    stale_volume = pd.Series([100.0, 200.0], index=index[:2])
+
+    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
+    monkeypatch.setattr(module, "_v78_fetch_spy_volume", lambda _index: (stale_volume, "test stale volume"))
+
+    gate, source = module._v78_spy_volume_gate(index)
+
+    assert gate.index.equals(index)
+    assert gate.tolist() == [True, True, True]
+    assert "stale" in source
+    assert "fail_closed" in source
+
+
+def test_v78_microcap_loader_accepts_current_v20_targetvol15_official_nav(tmp_path, monkeypatch):
+    module = load_v78_module()
+    repo_root = tmp_path / "A股美股动量组合策略"
+    microcap_outputs = tmp_path / "微盘股对冲策略" / "outputs"
+    microcap_outputs.mkdir(parents=True)
+    nav_path = microcap_outputs / "microcap_top100_mom16_targetvol15_max1p5_v2_0_costed_nav.csv"
+    pd.DataFrame(
+        {
+            "date": ["2026-06-29", "2026-06-30"],
+            "return_net": [0.01, -0.02],
+        }
+    ).to_csv(nav_path, index=False)
+
+    monkeypatch.setattr(module, "_repo_base_dir", lambda: str(repo_root))
+
+    ret = module._load_microcap_daily_ret(expected_latest_date=pd.Timestamp("2026-06-30"))
+
+    assert ret.index[-1] == pd.Timestamp("2026-06-30")
+    assert ret.iloc[-1] == -0.02
+
+    with pytest.raises(Exception) as excinfo:
+        module._load_microcap_daily_ret(expected_latest_date=pd.Timestamp("2026-07-01"))
+
+    assert "targetvol15" in str(excinfo.value)
+    assert "targetvol25" not in str(excinfo.value)
 
 
 def test_v78_run_strategies_passes_strict_subb_open_execution_to_all_subb_legs():

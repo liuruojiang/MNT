@@ -17,6 +17,19 @@ def load_v78_module():
     return module
 
 
+def test_v78_dk_full_pool_frame_clamps_to_zz1000_publication_date():
+    module = load_v78_module()
+    dates = pd.to_datetime(["2014-10-16", "2014-10-17", "2014-10-20"])
+    dk_dfs = {
+        col: pd.DataFrame({col: [1.0, 2.0, 3.0]}, index=dates)
+        for col in module.CN_DK_COLS
+    }
+
+    out = module._build_cn_dk_close_frame(dk_dfs)
+
+    assert out.index.min() == pd.Timestamp("2014-10-17")
+
+
 def test_v78_adk_status_rows_include_v77_and_new_adk_legs():
     module = load_v78_module()
     dates = pd.to_datetime(["2026-06-12"])
@@ -673,6 +686,7 @@ def test_v78_subb_param_tables_list_each_leg_separately():
     assert "30% / 40日 / max1.25x" in text
     assert "SPY量/MA60≥1.5 -> QQQ/EMXC/EFA ×0.75" in text
     assert "component-net" in text
+    assert "V7.7 official+EMA account-level blend is pre-netted before entering V7.8 as the 50% V7.7 component" in text
     assert "fail_closed" in text
     assert "local runs without Yahoo access may be more defensive" in text
     assert "rv≥50% -> QQQ/EMXC/EFA目标仓位×0.75" in text

@@ -14,6 +14,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 import types
 import urllib.request
@@ -407,6 +408,15 @@ CN_ASSET_NAMES = {
     "zz500": "中证500",
 }
 
+CN_ASSET_PUBLICATION_DATES = {
+    "sz50": pd.Timestamp("2004-01-02"),
+    "hs300": pd.Timestamp("2005-04-08"),
+    "zz500": pd.Timestamp("2007-01-15"),
+    "cyb": pd.Timestamp("2010-06-01"),
+    "zz1000": pd.Timestamp("2014-10-17"),
+}
+
+
 STRATEGY_LEGS = {
     "forward_zz1000_hs300": ("zz1000", "hs300"),
     "reverse_hs300_zz1000": ("hs300", "zz1000"),
@@ -425,6 +435,47 @@ STRATEGY_LEGS = {
     "forward_cyb_zz500": ("cyb", "zz500"),
     "reverse_zz500_cyb": ("zz500", "cyb"),
 }
+
+
+def _coerce_timestamp(value: object) -> Optional[pd.Timestamp]:
+    if value in (None, ""):
+        return None
+    try:
+        ts = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    return ts.normalize()
+
+
+def _required_formal_start_for_strategy(config: "StrategyConfig") -> Optional[pd.Timestamp]:
+    dates = [
+        CN_ASSET_PUBLICATION_DATES[asset]
+        for asset in STRATEGY_LEGS.get(config.key, ())
+        if asset in CN_ASSET_PUBLICATION_DATES
+    ]
+    if not dates:
+        return None
+    return max(pd.Timestamp(item).normalize() for item in dates)
+
+
+def _effective_online_start(config: "StrategyConfig", meta: dict, fallback: object) -> pd.Timestamp:
+    candidates = []
+    fallback_ts = _coerce_timestamp(fallback)
+    if fallback_ts is not None:
+        candidates.append(fallback_ts)
+    for key in ("common_start", "formal_start"):
+        ts = _coerce_timestamp(meta.get(key) if isinstance(meta, dict) else None)
+        if ts is not None:
+            candidates.append(ts)
+    required = _required_formal_start_for_strategy(config)
+    if required is not None:
+        candidates.append(required)
+    if not candidates:
+        return pd.Timestamp.min.normalize()
+    return max(candidates)
+
 
 ONLINE_DISABLED = os.environ.get("POE_ADK_DISABLE_ONLINE", "").strip().lower() in {"1", "true", "yes", "on"}
 POE_MODE = "poe_online_rebuild"
@@ -1584,8 +1635,6 @@ def _fetch_amount_history_with_fallback(
         ("EastMoney amount", lambda: _fetch_eastmoney_kline(secid, lookback_bars=lookback_bars)),
         ("CSIndex official amount", lambda: _fetch_csindex_amount(secid, lmt=lookback_bars)),
         ("Sohu amount", lambda: _fetch_sohu_amount(secid, lmt=lookback_bars)),
-        ("Sina volume proxy", lambda: _fetch_sina_volume_proxy(asset, lookback_bars=lookback_bars)),
-        ("Tencent volume proxy", lambda: _fetch_tencent_volume_proxy(asset, lookback_bars=lookback_bars)),
     )
     for source_name, fetcher in sources:
         try:
@@ -1832,13 +1881,7 @@ def _fetch_online_price_panel(
                     if amount_attempts:
                         amount_fallbacks[asset] = " -> ".join(amount_attempts)
                 except Exception as exc:
-                    current_volume = pd.to_numeric(frame.get("volume", pd.Series(index=frame.index, dtype=float)), errors="coerce")
-                    if int(current_volume.dropna().shape[0]) > 50:
-                        frame["amount"] = current_volume
-                        amount_sources[asset] = f"{source_name} volume proxy end={current_volume.dropna().index[-1].strftime('%Y-%m-%d')}"
-                        amount_errors[asset] = f"real amount fallback failed; using price-source volume proxy: {exc}"
-                    else:
-                        amount_errors[asset] = str(exc)
+                    amount_errors[asset] = f"real amount unavailable: {exc}"
             else:
                 amount_sources[asset] = f"{source_name} amount end={current_amount.dropna().index[-1].strftime('%Y-%m-%d')}"
             frame = frame[~frame.index.duplicated(keep="last")].sort_index()
@@ -1866,6 +1909,7 @@ def _fetch_online_price_panel(
     panel.attrs["fetched_at"] = bj.strftime("%Y-%m-%d %H:%M:%S")
     panel.attrs["mode"] = "intraday" if live_assets else "daily"
     panel.attrs["lookback_bars"] = int(lookback_bars)
+    _validate_online_price_panel(panel)
     return panel, dict(panel.attrs)
 
 
@@ -1965,6 +2009,24 @@ def _consecutive_true_live(mask: pd.Series) -> pd.Series:
     return pd.Series(out, index=mask.index, dtype=float)
 
 
+def _formal_spread_return(price: pd.DataFrame, long_asset: str, short_asset: str) -> pd.Series:
+    if long_asset not in price.columns or short_asset not in price.columns:
+        return pd.Series(dtype=float)
+    long_ret = pd.to_numeric(price[long_asset], errors="coerce").pct_change()
+    short_ret = pd.to_numeric(price[short_asset], errors="coerce").pct_change()
+    return (long_ret.fillna(0.0) - short_ret.fillna(0.0)).reindex(price.index)
+
+
+def _metric_family_is_high(family: str) -> bool:
+    family = str(family or "").strip().lower()
+    return family == "high_pair" or family.startswith("high_") or family.endswith("_high") or family.endswith("high")
+
+
+def _metric_family_is_low(family: str) -> bool:
+    family = str(family or "").strip().lower()
+    return family == "low_pair" or family.startswith("low_") or family.endswith("_low") or family.endswith("low")
+
+
 def _combine_seed_and_online_series(seed: Optional[pd.Series], online: pd.Series) -> pd.Series:
     parts = []
     if seed is not None:
@@ -2034,9 +2096,9 @@ def _live_metric_overlay_state(
         return {"enabled": True, "available": False, "reason": f"too few online {metric} rows ({len(raw)})"}
     ma = raw.rolling(window).mean()
     ratio = raw / ma.replace(0, math.nan)
-    if family.startswith("high_"):
+    if _metric_family_is_high(family):
         raw_gate = ratio >= threshold
-        gate = raw_gate
+        gate = _consecutive_true_live(raw_gate) >= confirm_days
     else:
         raw_gate = ratio <= threshold
         gate = _consecutive_true_live(raw_gate) >= confirm_days
@@ -2103,8 +2165,8 @@ def _metric_gate_series(
     if len(raw) < max(window, 2):
         return pd.Series(dtype=float), pd.Series(dtype=float)
     ratio = raw / raw.rolling(window).mean().replace(0, math.nan)
-    if family.startswith("high_"):
-        gate = ratio >= threshold
+    if _metric_family_is_high(family):
+        gate = _consecutive_true_live(ratio >= threshold) >= confirm_days
     else:
         gate = _consecutive_true_live(ratio <= threshold) >= confirm_days
     return ratio, gate.astype(float)
@@ -2149,12 +2211,13 @@ def _live_probe_for_strategy(
         return None
     long_asset, short_asset = legs
     pair = panel[[long_asset, short_asset]].dropna().copy()
-    start = pd.Timestamp(meta.get("common_start", pair.index.min()))
+    start = _effective_online_start(config, meta, pair.index.min())
     pair = pair.loc[pair.index >= start]
     if len(pair) < 100:
         return None
     ratio = pair[long_asset] / pair[short_asset]
     close = ratio / float(ratio.iloc[0])
+    spread_return = _formal_spread_return(pair, long_asset, short_asset)
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
     bias_ma = int(signal.get("bias_ma") or 60)
     mom_day = int(signal.get("mom_day") or 20)
@@ -2185,7 +2248,7 @@ def _live_probe_for_strategy(
     vol_value = math.nan
     vol_scale = math.nan
     if vol_window not in (None, ""):
-        vol_series = close.pct_change().rolling(int(vol_window)).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_return.rolling(int(vol_window)).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
         if pd.notna(vol_series.iloc[-1]):
             vol_value = float(vol_series.iloc[-1])
             if vol_section.get("kind") == "downonly_tv":
@@ -2217,12 +2280,13 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     price = panel[[long_asset, short_asset]].dropna().copy()
     if price.empty:
         return pd.DataFrame()
-    start = pd.Timestamp(meta.get("common_start", price.index.min()))
+    start = _effective_online_start(config, meta, price.index.min())
     price = price.loc[price.index >= start]
     if price.empty:
         return pd.DataFrame()
     ratio = price[long_asset] / price[short_asset]
     close = ratio / float(ratio.iloc[0])
+    spread_return = _formal_spread_return(price, long_asset, short_asset)
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
     score = _bias_momentum_score_for_live(
         close,
@@ -2241,6 +2305,7 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
     out[long_asset] = price[long_asset]
     out[short_asset] = price[short_asset]
     out["spread_close"] = close
+    out["spread_return"] = spread_return
     out["score"] = score
     out["r2"] = r2
     score_threshold = float(signal.get("score_threshold") or 0.0)
@@ -2282,7 +2347,7 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
             out["volume_ma_ratio"] = ratio_series.reindex(out.index)
     vol = _vol_overlay_section(meta)
     if vol.get("enabled") and vol.get("window") not in (None, ""):
-        vol_series = close.pct_change().rolling(int(vol.get("window"))).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_return.rolling(int(vol.get("window"))).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
         for col in ("overheat_indicator", "volhot_indicator", "vol_indicator", "realized_vol", "base_realized_vol"):
             out[col] = vol_series
         if vol.get("kind") == "downonly_tv":
@@ -2402,6 +2467,7 @@ def _online_target_vol_scale(
     meta: dict,
     signal_date: pd.Timestamp,
     vol_series: pd.Series,
+    active_signal: Optional[float] = None,
 ) -> tuple[float, float, float]:
     target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
     if not target_vol.get("enabled"):
@@ -2416,6 +2482,8 @@ def _online_target_vol_scale(
     else:
         min_leverage = _safe_float(_first_section_value(target_vol, ("min_leverage", "min_scale", "floor")), 0.0)
         raw = min(max(float(target) / rv, min_leverage), max_leverage)
+    if active_signal is not None and math.isfinite(float(active_signal)) and float(active_signal) <= 0.5:
+        return raw, 0.0, 0.0
     prev_scale = _first_numeric(prev_row, ("target_vol_scale", "base_target_vol_scale"))
     if not math.isfinite(prev_scale) or prev_scale <= 1e-12:
         prev_scale = raw
@@ -2443,10 +2511,14 @@ def _online_gate_and_multiplier(
     signal_frame: pd.DataFrame,
     curve_so_far: pd.DataFrame,
     decay_state_frame: Optional[pd.DataFrame] = None,
+    state_as_of: Optional[pd.Timestamp] = None,
 ) -> float:
     multiplier = 1.0
-    state_idx = signal_frame.index[signal_frame.index < idx]
-    as_of = pd.Timestamp(state_idx[-1] if len(state_idx) else idx)
+    if state_as_of is None:
+        state_idx = signal_frame.index[signal_frame.index < idx]
+        as_of = pd.Timestamp(state_idx[-1] if len(state_idx) else idx)
+    else:
+        as_of = pd.Timestamp(state_as_of)
     state_row = signal_frame.loc[as_of] if as_of in signal_frame.index else pd.Series(dtype=float)
 
     nav = meta.get("nav_defense", {}) if isinstance(meta.get("nav_defense", {}), dict) else {}
@@ -2552,13 +2624,17 @@ def _fill_online_execution_row(
     if idx not in signal_frame.index:
         return row
     spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
+    if "spread_return" in signal_frame.columns:
+        spread_returns = pd.to_numeric(signal_frame["spread_return"], errors="coerce")
+    else:
+        spread_returns = spread.pct_change()
     if target_series is None:
         r2_series = pd.to_numeric(signal_frame["r2"], errors="coerce") if "r2" in signal_frame.columns else None
         target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta, r2=r2_series)
     target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
     tv_window = int(target_vol.get("target_vol_window") or 20)
     if vol_series is None:
-        vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
     if curve_so_far.empty:
         row["target"] = 0.0
         row["exec_signal"] = 0.0
@@ -2586,12 +2662,14 @@ def _fill_online_execution_row(
 
     prev_idx = curve_so_far.index[-1]
     prev_row = curve_so_far.iloc[-1]
-    if idx not in spread.index or prev_idx not in spread.index:
+    if idx not in spread.index or prev_idx not in spread.index or idx not in spread_returns.index:
         return row
-    spread_ret = float(spread.loc[idx] / spread.loc[prev_idx] - 1.0)
+    spread_ret = float(spread_returns.loc[idx])
+    if not math.isfinite(spread_ret):
+        spread_ret = 0.0
     signal_date = prev_idx if prev_idx in target_series.index else target_series.loc[target_series.index < idx].index[-1]
     target = float(target_series.loc[signal_date]) if signal_date in target_series.index else 0.0
-    raw_scale, target_scale, suppressed = _online_target_vol_scale(pd.Series(row), prev_row, meta, signal_date, vol_series)
+    raw_scale, target_scale, suppressed = _online_target_vol_scale(pd.Series(row), prev_row, meta, signal_date, vol_series, active_signal=target)
     base_exposure = target * target_scale
     prev_base_exposure = _first_numeric(prev_row, ("base_gross_exposure", "gross_exposure"))
     if not math.isfinite(prev_base_exposure):
@@ -2671,8 +2749,8 @@ def _extend_curves_with_online_prices(
         if len(price) < 2 or pd.Timestamp(price.index[-1]).normalize() <= last_date:
             refreshed[config.key] = curve
             continue
-        ratio_return = (price[long_asset] / price[short_asset]).pct_change()
-        new_dates = [idx for idx in ratio_return.index if pd.Timestamp(idx).normalize() > last_date and pd.notna(ratio_return.loc[idx])]
+        spread_return = _formal_spread_return(price, long_asset, short_asset)
+        new_dates = [idx for idx in spread_return.index if pd.Timestamp(idx).normalize() > last_date and pd.notna(spread_return.loc[idx])]
         if not new_dates:
             refreshed[config.key] = curve
             continue
@@ -2682,7 +2760,7 @@ def _extend_curves_with_online_prices(
         rows = []
         for idx in new_dates:
             is_provisional = provisional_date is not None and pd.Timestamp(idx).normalize() == provisional_date
-            gross_return = exposure * float(ratio_return.loc[idx])
+            gross_return = exposure * float(spread_return.loc[idx])
             nav *= 1.0 + gross_return
             row = {col: math.nan for col in curve.columns}
             row.update(
@@ -2738,7 +2816,11 @@ def _build_curves_from_online_prices(
         target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta, r2=r2_series)
         target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
         tv_window = int(target_vol.get("target_vol_window") or 20)
-        vol_series = spread.pct_change().rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        if "spread_return" in signal_frame.columns:
+            spread_returns = pd.to_numeric(signal_frame["spread_return"], errors="coerce")
+        else:
+            spread_returns = spread.pct_change()
+        vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
         valid_index = signal_frame.loc[spread.notna()].index
         tail_index = list(valid_index if full_history else valid_index[-ONLINE_REBUILD_LOOKBACK_BARS:])
         rows: list[tuple[pd.Timestamp, dict]] = [] if full_history else _snapshot_seed_rows(config, signal_frame)
@@ -2788,14 +2870,15 @@ def _snapshot_seed_rows(config: StrategyConfig, signal_frame: pd.DataFrame) -> l
     if not as_of or not isinstance(values, dict):
         return []
     seed_idx = pd.Timestamp(str(as_of))
+    if seed_idx not in signal_frame.index:
+        return []
     row = {k: float(v) for k, v in values.items() if isinstance(v, (int, float)) and math.isfinite(float(v))}
-    if seed_idx in signal_frame.index:
-        for col, value in signal_frame.loc[seed_idx].items():
-            if col not in row and pd.notna(value):
-                try:
-                    row[col] = float(value)
-                except (TypeError, ValueError):
-                    pass
+    for col, value in signal_frame.loc[seed_idx].items():
+        if col not in row and pd.notna(value):
+            try:
+                row[col] = float(value)
+            except (TypeError, ValueError):
+                pass
     row["state_snapshot_seed"] = 1.0
     row["online_rebuilt_bar"] = 0.0
     row["online_provisional_bar"] = 0.0
@@ -2812,6 +2895,24 @@ def _snapshot_seed_rows(config: StrategyConfig, signal_frame: pd.DataFrame) -> l
     return [(seed_idx, row)]
 
 
+def _validate_snapshot_score_diffs(panel: pd.DataFrame, metas: dict[str, dict]) -> None:
+    rows = snapshot_score_diffs(panel, metas)
+    bad: list[str] = []
+    for item in rows:
+        status = str(item.get("status") or "")
+        abs_diff = _safe_float(item.get("abs_diff"))
+        if status in {"as_of_not_in_panel", "missing_recomputed_score"}:
+            continue
+        if status != "ok":
+            bad.append(f"{item.get('key')}: {status}")
+        elif math.isfinite(abs_diff) and abs_diff > SNAPSHOT_SCORE_ABS_TOL:
+            bad.append(f"{item.get('key')}: abs_diff={abs_diff:.6g}")
+    if bad:
+        preview = "; ".join(bad[:8])
+        suffix = f"; +{len(bad) - 8} more" if len(bad) > 8 else ""
+        raise RuntimeError(f"snapshot score validation failed: {preview}{suffix}")
+
+
 def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.DataFrame], dict[str, dict], dict[str, object]]:
     metas = load_strategy_metas()
     online: dict[str, object] = {"ok": False, "error": None, "probes": {}}
@@ -2824,6 +2925,8 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
             local_error = str(exc)
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=include_realtime)
+        _validate_online_price_panel(panel, metas)
+        _validate_snapshot_score_diffs(panel, metas)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
@@ -2846,6 +2949,25 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
 _PERFORMANCE_CONTEXT_CACHE: dict[str, object] = {}
 _PERFORMANCE_QUERY_CONTEXT_CACHE: dict[str, dict[str, object]] = {}
 _PERFORMANCE_CONTEXT_TTL_SECONDS = 180.0
+_PERFORMANCE_QUERY_CONTEXT_MAX_ENTRIES = 16
+_PERFORMANCE_QUERY_CONTEXT_LOCK = threading.Lock()
+
+
+def _prune_performance_query_cache(now: Optional[float] = None) -> None:
+    now = time.monotonic() if now is None else float(now)
+    expired = [
+        key
+        for key, item in _PERFORMANCE_QUERY_CONTEXT_CACHE.items()
+        if now - float(item.get("cached_at", 0.0) or 0.0) > _PERFORMANCE_CONTEXT_TTL_SECONDS
+    ]
+    for key in expired:
+        _PERFORMANCE_QUERY_CONTEXT_CACHE.pop(key, None)
+    while len(_PERFORMANCE_QUERY_CONTEXT_CACHE) > _PERFORMANCE_QUERY_CONTEXT_MAX_ENTRIES:
+        oldest = min(
+            _PERFORMANCE_QUERY_CONTEXT_CACHE,
+            key=lambda item_key: float(_PERFORMANCE_QUERY_CONTEXT_CACHE[item_key].get("cached_at", 0.0) or 0.0),
+        )
+        _PERFORMANCE_QUERY_CONTEXT_CACHE.pop(oldest, None)
 
 
 def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object]]:
@@ -2864,6 +2986,7 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
             curves = {}
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=False)
+        _validate_online_price_panel(panel, metas)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
@@ -2923,26 +3046,30 @@ def _load_performance_curves_for_query(query: str) -> tuple[dict[str, pd.DataFra
 
     cache_key = str(int(lookback_bars))
     now = time.monotonic()
-    cached = _PERFORMANCE_QUERY_CONTEXT_CACHE.get(cache_key)
-    if cached:
-        cached_at = float(cached.get("cached_at", 0.0) or 0.0)
-        value = cached.get("value")
-        if value is not None and now - cached_at <= _PERFORMANCE_CONTEXT_TTL_SECONDS:
-            return value  # type: ignore[return-value]
+    with _PERFORMANCE_QUERY_CONTEXT_LOCK:
+        _prune_performance_query_cache(now)
+        cached = _PERFORMANCE_QUERY_CONTEXT_CACHE.get(cache_key)
+        if cached:
+            cached_at = float(cached.get("cached_at", 0.0) or 0.0)
+            value = cached.get("value")
+            if value is not None and now - cached_at <= _PERFORMANCE_CONTEXT_TTL_SECONDS:
+                return value  # type: ignore[return-value]
 
-    metas = load_strategy_metas()
-    panel, online_meta = _fetch_online_price_panel(include_realtime=False, lookback_bars=lookback_bars)
-    curves = _build_curves_from_online_prices(metas, panel, full_history=True)
-    online = {
-        **online_meta,
-        "ok": True,
-        "error": None,
-        "data_mode": "online_rebuild_recent_performance",
-        "performance_lookback_bars": int(lookback_bars),
-    }
-    value = (curves, online)
-    _PERFORMANCE_QUERY_CONTEXT_CACHE[cache_key] = {"cached_at": now, "value": value}
-    return value
+        metas = load_strategy_metas()
+        panel, online_meta = _fetch_online_price_panel(include_realtime=False, lookback_bars=lookback_bars)
+        _validate_online_price_panel(panel, metas)
+        curves = _build_curves_from_online_prices(metas, panel, full_history=True)
+        online = {
+            **online_meta,
+            "ok": True,
+            "error": None,
+            "data_mode": "online_rebuild_recent_performance",
+            "performance_lookback_bars": int(lookback_bars),
+        }
+        value = (curves, online)
+        _PERFORMANCE_QUERY_CONTEXT_CACHE[cache_key] = {"cached_at": time.monotonic(), "value": value}
+        _prune_performance_query_cache()
+        return value
 
 
 def _blend_returns(parts: Iterable[pd.Series]) -> pd.Series:
@@ -2954,14 +3081,59 @@ def _nav_from_returns(returns: pd.Series) -> pd.Series:
     return (1.0 + returns.fillna(0.0)).cumprod()
 
 
+def _unavailable_curve(reason: str) -> pd.DataFrame:
+    frame = pd.DataFrame()
+    frame.attrs["unavailable_reason"] = reason
+    return frame
+
+
+def _curve_unavailable_reason(curves: dict[str, pd.DataFrame], key: str) -> Optional[str]:
+    curve = curves.get(key)
+    if curve is None:
+        return f"missing curve {key}"
+    if curve.empty:
+        return f"empty curve {key}"
+    if "return" not in curve.columns:
+        return f"missing return column {key}"
+    returns = pd.to_numeric(curve["return"], errors="coerce").dropna()
+    if returns.empty:
+        return f"empty return series {key}"
+    return None
+
+
+def _aligned_numeric_column(frame: pd.DataFrame, index: pd.Index, column: str, default: float = 0.0) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(default, index=index, dtype=float)
+    return pd.to_numeric(frame.loc[index, column], errors="coerce").fillna(default).astype(float)
+
+
 def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     combos: dict[str, pd.DataFrame] = {}
     pair_returns: dict[str, pd.Series] = {}
+    unavailable_pairs: list[str] = []
 
     for pair_key, _label, forward_key, reverse_key in PAIR_DEFS:
+        missing = [
+            reason
+            for reason in (
+                _curve_unavailable_reason(curves, forward_key),
+                _curve_unavailable_reason(curves, reverse_key),
+            )
+            if reason
+        ]
+        if missing:
+            reason = "; ".join(missing)
+            combos[pair_key] = _unavailable_curve(reason)
+            unavailable_pairs.append(f"{pair_key}: {reason}")
+            continue
         fwd = curves[forward_key]
         rev = curves[reverse_key]
         pair_return = _blend_returns([fwd["return"].rename("forward"), rev["return"].rename("reverse")])
+        if pair_return.empty:
+            reason = f"no overlapping return dates {forward_key}/{reverse_key}"
+            combos[pair_key] = _unavailable_curve(reason)
+            unavailable_pairs.append(f"{pair_key}: {reason}")
+            continue
         idx = pair_return.index
         frame = pd.DataFrame(index=idx)
         frame["forward_return"] = fwd.loc[idx, "return"].astype(float)
@@ -2969,22 +3141,33 @@ def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
         frame["return"] = pair_return.astype(float)
         frame["gross_return"] = frame["return"]
         frame["cost"] = (
-            pd.to_numeric(fwd.loc[idx].get("cost", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("cost", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "cost") * 0.5
+            + _aligned_numeric_column(rev, idx, "cost") * 0.5
         )
         frame["turnover"] = (
-            pd.to_numeric(fwd.loc[idx].get("turnover", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("turnover", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "turnover") * 0.5
+            + _aligned_numeric_column(rev, idx, "turnover") * 0.5
         )
         frame["gross_exposure"] = (
-            pd.to_numeric(fwd.loc[idx].get("gross_exposure", 0.0), errors="coerce").fillna(0.0) * 0.5
-            + pd.to_numeric(rev.loc[idx].get("gross_exposure", 0.0), errors="coerce").fillna(0.0) * 0.5
+            _aligned_numeric_column(fwd, idx, "gross_exposure") * 0.5
+            + _aligned_numeric_column(rev, idx, "gross_exposure") * 0.5
         )
         frame["nav"] = _nav_from_returns(frame["return"])
         combos[pair_key] = frame
         pair_returns[pair_key] = frame["return"].rename(pair_key)
 
+    if unavailable_pairs or len(pair_returns) != len(PAIR_DEFS):
+        reason = "missing pair curves: " + "; ".join(unavailable_pairs)
+        combos["all_pair_equal_weight"] = _unavailable_curve(reason)
+        return combos
+    if not pair_returns:
+        combos["all_pair_equal_weight"] = _unavailable_curve("missing pair curves")
+        return combos
+
     total_return = _blend_returns(pair_returns.values())
+    if total_return.empty:
+        combos["all_pair_equal_weight"] = _unavailable_curve("no overlapping pair return dates")
+        return combos
     total = pd.DataFrame(index=total_return.index)
     for pair_key, _label, _forward_key, _reverse_key in PAIR_DEFS:
         total[f"{pair_key}_return"] = combos[pair_key].loc[total.index, "return"].astype(float)
@@ -3007,6 +3190,7 @@ def drawdown(nav: pd.Series) -> pd.Series:
 
 def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
     if curve.empty:
+        reason = str(curve.attrs.get("unavailable_reason") or "N/A")
         return {
             "start": "",
             "end": "",
@@ -3018,8 +3202,19 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
             "sharpe": math.nan,
             "calmar": math.nan,
             "final_nav": math.nan,
+            "reason": reason,
         }
-    returns = pd.to_numeric(curve["return"], errors="coerce").fillna(0.0)
+    if "return" not in curve.columns:
+        reason = str(curve.attrs.get("unavailable_reason") or "missing return column")
+        unavailable = _unavailable_curve(reason)
+        return metrics_for_curve(unavailable)
+    raw_returns = pd.to_numeric(curve["return"], errors="coerce")
+    returns = raw_returns.dropna()
+    invalid_count = int(len(raw_returns) - len(returns))
+    if returns.empty:
+        reason = str(curve.attrs.get("unavailable_reason") or "empty valid return series")
+        unavailable = _unavailable_curve(reason)
+        return metrics_for_curve(unavailable)
     nav = _nav_from_returns(returns)
     rows = int(len(returns))
     final_nav = float(nav.iloc[-1])
@@ -3036,8 +3231,8 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         sharpe = math.nan
         calmar = math.nan
     return {
-        "start": curve.index[0].strftime("%Y-%m-%d"),
-        "end": curve.index[-1].strftime("%Y-%m-%d"),
+        "start": returns.index[0].strftime("%Y-%m-%d"),
+        "end": returns.index[-1].strftime("%Y-%m-%d"),
         "rows": rows,
         "period_return": period_return,
         "ann_return": ann_return,
@@ -3046,6 +3241,7 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         "sharpe": sharpe,
         "calmar": calmar,
         "final_nav": final_nav,
+        "reason": f"dropped {invalid_count} invalid return rows" if invalid_count else "",
     }
 
 
@@ -3150,10 +3346,12 @@ def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp,
     explicit = _parse_explicit_date_range(raw)
     if explicit is not None:
         start, end = explicit
+        if start.normalize() > end.normalize():
+            raise ValueError(f"start date is after end date: {start:%Y-%m-%d} > {end:%Y-%m-%d}")
         start = max(min_date, start.normalize())
         end = min(max_date, end.normalize())
         if start > end:
-            start = end
+            raise ValueError(f"requested date range is outside available data: {start:%Y-%m-%d} > {end:%Y-%m-%d}")
         return start, end, f"{start:%Y-%m-%d} 至 {end:%Y-%m-%d}"
 
     if "今年" in raw or "YTD" in q or "YEAR_TO_DATE" in q:
@@ -3183,6 +3381,8 @@ def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp,
 
 
 def _slice_curve(curve: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    if curve.empty:
+        return curve.copy()
     return curve.loc[(curve.index >= start) & (curve.index <= end)].copy()
 
 
@@ -3192,13 +3392,103 @@ def _metric_table(rows: list[tuple[str, dict]]) -> list[str]:
         "|:-|------:|------:|------:|------:|------:|------:|------:|:-|",
     ]
     for label, metrics in rows:
+        if int(metrics.get("rows", 0) or 0) <= 0:
+            reason = str(metrics.get("reason") or "N/A")
+            period_text = f"N/A / 0 ({reason})"
+        else:
+            period_text = f"{metrics['start']}~{metrics['end']} / {metrics['rows']}"
         out.append(
             f"| {label} | {pct(metrics['period_return'])} | {pct(metrics['ann_return'])} | "
             f"{pct(metrics['ann_vol'])} | {pct(metrics['max_dd'])} | {num(metrics['sharpe'])} | "
             f"{num(metrics['calmar'])} | {num(metrics['final_nav'], 4)} | "
-            f"{metrics['start']}~{metrics['end']} / {metrics['rows']} |"
+            f"{period_text} |"
         )
     return out
+
+
+STANDARD_PERFORMANCE_WINDOWS: tuple[tuple[str, Optional[int]], ...] = (
+    ("Full", None),
+    ("10Y", 10),
+    ("5Y", 5),
+    ("3Y", 3),
+    ("1Y", 1),
+)
+
+
+def _combined_report_index(curves_to_report: dict[str, pd.DataFrame], order: list[tuple[str, str]]) -> pd.DatetimeIndex:
+    indexes = [
+        pd.DatetimeIndex(curves_to_report[key].index)
+        for key, _label in order
+        if key in curves_to_report and not curves_to_report[key].empty
+    ]
+    if not indexes:
+        return pd.DatetimeIndex([])
+    values: set[pd.Timestamp] = set()
+    for index in indexes:
+        values.update(pd.Timestamp(item) for item in index)
+    return pd.DatetimeIndex(sorted(values))
+
+
+def _with_unavailable_reason(reason: str) -> dict[str, Union[float, int, str]]:
+    return metrics_for_curve(_unavailable_curve(reason))
+
+
+def _standard_window_metrics(curve: pd.DataFrame, label: str, years: Optional[int], end: pd.Timestamp) -> dict[str, Union[float, int, str]]:
+    if curve.empty:
+        return metrics_for_curve(curve)
+    if "return" not in curve.columns:
+        return _with_unavailable_reason("missing return column")
+    curve_end = min(pd.Timestamp(curve.index.max()).normalize(), pd.Timestamp(end).normalize())
+    if years is None:
+        metrics = metrics_for_curve(curve.loc[curve.index <= curve_end])
+    else:
+        requested_start = curve_end - pd.DateOffset(years=years)
+        first_available = pd.Timestamp(curve.index.min()).normalize()
+        if first_available > requested_start + pd.Timedelta(days=7):
+            return _with_unavailable_reason(
+                f"history starts {first_available:%Y-%m-%d} after {label} start {requested_start:%Y-%m-%d}"
+            )
+        sliced = _slice_curve(curve, requested_start, curve_end)
+        if len(sliced) < MIN_ANNUALIZED_METRIC_ROWS:
+            return _with_unavailable_reason(f"insufficient rows for {label}: {len(sliced)}/{MIN_ANNUALIZED_METRIC_ROWS}")
+        metrics = metrics_for_curve(sliced)
+    if not math.isfinite(float(metrics.get("ann_return", math.nan))):
+        reason = str(metrics.get("reason") or f"insufficient rows for annualized metrics: {metrics.get('rows', 0)}/{MIN_ANNUALIZED_METRIC_ROWS}")
+        metrics = dict(metrics)
+        metrics["reason"] = reason
+    return metrics
+
+
+def _standard_window_metric_table(
+    curves_to_report: dict[str, pd.DataFrame],
+    order: list[tuple[str, str]],
+    shared_index: pd.DatetimeIndex,
+) -> list[str]:
+    if shared_index.empty:
+        return ["### Standard windows", "", "- N/A: no return curves available"]
+    end = pd.Timestamp(shared_index.max()).normalize()
+    lines = [
+        "### Standard windows",
+        "",
+        "| Window | Strategy | Ann Return | Max DD | Start/End/Rows | Reason |",
+        "|:-|:-|------:|------:|:-|:-|",
+    ]
+    for window_label, years in STANDARD_PERFORMANCE_WINDOWS:
+        for key, display in order:
+            curve = curves_to_report.get(key, _unavailable_curve(f"missing curve {key}"))
+            metrics = _standard_window_metrics(curve, window_label, years, end)
+            rows = int(metrics.get("rows", 0) or 0)
+            if rows > 0:
+                period = f"{metrics['start']}~{metrics['end']} / {rows}"
+            else:
+                period = "N/A / 0"
+            reason = str(metrics.get("reason") or "")
+            if rows > 0 and not math.isfinite(float(metrics.get("ann_return", math.nan))):
+                reason = reason or "annualized metric N/A"
+            lines.append(
+                f"| {window_label} | {display} | {pct(metrics['ann_return'])} | {pct(metrics['max_dd'])} | {period} | {reason} |"
+            )
+    return lines
 
 
 def render_performance(query: str, combo: bool = False) -> str:
@@ -3207,15 +3497,30 @@ def render_performance(query: str, combo: bool = False) -> str:
         curves_to_report = build_combo_curves(curves)
         order = [(pair_key, label) for pair_key, label, _forward_key, _reverse_key in PAIR_DEFS]
         order.append(("all_pair_equal_weight", f"{len(PAIR_DEFS)}组再等权总组合"))
-        shared_index = curves_to_report["all_pair_equal_weight"].index
+        shared_index = _combined_report_index(curves_to_report, order)
         heading = "## 组合表现"
         note = f"{len(PAIR_DEFS)}组正反50/50，再将{len(PAIR_DEFS)}组等权；组合层不额外收费。"
     else:
         curves_to_report = curves
         order = [(config.key, config.display_name) for config in STRATEGIES]
-        shared_index = pd.DatetimeIndex(sorted(set.union(*(set(curves[k].index) for k, _ in order))))
+        shared_index = _combined_report_index(curves_to_report, order)
         heading = "## ADK价差子策略表现"
         note = f"{len(STRATEGIES)}个子策略按在线重建日收益统计；各子策略保留自身正式样本起点。"
+
+    if shared_index.empty:
+        today = pd.Timestamp(beijing_now().date())
+        rows = [
+            (display, metrics_for_curve(curves_to_report.get(key, _unavailable_curve(f"missing curve {key}"))))
+            for key, display in order
+        ]
+        lines = [heading, "", "- Query window: **N/A**", f"- 口径: {note}", "- N/A: no return curves available"]
+        if online.get("error"):
+            lines.append(f"- 在线刷新: **失败**；原因 `{online.get('error')}`")
+        lines.append("")
+        lines.extend(_metric_table(rows))
+        lines.append("")
+        lines.extend(_standard_window_metric_table(curves_to_report, order, pd.DatetimeIndex([today])))
+        return "\n".join(lines).rstrip() + "\n"
 
     start, end, label = parse_date_range(query, shared_index)
     if label == "全样本":
@@ -3225,7 +3530,10 @@ def render_performance(query: str, combo: bool = False) -> str:
             label = f"Poe最近窗口（约{lookback}个交易日）"
         elif data_mode == "online_rebuild_full_performance":
             label = f"Poe在线价格窗口（约{ONLINE_FETCH_LOOKBACK_BARS}个交易日）"
-    rows = [(display, metrics_for_curve(_slice_curve(curves_to_report[key], start, end))) for key, display in order]
+    rows = [
+        (display, metrics_for_curve(_slice_curve(curves_to_report.get(key, _unavailable_curve(f"missing curve {key}")), start, end)))
+        for key, display in order
+    ]
     lines = [heading, "", f"- 查询区间: **{label}** ({start:%Y-%m-%d} 至 {end:%Y-%m-%d})", f"- 口径: {note}"]
     if online.get("ok"):
         latest = max((df.index.max() for df in curves.values() if not df.empty), default=end)
@@ -3240,6 +3548,8 @@ def render_performance(query: str, combo: bool = False) -> str:
         lines.append(f"- 在线刷新: **失败**；原因: `{online.get('error')}`")
     lines.append("")
     lines.extend(_metric_table(rows))
+    lines.append("")
+    lines.extend(_standard_window_metric_table(curves_to_report, order, shared_index))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -3307,7 +3617,7 @@ def _extract_signal_for_row(row: pd.Series, probe: Optional[dict[str, object]]) 
                 return value
         except (TypeError, ValueError):
             pass
-    for key in ("target", "exec_signal", "raw_signal"):
+    for key in ("raw_signal", "target", "exec_signal"):
         if key in row.index and pd.notna(row[key]):
             try:
                 value = float(row[key])
@@ -3418,12 +3728,14 @@ def _target_vol_deadband(section: dict) -> object:
 
 def _target_vol_deadband_mode(section: dict) -> str:
     if not isinstance(section, dict):
-        return "rel"
+        return "abs"
     value = _first_section_value(section, ("deadband_mode", "deadband_type"))
     text = str(value or "").strip().lower()
     if text.startswith("abs") or "absolute" in text:
         return "abs"
-    return "rel"
+    if text.startswith("rel") or "relative" in text:
+        return "rel"
+    return "abs"
 
 
 def _target_vol_deadband_suppressed(raw_scale: float, prev_scale: float, section: dict) -> bool:
@@ -3474,12 +3786,15 @@ def _scorehot_threshold(section: dict) -> object:
 
 def _cost_rate_from_meta(meta: dict) -> float:
     cost_model = meta.get("cost_model", {}) if isinstance(meta.get("cost_model", {}), dict) else {}
+    legs = _safe_float(cost_model.get("legs"), 1.0)
+    if not math.isfinite(legs) or legs <= 0:
+        legs = 1.0
     bps = cost_model.get("one_way_cost_bps")
     if bps not in (None, ""):
-        return float(bps) / 10000.0
+        return float(bps) / 10000.0 * float(legs)
     commission = cost_model.get("one_way_commission")
     if commission not in (None, ""):
-        return float(commission)
+        return float(commission) * float(legs)
     return 0.0
 
 
@@ -3652,6 +3967,116 @@ def _volume_overlay_sections(meta: dict) -> list[dict]:
 
 def _has_amount_sensitive_overlay(meta: dict) -> bool:
     return bool(_amount_overlay_section(meta) or _volume_overlay_sections(meta))
+
+
+def _panel_column_value_count(panel: pd.DataFrame, column: str) -> int:
+    if column not in panel.columns:
+        return 0
+    return int(pd.to_numeric(panel[column], errors="coerce").dropna().shape[0])
+
+
+def _metric_columns_for_section(section: dict, long_asset: str, short_asset: str, metric: str) -> list[str]:
+    family = str(section.get("family") or "")
+    if family in {"high_pair", "low_pair"}:
+        return [f"{long_asset}_{metric}", f"{short_asset}_{metric}"]
+
+    metric_asset = long_asset
+    series_name = str(section.get("series") or section.get("feature") or "").lower()
+    for asset in CN_ASSET_NAMES:
+        if f"{asset}_amount" in series_name or f"{asset}_volume" in series_name or asset in series_name:
+            metric_asset = asset
+            break
+    return [f"{metric_asset}_{metric}"]
+
+
+def _required_overlay_metric_specs(meta: dict, long_asset: str, short_asset: str) -> list[tuple[str, list[str], int]]:
+    specs: list[tuple[str, list[str], int]] = []
+    amount = _amount_overlay_section(meta)
+    if amount:
+        series_name = str(amount.get("series") or amount.get("feature") or "").lower()
+        metric = "volume" if "volume" in series_name else "amount"
+        min_rows = max(int(amount.get("window") or 1), 2)
+        specs.append((f"amount_overlay:{metric}", _metric_columns_for_section(amount, long_asset, short_asset, metric), min_rows))
+    for volume in _volume_overlay_sections(meta):
+        min_rows = max(int(volume.get("window") or 1), 2)
+        label = str(volume.get("_meta_key") or volume.get("_label") or "volume_overlay")
+        specs.append((label, _metric_columns_for_section(volume, long_asset, short_asset, "volume"), min_rows))
+    return specs
+
+
+def _validate_online_price_panel(panel: pd.DataFrame, metas: Optional[dict[str, dict]] = None) -> None:
+    today = pd.Timestamp(beijing_now().date()).normalize()
+    if isinstance(panel.index, pd.DatetimeIndex) and len(panel.index) > 0:
+        latest_index_date = pd.Timestamp(panel.index.max()).normalize()
+        if latest_index_date > today:
+            raise RuntimeError(f"online price panel has future date: {latest_index_date:%Y-%m-%d}")
+        enforce_freshness = bool(panel.attrs.get("fetched_at") or panel.attrs.get("enforce_freshness"))
+        if enforce_freshness and (today - latest_index_date).days > 7:
+            raise RuntimeError(f"stale online price panel: latest={latest_index_date:%Y-%m-%d}, today={today:%Y-%m-%d}")
+
+    missing_assets = [
+        asset
+        for asset in CN_PRICE_SECIDS
+        if asset not in panel.columns or _panel_column_value_count(panel, asset) <= 0
+    ]
+    if missing_assets:
+        errors = panel.attrs.get("errors", {}) if isinstance(panel.attrs.get("errors", {}), dict) else {}
+        detail = ", ".join(
+            f"{asset} ({errors.get(asset)})" if errors.get(asset) else asset
+            for asset in missing_assets
+        )
+        raise RuntimeError(f"missing required online assets: {detail}")
+
+    latest_dates: dict[str, pd.Timestamp] = {}
+    invalid_prices: list[str] = []
+    for asset in CN_PRICE_SECIDS:
+        values = pd.to_numeric(panel[asset], errors="coerce")
+        finite = values[values.map(lambda item: math.isfinite(float(item)) if pd.notna(item) else False)]
+        if finite.empty:
+            invalid_prices.append(f"{asset}: no finite prices")
+            continue
+        non_positive = finite[finite <= 0]
+        if not non_positive.empty:
+            invalid_prices.append(f"{asset}: non-positive price at {pd.Timestamp(non_positive.index[-1]).strftime('%Y-%m-%d')}")
+        latest_dates[asset] = pd.Timestamp(finite.index[-1]).normalize()
+    if invalid_prices:
+        raise RuntimeError("non-positive or invalid online prices: " + "; ".join(invalid_prices[:8]))
+    if latest_dates:
+        latest = max(latest_dates.values())
+        lagged = [f"{asset} latest={date:%Y-%m-%d}" for asset, date in latest_dates.items() if date != latest]
+        if lagged:
+            raise RuntimeError(f"misaligned latest online price dates: panel latest={latest:%Y-%m-%d}; " + "; ".join(lagged[:8]))
+
+    if metas is None:
+        return
+
+    missing_metrics: list[str] = []
+    latest_price_date = max(latest_dates.values()) if latest_dates else pd.Timestamp(panel.index.max()).normalize()
+    for config in STRATEGIES:
+        legs = STRATEGY_LEGS.get(config.key)
+        if not legs:
+            continue
+        meta = metas.get(config.key, {}) if isinstance(metas, dict) else {}
+        for label, columns, min_rows in _required_overlay_metric_specs(meta, legs[0], legs[1]):
+            for column in columns:
+                if column not in panel.columns:
+                    missing_metrics.append(f"{config.key}:{label}:{column} missing")
+                    continue
+                series = pd.to_numeric(panel[column], errors="coerce")
+                valid = series[(series > 0) & series.notna()]
+                count = int(valid.shape[0])
+                if count < min_rows:
+                    missing_metrics.append(f"{config.key}:{label}:{column} rows={count}/{min_rows}")
+                    continue
+                metric_latest = pd.Timestamp(valid.index[-1]).normalize()
+                if metric_latest < latest_price_date:
+                    missing_metrics.append(
+                        f"{config.key}:{label}:{column} latest={metric_latest:%Y-%m-%d}/{latest_price_date:%Y-%m-%d}"
+                    )
+    if missing_metrics:
+        preview = "; ".join(missing_metrics[:12])
+        suffix = f"; +{len(missing_metrics) - 12} more" if len(missing_metrics) > 12 else ""
+        raise RuntimeError(f"missing required online overlay metrics: {preview}{suffix}")
 
 
 def _nav_drawdown_value(curve: pd.DataFrame) -> tuple[float, str]:
@@ -3946,15 +4371,19 @@ def _online_decay_state_frame(signal_frame: pd.DataFrame, meta: dict) -> pd.Data
             is_active = _safe_float(active.get(idx), 0.0) > 0.5
             cur_strength = _safe_float(strength.get(idx))
             ratio = math.nan
-            if (not is_active) or (not math.isfinite(cur_strength)) or cur_strength <= 0.0:
+            if (not math.isfinite(cur_strength)) or cur_strength <= 0.0:
                 peak = math.nan
                 active_days = 0
                 in_decay = False
             else:
-                active_days += 1
                 peak = cur_strength if not math.isfinite(peak) else max(peak, cur_strength)
                 ratio = cur_strength / peak if peak > 0 else math.nan
-                if active_days >= max(warmup_days, 1):
+                if not is_active:
+                    active_days = 0
+                    in_decay = False
+                else:
+                    active_days += 1
+                if is_active and active_days >= max(warmup_days, 1):
                     if in_decay:
                         if math.isfinite(ratio) and ratio >= recovery_ratio:
                             in_decay = False
@@ -4180,10 +4609,15 @@ def _overlay_detail_rows(
         abs_pass = True
         if math.isfinite(abs_threshold):
             abs_pass = math.isfinite(abs_mom) and abs_mom > abs_threshold
+        r2_threshold = _signal_r2_threshold(signal)
+        r2_value = _safe_float(probe.get("r2") if probe else row.get("r2", math.nan))
+        r2_pass = True if r2_threshold is None else math.isfinite(r2_value) and r2_value >= r2_threshold
         parts = [
-            _pass_text(score_pass and abs_pass),
+            _pass_text(score_pass and abs_pass and r2_pass),
             f"Score {num(score_value, 3)} / 阈值 {num(score_threshold, 3)}",
         ]
+        if r2_threshold is not None:
+            parts.append(f"R2 {num(r2_value, 3)} / threshold {num(r2_threshold, 3)}")
         if math.isfinite(abs_threshold):
             if math.isfinite(abs_mom):
                 parts.append(f"AbsMom{abs_day} {pct(abs_mom)} / 阈值 {pct(abs_threshold)}")
@@ -4203,6 +4637,9 @@ def _overlay_detail_rows(
         ]
         if math.isfinite(raw_scale):
             parts.append(f"raw {num(raw_scale, 3)}")
+        realized_vol = _first_numeric(row, ("realized_vol", "base_realized_vol"))
+        if math.isfinite(realized_vol):
+            parts.append(f"RV {pct(realized_vol)}")
         deadband = _target_vol_deadband(tv)
         if deadband not in (None, ""):
             deadband_status = "触发" if math.isfinite(suppressed) and suppressed > 0 else "未触发"
@@ -4298,6 +4735,7 @@ def _overlay_detail_rows(
     if decay.get("enabled"):
         gate = _first_numeric_with_history(curve, row, ("decay_gate", "base_decay_gate", "decay_on"))
         decision_ratio, state_gate, _state_mult, state_active = _online_decay_state_for_display(curve, row, meta)
+        has_online_signal_frame = _online_signal_frame_from_curve(curve) is not None
         current_cols = ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux")
         has_current_decay_col = any(col in row.index for col in current_cols)
         reference_ratio = _realtime_decay_ratio_for_display(curve, row, meta)
@@ -4314,7 +4752,10 @@ def _overlay_detail_rows(
         scale = _scale_from_section(decay)
         mult = _first_numeric_with_history(curve, row, ("decay_mult", "decay_scale"))
         display_ratio = reference_ratio if math.isfinite(reference_ratio) else decision_ratio
-        if state_active and math.isfinite(display_ratio):
+        if state_active and has_online_signal_frame and math.isfinite(state_gate):
+            gate = state_gate
+            mult = _state_mult
+        elif state_active and math.isfinite(display_ratio):
             gate = _infer_gate_from_threshold(display_ratio, _decay_threshold(decay), "<=")
             mult = _scale_from_section(decay) if _gate_triggered(gate) else 1.0
         elif not state_active:
@@ -4543,7 +4984,7 @@ def _row_with_current_decay_display(curve: pd.DataFrame, row: pd.Series, meta: d
     decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
     if not decay.get("enabled"):
         return out
-    state_ratio, _state_gate, _state_mult, active = _online_decay_state_for_display(curve, row, meta)
+    state_ratio, state_gate, state_mult, active = _online_decay_state_for_display(curve, row, meta)
     ratio = _realtime_decay_ratio_for_display(curve, row, meta)
     if not math.isfinite(ratio):
         ratio = state_ratio
@@ -4556,8 +4997,8 @@ def _row_with_current_decay_display(curve: pd.DataFrame, row: pd.Series, meta: d
             for col in ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux"):
                 out[col] = ratio
         return out
-    gate = _infer_gate_from_threshold(ratio, _decay_threshold(decay), "<=")
-    mult = _scale_from_section(decay) if _gate_triggered(gate) else 1.0
+    gate = state_gate if math.isfinite(state_gate) else _infer_gate_from_threshold(ratio, _decay_threshold(decay), "<=")
+    mult = state_mult if math.isfinite(state_mult) else _scale_from_section(decay) if _gate_triggered(gate) else 1.0
     if math.isfinite(gate):
         for col in ("decay_gate", "base_decay_gate", "decay_on"):
             out[col] = gate
@@ -4568,6 +5009,75 @@ def _row_with_current_decay_display(curve: pd.DataFrame, row: pd.Series, meta: d
         for col in ("decay_ratio_signal_day", "decay_indicator", "score_decay_ratio_overlay", "decay_aux"):
             out[col] = ratio
     return out
+
+
+def _online_signal_frame_from_curve(curve: pd.DataFrame) -> Optional[pd.DataFrame]:
+    source = curve.attrs.get("online_signal_frame") if isinstance(getattr(curve, "attrs", None), dict) else None
+    if isinstance(source, _OnlineSignalFrameRef):
+        source = source.frame
+    return source if isinstance(source, pd.DataFrame) and not source.empty else None
+
+
+def _post_close_display_row(curve: pd.DataFrame, row: pd.Series, meta: dict) -> pd.Series:
+    signal_frame = _online_signal_frame_from_curve(curve)
+    row_name = getattr(row, "name", None)
+    if signal_frame is None or row_name not in signal_frame.index:
+        return _row_with_current_decay_display(curve, row, meta)
+
+    out = signal_frame.loc[row_name].copy()
+    out.name = row_name
+    for col in row.index:
+        if col not in out.index:
+            out[col] = row[col]
+
+    spread = pd.to_numeric(signal_frame["spread_close"], errors="coerce")
+    r2_series = pd.to_numeric(signal_frame["r2"], errors="coerce") if "r2" in signal_frame.columns else None
+    target_series = _online_target_series(spread, pd.to_numeric(signal_frame["score"], errors="coerce"), meta, r2=r2_series)
+    target = float(target_series.loc[row_name]) if row_name in target_series.index and pd.notna(target_series.loc[row_name]) else 0.0
+    target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
+    tv_window = int(target_vol.get("target_vol_window") or 20)
+    if "spread_return" in signal_frame.columns:
+        spread_returns = pd.to_numeric(signal_frame["spread_return"], errors="coerce")
+    else:
+        spread_returns = spread.pct_change()
+    vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+    raw_scale, target_scale, suppressed = _online_target_vol_scale(
+        out,
+        row,
+        meta,
+        pd.Timestamp(row_name),
+        vol_series,
+        active_signal=target,
+    )
+    out["target"] = target
+    out["exec_signal"] = target
+    out["base_target_vol_raw_scale"] = raw_scale
+    out["target_vol_raw_scale"] = raw_scale
+    out["base_target_vol_scale"] = target_scale
+    out["target_vol_scale"] = target_scale
+    out["base_target_vol_deadband_suppressed"] = suppressed
+    out["target_vol_deadband_suppressed"] = suppressed
+    out["base_realized_vol"] = _previous_online_value(vol_series, pd.Timestamp(row_name) + pd.Timedelta(nanoseconds=1))
+    out["realized_vol"] = out["base_realized_vol"]
+    base_exposure = target * target_scale
+    out["base_gross_exposure"] = base_exposure
+
+    curve_so_far = curve.loc[curve.index <= row_name] if isinstance(curve.index, pd.DatetimeIndex) else curve
+    decay_state_frame = _online_decay_state_frame(signal_frame, meta)
+    row_dict = out.to_dict()
+    multiplier = _online_gate_and_multiplier(
+        pd.Timestamp(row_name),
+        row_dict,
+        row,
+        meta,
+        signal_frame,
+        curve_so_far,
+        decay_state_frame=decay_state_frame,
+        state_as_of=pd.Timestamp(row_name),
+    )
+    row_dict["gross_exposure"] = base_exposure * multiplier
+    out = pd.Series(row_dict, name=row_name)
+    return _row_with_current_decay_display(curve, out, meta)
 
 
 def _strategy_signal_snapshot(
@@ -4588,7 +5098,7 @@ def _strategy_signal_snapshot(
         candidate = online.get("probes", {}).get(config.key)  # type: ignore[assignment]
         if isinstance(candidate, dict):
             probe = candidate
-    display_row = _row_with_current_decay_display(confirmed_curve, row, meta)
+    display_row = _post_close_display_row(confirmed_curve, row, meta)
 
     sample_end = confirmed_curve.index[-1].strftime("%Y-%m-%d")
     sample_start = confirmed_curve.index[0].strftime("%Y-%m-%d")
@@ -4626,7 +5136,7 @@ def _strategy_signal_snapshot(
     if not math.isfinite(current_overlay_multiplier):
         current_overlay_multiplier = overlay_multiplier
 
-    post_close_tv_scale = _first_numeric(row, ("target_vol_raw_scale", "raw_scale", "target_vol_scale", "base_target_vol_scale", "target_vol_applied_scale", "applied_scale", "scale"))
+    post_close_tv_scale = _first_numeric(display_row, ("target_vol_scale", "base_target_vol_scale", "target_vol_applied_scale", "applied_scale", "scale", "target_vol_raw_scale", "raw_scale"))
     if not math.isfinite(post_close_tv_scale):
         post_close_tv_scale = tv_scale if math.isfinite(tv_scale) else 1.0
     if not tv.get("enabled"):
@@ -4658,10 +5168,10 @@ def _strategy_signal_snapshot(
     tv_text = "未启用"
     if tv.get("enabled"):
         tv_text = f"scale {num(tv_scale, 3)}"
-        raw_scale = _first_numeric(row, ("target_vol_raw_scale", "base_target_vol_raw_scale"))
+        raw_scale = _first_numeric(display_row, ("target_vol_raw_scale", "base_target_vol_raw_scale"))
         if math.isfinite(raw_scale):
             tv_text += f"；raw {num(raw_scale, 3)}"
-        suppressed = _first_numeric(row, ("target_vol_deadband_suppressed", "base_target_vol_deadband_suppressed"))
+        suppressed = _first_numeric(display_row, ("target_vol_deadband_suppressed", "base_target_vol_deadband_suppressed"))
         if _target_vol_deadband(tv) not in (None, ""):
             tv_text += f"；deadband {'触发' if math.isfinite(suppressed) and suppressed > 0 else '未触发'}"
 
@@ -4814,8 +5324,10 @@ def _target_vol_detail(tv: dict) -> str:
         f"window={tv.get('target_vol_window')}",
         f"max_leverage={_format_meta_value(tv.get('max_leverage'))}",
     ]
-    if tv.get("min_leverage") not in (None, ""):
-        parts.append(f"min_leverage={_format_meta_value(tv.get('min_leverage'))}")
+    min_scale = _first_section_value(tv, ("min_leverage", "min_scale", "floor"))
+    if min_scale not in (None, ""):
+        key = "min_leverage" if tv.get("min_leverage") not in (None, "") else "min_scale"
+        parts.append(f"{key}={_format_meta_value(min_scale)}")
     deadband = _target_vol_deadband(tv)
     if deadband not in (None, ""):
         parts.append(f"deadband={_format_meta_value(deadband)}")
@@ -4836,6 +5348,10 @@ def _section_meta_detail(section: dict) -> str:
         "series",
         "window",
         "threshold",
+        "nav_threshold",
+        "nav_dd_threshold",
+        "amount_threshold",
+        "volume_threshold",
         "score_threshold",
         "decay_threshold",
         "decay_ratio",
@@ -4845,6 +5361,10 @@ def _section_meta_detail(section: dict) -> str:
         "confirm_days",
         "scale",
         "derisk_scale",
+        "defense_scale",
+        "nav_scale",
+        "amount_scale",
+        "volume_scale",
         "min_scale",
     )
     parts = []
@@ -4855,8 +5375,26 @@ def _section_meta_detail(section: dict) -> str:
 
 def render_params(live: bool = False) -> str:
     metas = load_strategy_metas()
+    curves: dict[str, pd.DataFrame] = {}
+    online: dict[str, object] = {"ok": False, "error": None}
+    live_snapshots: dict[str, dict[str, object]] = {}
+    if live:
+        try:
+            curves, context_metas, online = load_strategy_context(include_realtime=True)
+            if context_metas:
+                metas = context_metas
+            for config in STRATEGIES:
+                curve = curves.get(config.key)
+                meta = metas.get(config.key, {})
+                if curve is not None and not curve.empty:
+                    live_snapshots[config.key] = _strategy_signal_snapshot(config, curve, meta, online, live=True)
+        except Exception as exc:
+            online = {"ok": False, "error": _user_error_message(exc)}
     title = "## 实时参数" if live else "## 参数"
     lines = [title, ""]
+    if live:
+        lines.append(f"- live_data: ok={bool(online.get('ok'))}, mode={online.get('data_mode', online.get('mode', 'N/A'))}, error={online.get('error') or 'None'}")
+        lines.append("")
     configs = {config.key: config for config in STRATEGIES}
     for _pair_key, pair_display, forward_key, reverse_key in PAIR_DEFS:
         pair_title = pair_display.replace(" 正反50/50", "")
@@ -4882,8 +5420,18 @@ def render_params(live: bool = False) -> str:
             scorehot = meta.get("score_overheat", {}) if isinstance(meta.get("score_overheat", {}), dict) else {}
             decay = meta.get("momentum_decay", {}) if isinstance(meta.get("momentum_decay", {}), dict) else {}
             abs_day = _signal_abs_day(signal)
+            r2_threshold = _signal_r2_threshold(signal)
+            r2_detail = "disabled" if r2_threshold is None else _format_meta_value(r2_threshold)
+            live_state = "N/A"
+            if live:
+                snapshot = live_snapshots.get(config.key)
+                if snapshot:
+                    live_state = " | ".join(
+                        str(snapshot.get(name, "N/A"))
+                        for name in ("target_score", "exposure", "tv", "overlay_summary")
+                    )
             snapshots.append({
-                "signal": f"bias_ma={signal.get('bias_ma')}, mom_day={signal.get('mom_day')}, weight_end={signal.get('weight_end')}, score_threshold={signal.get('score_threshold')}, abs_mom_day={abs_day}, abs_threshold={signal.get('abs_threshold')}",
+                "signal": f"bias_ma={signal.get('bias_ma')}, mom_day={signal.get('mom_day')}, weight_end={signal.get('weight_end')}, score_threshold={signal.get('score_threshold')}, r2_threshold={r2_detail}, abs_mom_day={abs_day}, abs_threshold={signal.get('abs_threshold')}",
                 "target-vol": _target_vol_detail(tv),
                 "NAV-defense": _section_meta_detail(nav),
                 "vol-overlay": _section_meta_detail(vol),
@@ -4891,14 +5439,18 @@ def render_params(live: bool = False) -> str:
                 "momentum-decay": _section_meta_detail(decay),
                 "amount-overlay": _section_meta_detail(amount),
                 "volume-overlay": volume_detail,
+                "live-state": live_state,
             })
-        for name in ("signal", "target-vol", "NAV-defense", "vol-overlay", "score-overheat", "momentum-decay", "amount-overlay", "volume-overlay"):
+        names = ["signal", "target-vol", "NAV-defense", "vol-overlay", "score-overheat", "momentum-decay", "amount-overlay", "volume-overlay"]
+        if live:
+            names.append("live-state")
+        for name in names:
             lines.append(_md_row(name, snapshots[0][name], snapshots[1][name]))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 def render_signal_history(query: str) -> str:
-    curves, _metas, online = load_strategy_context(include_realtime=True)
+    curves, _metas, online = load_strategy_context(include_realtime=False)
     if not curves or not any(not curve.empty for curve in curves.values()):
         return (
             "## 信号历史不可用\n\n"
@@ -4910,10 +5462,20 @@ def render_signal_history(query: str) -> str:
         lines.append("- 数据来源: Poe 在线重建最近 5 个交易日；不读取本地正式 artifacts。")
         lines.append("")
     for config in STRATEGIES:
-        curve = curves[config.key]
-        if curve.empty:
+        curve = curves.get(config.key)
+        if curve is None:
+            lines.append(f"### {config.display_name}")
+            lines.append(f"- missing curve: {config.key}")
             continue
-        records = curve.tail(5)[["gross_exposure", "score"]] if set(["gross_exposure", "score"]).issubset(curve.columns) else curve.tail(5)
+        if curve.empty:
+            lines.append(f"### {config.display_name}")
+            lines.append(f"- empty curve: {config.key}")
+            continue
+        confirmed = curve
+        if "online_provisional_bar" in confirmed.columns:
+            provisional = pd.to_numeric(confirmed["online_provisional_bar"], errors="coerce").fillna(0.0) > 0
+            confirmed = confirmed.loc[~provisional]
+        records = confirmed.tail(5)[["gross_exposure", "score"]] if set(["gross_exposure", "score"]).issubset(confirmed.columns) else confirmed.tail(5)
         lines.append(f"### {config.display_name}")
         if records.empty:
             lines.append("- 无记录")
@@ -4926,7 +5488,8 @@ def render_signal_history(query: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 def render_nav_chart(query: str, combo: bool = False) -> str:
-    return "## NAV 曲线\n\n当前环境不再生成图表。"
+    fallback = render_performance(query, combo=combo)
+    return "## NAV curve\n\nNAV chart unavailable in the current Poe environment; metrics fallback below.\n\n" + fallback
 
 def render_query(query: str) -> str:
     normalized = _normalize_query(query)
@@ -4952,15 +5515,51 @@ def _write_query_response(msg, query: str) -> None:
     msg.write(rendered)
 
 
+def _message_text(message: object) -> str:
+    for attr in ("content", "text"):
+        value = getattr(message, attr, None)
+        if value not in (None, ""):
+            return str(value)
+    if isinstance(message, dict):
+        for key in ("content", "text"):
+            value = message.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return ""
+
+
+def _extract_request_query_text(request: object) -> str:
+    query = getattr(request, "query", None)
+    if isinstance(query, (list, tuple)):
+        for message in reversed(query):
+            text = _message_text(message).strip()
+            if text:
+                return text
+        return ""
+    text = _message_text(query).strip()
+    if text:
+        return text
+    return str(getattr(request, "text", "") or "").strip()
+
+
+def _user_error_message(exc: Exception) -> str:
+    return f"Internal error while handling query. Error type: {type(exc).__name__}."
+
+
+def _write_user_error(msg, exc: Exception) -> None:
+    msg.write("## Query failed\n\n")
+    msg.write(f"{_user_error_message(exc)}\n")
+
+
 
 async def get_response(request):  # pragma: no cover - Poe runtime entrypoint
-    query = getattr(request, "query", None) or getattr(request, "text", "")
+    query = _extract_request_query_text(request)
     with poe.start_message() as msg:
         try:
-            _write_query_response(msg, str(query))
+            _write_query_response(msg, query)
         except Exception as exc:
             msg.write("## 查询失败\n\n")
-            msg.write(f"`{exc}`\n")
+            msg.write(f"{_user_error_message(exc)}\n")
         return msg
 
 
@@ -4970,27 +5569,29 @@ def main(argv: Optional[list[str]] = None) -> int:
     query = " ".join(argv).strip()
     if not query:
         query_obj = getattr(poe, "query", None)
-        query = getattr(query_obj, "text", "") if query_obj is not None else ""
+        query = _extract_request_query_text(query_obj) if query_obj is not None else ""
     query = str(query).strip() or "信号"
     with poe.start_message() as msg:
         try:
             _write_query_response(msg, query)
         except Exception as exc:
             msg.write("## 查询失败\n\n")
-            msg.write(f"`{exc}`\n")
+            msg.write(f"{_user_error_message(exc)}\n")
+            return 1
     return 0
 
 
 def run() -> int:
     query_obj = getattr(poe, "query", None)
-    query = getattr(query_obj, "text", "") if query_obj is not None else ""
+    query = _extract_request_query_text(query_obj) if query_obj is not None else ""
     query = str(query).strip() or "信号"
     with poe.start_message() as msg:
         try:
             _write_query_response(msg, query)
         except Exception as exc:
             msg.write("## 查询失败\n\n")
-            msg.write(f"`{exc}`\n")
+            msg.write(f"{_user_error_message(exc)}\n")
+            return 1
     return 0
 
 

@@ -208,6 +208,20 @@ def test_v78_suba_signal_exposure_lines_use_display_snapshot():
     assert "_v78_suba_display_leg_snapshot(cn_result, _cn_display_idx_lp)" in live_params_source
 
 
+def test_v78_a_share_param_surfaces_do_not_describe_next_open_execution():
+    module = load_v78_module()
+    source = "\n".join(
+        [
+            inspect.getsource(module.CombinedStrategyV78._handle_params),
+            inspect.getsource(module.CombinedStrategyV78._handle_live_params),
+        ]
+    )
+
+    assert "T+1已天然保证" not in source
+    assert "next trading day's open" not in source
+    assert "hold next trading day" not in source
+
+
 def test_v78_suba_signal_info_does_not_suppress_weight_only_signals():
     module = load_v78_module()
     source = inspect.getsource(module.CombinedStrategyV78._handle_signal)
@@ -251,6 +265,19 @@ def test_v78_suba_legacy_single_leg_hypo_cn_is_not_exposed_to_display_layer():
     assert 'd.get("hypo_cn"' not in live_source
     assert 'd["hypo_cn"]' not in signal_source
     assert 'd["hypo_cn"]' not in live_source
+
+
+def test_v78_formal_history_nav_and_performance_do_not_allow_unresolved_suba_volume():
+    module = load_v78_module()
+
+    formal_sources = {
+        "_handle_signal_history": inspect.getsource(module.CombinedStrategyV78._handle_signal_history),
+        "_handle_nav_chart": inspect.getsource(module.CombinedStrategyV78._handle_nav_chart),
+        "_handle_performance": inspect.getsource(module.CombinedStrategyV78._handle_performance),
+    }
+
+    for name, source in formal_sources.items():
+        assert "allow_unresolved_suba_volume=True" not in source, name
 
 
 def test_v78_suba_rebalances_use_newa_target_on_signal_day():
@@ -513,6 +540,34 @@ def test_v78_rebalance_extractors_are_wired_into_signal_and_performance_pages():
     assert "extract_v78_adk_rebalances(cn_dk_result" in signal_source
     assert "extract_v78_suba_rebalances(cn_result" in performance_source
     assert "extract_v78_adk_rebalances(cn_dk_result" in performance_source
+
+
+def test_v78_performance_standard_window_rows_cover_required_windows_and_na_reasons():
+    module = load_v78_module()
+    long_idx = pd.date_range("2012-01-02", "2026-01-02", freq="B")
+    short_idx = pd.date_range("2025-10-01", "2026-01-02", freq="B")
+    daily_returns = {
+        "Sub-A": pd.Series(0.0002, index=long_idx),
+        "Sub-B": pd.Series(0.0001, index=short_idx),
+    }
+
+    rows = module._performance_standard_window_rows(
+        daily_returns,
+        end_date=pd.Timestamp("2026-01-02"),
+    )
+
+    assert [row["window"] for row in rows] == ["Full", "10Y", "5Y", "3Y", "1Y"]
+    assert rows[0]["metrics"]["Sub-A"]["annual"] is not None
+    assert rows[0]["metrics"]["Sub-A"]["max_dd"] is not None
+    assert rows[1]["metrics"]["Sub-B"]["annual"] is None
+    assert "insufficient post-start history" in rows[1]["metrics"]["Sub-B"]["reason"]
+
+
+def test_v78_performance_page_writes_standard_window_table():
+    module = load_v78_module()
+    source = inspect.getsource(module.CombinedStrategyV78._handle_performance)
+
+    assert "_write_performance_standard_window_table(" in source
 
 
 def test_v78_suba_v77_leg_tables_use_v77_holding_not_composite_holding():
