@@ -4921,6 +4921,9 @@ def blend_v78_suba_results(v77_result, new_result):
     v77_weight_full = v77_result.get("weight", pd.Series(0.0, index=v77_result.index))
     if not isinstance(v77_weight_full, pd.Series):
         v77_weight_full = pd.Series(v77_weight_full, index=v77_result.index)
+    v77_scale_raw_full = v77_result.get("scale_raw", pd.Series(np.nan, index=v77_result.index))
+    if not isinstance(v77_scale_raw_full, pd.Series):
+        v77_scale_raw_full = pd.Series(v77_scale_raw_full, index=v77_result.index)
     out["v78_suba_v77_holding"] = v77_holding_full.shift(1).reindex(common_index).fillna("cash").astype(str)
     out["v78_suba_new_holding"] = new.get("holding", "cash")
     out["v78_suba_v77_weight"] = pd.to_numeric(
@@ -4931,7 +4934,9 @@ def blend_v78_suba_results(v77_result, new_result):
     out["v78_suba_new_target"] = _component_target_holding(new, common_index)
     out["v78_suba_v77_target_weight"] = _component_target_weight(v77, common_index)
     out["v78_suba_new_target_weight"] = _component_target_weight(new, common_index)
-    out["v78_suba_v77_scale_raw"] = pd.to_numeric(v77.get("scale_raw", np.nan), errors="coerce")
+    out["v78_suba_v77_scale_raw"] = pd.to_numeric(
+        v77_scale_raw_full.shift(1).reindex(common_index), errors="coerce"
+    )
     out["v78_suba_new_scale_raw"] = pd.to_numeric(new.get("scale_raw", np.nan), errors="coerce")
     out["v78_suba_final_exposure"] = (
         V78_SUBA_V77_WEIGHT * out["v78_suba_v77_weight"]
@@ -11429,13 +11434,8 @@ def _v78_suba_position_text(row, mode="holding"):
 
 def _v78_suba_pre_trade_position_text(cn_result, pos):
     row = cn_result.iloc[pos]
-    if bool(row.get("is_signal", False)) and pos > 0:
-        prev = cn_result.iloc[pos - 1]
-        v77_h = prev.get("v78_suba_v77_holding", row.get("v78_suba_v77_holding", "cash"))
-        v77_w_raw = prev.get("v78_suba_v77_weight", row.get("v78_suba_v77_weight", 0.0))
-    else:
-        v77_h = row.get("v78_suba_v77_holding", "cash")
-        v77_w_raw = row.get("v78_suba_v77_weight", 0.0)
+    v77_h = row.get("v78_suba_v77_holding", "cash")
+    v77_w_raw = row.get("v78_suba_v77_weight", 0.0)
     new_h = row.get("v78_suba_new_holding", "cash")
     new_w_raw = row.get("v78_suba_new_weight", 0.0)
     try:
@@ -13871,7 +13871,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("\n")
             w(f"阈值: R²≥{CN_R2_THRESHOLD:.2f} | {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%} | 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _cn_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
-            _cn_display_idx = -2 if _cn_intraday else -1
+            _cn_display_idx = -1
             _cn_state = _suba_signal_display_state(cn_result, _cn_display_idx)
             _cn_display_date = _cn_state["display_date"]
             _cn_display_holding = _cn_state["current_holding"]
@@ -13885,7 +13885,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             last_cn_sig_date = _cn_state["last_signal_date"]
             if _cn_intraday:
                 w("⏸️ 今日盘中，今日收盘信号未确认\n")
-                w(f"当前已生效持仓: **{_cn_display_name}**（对应 {_cn_display_date.strftime('%Y-%m-%d')} 收盘确认）\n")
+                w(f"当前已生效持仓: **{_cn_display_name}**（在 {_cn_display_date.strftime('%Y-%m-%d')} 交易时段生效，来源为前一收盘确认）\n")
                 w(f"上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
                 w("盘中假设信号仅在“实时信号”中显示\n\n")
             elif _cn_display_is_signal:
@@ -13984,7 +13984,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_close_target_rows = _v78_adk_close_target_change_rows(cn_dk_result, -1)
             _dk_close_target_changed = any(row["changed"] for row in _dk_close_target_rows)
             if _dk_intraday:
-                _dk_signal_current_idx = -2
+                _dk_signal_current_idx = -1
                 _dk_signal_target_idx = -1
                 _dk_signal_context = "盘中假设"
             else:
@@ -13994,7 +13994,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_effective_issue_date = cn_dk_result.index[_dk_signal_current_idx]
             _dk_effective_holding = cn_dk_result["holding"].iloc[_dk_signal_current_idx]
             _dk_effective_name = _dk_pos_str(_dk_effective_holding)
-            w(f"**当前已生效双腿持仓:** **{_dk_effective_name}**（对应 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
+            w(f"**当前已生效双腿持仓:** **{_dk_effective_name}**（在 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 交易时段生效）\n")
             if "v78_adk_final_exposure" in cn_dk_result.columns:
                 if _dk_close_target_changed:
                     w("🔴 **ADK本日收盘配对/方向目标变化；按下方两腿未移位Top-1复核，勿重复执行结果表末行的昨日信号。**\n")
@@ -14028,7 +14028,9 @@ class CombinedStrategyV78(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
                 if "v78_adk_final_exposure" in cn_dk_result.columns:
+                    _write_v78_adk_blend_table(w, cn_dk_result, _dk_display_idx)
                     _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_display_idx)
+                    _write_v78_adk_leg_status_table(w, cn_dk_result, _dk_display_idx)
                 else:
                     _dk_sc_rt = cn_dk_result["weight"].iloc[_dk_display_idx]
                     _dk_base_w_rt = cn_dk_result["base_weight"].iloc[_dk_display_idx] if "base_weight" in cn_dk_result.columns else _dk_sc_rt
@@ -14648,12 +14650,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_r2_text3 = f" | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}" if CN_DK_R2_QUALITY_ENABLED else ""
             w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text3} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _dk_intraday3 = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
-            _dk_effective_idx3 = -2 if _dk_intraday3 else -1
+            _dk_effective_idx3 = -1
             _dk_hypo_idx3 = -1
             _dk_effective_issue_date3 = cn_dk_result.index[_dk_effective_idx3]
             _dk_effective_holding3 = cn_dk_result["holding"].iloc[_dk_effective_idx3]
             dk_current_name3 = _dk_pos_str(_dk_effective_holding3)
-            w(f"**当前已生效双腿持仓:** **{dk_current_name3}**（对应 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
+            w(f"**当前已生效双腿持仓:** **{dk_current_name3}**（在 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 交易时段生效）\n")
             _dk_close_target_rows3 = _v78_adk_close_target_change_rows(cn_dk_result, -1)
             _dk_close_target_changed3 = any(row["changed"] for row in _dk_close_target_rows3)
             if "v78_adk_final_exposure" in cn_dk_result.columns:
@@ -14673,12 +14675,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             # ── DK vol-scaling 杠杆显示 (实时) ──
             _dk_pending3 = False
             if "v78_adk_final_exposure" in cn_dk_result.columns:
+                _write_v78_adk_blend_table(w, cn_dk_result, _dk_effective_idx3)
+                _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_effective_idx3)
+                _write_v78_adk_leg_status_table(w, cn_dk_result, _dk_effective_idx3)
                 w("\n**③ ADK双腿波动率缩放:**\n\n")
                 w("ADK双腿分别执行波动率缩放；综合结果不存在单一VolScale。各腿的已实现波动率、raw/banded VolScale、overlay乘数与最终贡献见上方双腿状态表。\n")
-            elif "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
-                if "v78_adk_final_exposure" in cn_dk_result.columns:
-                    _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_effective_idx3)
-                else:
+            else:
+                if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                     _dk_sc_rt3 = cn_dk_result["weight"].iloc[-1]
                     _dk_rv_rt3 = cn_dk_result["realized_vol"].iloc[-1] if "realized_vol" in cn_dk_result.columns else None
                     _dk_cur_vs3 = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
@@ -15052,12 +15055,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
                     abs_mom_lp[code] = cn_close_with_bond[code].pct_change(CN_ABS_MOM_DAY)
             _cn_params_intraday = cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2
-            _cn_display_idx_lp = -2 if _cn_params_intraday else -1
+            _cn_display_idx_lp = -1
             _cn_effective_date = cn_result.index[_cn_display_idx_lp]
             _effective_label = _cn_effective_date.strftime("%Y-%m-%d")
             w("**① V7.9 Sub-A双腿实时状态:**\n\n")
             if _cn_params_intraday:
-                w(f"当前显示为 **{_effective_label} 收盘已生效**；今日盘中快照只用于观察，收盘确认后才会进入执行。\n")
+                w(f"当前显示为 **{_effective_label} 交易时段已生效持仓**；今日收盘目标仍待确认。\n")
             else:
                 w(f"当前快照日期 **{_effective_label}**。\n")
             w("\n")
@@ -15114,10 +15117,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _write_v78_adk_param_tables(w)
             w("\n")
             _dk_params_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
-            _dk_display_idx_lp = -2 if _dk_params_intraday else -1
+            _dk_display_idx_lp = -1
             w("**① V7.9 ADK双腿实时状态:**\n\n")
             if _dk_params_intraday:
-                w(f"当前显示为 **{cn_dk_result.index[_dk_display_idx_lp].strftime('%Y-%m-%d')} 收盘已生效**；今日盘中快照只用于观察，收盘确认后才会进入执行。\n")
+                w(f"当前显示为 **{cn_dk_result.index[_dk_display_idx_lp].strftime('%Y-%m-%d')} 交易时段已生效持仓**；今日未移位目标仍待收盘确认。\n")
             _write_v78_adk_new_leg_then_summary(
                 w,
                 cn_dk_result,
@@ -15456,7 +15459,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 if len(cn_rebs) == 0:
                     w("该时段无分腿调仓信号。\n")
                     if len(cn_period) > 0:
-                        w(f"持仓: **{_v78_suba_position_text(cn_period.iloc[-1])}**\n\n")
+                        w(f"期末收盘后持仓: **{_v78_suba_position_text(cn_period.iloc[-1], mode='target')}**\n\n")
                     else:
                         w("\n")
                 else:
@@ -15466,7 +15469,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w(f"| {rec.get('日期', '')} | {rec.get('策略', 'Sub-A')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
                     w(f"\n共 **{len(cn_rebs)}** 次分腿调仓\n")
                     if len(cn_period) > 0:
-                        w(f"期末持仓: **{_v78_suba_position_text(cn_period.iloc[-1])}**\n\n")
+                        w(f"期末收盘后持仓: **{_v78_suba_position_text(cn_period.iloc[-1], mode='target')}**\n\n")
             else:
                 cn_trades = cn_period[cn_period["is_signal"] == True]
                 if len(cn_trades) == 0:

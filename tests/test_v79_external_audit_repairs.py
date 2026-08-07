@@ -427,3 +427,94 @@ def test_signal_handler_uses_unshifted_adk_close_targets():
 
     assert "_v78_adk_close_target_change_rows" in source
     assert "_v78_adk_close_target_change_rows" in live_source
+
+
+def test_suba_pre_trade_text_reads_the_current_during_day_row():
+    module = load_v79_module()
+    dates = pd.to_datetime(["2026-06-10", "2026-06-11", "2026-06-12"])
+    result = pd.DataFrame(
+        {
+            "v78_suba_v77_holding": ["A", "B", "C"],
+            "v78_suba_v77_weight": [0.4, 0.8, 1.2],
+            "v78_suba_new_holding": ["X", "Y", "Z"],
+            "v78_suba_new_weight": [0.2, 0.4, 0.6],
+            "is_signal": [False, False, True],
+        },
+        index=dates,
+    )
+
+    text = module._v78_suba_pre_trade_position_text(result, 2)
+
+    assert "C" in text
+    assert "Z" in text
+    assert "V7.7A: B" not in text
+
+
+def test_suba_blend_shifts_v77_scale_raw_with_during_day_weight():
+    module = load_v79_module()
+    dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
+    v77 = pd.DataFrame(
+        {
+            "return": [0.0, 0.0],
+            "holding": ["A", "B"],
+            "weight": [0.8, 1.2],
+            "scale_raw": [0.9, 1.3],
+            "is_signal": [False, True],
+        },
+        index=dates,
+    )
+    new = pd.DataFrame(
+        {
+            "return": [0.0, 0.0],
+            "holding": ["A", "A"],
+            "target": ["A", "A"],
+            "weight": [0.4, 0.4],
+            "target_weight": [0.4, 0.4],
+            "scale_raw": [0.5, 0.6],
+            "is_signal": [False, False],
+        },
+        index=dates,
+    )
+
+    blend = module.blend_v78_suba_results(v77, new)
+
+    assert blend.loc[dates[1], "v78_suba_v77_scale_raw"] == pytest.approx(0.9)
+    assert blend.loc[dates[1], "v78_suba_new_scale_raw"] == pytest.approx(0.6)
+
+
+def test_intraday_current_state_always_uses_latest_during_day_row():
+    module = load_v79_module()
+    signal_source = inspect.getsource(module.CombinedStrategyV78._handle_signal)
+    live_source = inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
+    params_source = inspect.getsource(module.CombinedStrategyV78._handle_live_params)
+
+    assert "_cn_display_idx = -1" in signal_source
+    assert "_dk_signal_current_idx = -1" in signal_source
+    assert "_dk_effective_idx3 = -1" in live_source
+    assert "_cn_display_idx_lp = -1" in params_source
+    assert "_dk_display_idx_lp = -1" in params_source
+
+
+def test_live_signal_renders_current_adk_net_exposure_before_close_target():
+    module = load_v79_module()
+    source = inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
+    block = source.split("# ── DK vol-scaling 杠杆显示 (实时) ──", 1)[1].split(
+        'w("\\n---\\n\\n")', 1
+    )[0]
+    blend_branch = block.index('if "v78_adk_final_exposure" in cn_dk_result.columns:')
+    net_table = block.index(
+        "_write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_effective_idx3)"
+    )
+    scale_heading = block.index('w("\\n**③ ADK双腿波动率缩放:**')
+
+    assert blend_branch < net_table < scale_heading
+    assert block.count('"v78_adk_final_exposure" in cn_dk_result.columns') == 1
+
+
+def test_signal_history_end_position_uses_post_close_target_semantics():
+    module = load_v79_module()
+    source = inspect.getsource(module.CombinedStrategyV78._handle_signal_history)
+
+    assert source.count(
+        "_v78_suba_position_text(cn_period.iloc[-1], mode='target')"
+    ) == 2
