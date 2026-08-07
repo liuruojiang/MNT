@@ -2271,12 +2271,12 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
     for attempt in range(effective_retries):
         if attempt > 0:
             time.sleep(2 * attempt)  # 递增延迟: 2s, 4s
-        sess = requests.Session()
-        try:
-            sess.get(detail_url, timeout=15, headers=doc_headers)
-        except requests.exceptions.RequestException:
-            pass
-        resp = sess.get(url, timeout=30, headers=api_headers)
+        with requests.Session() as sess:
+            try:
+                sess.get(detail_url, timeout=15, headers=doc_headers)
+            except requests.exceptions.RequestException:
+                pass
+            resp = sess.get(url, timeout=30, headers=api_headers)
         # csindex CDN/WAF有时返回403但响应体仍含有效数据，先尝试解析JSON
         try:
             data = resp.json()
@@ -2335,12 +2335,12 @@ def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _ma
         if attempt > 0:
             time.sleep(1.5 * attempt)
         try:
-            sess = requests.Session()
-            try:
-                sess.get(detail_url, timeout=10, headers=headers)
-            except requests.exceptions.RequestException:
-                pass
-            resp = sess.get(url, timeout=20, headers=headers)
+            with requests.Session() as sess:
+                try:
+                    sess.get(detail_url, timeout=10, headers=headers)
+                except requests.exceptions.RequestException:
+                    pass
+                resp = sess.get(url, timeout=20, headers=headers)
             data = resp.json()
             rows = []
             for item in data.get("data", []) if isinstance(data, dict) else []:
@@ -2419,14 +2419,17 @@ def _stitch_cn_proxy_returns(base_df, proxy_df):
     overlap = base.index.intersection(proxy.index)
     if len(overlap) == 0:
         return base
+    if base.index.max() >= proxy.index.max():
+        return base
 
     anchor = overlap[-1]
-    stitched = base.loc[:anchor].copy()
+    stitched = base.copy()
     proxy_tail = proxy.loc[anchor:, "close"].dropna()
     if len(proxy_tail) <= 1:
         return stitched
 
-    last_close = float(stitched.iloc[-1]["close"])
+    last_close = float(base.loc[anchor, "close"])
+    base_latest = base.index.max()
     rows = []
     prev_proxy = float(proxy_tail.iloc[0])
     for dt, px in proxy_tail.iloc[1:].items():
@@ -2435,7 +2438,8 @@ def _stitch_cn_proxy_returns(base_df, proxy_df):
             prev_proxy = px
             continue
         last_close *= px / prev_proxy
-        rows.append((dt, last_close))
+        if dt > base_latest:
+            rows.append((dt, last_close))
         prev_proxy = px
     if rows:
         ext = pd.DataFrame(rows, columns=["date", "close"]).set_index("date")
@@ -2509,6 +2513,8 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     # 非工作日不补充 (周末)
     if bj_today.weekday() >= 5:
         return df
+    if not _is_cn_required_close_day(bj_today):
+        return df
     bj_now = beijing_now()
     if bj_today == bj_now.date() and not _can_use_cn_realtime_snapshot_at(bj_now):
         return df
@@ -2522,10 +2528,6 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
             realtime_close = _project_proxy_realtime_close(df, proxy_df, realtime_close)
         except _DATA_FETCH_ERRORS:
             pass
-    # 与最后一行收盘价对比，完全相同说明可能是非交易日(节假日)
-    last_close = float(df.iloc[-1]["close"]) if "close" in df.columns else None
-    if last_close is not None and last_close > 0 and abs(realtime_close - last_close) / last_close < 1e-6:
-        return df
     # 补充今天的数据行
     today_ts = pd.Timestamp(bj_today)
     new_row = pd.DataFrame([{"close": realtime_close}], index=pd.DatetimeIndex([today_ts], name=df.index.name))
@@ -2975,11 +2977,10 @@ def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, l
         ]
     elif secid == CN_SA_VOLUME_CYB_SECID:
         sources = [
+            ("Sohu amount", lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)),
+            ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
             ("QQ volume proxy", lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)),
             ("Sina volume proxy", lambda: _fetch_cn_sina_amount_proxy(secid)),
-            ("Sohu amount", lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)),
-            ("CSIndex official amount", lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)),
-            ("EastMoney amount", lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)),
         ]
     else:
         sources = [
@@ -3171,6 +3172,26 @@ def _apply_suba_volume_overlay_policy(
         suba_volume_feature,
         scale=CN_SA_VOLUME_SCALE,
         rule_name=CN_SA_VOLUME_RULE_NAME,
+    )
+
+
+def _apply_v78_suba_new_volume_overlay_policy(
+    new_result,
+    close_df,
+    suba_volume_signal,
+    suba_volume_feature,
+    allow_unresolved_suba_volume=False,
+):
+    if _suba_volume_feature_has_unresolved(suba_volume_feature):
+        message = "Sub-A成交额风控不可判定，本次不应用该风控改写仓位"
+        if not allow_unresolved_suba_volume:
+            raise poe.BotError("Sub-A成交额风控存在不可判定项，正式路径中止。")
+        return _mark_suba_volume_unavailable(new_result, message)
+    return apply_v78_suba_new_volume_overlay(
+        new_result,
+        close_df,
+        suba_volume_signal,
+        suba_volume_feature,
     )
 
 
@@ -4124,7 +4145,7 @@ def calc_bias_momentum(close_series, bias_n=None, mom_day=None):
     n = len(prices)
     result = np.full(n, np.nan)
     ma = pd.Series(prices, index=close_series.index).rolling(bias_n).mean().to_numpy(dtype=float)
-    total_lookback = bias_n + mom_day - 1
+    total_lookback = bias_n + mom_day - 2
     with np.errstate(divide="ignore", invalid="ignore"):
         bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
     x = np.arange(mom_day, dtype=float)
@@ -4290,7 +4311,7 @@ def _suba_single_calc_bias_momentum(close, bias_ma, mom_day, weight_end):
     w_sum = float(weights.sum())
     x_bar = float((weights * x).sum() / w_sum)
     denom = float((weights * (x - x_bar) ** 2).sum())
-    for end in range(int(bias_ma) + int(mom_day) - 1, n):
+    for end in range(int(bias_ma) + int(mom_day) - 2, n):
         y = bias[end - int(mom_day) + 1:end + 1]
         if not np.isfinite(y).all() or y[0] <= 1e-10:
             continue
@@ -4312,7 +4333,7 @@ def _suba_single_calc_bias_momentum_r2(close, bias_ma, mom_day, weight_end):
     w_sum = float(weights.sum())
     x_bar = float((weights * x).sum() / w_sum)
     denom = float((weights * (x - x_bar) ** 2).sum())
-    for end in range(int(bias_ma) + int(mom_day) - 1, n):
+    for end in range(int(bias_ma) + int(mom_day) - 2, n):
         y = bias[end - int(mom_day) + 1:end + 1]
         if not np.isfinite(y).all() or y[0] <= 1e-10:
             continue
@@ -4894,9 +4915,17 @@ def blend_v78_suba_results(v77_result, new_result):
     out["v78_suba_new_return"] = new["return"].astype(float)
     out["return"] = V78_SUBA_V77_WEIGHT * out["v78_suba_v77_return"] + V78_SUBA_NEW_TV10_WEIGHT * out["v78_suba_new_return"]
     out["nav"] = (1.0 + out["return"].fillna(0.0)).cumprod()
-    out["v78_suba_v77_holding"] = v77.get("holding", "cash")
+    v77_holding_full = v77_result.get("holding", pd.Series("cash", index=v77_result.index))
+    if not isinstance(v77_holding_full, pd.Series):
+        v77_holding_full = pd.Series(v77_holding_full, index=v77_result.index)
+    v77_weight_full = v77_result.get("weight", pd.Series(0.0, index=v77_result.index))
+    if not isinstance(v77_weight_full, pd.Series):
+        v77_weight_full = pd.Series(v77_weight_full, index=v77_result.index)
+    out["v78_suba_v77_holding"] = v77_holding_full.shift(1).reindex(common_index).fillna("cash").astype(str)
     out["v78_suba_new_holding"] = new.get("holding", "cash")
-    out["v78_suba_v77_weight"] = pd.to_numeric(v77.get("weight", 0.0), errors="coerce").fillna(0.0)
+    out["v78_suba_v77_weight"] = pd.to_numeric(
+        v77_weight_full.shift(1).reindex(common_index), errors="coerce"
+    ).fillna(0.0)
     out["v78_suba_new_weight"] = pd.to_numeric(new.get("weight", 0.0), errors="coerce").fillna(0.0)
     out["v78_suba_v77_target"] = _component_target_holding(v77, common_index)
     out["v78_suba_new_target"] = _component_target_holding(new, common_index)
@@ -4913,6 +4942,7 @@ def blend_v78_suba_results(v77_result, new_result):
         + V78_SUBA_NEW_TV10_WEIGHT * out["v78_suba_new_target_weight"]
     )
     out["final_exposure"] = out["v78_suba_final_exposure"]
+    out["target_exposure"] = out["v78_suba_target_exposure"]
     out["final_components"] = [
         {
             "v77": {
@@ -4947,7 +4977,7 @@ def blend_v78_suba_results(v77_result, new_result):
     out["is_signal"] = (
         v77.get("is_signal", pd.Series(False, index=common_index)).astype(bool)
         | new.get("is_signal", pd.Series(False, index=common_index)).astype(bool)
-        | out["final_exposure"].diff().abs().fillna(0.0).gt(1e-4)
+        | (out["v78_suba_target_exposure"] - out["v78_suba_final_exposure"]).abs().gt(1e-4)
     )
     out["target"] = pd.Series(target_holding, index=out.index).where(out["is_signal"], None)
     out["v78_blend_label"] = "50% V7.7A + 50% New A TV1.0"
@@ -5674,7 +5704,7 @@ def _dk_calc_bias_momentum(series, bias_n, mom_day):
     n = len(prices)
     result = np.full(n, np.nan)
     ma = series.rolling(bias_n).mean().values
-    total_lookback = bias_n + mom_day - 1
+    total_lookback = bias_n + mom_day - 2
     x = np.arange(mom_day, dtype=float)
     weights = np.linspace(1.0, 10.0, mom_day)
     w_sum = float(weights.sum())
@@ -5700,7 +5730,7 @@ def _dk_calc_bias_momentum_r2(series, bias_n, mom_day):
     n = len(prices)
     result = np.full(n, np.nan)
     ma = series.rolling(bias_n).mean().values
-    total_lookback = bias_n + mom_day - 1
+    total_lookback = bias_n + mom_day - 2
     x = np.arange(mom_day, dtype=float)
     weights = np.linspace(1.0, 10.0, mom_day)
     w_sum = float(weights.sum())
@@ -6171,7 +6201,8 @@ def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=20.0, derisk_scale=
     out["v78_score_overheat_score"] = active_score
     out["v78_score_overheat_scale"] = scale_s
     out["v78_score_overheat_on"] = scale_s < 0.999999
-    out["v78_score_overheat_cost"] = cost_s
+    # Diagnostic only: effective leg-turnover costs are rebuilt below.
+    out["v78_score_overheat_cost_indicative"] = cost_s
     out["return_before_v78_score_overheat"] = base_ret
     out["base_weight_before_v78_score_hot"] = base_weight
     out["weight"] = base_weight * scale_s
@@ -7608,40 +7639,126 @@ def _v78_fetch_spy_volume(index, timeout=20):
         vol = result["indicators"]["quote"][0]["volume"]
         out = pd.Series(vol, index=ts, dtype=float).sort_index()
         out = out[~out.index.duplicated(keep="last")]
-        return out.reindex(index).ffill(), "Yahoo chart SPY volume"
+        return out, "Yahoo chart SPY volume"
+    except Exception as exc:
+        return pd.Series(False, index=index, dtype=bool), f"unavailable: {_short_error(exc)}"
+
+
+def _v78_spy_volume_cache_path():
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+    return os.path.join(base_dir, ".us_market_cache", "SPY_volume.csv")
+
+
+def _clean_v78_spy_volume(series):
+    out = pd.to_numeric(pd.Series(series), errors="coerce")
+    out.index = pd.DatetimeIndex(pd.to_datetime(out.index)).tz_localize(None).normalize()
+    out = out.dropna()
+    out = out[out > 0]
+    return out[~out.index.duplicated(keep="last")].sort_index().astype(float)
+
+
+def _load_v78_spy_volume_cache():
+    path = _v78_spy_volume_cache_path()
+    if not os.path.exists(path):
+        raise FileNotFoundError("no SPY volume cache")
+    frame = pd.read_csv(path)
+    if "date" not in frame.columns or "volume" not in frame.columns:
+        raise ValueError("invalid SPY volume cache schema")
+    series = _clean_v78_spy_volume(frame.set_index("date")["volume"])
+    if series.empty:
+        raise ValueError("SPY volume cache has no usable rows")
+    return series
+
+
+def _save_v78_spy_volume_cache(series):
+    fresh = _clean_v78_spy_volume(series)
+    if fresh.empty:
+        return
+    try:
+        cached = _load_v78_spy_volume_cache()
+    except (FileNotFoundError, ValueError, OSError):
+        cached = pd.Series(dtype=float)
+    merged = fresh.combine_first(cached).sort_index()
+    path = _v78_spy_volume_cache_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    merged.rename("volume").to_csv(path, index_label="date", encoding="utf-8")
+
+
+def _v78_fetch_spy_volume_stooq(index, timeout=20):
+    try:
+        start = pd.Timestamp(index.min()).strftime("%Y%m%d")
+        end = (pd.Timestamp(index.max()) + pd.Timedelta(days=5)).strftime("%Y%m%d")
+        url = f"https://stooq.com/q/d/l/?s=spy.us&d1={start}&d2={end}&i=d"
+        resp = _session.get(url, timeout=timeout)
+        resp.raise_for_status()
+        frame = pd.read_csv(io.StringIO(resp.text))
+        if "Date" not in frame.columns or "Volume" not in frame.columns:
+            raise ValueError("Stooq SPY volume schema missing Date/Volume")
+        series = _clean_v78_spy_volume(frame.set_index("Date")["Volume"])
+        if series.empty:
+            raise ValueError("Stooq SPY volume is empty")
+        return series, "Stooq SPY volume"
     except Exception as exc:
         return pd.Series(False, index=index, dtype=bool), f"unavailable: {_short_error(exc)}"
 
 
 def _v78_spy_volume_gate(index):
-    target_index = pd.DatetimeIndex(index)
-    spy_volume, source = _v78_fetch_spy_volume(target_index)
+    target_index = pd.DatetimeIndex(pd.to_datetime(index)).tz_localize(None).normalize()
     mode = str(globals().get("V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open") or "warn_open").lower()
-    def _volume_unavailable_gate(reason):
-        if mode == "warn_open":
-            return pd.Series(False, index=target_index, dtype=bool), reason
-        if mode == "fail_closed":
-            return pd.Series(True, index=target_index, dtype=bool), f"{reason}; fail_closed"
-        if mode == "raise":
-            raise RuntimeError(f"SPY volume unavailable: {reason}")
+    if mode not in ("warn_open", "fail_closed", "raise"):
         raise ValueError(f"Unsupported V78_SUBB_SPY_VOLUME_FAIL_MODE: {mode}")
 
-    if spy_volume.dtype == bool:
-        if str(source).startswith(("unavailable", "stale")):
-            return _volume_unavailable_gate(source)
-        return spy_volume.reindex(target_index).fillna(False).astype(bool), source
-    valid_volume = spy_volume.dropna()
-    if valid_volume.empty:
-        return _volume_unavailable_gate(f"{source}; empty")
-    latest_volume_date = pd.Timestamp(valid_volume.index.max()).normalize()
-    latest_target_date = pd.Timestamp(target_index.max()).normalize()
-    if latest_volume_date < latest_target_date:
-        return _volume_unavailable_gate(
-            f"{source}; stale latest {latest_volume_date.date().isoformat()} < target {latest_target_date.date().isoformat()}"
-        )
-    spy_volume = spy_volume.reindex(target_index).ffill()
-    ratio = spy_volume / spy_volume.rolling(60).mean()
+    merged = pd.Series(dtype=float)
+    valid_sources = []
+    failures = []
+    for fetcher in (_v78_fetch_spy_volume, _v78_fetch_spy_volume_stooq):
+        candidate, source = fetcher(target_index)
+        if getattr(candidate, "dtype", None) == bool:
+            failures.append(str(source))
+            continue
+        candidate = _clean_v78_spy_volume(candidate)
+        if candidate.empty:
+            failures.append(f"{source}; empty")
+            continue
+        merged = merged.combine_first(candidate) if not merged.empty else candidate
+        valid_sources.append(str(source))
+    try:
+        cached = _load_v78_spy_volume_cache()
+        merged = merged.combine_first(cached)
+        valid_sources.append("local-cache SPY volume")
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        failures.append(f"cache unavailable: {_short_error(exc)}")
+
+    if not merged.empty and valid_sources and any("Yahoo" in item or "Stooq" in item for item in valid_sources):
+        try:
+            _save_v78_spy_volume_cache(merged)
+        except OSError as exc:
+            failures.append(f"cache write unavailable: {_short_error(exc)}")
+
+    aligned = pd.Series(np.nan, index=target_index, dtype=float)
+    if not merged.empty:
+        expanded_index = merged.index.union(target_index).sort_values()
+        aligned = merged.reindex(expanded_index).ffill().reindex(target_index)
+        aligned.loc[target_index < merged.index.min()] = np.nan
+        aligned.loc[target_index > merged.index.max()] = np.nan
+    ratio = aligned / aligned.rolling(60, min_periods=60).mean()
     gate = (ratio >= 1.5).fillna(False).astype(bool)
+    unresolved = aligned.isna()
+    if unresolved.any():
+        missing_dates = target_index[unresolved]
+        reason = (
+            f"unresolved SPY volume {missing_dates.min().date().isoformat()}.."
+            f"{missing_dates.max().date().isoformat()} ({int(unresolved.sum())} dates)"
+        )
+        if mode == "raise":
+            raise RuntimeError(f"SPY volume unavailable: {reason}")
+        if mode == "fail_closed":
+            gate.loc[unresolved] = True
+            failures.append(f"{reason}; fail_closed")
+        else:
+            failures.append(f"{reason}; warn_open")
+    source_parts = valid_sources + failures
+    source = " | ".join(dict.fromkeys(source_parts)) or "unavailable: SPY volume"
     return gate, source
 
 
@@ -7650,7 +7767,7 @@ def _v78_score_bias_level(close_df):
     score = pd.DataFrame(0.0, index=close_df.index, columns=US_ROT_POOL)
     denom = sum(weights.values())
     for lb, weight in weights.items():
-        score = score.add((close_df[US_ROT_POOL] / close_df[US_ROT_POOL].rolling(lb).mean() - 1.0) * (weight / denom), fill_value=0.0)
+        score = score + (close_df[US_ROT_POOL] / close_df[US_ROT_POOL].rolling(lb).mean() - 1.0) * (weight / denom)
     return score
 
 
@@ -7658,7 +7775,7 @@ def _v78_score_log_weighted(close_df):
     weights = {120: 0.60, 200: 0.30, 320: 0.10}
     score = pd.DataFrame(0.0, index=close_df.index, columns=US_ROT_POOL)
     for lb, weight in weights.items():
-        score = score.add(np.log(close_df[US_ROT_POOL] / close_df[US_ROT_POOL].shift(lb)) * weight, fill_value=0.0)
+        score = score + np.log(close_df[US_ROT_POOL] / close_df[US_ROT_POOL].shift(lb)) * weight
     return score
 
 
@@ -8075,17 +8192,15 @@ def _v78_suba_display_leg_snapshot(cn_result, idx):
     pos = idx if idx >= 0 else n + idx
     pos = int(np.clip(pos, 0, n - 1))
     row = cn_result.iloc[pos]
-    v77_row = cn_result.iloc[pos - 1] if bool(row.get("is_signal", False)) and pos > 0 else row
-
     def _to_float(value, default=0.0):
         try:
             return float(value)
         except Exception:
             return float(default)
 
-    v77_h = v77_row.get("v78_suba_v77_holding", row.get("v78_suba_v77_holding", "cash"))
+    v77_h = row.get("v78_suba_v77_holding", "cash")
     new_h = row.get("v78_suba_new_holding", "cash")
-    v77_w = _to_float(v77_row.get("v78_suba_v77_weight", row.get("v78_suba_v77_weight", 0.0)))
+    v77_w = _to_float(row.get("v78_suba_v77_weight", 0.0))
     new_w = _to_float(row.get("v78_suba_new_weight", 0.0))
     return {
         "v77_holding": v77_h,
@@ -8257,6 +8372,16 @@ def _v78_adk_leg_status_rows(cn_dk_result, idx):
         weight = float(row.get("weight", 0.0) or 0.0)
         score_hot_on = bool(row.get("v78_score_overheat_on", False)) if is_new else False
         score_hot_scale = float(row.get("v78_score_overheat_scale", 1.0) or 0.0) if is_new else 1.0
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+        vol_scale = float(_dk_get_vol_scale(result_df, component_idx))
+        raw_value = row.get("scale_raw", np.nan)
+        realized_value = row.get("realized_vol", np.nan)
+        vol_scale_raw = float(raw_value) if pd.notna(raw_value) else np.nan
+        realized_vol = float(realized_value) if pd.notna(realized_value) else np.nan
+        overlay_multiplier = weight / vol_scale if abs(vol_scale) > 1e-12 else 0.0
         rows.append({
             "leg": label,
             "scope": scope,
@@ -8267,6 +8392,10 @@ def _v78_adk_leg_status_rows(cn_dk_result, idx):
             "score": _v78_adk_pair_score(result_df, row, date),
             "score_hot_on": score_hot_on,
             "score_hot_scale": score_hot_scale,
+            "realized_vol": realized_vol,
+            "vol_scale_raw": vol_scale_raw,
+            "vol_scale": vol_scale,
+            "overlay_multiplier": overlay_multiplier,
             "leg_weight": weight,
             "leg_contribution": float(blend_weight) * weight,
         })
@@ -8278,24 +8407,24 @@ def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label="�
     if not rows:
         return
     w("\n**V7.9 ADK 子策略状态**\n\n")
-    w(f"| 腿 | 配对范围 | {position_col_label} | 排名分数 | 质量过滤 | 风控/过滤 | 腿内敞口 | 组合贡献 |\n")
-    w("|:-|:-|:-|------:|:-|:-|------:|------:|\n")
+    w(f"| 腿 | 配对范围 | {position_col_label} | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 腿内最终敞口 | 组合贡献 |\n")
+    w("|:-|:-|:-|------:|:-|------:|------:|------:|------:|------:|------:|\n")
     for row in rows:
         score = row["score"]
         score_text = f"`{score:.2f}`" if not np.isnan(score) else "`NA`"
         if row["leg"] == V78_ADK_NEW_LABEL:
             quality_text = "R²不启用"
-            risk_text = (
-                f"score-hot触发，scale {row['score_hot_scale']:.2f}x"
-                if row["score_hot_on"]
-                else "score-hot关闭"
-            )
         else:
             quality_text = f"R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}" if CN_DK_R2_QUALITY_ENABLED else "R²质控关闭"
-            risk_text = "score-hot不适用"
+        realized_text = f"{row['realized_vol']:.1%}" if pd.notna(row["realized_vol"]) else "NA"
+        raw_scale_text = f"{row['vol_scale_raw']:.2f}x" if pd.notna(row["vol_scale_raw"]) else "NA"
+        overlay_text = f"{row['overlay_multiplier']:.2f}x"
+        if row["leg"] == V78_ADK_NEW_LABEL:
+            overlay_text += " (score-hot开启)" if row["score_hot_on"] else " (score-hot关闭)"
         w(
             f"| {row['leg']} | {row['scope']} | {row['position_text']} | {score_text} | "
-            f"{quality_text} | {risk_text} | {_fmt_v78_x(row['leg_weight'])} | {_fmt_v78_x(row['leg_contribution'])} |\n"
+            f"{quality_text} | {realized_text} | {raw_scale_text} | {row['vol_scale']:.2f}x | "
+            f"{overlay_text} | {_fmt_v78_x(row['leg_weight'])} | {_fmt_v78_x(row['leg_contribution'])} |\n"
         )
 
 
@@ -8310,6 +8439,68 @@ def _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=False, top_n=3):
         if rows:
             sections.append({"leg": label, "scope": scope, "rows": rows})
     return sections
+
+
+def _v78_adk_close_target_change_rows(cn_dk_result, idx=-1):
+    """Compare during-day component holdings with targets from the current close."""
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return []
+    specs = [
+        ("V7.7 ADK", cn_dk_result.attrs.get("v78_adk_v77")),
+        (V78_ADK_NEW_LABEL, cn_dk_result.attrs.get("v78_adk_new")),
+    ]
+    rows = []
+    for label, result_df in specs:
+        current = _v78_row_for_display(result_df, resolved_idx, date)
+        if current is None:
+            continue
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+        targets = _build_dk_rank_rows_at(
+            result_df,
+            idx=component_idx,
+            use_shifted=False,
+            top_n=1,
+        )
+        current_pair = str(current.get("top_pair", "none") or "none")
+        current_direction = int(current.get("direction", 0) or 0)
+        if targets:
+            target_pair = str(targets[0]["pair"])
+            target_direction = int(targets[0]["direction"] or 0)
+            target_text = targets[0]["position_text"]
+        else:
+            target_pair = current_pair
+            target_direction = current_direction
+            target_text = _dk_pos_str(f"{current_pair}_{current_direction}")
+        current_text = _dk_pos_str(f"{current_pair}_{current_direction}")
+        rows.append({
+            "leg": label,
+            "current_pair": current_pair,
+            "current_direction": current_direction,
+            "current_text": current_text,
+            "target_pair": target_pair,
+            "target_direction": target_direction,
+            "target_text": target_text,
+            "changed": (
+                current_pair != target_pair
+                or current_direction != target_direction
+            ),
+        })
+    return rows
+
+
+def _v78_adk_close_target_signal_text(change_rows):
+    changed = [row for row in change_rows if row.get("changed")]
+    if not changed:
+        return "ADK本日收盘配对/方向目标无变化"
+    details = "; ".join(
+        f"{row['leg']}: {row['current_text']} -> {row['target_text']}"
+        for row in changed
+    )
+    return f"ADK本日收盘配对/方向目标变化: {details}"
 
 
 def _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False):
@@ -8365,6 +8556,15 @@ def _write_v78_adk_position_context_note(w, position_context):
 
 
 def _write_v78_adk_new_leg_then_summary(w, cn_dk_result, idx, use_shifted=False, position_context=None):
+    is_close_target = (
+        not use_shifted
+        and position_context is not None
+        and ("目标" in str(position_context) or str(position_context).startswith("若现在收盘"))
+    )
+    if is_close_target:
+        w("\n**ADK收盘目标口径:** 下表仅用当日未移位分数判断各腿配对/方向目标；当前正式持仓与账户级净敞口仍以上方已生效表为准。\n")
+        _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False)
+        return
     blend_col, status_col = _v78_adk_position_context_labels(position_context)
     _write_v78_adk_position_context_note(w, position_context)
     _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label=blend_col)
@@ -8543,7 +8743,7 @@ def _v78_subb_volume_warning(us_rot_result):
         if comp is None or len(comp) == 0 or "volume_source" not in comp.columns:
             continue
         src = str(comp.iloc[-1].get("volume_source", "") or "")
-        if src.startswith("unavailable:"):
+        if src.startswith("unavailable:") or "unresolved SPY volume" in src:
             failed.append(label)
     if not failed:
         return ""
@@ -10440,8 +10640,11 @@ def parse_date_range(text):
         yr = now.year
         start = pd.Timestamp(f"{yr}-{int(m.group(1)):02d}-{int(m.group(2)):02d}")
         end = pd.Timestamp(f"{yr}-{int(m.group(3)):02d}-{int(m.group(4)):02d}")
-        # 如果结束日期在未来或开始>结束，可能指去年
-        if start > end or end > now.normalize():
+        # 跨年区间: 开始在上一年，结束保留当前年。
+        if start > end:
+            start = pd.Timestamp(f"{yr-1}-{int(m.group(1)):02d}-{int(m.group(2)):02d}")
+        # 非跨年但整体仍在未来时，解释为上一年的同一区间。
+        elif end > now.normalize():
             start = pd.Timestamp(f"{yr-1}-{int(m.group(1)):02d}-{int(m.group(2)):02d}")
             end = pd.Timestamp(f"{yr-1}-{int(m.group(3)):02d}-{int(m.group(4)):02d}")
         return start, end
@@ -10918,11 +11121,10 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name="Sub-A", names=None
             })
         elif has_weight and prev_weight is not None and weight is not None and abs(weight - prev_weight) > 0.001:
             h_name = names.get(holding, holding)
-            # weight 含 shift(1): date 是执行日, 信号在 date-1 收盘发出
-            # 执行时间应为 date 的开盘 (09:30)
+            # Keep the record aligned with the close-to-close accounting row.
             records.append({
                 "日期": date.strftime("%Y-%m-%d"),
-                "北京时间": beijing_time_str(date, "CN", "open"),
+                "北京时间": beijing_time_str(date, "CN", "close"),
                 "策略": strategy_name,
                 "卖出": f"杠杆 {prev_weight:.2f}x",
                 "卖出价格": None,
@@ -11509,7 +11711,7 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, si
     records = []
     assets = sorted(_weight_columns_assets(
         us_rot_result,
-        prefixes=("w_", "actual_w_", "target_w_", "model_w_", "effective_w_"),
+        prefixes=("w_", "actual_w_", "target_w_", "model_w_", "model_target_w_", "effective_w_"),
     ))
     us_schedule = _coerce_session_index(us_open)
     if us_schedule is None and us_rot_close is not None:
@@ -11521,7 +11723,9 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, si
         start_i = int(us_rot_result.index.searchsorted(since_ts, side="left"))
         if start_i > 0:
             prev_row = us_rot_result.iloc[start_i - 1]
-            prev_model_weights = _row_prefixed_weights(prev_row, "target_w_", assets)
+            prev_model_weights = _row_prefixed_weights(prev_row, "model_target_w_", assets)
+            if not any(abs(v) > 1e-12 for v in prev_model_weights.values()):
+                prev_model_weights = _row_prefixed_weights(prev_row, "target_w_", assets)
             if not any(abs(v) > 1e-12 for v in prev_model_weights.values()):
                 prev_model_weights = _row_prefixed_weights(prev_row, "actual_w_", assets)
             if not any(abs(v) > 1e-12 for v in prev_model_weights.values()):
@@ -11532,18 +11736,23 @@ def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, si
         current_actual = _row_prefixed_weights(row, "actual_w_", assets)
         if not any(abs(v) > 1e-12 for v in current_actual.values()):
             current_actual = _row_prefixed_weights(row, "w_", assets)
-        current_target = _row_prefixed_weights(row, "target_w_", assets)
+        current_target = _row_prefixed_weights(row, "model_target_w_", assets)
+        if not any(abs(v) > 1e-12 for v in current_target.values()):
+            current_target = _row_prefixed_weights(row, "target_w_", assets)
         if not any(abs(v) > 1e-12 for v in current_target.values()):
             current_target = current_actual
         volreg_action = str(row.get("volreg_action", "") or "")
+        is_model_rebalanced = _subb_model_rebalanced_value(row)
         if (
-            bool(row.get("volreg_cash", False))
-            or bool(row.get("volreg_transition", False))
-            or volreg_action in ("enter_cash", "exit_cash", "enter_defense", "exit_defense")
+            not is_model_rebalanced
+            and (
+                bool(row.get("volreg_cash", False))
+                or bool(row.get("volreg_transition", False))
+                or volreg_action in ("enter_cash", "exit_cash", "enter_defense", "exit_defense")
+            )
         ):
             prev_model_weights = current_target
             continue
-        is_model_rebalanced = _subb_model_rebalanced_value(row)
         if prev_model_weights is None:
             prev_model_weights = {"BIL": 1.0}
         if not is_model_rebalanced:
@@ -12673,11 +12882,12 @@ class CombinedStrategyBase:
         cn_v77_result = cn_result
         cn_new_result = run_v78_suba_new_tv10(cn_close_with_bond, CN_EQUITY_CODES)
         if CN_SA_VOLUME_OVERLAY_ENABLED and suba_volume_signal is not None:
-            cn_new_result = apply_v78_suba_new_volume_overlay(
+            cn_new_result = _apply_v78_suba_new_volume_overlay_policy(
                 cn_new_result,
                 cn_close_with_bond,
                 suba_volume_signal,
                 suba_volume_feature,
+                allow_unresolved_suba_volume=allow_unresolved_suba_volume,
             )
         cn_result = blend_v78_suba_results(cn_v77_result, cn_new_result)
         # v6.1: Sub-A-DK uses multi-pair Top-1
@@ -13697,6 +13907,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 "note": f"{_cn_display_date.strftime('%Y-%m-%d')}收盘确认; 上次{last_cn_sig_date.strftime('%Y-%m-%d')}",
             }
             # ── Sub-A vol-scaling 杠杆显示 ──
+            _cn_pending = False
             if "weight" in cn_result.columns:
                 _cn_sc_rt = cn_result["weight"].iloc[_cn_display_idx]
                 if "v78_suba_final_exposure" in cn_result.columns:
@@ -13770,24 +13981,26 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_r2_text = f" | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}" if CN_DK_R2_QUALITY_ENABLED else ""
             w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _dk_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
-            _dk_last_is_signal = bool(cn_dk_result["is_signal"].iloc[-1]) if "is_signal" in cn_dk_result.columns and len(cn_dk_result) > 0 else False
+            _dk_close_target_rows = _v78_adk_close_target_change_rows(cn_dk_result, -1)
+            _dk_close_target_changed = any(row["changed"] for row in _dk_close_target_rows)
             if _dk_intraday:
                 _dk_signal_current_idx = -2
                 _dk_signal_target_idx = -1
                 _dk_signal_context = "盘中假设"
-            elif len(cn_dk_result) >= 2 and _dk_last_is_signal:
-                _dk_signal_current_idx = -2
-                _dk_signal_target_idx = -1
-                _dk_signal_context = "今日收盘已确认"
             else:
                 _dk_signal_current_idx = -1
                 _dk_signal_target_idx = -1
-                _dk_signal_context = "当前维持"
+                _dk_signal_context = "今日收盘已确认" if _dk_close_target_changed else "当前维持"
             _dk_effective_issue_date = cn_dk_result.index[_dk_signal_current_idx]
             _dk_effective_holding = cn_dk_result["holding"].iloc[_dk_signal_current_idx]
             _dk_effective_name = _dk_pos_str(_dk_effective_holding)
             w(f"**当前已生效双腿持仓:** **{_dk_effective_name}**（对应 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
-            if "adk_net_asset_exposure" in cn_dk_result.columns:
+            if "v78_adk_final_exposure" in cn_dk_result.columns:
+                if _dk_close_target_changed:
+                    w("🔴 **ADK本日收盘配对/方向目标变化；按下方两腿未移位Top-1复核，勿重复执行结果表末行的昨日信号。**\n")
+                else:
+                    w("🟢 **ADK本日收盘配对/方向目标无变化。**\n")
+            elif "adk_net_asset_exposure" in cn_dk_result.columns:
                 if _adk_net_exposure_changed(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx):
                     w("🔴 **ADK净敞口已变化：按下方“当前/目标账户级净敞口”复核执行。**\n")
                 else:
@@ -13798,11 +14011,19 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w("今日盘中，今日收盘信号未确认；盘中假设目标仅作实时参考。\n")
             _dk_display_idx = _dk_signal_current_idx
             _dk_target_idx = _dk_signal_target_idx
-            _dk_display_is_signal = bool(cn_dk_result["is_signal"].iloc[_dk_target_idx]) if "is_signal" in cn_dk_result.columns else False
+            _dk_display_is_signal = (
+                _dk_close_target_changed
+                if "v78_adk_final_exposure" in cn_dk_result.columns
+                else bool(cn_dk_result["is_signal"].iloc[_dk_target_idx]) if "is_signal" in cn_dk_result.columns else False
+            )
             signal_info["Sub-A-DK"] = {
                 "is_signal": bool(_dk_display_is_signal),
-                "signal_text": _adk_net_exposure_signal_text(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx),
-                "note": "V7.9 ADK为双腿component-net；执行优先看账户级净敞口表",
+                "signal_text": (
+                    _v78_adk_close_target_signal_text(_dk_close_target_rows)
+                    if "v78_adk_final_exposure" in cn_dk_result.columns
+                    else _adk_net_exposure_signal_text(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx)
+                ),
+                "note": "V7.9 ADK为双腿component-net；当前净敞口看已生效表，收盘目标看两腿未移位Top-1与各腿风控",
             }
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
@@ -14353,6 +14574,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"持仓: **{cn_current_name}**\n")
                 w(f"假设现在收盘目标: **{cn_target_name}**（以V7.9双腿状态表/target exposure为准）\n\n")
             # ── Sub-A vol-scaling 杠杆显示 (详细) ──
+            _cn_pending3 = False
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _cn_sc_rt3 = cn_result["weight"].iloc[-1]
                 if "v78_suba_final_exposure" in cn_result.columns:
@@ -14432,7 +14654,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_effective_holding3 = cn_dk_result["holding"].iloc[_dk_effective_idx3]
             dk_current_name3 = _dk_pos_str(_dk_effective_holding3)
             w(f"**当前已生效双腿持仓:** **{dk_current_name3}**（对应 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 收盘发出的信号）\n")
-            if dk_rank_today:
+            _dk_close_target_rows3 = _v78_adk_close_target_change_rows(cn_dk_result, -1)
+            _dk_close_target_changed3 = any(row["changed"] for row in _dk_close_target_rows3)
+            if "v78_adk_final_exposure" in cn_dk_result.columns:
+                if _dk_close_target_changed3:
+                    w("🔴 **ADK若现在收盘配对/方向目标将变化；按下方两腿未移位Top-1复核，不把结果末行当作新信号。**\n")
+                else:
+                    w("🟢 **ADK若现在收盘配对/方向目标无变化。**\n")
+            elif dk_rank_today:
                 if "adk_net_asset_exposure" in cn_dk_result.columns:
                     if _adk_net_exposure_changed(cn_dk_result, _dk_effective_idx3, _dk_hypo_idx3):
                         w("🔴 **ADK净敞口将变化：若现在收盘，按下方“若现在收盘目标/账户级净敞口”执行。**\n")
@@ -14442,7 +14671,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w("⚠️ **ADK净敞口字段不可用，无法按账户级净敞口判断实时变化。**\n")
                 w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, "今日双腿配对"))
             # ── DK vol-scaling 杠杆显示 (实时) ──
-            if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
+            _dk_pending3 = False
+            if "v78_adk_final_exposure" in cn_dk_result.columns:
+                w("\n**③ ADK双腿波动率缩放:**\n\n")
+                w("ADK双腿分别执行波动率缩放；综合结果不存在单一VolScale。各腿的已实现波动率、raw/banded VolScale、overlay乘数与最终贡献见上方双腿状态表。\n")
+            elif "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 if "v78_adk_final_exposure" in cn_dk_result.columns:
                     _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_effective_idx3)
                 else:
@@ -14758,7 +14991,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"| {_cname}权重 | **{_cw:.1%}** |\n")
             w(
                 f"| 微盘成交额参考提示 | **宽口径参考: 中证2000/创业板 MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天 AND；"
-                f"参考比例 {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}（仅提示，不执行）；直接口径参考: {MICROCAP_DIRECT_VOLUME_CODE} MA{MICROCAP_DIRECT_VOLUME_MA}/{MICROCAP_DIRECT_VOLUME_DAYS}天** |\n"
+                f"参考比例 {MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}（仅提示，不执行）** |\n"
             )
             w(f"| 微盘接入版本 | **v2.0 target-vol 独立模块** | 本 Bot 不参与微盘净值计算；缓存检查由微盘独立脚本负责 |\n")
             w(f"| 微盘成交额政策 | **仅参考，不改仓位** | 官方微盘v2.0未启用宽口径成交额风控；本面板保留中证2000+创业板MA{MICROCAP_BROAD_VOLUME_ZZ2000_MA}/{MICROCAP_BROAD_VOLUME_ZZ2000_DAYS}天AND参考提示，参考比例={MICROCAP_BROAD_VOLUME_REFERENCE_SCALE:.0%}，不自动改写微盘仓位 |\n")
@@ -14924,7 +15157,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"| 最终杠杆 | **{_dk_final_w_lp:.2f}x**（= {_dk_base_w_lp:.2f}x × {_dk_gate_scale_lp:.2f}） |\n")
             else:
                 w(f"| 最终杠杆 | **{cn_dk_result['weight'].iloc[_dk_display_idx_lp]:.2f}x** |\n")
-            if "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
+            if "v78_adk_final_exposure" in cn_dk_result.columns:
+                w("\n**③ ADK双腿波动率缩放:**\n\n")
+                w("ADK双腿分别执行波动率缩放；综合结果不存在单一VolScale。各腿的已实现波动率、raw/banded VolScale、overlay乘数与最终贡献见上方双腿状态表。\n")
+            elif "weight" in cn_dk_result.columns and len(cn_dk_result) >= 2:
                 _dk_sc_p = cn_dk_result["weight"].iloc[_dk_display_idx_lp]
                 _dk_rv_p = cn_dk_result["realized_vol"].iloc[_dk_display_idx_lp] if "realized_vol" in cn_dk_result.columns else None
                 _dk_abs_idx_lp = _dk_display_idx_lp if _dk_display_idx_lp >= 0 else len(cn_dk_result) + _dk_display_idx_lp
