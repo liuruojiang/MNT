@@ -28,6 +28,13 @@ The V7.8 audit P0/P1/P2 remediation baseline remains fixed in commit `dc2bec38`:
 - `docs/V7.8_AUDIT_RESOLUTION.md`: P0/P1/P2 audit resolution record and required revalidation commands.
 - `tests/test_v78_overlay_freshness_and_volreg.py`: regression tests for stale gates, VolReg open execution, strict Sub-B open execution, and display/documentation guardrails.
 
+Research-only reproducibility utilities:
+
+- `backtest_v78_v79_proxy_compare.py`: matched V7.8/V7.9 formal-window and long-proxy comparison runner; proxy output is not a formal conclusion.
+- `research_suba_fallback_symmetry_v79.py`: symmetric Sub-A fallback-rule comparison without changing production defaults.
+- `research_v79_inflation_compass_50_50.py`: reconciled 50/50 V7.9 core plus frozen Inflation Compass study.
+- `research_v79_inflation_compass_weight_scan.py`: 0%-30% Inflation Compass allocation scan built on the reconciled runner.
+
 ## Verification
 
 Run these commands after touching V7.9 production behavior:

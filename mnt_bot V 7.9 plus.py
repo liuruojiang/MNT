@@ -4606,6 +4606,14 @@ def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
                 val = bias_dict[code].iloc[i]
                 if not np.isnan(val):
                     scores[code] = val
+        top_code = max(scores, key=scores.get) if scores else "cash"
+        top_score = scores.get(top_code, np.nan)
+        top_r2 = _cn_series_value_at(r2_dict.get(top_code), i) if top_code != "cash" else np.nan
+        top_abs = (
+            _cn_series_value_at(abs_mom_dict.get(top_code), i)
+            if top_code != "cash" and abs_mom_dict is not None
+            else np.nan
+        )
         ideal = "cash"
         if scores:
             ideal = _select_cn_ideal_asset(scores, r2_dict, i, holding=holding, abs_mom_dict=abs_mom_dict)
@@ -4717,6 +4725,14 @@ def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
             "pending_entry_target": pending_entry_target,
             "pending_entry_since": pending_entry_since,
             "pending_entry_days": pending_entry_days,
+            "suba_top_code": top_code,
+            "suba_top_score": top_score,
+            "suba_top_r2": top_r2,
+            "suba_top_abs_mom": top_abs,
+            "suba_top_score_pass": bool(pd.notna(top_score) and float(top_score) > 0.0),
+            "suba_top_r2_pass": bool(pd.notna(top_r2) and float(top_r2) >= CN_R2_THRESHOLD),
+            "suba_top_abs_pass": bool(pd.notna(top_abs) and float(top_abs) > CN_ABS_MOM_THRESHOLD),
+            "suba_raw_ideal": raw_ideal,
             "suba_single_gate_raw_ideal": raw_ideal,
             "suba_single_gate_pass": single_gate_pass,
             "suba_single_gate_blocked": single_gate_blocked,
@@ -4815,6 +4831,10 @@ def run_v78_suba_new_tv10(close_df, equity_codes):
         weight_end=V78_SUBA_NEW_WEIGHT_END,
     )
     abs_mom = close.pct_change(V78_SUBA_NEW_ABS_DAY)
+    raw_score_arr = raw_score.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float)
+    raw_filled = np.where(np.isfinite(raw_score_arr), raw_score_arr, -np.inf)
+    raw_top_idx = np.argmax(raw_filled, axis=1)
+    raw_top_val = raw_filled[np.arange(len(raw_filled)), raw_top_idx]
     score = raw_score.where(raw_score > V78_SUBA_NEW_SCORE_THRESHOLD)
     score = score.where(abs_mom > V78_SUBA_NEW_ABS_THRESHOLD)
     score_arr = score.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float)
@@ -4870,9 +4890,18 @@ def run_v78_suba_new_tv10(close_df, equity_codes):
             "turnover": turnover,
             "cash_component": cash_component,
             "is_signal": (code_changed | weight_changed).fillna(False),
+            "v78_raw_top": label_arr[np.where(np.isfinite(raw_top_val), raw_top_idx, len(codes))],
+            "v78_raw_top_score": np.where(np.isfinite(raw_top_val), raw_top_val, np.nan),
+            "v78_raw_top_abs_mom": np.where(
+                np.isfinite(raw_top_val),
+                abs_mom.to_numpy(dtype=float)[np.arange(len(close)), raw_top_idx],
+                np.nan,
+            ),
         },
         index=close.index,
     )
+    out["v78_raw_top_score_pass"] = out["v78_raw_top_score"] > V78_SUBA_NEW_SCORE_THRESHOLD
+    out["v78_raw_top_abs_pass"] = out["v78_raw_top_abs_mom"] > V78_SUBA_NEW_ABS_THRESHOLD
     out["nav"] = (1.0 + out["return"].fillna(0.0)).cumprod()
     out.attrs["v78_raw_score"] = raw_score
     out.attrs["v78_abs_mom"] = abs_mom
@@ -5381,6 +5410,9 @@ def apply_suba_volume_overlay(
         if "effective_fraction" in cn_result.columns
         else cn_result["holding_fraction"].fillna(0.0).astype(float)
     )
+    pre_weight = pd.to_numeric(
+        cn_result.get("weight", pre_f), errors="coerce"
+    ).fillna(0.0)
     signal_s = (
         pd.Series(volume_signal, dtype="boolean")
         .reindex(cn_result.index)
@@ -5417,6 +5449,9 @@ def apply_suba_volume_overlay(
         prev_f = f
 
     extra_cols = {
+        "pre_suba_volume_holding": pre_h,
+        "pre_suba_volume_fraction": pre_f,
+        "pre_suba_volume_weight": pre_weight,
         "suba_volume_rule_on": signal_s,
         "suba_volume_rule_scale": scale_s,
         "suba_volume_rule_name": pd.Series(rule_name, index=cn_result.index),
@@ -5529,6 +5564,7 @@ def apply_v78_suba_new_volume_overlay(
 
     out["base_weight_before_suba_volume"] = base_holding_w
     out["base_target_weight_before_suba_volume"] = base_target_w
+    out["base_target_holding_before_suba_volume"] = target_s
     out["suba_volume_rule_on"] = signal_s
     out["suba_volume_rule_scale"] = scale_s
     out["suba_volume_rule_name"] = pd.Series(rule_name, index=idx)
@@ -5585,6 +5621,9 @@ def apply_suba_same_side_overheat_overlay(
         raise KeyError(f"Missing required Sub-A columns: {sorted(missing)}")
 
     out = cn_result.copy()
+    pre_weight = pd.to_numeric(
+        out.get("weight", out.get("holding_fraction", 0.0)), errors="coerce"
+    ).fillna(0.0)
     features = _suba_same_side_overheat_features(close_df)
     pre_h = out["effective_holding"].fillna("cash").astype(str) if "effective_holding" in out.columns else out["holding"].fillna("cash").astype(str)
     pre_f = out["effective_fraction"].fillna(0.0).astype(float) if "effective_fraction" in out.columns else out["holding_fraction"].fillna(0.0).astype(float)
@@ -5651,6 +5690,7 @@ def apply_suba_same_side_overheat_overlay(
     extra = {
         "pre_suba_overheat_holding": pre_h,
         "pre_suba_overheat_fraction": pre_f,
+        "pre_suba_overheat_weight": pre_weight,
         "suba_same_side_overheat_bias": pd.Series(bias_vals, index=out.index, dtype=float),
         "suba_same_side_overheat_bias_mom": pd.Series(mom_vals, index=out.index, dtype=float),
         "suba_same_side_overheat_signal": pd.Series(same_side_vals, index=out.index, dtype=bool),
@@ -8127,7 +8167,7 @@ def _write_v78_suba_new_leg_signal_table(w, cn_result, idx):
     _write_unified_suba_leg_rows(
         w,
         "New A TV1.0 子策略状态",
-        f"MA{V78_SUBA_NEW_MA}/{V78_SUBA_NEW_MOM_DAY} score>{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}, abs{V78_SUBA_NEW_ABS_DAY}>{V78_SUBA_NEW_ABS_THRESHOLD:.0%}",
+        f"全池逐只过滤 → 合格池择优；首名失败可递补。MA{V78_SUBA_NEW_MA}/{V78_SUBA_NEW_MOM_DAY} score>{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}, abs{V78_SUBA_NEW_ABS_DAY}>{V78_SUBA_NEW_ABS_THRESHOLD:.0%}",
         unified,
     )
 
@@ -8174,7 +8214,7 @@ def _write_v78_suba_v77_leg_signal_table(w, bias_mom, r2, abs_mom, codes, idx, c
     _write_unified_suba_leg_rows(
         w,
         "V7.7A原版 子策略状态",
-        f"bias_mom排序 + R²≥{CN_R2_THRESHOLD:.2f} + {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%}",
+        f"先定原始Top-1 → 只验Top-1；失败直接Cash，不递补第2名。bias_mom排序 + R²≥{CN_R2_THRESHOLD:.2f} + {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%}",
         rows,
     )
 
@@ -8230,6 +8270,199 @@ def _write_v78_suba_blend_table(w, cn_result, idx):
     w(f"| V7.7A原版 | {V78_SUBA_V77_WEIGHT:.0%} | {CN_NAMES.get(v77_h, v77_h)} | {_fmt_v78_x(v77_w)} | {_fmt_v78_x(V78_SUBA_V77_WEIGHT * v77_w)} |\n")
     w(f"| {V78_SUBA_NEW_LABEL} | {V78_SUBA_NEW_TV10_WEIGHT:.0%} | {CN_NAMES.get(new_h, new_h)} | {_fmt_v78_x(new_w)} | {_fmt_v78_x(V78_SUBA_NEW_TV10_WEIGHT * new_w)} |\n")
     w(f"| **V7.9最终** | **100%** | - | - | **{_fmt_v78_x(display['final_exposure'])}** |\n")
+
+
+def _v79_suba_leg_execution_rows(cn_result, idx):
+    """Explain each Sub-A leg from raw close signal to executable target."""
+    if cn_result is None or len(cn_result) == 0:
+        return []
+
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    date = cn_result.index[pos]
+    row = cn_result.iloc[pos]
+
+    def _number(value, default=0.0):
+        try:
+            value = float(value)
+        except Exception:
+            return float(default)
+        return value if np.isfinite(value) else float(default)
+
+    def _bool(value):
+        return False if pd.isna(value) else bool(value)
+
+    def _component_row(component):
+        if component is None or len(component) == 0:
+            return pd.Series(dtype=object)
+        try:
+            source = component.loc[date]
+            return source.iloc[-1] if isinstance(source, pd.DataFrame) else source
+        except Exception:
+            source_pos = min(pos, len(component) - 1)
+            return component.iloc[source_pos]
+
+    def _holding(value, weight):
+        if weight <= 1e-12 or value is None or pd.isna(value):
+            return "cash"
+        return str(value)
+
+    def _position_text(holding, weight):
+        if weight <= 1e-12 or holding == "cash":
+            return "Cash / 0.00x"
+        return f"{CN_NAMES.get(holding, holding)} / {weight:.2f}x"
+
+    def _v77_cash_reason(source):
+        code = str(source.get("suba_top_code", "cash") or "cash")
+        if code == "cash":
+            return "原始排名无有效候选"
+        score = source.get("suba_top_score", np.nan)
+        r2 = source.get("suba_top_r2", np.nan)
+        abs_mom = source.get("suba_top_abs_mom", np.nan)
+        failed = []
+        if not _bool(source.get("suba_top_score_pass", False)):
+            failed.append(f"排名分数{_fmt_v78_score(score)}≤0")
+        if not _bool(source.get("suba_top_r2_pass", False)):
+            failed.append(f"R² {_fmt_v78_score(r2)}<{CN_R2_THRESHOLD:.2f}")
+        if not _bool(source.get("suba_top_abs_pass", False)):
+            failed.append(f"{CN_ABS_MOM_DAY}日动量{_format_suba_abs_mom(abs_mom)}≤{CN_ABS_MOM_THRESHOLD:.0%}")
+        if _bool(source.get("suba_single_gate_blocked", False)):
+            failed.append("单资产独立门控未通过")
+        detail = "、".join(failed) if failed else "执行目标为Cash"
+        return f"Top-1={CN_NAMES.get(code, code)}未通过：{detail}；V7.7A只检查Top-1，不递补第2名"
+
+    def _new_cash_reason(source):
+        code = str(source.get("v78_raw_top", "cash") or "cash")
+        if code == "cash":
+            return "原始排名无有效候选"
+        score = source.get("v78_raw_top_score", np.nan)
+        abs_mom = source.get("v78_raw_top_abs_mom", np.nan)
+        failed = []
+        if not _bool(source.get("v78_raw_top_score_pass", False)):
+            failed.append(f"score {_fmt_v78_score(score)}≤{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}")
+        if not _bool(source.get("v78_raw_top_abs_pass", False)):
+            failed.append(f"abs{V78_SUBA_NEW_ABS_DAY} {_format_suba_abs_mom(abs_mom)}≤{V78_SUBA_NEW_ABS_THRESHOLD:.0%}")
+        detail = "、".join(failed) if failed else "其余候选未同时通过"
+        return f"无资产同时通过全部条件；原始Top-1={CN_NAMES.get(code, code)}：{detail}"
+
+    def _reason(current_h, current_w, raw_h, raw_w, final_h, final_w, blockers, raw_cash_reason):
+        if current_w <= 1e-12:
+            if final_w > 1e-12:
+                return (
+                    f"当前0仅因时点：{date.strftime('%Y-%m-%d')}收盘信号尚未计入盘中仓位；"
+                    f"收盘执行后为{_position_text(final_h, final_w)}"
+                )
+            if raw_w > 1e-12:
+                return "当前及收盘目标均为0：" + ("；".join(blockers) if blockers else "执行覆盖层将原始目标压至0")
+            return f"当前及收盘目标均为0：{raw_cash_reason}"
+        if final_w <= 1e-12:
+            return "当前仍有仓位；本次收盘后清仓：" + ("；".join(blockers) if blockers else "原始目标转为Cash")
+        if current_h != final_h:
+            return f"当前持有{CN_NAMES.get(current_h, current_h)}；本次收盘后换为{CN_NAMES.get(final_h, final_h)}"
+        if abs(current_w - final_w) > 1e-4:
+            return f"资产不变；本次收盘后敞口 {current_w:.2f}x → {final_w:.2f}x"
+        return "当前仓位与收盘最终目标一致"
+
+    rows = []
+    v77_component = cn_result.attrs.get("v78_suba_v77") if hasattr(cn_result, "attrs") else None
+    v77 = _component_row(v77_component)
+    current_v77_w = _number(row.get("v78_suba_v77_weight", 0.0))
+    current_v77_h = _holding(row.get("v78_suba_v77_holding", "cash"), current_v77_w)
+    final_v77_w = _number(v77.get("weight", row.get("v78_suba_v77_target_weight", 0.0)))
+    final_v77_h = _holding(v77.get("holding", row.get("v78_suba_v77_target", "cash")), final_v77_w)
+    raw_v77_w = _number(v77.get("pre_suba_overheat_weight", v77.get("pre_suba_volume_weight", final_v77_w)))
+    raw_v77_h = _holding(v77.get("pre_suba_overheat_holding", v77.get("pre_suba_volume_holding", final_v77_h)), raw_v77_w)
+    after_overheat_w = _number(v77.get("pre_suba_volume_weight", final_v77_w))
+    overheat_on = _bool(v77.get("suba_same_side_overheat_on", False))
+    volume_on = _bool(v77.get("suba_volume_rule_on", False))
+    volume_scale = _number(v77.get("suba_volume_rule_scale", 1.0), 1.0)
+    v77_overheat_scale = (
+        float(CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE)
+        if overheat_on and raw_v77_w > 1e-12
+        else 1.0
+    )
+    v77_blockers = []
+    if overheat_on and raw_v77_w > 1e-12 and after_overheat_w <= 1e-12:
+        bias = v77.get("suba_same_side_overheat_bias", np.nan)
+        bias_text = f"（当前乖离{float(bias):.1%}）" if pd.notna(bias) else ""
+        v77_blockers.append(f"MA60过热止盈 ×{v77_overheat_scale:.2f}{bias_text}")
+    if volume_on and volume_scale < 1.0 - 1e-12 and after_overheat_w > 1e-12:
+        v77_blockers.append(f"成交额风控 ×{volume_scale:.2f}")
+    rows.append({
+        "leg": "V7.7A原版",
+        "selection_rule": "先定原始Top-1；只验Top-1，失败Cash，不递补",
+        "current": _position_text(current_v77_h, current_v77_w),
+        "raw_target": _position_text(raw_v77_h, raw_v77_w),
+        "overlays": f"过热×{v77_overheat_scale:.2f}；成交额×{volume_scale if volume_on else 1.0:.2f}",
+        "final_target": _position_text(final_v77_h, final_v77_w),
+        "reason": _reason(
+            current_v77_h,
+            current_v77_w,
+            raw_v77_h,
+            raw_v77_w,
+            final_v77_h,
+            final_v77_w,
+            v77_blockers,
+            _v77_cash_reason(v77),
+        ),
+    })
+
+    new_component = cn_result.attrs.get("v78_suba_new") if hasattr(cn_result, "attrs") else None
+    new = _component_row(new_component)
+    current_new_w = _number(row.get("v78_suba_new_weight", 0.0))
+    current_new_h = _holding(row.get("v78_suba_new_holding", "cash"), current_new_w)
+    raw_new_w = _number(new.get("base_target_weight_before_suba_volume", new.get("target_weight", 0.0)))
+    raw_new_h = _holding(new.get("base_target_holding_before_suba_volume", new.get("target", "cash")), raw_new_w)
+    final_new_w = _number(new.get("target_weight", row.get("v78_suba_new_target_weight", 0.0)))
+    final_new_h_raw = new.get("target", None)
+    if final_new_h_raw is None or pd.isna(final_new_h_raw):
+        final_new_h_raw = raw_new_h if final_new_w > 1e-12 else "cash"
+    final_new_h = _holding(final_new_h_raw, final_new_w)
+    new_volume_on = _bool(new.get("suba_volume_rule_on", False))
+    new_volume_scale = _number(new.get("suba_volume_rule_scale", 1.0), 1.0)
+    new_blockers = []
+    if new_volume_on and new_volume_scale < 1.0 - 1e-12 and raw_new_w > 1e-12:
+        new_blockers.append(f"成交额风控 ×{new_volume_scale:.2f}")
+    rows.append({
+        "leg": V78_SUBA_NEW_LABEL,
+        "selection_rule": "全池逐只过滤；从合格池择优，首名失败可递补",
+        "current": _position_text(current_new_h, current_new_w),
+        "raw_target": _position_text(raw_new_h, raw_new_w),
+        "overlays": f"成交额×{new_volume_scale if new_volume_on else 1.0:.2f}",
+        "final_target": _position_text(final_new_h, final_new_w),
+        "reason": _reason(
+            current_new_h,
+            current_new_w,
+            raw_new_h,
+            raw_new_w,
+            final_new_h,
+            final_new_w,
+            new_blockers,
+            _new_cash_reason(new),
+        ),
+    })
+    return rows
+
+
+def _write_v79_suba_execution_chain(w, cn_result, idx):
+    rows = _v79_suba_leg_execution_rows(cn_result, idx)
+    if not rows:
+        return
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    date = cn_result.index[pos]
+    w(f"\n**V7.9 Sub-A分腿仓位因果链（{date.strftime('%Y-%m-%d')}）**\n\n")
+    w("当前=当日收盘执行前已生效仓位；收盘目标=当日信号经过全部覆盖层后的执行结果。\n\n")
+    w("**两腿选拔规则不同：V7.7A首名失败不递补；New A会从其余合格资产中递补。**\n\n")
+    w("| 腿 | 选拔 / 递补规则 | 当前已生效 | 收盘原始目标 | 执行覆盖层 | 收盘最终目标 | 结论 / 0仓位主因 |\n")
+    w("|:-|:-|:-|:-|:-|:-|:-|\n")
+    for item in rows:
+        w(
+            f"| {item['leg']} | {item['selection_rule']} | {item['current']} | {item['raw_target']} | {item['overlays']} | "
+            f"{item['final_target']} | **{item['reason']}** |\n"
+        )
 
 
 def _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label="当前配对/方向"):
@@ -8433,6 +8666,297 @@ def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label="�
         )
 
 
+def _v79_adk_base_position(result_df, row, date):
+    """Return the pre-overlay pair/direction hidden by a zero final weight."""
+    pair = str(row.get("top_pair", "none") or "none")
+    direction = int(row.get("direction", 0) or 0)
+    pair_data = result_df.attrs.get("pair_data", {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is not None and date in pdata.index:
+        source = pdata.loc[date]
+        if isinstance(source, pd.DataFrame):
+            source = source.iloc[-1]
+        value = source.get("position", source.get("signal", np.nan))
+        if pd.notna(value):
+            direction = int(value)
+    return pair, direction
+
+
+def _v79_adk_pair_next_vol_scale(result_df, pair, date, fallback_scale):
+    pair_data = result_df.attrs.get("pair_data", {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is None or date not in pdata.index:
+        return float(fallback_scale), float(fallback_scale), False
+    source = pdata.loc[date]
+    if isinstance(source, pd.DataFrame):
+        source = source.iloc[-1]
+    current_scale = source.get("scale", fallback_scale)
+    current_scale = float(current_scale) if pd.notna(current_scale) else float(fallback_scale)
+    realized_vol = source.get("realized_vol", np.nan)
+    return _compute_next_vol_scale(
+        realized_vol,
+        current_scale,
+        CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None,
+        CN_DK_MIN_LEV,
+        CN_DK_MAX_LEV,
+        CN_DK_SCALE_THRESHOLD,
+    )
+
+
+def _v79_adk_same_side_close_state(result_df, pair, date, current_on, same_trade):
+    """Advance the V7.7 same-side overlay with the latest unshifted close feature."""
+    pair_data = result_df.attrs.get("pair_data", {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is None or date not in pdata.index or "ratio" not in pdata.columns or "bias_mom" not in pdata.columns:
+        return bool(current_on), np.nan, False
+    ratio = pd.to_numeric(pdata["ratio"], errors="coerce")
+    bias = ratio / ratio.rolling(CN_DK_BIAS_N).mean() - 1.0
+    source = pdata.loc[date]
+    if isinstance(source, pd.DataFrame):
+        source = source.iloc[-1]
+    abs_bias = abs(float(bias.loc[date])) if pd.notna(bias.loc[date]) else np.nan
+    bias_mom = source.get("bias_mom", np.nan)
+    same_side = bool(
+        pd.notna(bias.loc[date])
+        and pd.notna(bias_mom)
+        and np.sign(float(bias.loc[date])) == np.sign(float(bias_mom))
+    )
+    defense_on = bool(current_on) if same_trade else False
+    if pd.isna(abs_bias) or not same_side:
+        defense_on = False
+    elif defense_on and abs_bias <= CN_DK_SAME_SIDE_OVERHEAT_EXIT:
+        defense_on = False
+    elif (not defense_on) and abs_bias > CN_DK_SAME_SIDE_OVERHEAT_ENTER:
+        defense_on = True
+    return defense_on, abs_bias, same_side
+
+
+def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
+    """Explain current and close-target ADK state at the executable leg level."""
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return []
+    specs = [
+        ("V7.7 ADK", V78_ADK_V77_WEIGHT, cn_dk_result.attrs.get("v78_adk_v77"), False),
+        (V78_ADK_NEW_LABEL, V78_ADK_NEW_PRIMARY_WEIGHT, cn_dk_result.attrs.get("v78_adk_new"), True),
+    ]
+    rows = []
+    for label, blend_weight, result_df, is_new in specs:
+        row = _v78_row_for_display(result_df, resolved_idx, date)
+        if row is None:
+            continue
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+
+        base_pair, base_direction = _v79_adk_base_position(result_df, row, date)
+        current_final_weight = float(row.get("weight", 0.0) or 0.0)
+        current_vol_scale = float(_dk_get_vol_scale(result_df, component_idx))
+        if is_new:
+            current_base_weight = float(row.get("base_weight_before_v78_score_hot", current_vol_scale) or 0.0)
+            current_overlay_scale = float(row.get("v78_score_overheat_scale", 1.0) or 0.0)
+            current_overlay_on = bool(row.get("v78_score_overheat_on", False))
+            prior_score = np.nan
+            if component_idx > 0 and "v78_score_overheat_score" in result_df.columns:
+                prior_score = result_df["v78_score_overheat_score"].iloc[component_idx - 1]
+            trigger_pos = None
+            trigger_score = np.nan
+            trigger_date = None
+            if "v78_score_overheat_on" in result_df.columns:
+                on_series = result_df["v78_score_overheat_on"].fillna(False).astype(bool)
+                triggered = on_series & ~on_series.shift(1, fill_value=False)
+                prior_triggers = np.flatnonzero(triggered.to_numpy()[:component_idx + 1])
+                if len(prior_triggers) > 0:
+                    trigger_pos = int(prior_triggers[-1])
+                    trigger_basis_pos = max(trigger_pos - 1, 0)
+                    trigger_date = result_df.index[trigger_basis_pos]
+                    if "v78_score_overheat_score" in result_df.columns:
+                        trigger_score = result_df["v78_score_overheat_score"].iloc[trigger_basis_pos]
+            if current_overlay_on:
+                trigger_text = ""
+                if trigger_date is not None and pd.notna(trigger_score):
+                    trigger_text = (
+                        f"{pd.Timestamp(trigger_date).strftime('%Y-%m-%d')} 收盘基础配对分数 "
+                        f"{float(trigger_score):.2f} >= {V78_ADK_NEW_SCORE_HOT_ENTER:.0f} 触发"
+                    )
+                if trigger_pos == component_idx and trigger_text:
+                    current_reason = f"score-hot已触发：{trigger_text}，乘数 {current_overlay_scale:.2f}x"
+                elif trigger_text and pd.notna(prior_score):
+                    current_reason = (
+                        f"score-hot延续：{trigger_text}；上一收盘分数 {float(prior_score):.2f} "
+                        f"> {V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未达到恢复线"
+                    )
+                elif pd.notna(prior_score) and float(prior_score) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+                    current_reason = (
+                        f"score-hot已触发：上一收盘基础配对分数 {float(prior_score):.2f} "
+                        f">= {V78_ADK_NEW_SCORE_HOT_ENTER:.0f}，乘数 {current_overlay_scale:.2f}x"
+                    )
+                elif pd.notna(prior_score):
+                    current_reason = (
+                        f"score-hot延续：上一收盘基础配对分数 {float(prior_score):.2f} "
+                        f"> {V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未达到恢复线"
+                    )
+                else:
+                    current_reason = f"score-hot防守开启，乘数 {current_overlay_scale:.2f}x"
+            else:
+                current_reason = "score-hot关闭"
+        else:
+            current_base_weight = float(row.get("pre_overheat_weight", current_vol_scale) or 0.0)
+            current_overlay_scale = float(row.get("same_side_overheat_scale", 1.0) or 0.0)
+            current_overlay_on = bool(row.get("same_side_overheat_on", False))
+            current_abs_bias = row.get("same_side_overheat_abs_bias", np.nan)
+            bias_text = f"，判断乖离 {float(current_abs_bias):.1%}" if pd.notna(current_abs_bias) else ""
+            current_reason = (
+                f"同向过热防守开启，乘数 {current_overlay_scale:.2f}x{bias_text}"
+                if current_overlay_on
+                else "同向过热防守关闭"
+            )
+
+        targets = _build_dk_rank_rows_at(result_df, idx=component_idx, use_shifted=False, top_n=1)
+        if targets:
+            target_pair = str(targets[0]["pair"])
+            target_direction = int(targets[0]["direction"] or 0)
+        else:
+            target_pair, target_direction = base_pair, base_direction
+        _, target_base_weight, vol_changed = _v79_adk_pair_next_vol_scale(
+            result_df,
+            target_pair,
+            date,
+            current_vol_scale,
+        )
+
+        if is_new:
+            score_for_close = row.get("v78_score_overheat_score", np.nan)
+            target_overlay_on = current_overlay_on
+            if pd.notna(score_for_close):
+                if target_overlay_on and float(score_for_close) <= V78_ADK_NEW_SCORE_HOT_EXIT:
+                    target_overlay_on = False
+                elif (not target_overlay_on) and float(score_for_close) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+                    target_overlay_on = True
+            target_overlay_scale = V78_ADK_NEW_SCORE_HOT_SCALE if target_overlay_on else 1.0
+            score_text = f"{float(score_for_close):.2f}" if pd.notna(score_for_close) else "NA"
+            target_overlay_text = (
+                f"score-hot{'开启' if target_overlay_on else '关闭'} "
+                f"({score_text}; 进/出 {V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}) "
+                f"x{target_overlay_scale:.2f}"
+            )
+        else:
+            same_trade = base_pair == target_pair and base_direction == target_direction
+            target_overlay_on, target_abs_bias, target_same_side = _v79_adk_same_side_close_state(
+                result_df,
+                target_pair,
+                date,
+                current_overlay_on,
+                same_trade,
+            )
+            target_overlay_scale = CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE if target_overlay_on else 1.0
+            bias_text = f"{target_abs_bias:.1%}" if pd.notna(target_abs_bias) else "NA"
+            target_overlay_text = (
+                f"同向过热{'开启' if target_overlay_on else '关闭'} "
+                f"(乖离 {bias_text}; 同向 {'是' if target_same_side else '否'}) x{target_overlay_scale:.2f}"
+            )
+
+        target_final_weight = float(target_base_weight) * float(target_overlay_scale)
+        current_active = base_pair != "none" and base_direction != 0 and current_final_weight > 1e-12
+        target_active = target_pair != "none" and target_direction != 0 and target_final_weight > 1e-12
+        current_pair = base_pair if current_active else "none"
+        current_direction = base_direction if current_active else 0
+        final_target_pair = target_pair if target_active else "none"
+        final_target_direction = target_direction if target_active else 0
+        changed = (
+            current_pair != final_target_pair
+            or current_direction != final_target_direction
+            or abs(current_final_weight - target_final_weight) > 1e-3
+        )
+        base_text = _dk_pos_str(f"{base_pair}_{base_direction}") if base_pair != "none" and base_direction != 0 else "无有效基础信号"
+        current_final_text = (
+            f"{_dk_pos_str(f'{current_pair}_{current_direction}')} / {current_final_weight:.2f}x"
+            if current_active
+            else "空仓 / 0.00x"
+        )
+        target_base_text = (
+            f"{_dk_pos_str(f'{target_pair}_{target_direction}')} / {target_base_weight:.2f}x"
+            if target_pair != "none" and target_direction != 0
+            else "无有效基础信号"
+        )
+        target_final_text = (
+            f"{_dk_pos_str(f'{final_target_pair}_{final_target_direction}')} / {target_final_weight:.2f}x"
+            if target_active
+            else "空仓 / 0.00x"
+        )
+        if current_final_weight <= 1e-12 and current_base_weight > 1e-12:
+            current_reason = f"基础信号并未空仓；{current_reason}，{current_base_weight:.2f}x -> 0.00x"
+        if vol_changed:
+            target_overlay_text = f"VolScale {current_vol_scale:.2f}x->{target_base_weight:.2f}x；" + target_overlay_text
+        rows.append({
+            "leg": label,
+            "blend_weight": float(blend_weight),
+            "current_base_pair": base_pair,
+            "current_base_direction": base_direction,
+            "current_base_weight": current_base_weight,
+            "current_base_text": f"{base_text} / {current_base_weight:.2f}x",
+            "current_overlay_text": current_reason,
+            "current_pair": current_pair,
+            "current_direction": current_direction,
+            "current_weight": current_final_weight,
+            "current_final_text": current_final_text,
+            "target_base_pair": target_pair,
+            "target_base_direction": target_direction,
+            "target_base_weight": float(target_base_weight),
+            "target_base_text": target_base_text,
+            "target_overlay_text": target_overlay_text,
+            "target_pair": final_target_pair,
+            "target_direction": final_target_direction,
+            "target_weight": target_final_weight,
+            "target_final_text": target_final_text,
+            "changed": bool(changed),
+        })
+    return rows
+
+
+def _v79_adk_execution_summary(cn_dk_result, idx=-1):
+    rows = _v79_adk_leg_execution_rows(cn_dk_result, idx)
+    current_net = {}
+    target_net = {}
+    for row in rows:
+        for asset, exposure in _dk_position_legs(
+            row["current_pair"], row["current_direction"], row["blend_weight"] * row["current_weight"]
+        ).items():
+            current_net[asset] = current_net.get(asset, 0.0) + exposure
+        for asset, exposure in _dk_position_legs(
+            row["target_pair"], row["target_direction"], row["blend_weight"] * row["target_weight"]
+        ).items():
+            target_net[asset] = target_net.get(asset, 0.0) + exposure
+    assets = set(current_net) | set(target_net)
+    changed = any(abs(target_net.get(asset, 0.0) - current_net.get(asset, 0.0)) > 1e-4 for asset in assets)
+    return {
+        "rows": rows,
+        "current_net": {k: v for k, v in current_net.items() if abs(v) > 1e-12},
+        "target_net": {k: v for k, v in target_net.items() if abs(v) > 1e-12},
+        "changed": bool(changed),
+    }
+
+
+def _write_v79_adk_execution_chain(w, cn_dk_result, idx=-1, close_label="若现在收盘"):
+    summary = _v79_adk_execution_summary(cn_dk_result, idx)
+    rows = summary["rows"]
+    if not rows:
+        return summary
+    mark = "🔴" if summary["changed"] else "🟢"
+    verdict = "最终执行仓位将变化" if summary["changed"] else "最终执行仓位不变化"
+    w(f"\n{mark} **ADK {close_label}：{verdict}。**（按配对、方向和腿内敞口综合判断）\n\n")
+    w("| 腿 | 当前基础信号 | 当前为何是该持仓 | 当前最终持仓 | 收盘基础目标 | 收盘后覆盖层 | 收盘最终目标 | 结论 |\n")
+    w("|:-|:-|:-|:-|:-|:-|:-|:-|\n")
+    for row in rows:
+        w(
+            f"| {row['leg']} | {row['current_base_text']} | {row['current_overlay_text']} | "
+            f"{row['current_final_text']} | {row['target_base_text']} | {row['target_overlay_text']} | "
+            f"{row['target_final_text']} | **{'变化' if row['changed'] else '不变'}** |\n"
+        )
+    return summary
+
+
 def _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=False, top_n=3):
     specs = [
         ("V7.7 ADK", cn_dk_result.attrs.get("v78_adk_v77"), "正式8配对"),
@@ -8512,23 +9036,49 @@ def _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False):
     sections = _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=use_shifted, top_n=3)
     if not sections:
         return
+    execution_by_leg = {
+        row["leg"]: row for row in _v79_adk_leg_execution_rows(cn_dk_result, idx)
+    }
     if use_shifted:
         score_label = "确认分数"
-        rank_mark = " ← 当前该腿Top-1"
-        timing = "当前已生效Top-3"
-        hint = "当前已生效，用于查看每条腿当前正式持有；每条腿实际只持有Top-1"
+        timing = "当前基础Top-3"
+        hint = "这里只展示基础排名，不等于最终持仓；Top-1行同时给出覆盖层后的当前最终持仓"
     else:
         score_label = "实时分数"
-        rank_mark = " ← 若现在收盘将执行"
-        timing = "实时Top-3"
-        hint = "若现在收盘，用于判断每条腿是否按收盘价执行；每条腿实际只持有Top-1"
+        timing = "实时基础Top-3"
+        hint = "这里只展示若现在收盘的基础排名，不等于最终执行；Top-1行同时给出score-hot/过热/VolScale后的最终结论"
     w(f"\n**V7.9 ADK 两个子策略Top-3（{hint}）:**\n")
     for section in sections:
         w(f"\n**{section['leg']}（{section['scope']}） {timing}**\n")
+        execution = execution_by_leg.get(section["leg"])
         for row in section["rows"]:
             score = row["score_used"] if use_shifted else row["score_live"]
             score_text = f"{score:.2f}" if not np.isnan(score) else "NA"
-            mark = rank_mark if row["rank"] == 1 else ""
+            mark = ""
+            if row["rank"] == 1:
+                if execution is None:
+                    mark = " ← 基础Top-1（非最终执行结论）"
+                elif use_shifted:
+                    if execution["current_weight"] <= 1e-12:
+                        mark = (
+                            f" ← 当前基础Top-1；{execution['current_overlay_text']}；"
+                            "覆盖层后当前最终为空仓"
+                        )
+                    else:
+                        mark = (
+                            f" ← 当前基础Top-1；覆盖层后当前最终持仓 "
+                            f"{execution['current_final_text']}"
+                        )
+                elif execution["target_weight"] <= 1e-12:
+                    mark = (
+                        f" ← 收盘基础Top-1；{execution['target_overlay_text']}；"
+                        "过滤后最终为空仓，**不会执行该配对**"
+                    )
+                else:
+                    mark = (
+                        f" ← 收盘基础Top-1；{execution['target_overlay_text']}；"
+                        f"过滤后最终执行 {execution['target_final_text']}"
+                    )
             w(
                 f"- {row['rank']}. **{row['pair_display']}** | {score_label} `{score_text}` | "
                 f"方向 {row['direction']:+d} | {row['position_text']}{mark}\n"
@@ -8963,6 +9513,7 @@ def _write_v78_suba_param_tables(w):
     w(f"| 均线周期 | **{CN_BIAS_N}日** | price/MA{CN_BIAS_N}计算乖离率 |\n")
     w(f"| 斜率拟合窗口 | **{CN_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n")
     w(f"| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** | 最近日权重更高；v7.7正式信号使用linear_recent_3x |\n")
+    w("| 选拔/递补顺序 | **先定原始Top-1，再验门槛；不递补** | 仅检查排名第1的R²和绝对动量；Top-1失败即持Cash，即使第2名全部通过也不会买入 |\n")
     w(f"| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}** | 候选资产近{CN_ABS_MOM_DAY}日实际涨跌幅需高于阈值，否则持现金 |\n")
     w(f"| R²滚动窗口/门槛 | **{CN_R2_WINDOW}日 / {CN_R2_THRESHOLD}** | 所有资产(含国债)需R²≥门槛才持有 |\n")
     w(f"| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n")
@@ -8970,6 +9521,7 @@ def _write_v78_suba_param_tables(w):
     w("\n**New A TV1.0参数**\n\n")
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
     w(f"| MA/动量窗口 | **MA{V78_SUBA_NEW_MA} / {V78_SUBA_NEW_MOM_DAY}日** | New A score排名口径 |\n")
+    w("| 选拔/递补顺序 | **全池先过滤，再在合格池择优；允许递补** | 每只资产先独立检查score和绝对动量；原始第1名失败时，后续合格资产仍可成为最终Top-1 |\n")
     w(f"| score阈值 | **>{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}** | score未通过则排除 |\n")
     w(f"| 绝对动量过滤 | **abs{V78_SUBA_NEW_ABS_DAY}>{V78_SUBA_NEW_ABS_THRESHOLD:.0%}** | 绝对动量未通过则排除 |\n")
     w(f"| 目标波动率/窗口/上限 | **{V78_SUBA_NEW_TARGET_VOL:.0%} / {V78_SUBA_NEW_VOL_WINDOW}日 / {V78_SUBA_NEW_MAX_LEV:.1f}x** | New A腿独立target-vol |\n")
@@ -13939,6 +14491,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     else:
                         w(f"🟢 **V7.7A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n")
                 _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx, compact=True)
+                _write_v79_suba_execution_chain(w, cn_result, _cn_display_idx)
                 _write_v78_suba_blend_table(w, cn_result, _cn_display_idx)
                 _write_v78_suba_leg_signal_tables(
                     w,
@@ -13982,7 +14535,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f"阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n")
             _dk_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
             _dk_close_target_rows = _v78_adk_close_target_change_rows(cn_dk_result, -1)
-            _dk_close_target_changed = any(row["changed"] for row in _dk_close_target_rows)
+            _dk_execution_summary = (
+                _v79_adk_execution_summary(cn_dk_result, -1)
+                if "v78_adk_final_exposure" in cn_dk_result.columns
+                else None
+            )
+            _dk_close_target_changed = (
+                bool(_dk_execution_summary["changed"])
+                if _dk_execution_summary is not None
+                else any(row["changed"] for row in _dk_close_target_rows)
+            )
             if _dk_intraday:
                 _dk_signal_current_idx = -1
                 _dk_signal_target_idx = -1
@@ -13996,10 +14558,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _dk_effective_name = _dk_pos_str(_dk_effective_holding)
             w(f"**当前已生效双腿持仓:** **{_dk_effective_name}**（在 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 交易时段生效）\n")
             if "v78_adk_final_exposure" in cn_dk_result.columns:
-                if _dk_close_target_changed:
-                    w("🔴 **ADK本日收盘配对/方向目标变化；按下方两腿未移位Top-1复核，勿重复执行结果表末行的昨日信号。**\n")
-                else:
-                    w("🟢 **ADK本日收盘配对/方向目标无变化。**\n")
+                _write_v79_adk_execution_chain(
+                    w,
+                    cn_dk_result,
+                    _dk_signal_current_idx,
+                    close_label="若现在收盘" if _dk_intraday else "本日收盘确认后",
+                )
             elif "adk_net_asset_exposure" in cn_dk_result.columns:
                 if _adk_net_exposure_changed(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx):
                     w("🔴 **ADK净敞口已变化：按下方“当前/目标账户级净敞口”复核执行。**\n")
@@ -14019,11 +14583,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             signal_info["Sub-A-DK"] = {
                 "is_signal": bool(_dk_display_is_signal),
                 "signal_text": (
-                    _v78_adk_close_target_signal_text(_dk_close_target_rows)
+                    f"ADK最终执行仓位{'变化' if _dk_close_target_changed else '不变化'}"
                     if "v78_adk_final_exposure" in cn_dk_result.columns
                     else _adk_net_exposure_signal_text(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx)
                 ),
-                "note": "V7.9 ADK为双腿component-net；当前净敞口看已生效表，收盘目标看两腿未移位Top-1与各腿风控",
+                "note": "V7.9 ADK为双腿component-net；变化判断同时比较配对、方向、VolScale和覆盖层后的最终腿内敞口",
             }
             # ── DK vol-scaling 杠杆显示 ──
             if "weight" in cn_dk_result.columns:
@@ -14608,6 +15172,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     else:
                         w(f"🟢 **V7.7A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n")
                 _write_suba_volume_overlay_status(msg, cn_result, -1)
+                _write_v79_suba_execution_chain(w, cn_result, -1)
                 _write_v78_suba_blend_table(w, cn_result, -1)
                 _write_v78_suba_leg_signal_tables(
                     w,
@@ -14657,12 +15222,23 @@ class CombinedStrategyV78(CombinedStrategyBase):
             dk_current_name3 = _dk_pos_str(_dk_effective_holding3)
             w(f"**当前已生效双腿持仓:** **{dk_current_name3}**（在 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 交易时段生效）\n")
             _dk_close_target_rows3 = _v78_adk_close_target_change_rows(cn_dk_result, -1)
-            _dk_close_target_changed3 = any(row["changed"] for row in _dk_close_target_rows3)
+            _dk_execution_summary3 = (
+                _v79_adk_execution_summary(cn_dk_result, -1)
+                if "v78_adk_final_exposure" in cn_dk_result.columns
+                else None
+            )
+            _dk_close_target_changed3 = (
+                bool(_dk_execution_summary3["changed"])
+                if _dk_execution_summary3 is not None
+                else any(row["changed"] for row in _dk_close_target_rows3)
+            )
             if "v78_adk_final_exposure" in cn_dk_result.columns:
-                if _dk_close_target_changed3:
-                    w("🔴 **ADK若现在收盘配对/方向目标将变化；按下方两腿未移位Top-1复核，不把结果末行当作新信号。**\n")
-                else:
-                    w("🟢 **ADK若现在收盘配对/方向目标无变化。**\n")
+                _write_v79_adk_execution_chain(
+                    w,
+                    cn_dk_result,
+                    _dk_effective_idx3,
+                    close_label="若现在收盘",
+                )
             elif dk_rank_today:
                 if "adk_net_asset_exposure" in cn_dk_result.columns:
                     if _adk_net_exposure_changed(cn_dk_result, _dk_effective_idx3, _dk_hypo_idx3):
@@ -14923,14 +15499,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w(f"| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n")
             w("\n---\n\n")
     def _handle_params(self):
+        cn_result_params = None
         cn_dk_result_params = None
-        adk_params_error = None
+        strategy_params_error = None
         with _sm() as msg:
-            msg.write("⏳ 正在读取当前ADK持仓...\n")
+            msg.write("⏳ 正在读取当前Sub-A / ADK持仓...\n")
             try:
                 cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p = self._cached_fetch_data(
                     msg, include_cn_live_snapshot=False, include_us_live_snapshot=False)
-                _, cn_dk_result_params, _, _, _, _, _, _ = self._cached_run_strategies(
+                cn_result_params, cn_dk_result_params, _, _, _, _, _, _ = self._cached_run_strategies(
                     cn_close_p,
                     cn_dk_close_p,
                     us_rot_close_p,
@@ -14938,11 +15515,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     allow_unresolved_suba_volume=True,
                 )
             except Exception as exc:
-                adk_params_error = _short_error(exc)
+                strategy_params_error = _short_error(exc)
         with _sm() as msg:
             w = msg.write
             w("## ⚙️ 策略参数总览\n\n### Sub-A: A股乖离动量轮动 (v7.7 linear3x + abs20 gate)\n\n")
             _write_v78_suba_param_tables(w)
+            w("\n**当前分腿仓位因果链:**\n")
+            if cn_result_params is not None and len(cn_result_params) > 0:
+                _write_v79_suba_execution_chain(w, cn_result_params, -1)
+            else:
+                w(f"\n当前Sub-A仓位读取失败: {strategy_params_error or '未知错误'}\n")
             w("\n**计算过程:**\n")
             w(f"1. 乖离率: `bias = price / MA({CN_BIAS_N})`\n")
             w(f"2. 乖离动量: 最近{CN_MOM_DAY}日bias归一化后按1.0→{CN_BIAS_MOM_WEIGHT_END:.1f}加权线性拟合斜率×10000，用于排序\n")
@@ -14956,6 +15538,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("\n**当前持仓状态:**\n\n")
             if cn_dk_result_params is not None and len(cn_dk_result_params) > 0:
                 _write_v78_adk_current_holding_summary(w, cn_dk_result_params, -1)
+                if "v78_adk_final_exposure" in cn_dk_result_params.columns:
+                    _write_v79_adk_execution_chain(
+                        w,
+                        cn_dk_result_params,
+                        -1,
+                        close_label="按最新收盘重算",
+                    )
                 _write_v78_adk_new_leg_then_summary(
                     w,
                     cn_dk_result_params,
@@ -14964,7 +15553,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     position_context="当前已生效持仓",
                 )
             else:
-                w(f"当前ADK持仓读取失败: {adk_params_error or '未知错误'}\n")
+                w(f"当前ADK持仓读取失败: {strategy_params_error or '未知错误'}\n")
             w("\n**计算过程:**\n")
             w(f"1. 5指数→正式{len(ADK_OFFICIAL_PAIR_ORDER)}配对，每对计算乖离动量\n")
             w(f"2. 从正式池选|乖离动量|最大的Top-1配对\n")
@@ -15066,6 +15655,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("\n")
             if "weight" in cn_result.columns and len(cn_result) >= 2:
                 _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx_lp, prefix="")
+                _write_v79_suba_execution_chain(w, cn_result, _cn_display_idx_lp)
                 _write_v78_suba_blend_table(w, cn_result, _cn_display_idx_lp)
                 _write_v78_suba_leg_signal_tables(
                     w,
@@ -15121,6 +15711,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w("**① V7.9 ADK双腿实时状态:**\n\n")
             if _dk_params_intraday:
                 w(f"当前显示为 **{cn_dk_result.index[_dk_display_idx_lp].strftime('%Y-%m-%d')} 交易时段已生效持仓**；今日未移位目标仍待收盘确认。\n")
+            if "v78_adk_final_exposure" in cn_dk_result.columns:
+                _write_v79_adk_execution_chain(
+                    w,
+                    cn_dk_result,
+                    _dk_display_idx_lp,
+                    close_label="若现在收盘",
+                )
             _write_v78_adk_new_leg_then_summary(
                 w,
                 cn_dk_result,

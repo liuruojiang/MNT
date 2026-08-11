@@ -320,7 +320,7 @@ def test_suba_amount_zz2000_prefers_csindex_before_slow_eastmoney(monkeypatch):
     assert calls == [("csindex", module.CN_SA_VOLUME_ZZ2000_SECID)]
 
 
-def test_suba_amount_cyb_prefers_qq_before_slow_eastmoney(monkeypatch):
+def test_suba_amount_cyb_prefers_true_amount_before_volume_proxies(monkeypatch):
     module = load_v78_module()
     amount = pd.DataFrame(
         {"close": [100.0] * 60, "amount": [1_000.0] * 60},
@@ -328,22 +328,22 @@ def test_suba_amount_cyb_prefers_qq_before_slow_eastmoney(monkeypatch):
     )
     calls = []
 
-    def fake_qq(secid, datalen=10000):
-        calls.append(("qq", secid))
+    def fake_sohu(secid, beg=module.CN_SA_VOLUME_HISTORY_BEG, lmt=300):
+        calls.append(("sohu", secid))
         return amount
 
     def fail_eastmoney(secid, beg=module.CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
         calls.append(("eastmoney", secid))
-        raise AssertionError("EastMoney amount should be fallback for CYB")
+        raise AssertionError("EastMoney should not run after Sohu true amount succeeds")
 
-    monkeypatch.setattr(module, "_fetch_cn_qq_amount_proxy", fake_qq)
+    monkeypatch.setattr(module, "_fetch_cn_sohu_amount", fake_sohu)
     monkeypatch.setattr(module, "_fetch_cn_eastmoney_amount", fail_eastmoney)
 
     result, source = module._fetch_cn_amount_with_fallback(module.CN_SA_VOLUME_CYB_SECID, "CYB")
 
-    assert result["source"].iloc[-1] == "QQ volume proxy"
-    assert source == "QQ volume proxy"
-    assert calls == [("qq", module.CN_SA_VOLUME_CYB_SECID)]
+    assert result["source"].iloc[-1] == "Sohu amount"
+    assert source == "Sohu amount"
+    assert calls == [("sohu", module.CN_SA_VOLUME_CYB_SECID)]
 
 
 def test_h_index_fetch_uses_proxy_and_cached_base_before_csindex(monkeypatch):

@@ -81,6 +81,184 @@ def test_suba_blend_separates_during_day_and_close_target_exposure():
     assert bool(blend.loc[dates[1], "is_signal"])
 
 
+def test_suba_execution_chain_explains_zero_current_weight_as_timing_only():
+    module = load_v79_module()
+    date = pd.Timestamp("2026-08-10")
+    blend = pd.DataFrame(
+        {
+            "v78_suba_v77_holding": ["cash"],
+            "v78_suba_v77_weight": [0.0],
+            "v78_suba_new_holding": ["cash"],
+            "v78_suba_new_weight": [0.0],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_v77"] = pd.DataFrame(
+        {"holding": ["cash"], "weight": [0.0]}, index=[date]
+    )
+    blend.attrs["v78_suba_new"] = pd.DataFrame(
+        {
+            "holding": ["cash"],
+            "weight": [0.0],
+            "target": ["AAA"],
+            "target_weight": [0.8],
+            "base_target_holding_before_suba_volume": ["AAA"],
+            "base_target_weight_before_suba_volume": [0.8],
+            "suba_volume_rule_on": [False],
+            "suba_volume_rule_scale": [1.0],
+        },
+        index=[date],
+    )
+
+    rows = module._v79_suba_leg_execution_rows(blend, -1)
+    new_row = next(row for row in rows if row["leg"] == module.V78_SUBA_NEW_LABEL)
+
+    assert new_row["current"] == "Cash / 0.00x"
+    assert "AAA / 0.80x" in new_row["final_target"]
+    assert "当前0仅因时点" in new_row["reason"]
+    assert "收盘执行后" in new_row["reason"]
+
+
+def test_suba_execution_chain_names_the_overlay_that_forces_zero_target():
+    module = load_v79_module()
+    date = pd.Timestamp("2026-08-10")
+    blend = pd.DataFrame(
+        {
+            "v78_suba_v77_holding": ["cash"],
+            "v78_suba_v77_weight": [0.0],
+            "v78_suba_new_holding": ["cash"],
+            "v78_suba_new_weight": [0.0],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_v77"] = pd.DataFrame(
+        {"holding": ["cash"], "weight": [0.0]}, index=[date]
+    )
+    blend.attrs["v78_suba_new"] = pd.DataFrame(
+        {
+            "holding": ["cash"],
+            "weight": [0.0],
+            "target": ["cash"],
+            "target_weight": [0.0],
+            "base_target_holding_before_suba_volume": ["AAA"],
+            "base_target_weight_before_suba_volume": [0.8],
+            "suba_volume_rule_on": [True],
+            "suba_volume_rule_scale": [0.0],
+        },
+        index=[date],
+    )
+
+    rows = module._v79_suba_leg_execution_rows(blend, -1)
+    new_row = next(row for row in rows if row["leg"] == module.V78_SUBA_NEW_LABEL)
+
+    assert new_row["raw_target"] == "AAA / 0.80x"
+    assert new_row["final_target"] == "Cash / 0.00x"
+    assert "成交额风控 ×0.00" in new_row["reason"]
+
+
+def test_suba_execution_chain_names_v77_overheat_clear():
+    module = load_v79_module()
+    date = pd.Timestamp("2026-08-10")
+    blend = pd.DataFrame(
+        {
+            "v78_suba_v77_holding": ["cash"],
+            "v78_suba_v77_weight": [0.0],
+            "v78_suba_new_holding": ["cash"],
+            "v78_suba_new_weight": [0.0],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_v77"] = pd.DataFrame(
+        {
+            "holding": ["cash"],
+            "weight": [0.0],
+            "pre_suba_overheat_holding": ["AAA"],
+            "pre_suba_overheat_weight": [1.2],
+            "pre_suba_volume_weight": [0.0],
+            "suba_same_side_overheat_on": [True],
+            "suba_same_side_overheat_bias": [0.30],
+            "suba_volume_rule_on": [False],
+            "suba_volume_rule_scale": [1.0],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_new"] = pd.DataFrame(
+        {"holding": ["cash"], "weight": [0.0], "target_weight": [0.0]}, index=[date]
+    )
+
+    rows = module._v79_suba_leg_execution_rows(blend, -1)
+    v77_row = next(row for row in rows if row["leg"] == "V7.7A原版")
+
+    assert v77_row["raw_target"] == "AAA / 1.20x"
+    assert "MA60过热止盈 ×0.00" in v77_row["reason"]
+    assert "当前乖离30.0%" in v77_row["reason"]
+
+
+def test_suba_execution_chain_explains_v77_top1_failure_and_no_fallback():
+    module = load_v79_module()
+    date = pd.Timestamp("2026-08-10")
+    blend = pd.DataFrame(
+        {
+            "v78_suba_v77_holding": ["cash"],
+            "v78_suba_v77_weight": [0.0],
+            "v78_suba_new_holding": ["cash"],
+            "v78_suba_new_weight": [0.0],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_v77"] = pd.DataFrame(
+        {
+            "holding": ["cash"],
+            "weight": [0.0],
+            "suba_top_code": ["AAA"],
+            "suba_top_score": [12.0],
+            "suba_top_r2": [0.10],
+            "suba_top_abs_mom": [0.04],
+            "suba_top_score_pass": [True],
+            "suba_top_r2_pass": [False],
+            "suba_top_abs_pass": [True],
+        },
+        index=[date],
+    )
+    blend.attrs["v78_suba_new"] = pd.DataFrame(
+        {"holding": ["cash"], "weight": [0.0], "target_weight": [0.0]}, index=[date]
+    )
+
+    rows = module._v79_suba_leg_execution_rows(blend, -1)
+    v77_row = next(row for row in rows if row["leg"] == "V7.7A原版")
+
+    assert "Top-1=AAA未通过：R² 0.1000<0.15" in v77_row["reason"]
+    assert "只检查Top-1，不递补第2名" in v77_row["reason"]
+
+
+def test_suba_execution_chain_is_wired_to_all_query_surfaces():
+    module = load_v79_module()
+    for handler in (
+        module.CombinedStrategyV78._handle_signal,
+        module.CombinedStrategyV78._handle_live_signal,
+        module.CombinedStrategyV78._handle_params,
+        module.CombinedStrategyV78._handle_live_params,
+    ):
+        assert "_write_v79_suba_execution_chain" in inspect.getsource(handler)
+
+
+def test_suba_displays_state_the_two_different_fallback_rules_explicitly():
+    module = load_v79_module()
+    param_chunks = []
+    module._write_v78_suba_param_tables(param_chunks.append)
+    params_text = "".join(param_chunks)
+    execution_source = inspect.getsource(module._write_v79_suba_execution_chain)
+    v77_source = inspect.getsource(module._write_v78_suba_v77_leg_signal_table)
+    new_source = inspect.getsource(module._write_v78_suba_new_leg_signal_table)
+
+    assert "不递补第2名" in v77_source
+    assert "首名失败可递补" in new_source
+    assert "V7.7A首名失败不递补" in execution_source
+    assert "New A会从其余合格资产中递补" in execution_source
+    assert "先定原始Top-1，再验门槛；不递补" in params_text
+    assert "全池先过滤，再在合格池择优；允许递补" in params_text
+
+
 def test_subb_bias_and_logvol_scores_require_every_configured_window():
     module = load_v79_module()
     dates = pd.bdate_range("2024-01-02", periods=420)
@@ -518,3 +696,100 @@ def test_signal_history_end_position_uses_post_close_target_semantics():
     assert source.count(
         "_v78_suba_position_text(cn_period.iloc[-1], mode='target')"
     ) == 2
+
+
+def test_adk_execution_chain_explains_zero_new_leg_and_final_change_state():
+    module = load_v79_module()
+    dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
+    pair = "HS300/ZZ500"
+
+    def component(*, new_leg=False, live_score=90.0):
+        frame = pd.DataFrame(
+            {
+                "top_pair": [pair, pair],
+                "direction": [1, 0 if new_leg else 1],
+                "weight": [1.0, 0.0 if new_leg else 1.0],
+                "scale_raw": [1.0, 1.0],
+                "realized_vol": [0.14, 0.14],
+            },
+            index=dates,
+        )
+        if new_leg:
+            frame["base_weight_before_v78_score_hot"] = 1.0
+            frame["v78_score_overheat_scale"] = [1.0, 0.0]
+            frame["v78_score_overheat_on"] = [False, True]
+            frame["v78_score_overheat_score"] = [90.0, live_score]
+        else:
+            frame["pre_overheat_weight"] = 1.0
+            frame["same_side_overheat_scale"] = 1.0
+            frame["same_side_overheat_on"] = False
+        frame.attrs["signals_df"] = pd.DataFrame({pair: [90.0, 90.0]}, index=dates)
+        frame.attrs["pair_data"] = {
+            pair: pd.DataFrame(
+                {
+                    "position": [1, 1],
+                    "signal": [1, 1],
+                    "scale": [1.0, 1.0],
+                    "realized_vol": [0.14, 0.14],
+                },
+                index=dates,
+            )
+        }
+        return frame
+
+    blend = pd.DataFrame(
+        {
+            "v78_adk_final_exposure": [1.0, 0.5],
+            "adk_net_asset_exposure": [{}, {"HS300": 0.5, "ZZ500": -0.5}],
+        },
+        index=dates,
+    )
+    blend.attrs["v78_adk_v77"] = component()
+    blend.attrs["v78_adk_new"] = component(new_leg=True, live_score=90.0)
+
+    summary = module._v79_adk_execution_summary(blend, -1)
+    new_row = summary["rows"][1]
+    chunks = []
+    module._write_v79_adk_execution_chain(chunks.append, blend, -1)
+    text = "".join(chunks)
+
+    assert new_row["current_base_pair"] == pair
+    assert new_row["current_base_direction"] == 1
+    assert new_row["current_final_text"] == "空仓 / 0.00x"
+    assert "基础信号并未空仓" in new_row["current_overlay_text"]
+    assert "score-hot已触发" in new_row["current_overlay_text"]
+    assert summary["changed"] is False
+    assert "最终执行仓位不变化" in text
+
+    rank_chunks = []
+    module._write_v78_adk_leg_rank_tables(rank_chunks.append, blend, -1, use_shifted=False)
+    rank_text = "".join(rank_chunks)
+    new_rank_block = rank_text.split(module.V78_ADK_NEW_LABEL, 1)[1]
+
+    assert "实时基础Top-3" in rank_text
+    assert "这里只展示若现在收盘的基础排名，不等于最终执行" in rank_text
+    assert "score-hot开启" in new_rank_block
+    assert "过滤后最终为空仓" in new_rank_block
+    assert "不会执行该配对" in new_rank_block
+    assert "← 若现在收盘将执行" not in rank_text
+
+    blend.attrs["v78_adk_new"] = component(new_leg=True, live_score=10.0)
+    recovered = module._v79_adk_execution_summary(blend, -1)
+
+    assert recovered["rows"][1]["target_weight"] == pytest.approx(1.0)
+    assert recovered["rows"][1]["changed"] is True
+    assert recovered["changed"] is True
+
+
+def test_adk_query_surfaces_use_final_execution_change_chain():
+    module = load_v79_module()
+    signal_source = inspect.getsource(module.CombinedStrategyV78._handle_signal)
+    live_source = inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
+    params_source = inspect.getsource(module.CombinedStrategyV78._handle_params)
+    live_params_source = inspect.getsource(module.CombinedStrategyV78._handle_live_params)
+
+    assert "_write_v79_adk_execution_chain" in signal_source
+    assert "_write_v79_adk_execution_chain" in live_source
+    assert "_write_v79_adk_execution_chain" in params_source
+    assert "_write_v79_adk_execution_chain" in live_params_source
+    assert "变化判断同时比较配对、方向、VolScale和覆盖层后的最终腿内敞口" in signal_source
