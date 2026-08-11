@@ -73,15 +73,18 @@ def test_v78_suba_blend_exposes_final_components_and_signal_flags():
 
     out = module.blend_v78_suba_results(v77, new)
 
-    assert np.allclose(out["final_exposure"], [0.6, 0.8])
+    assert np.allclose(out["final_exposure"], [0.1, 0.8])
     assert np.allclose(out["weight"], out["final_exposure"])
-    assert out.loc[dates[0], "holding"] == "V7.7A:AAA|NewA:BBB"
-    assert out.loc[dates[0], "final_components"]["v77"]["holding"] == "AAA"
+    assert out.loc[dates[0], "holding"] == "V7.7A:cash|NewA:BBB"
+    assert out.loc[dates[0], "final_components"]["v77"]["holding"] == "cash"
+    assert out.loc[dates[0], "final_components"]["v77"]["weight"] == 0.0
     assert out.loc[dates[0], "final_components"]["new"]["weight"] == 0.1
     assert np.isnan(float(out.loc[dates[0], "scale_raw"]))
     assert np.allclose(out["base_weight"], out["final_exposure"])
-    assert np.allclose(out["v78_suba_v77_scale_raw"], [1.2, 1.2])
-    assert bool(out.loc[dates[1], "is_signal"]) is True
+    assert np.isnan(float(out.loc[dates[0], "v78_suba_v77_scale_raw"]))
+    assert float(out.loc[dates[1], "v78_suba_v77_scale_raw"]) == 1.2
+    assert bool(out.loc[dates[0], "is_signal"]) is True
+    assert bool(out.loc[dates[1], "is_signal"]) is False
 
 
 def test_v78_suba_blend_preserves_component_targets_for_signal_display():
@@ -376,7 +379,7 @@ def test_v78_suba_volume_overlay_is_applied_to_new_tv10_leg():
     source = inspect.getsource(module.CombinedStrategyBase._run_strategies)
 
     new_leg_pos = source.index("cn_new_result = run_v78_suba_new_tv10")
-    new_overlay_pos = source.index("cn_new_result = apply_v78_suba_new_volume_overlay")
+    new_overlay_pos = source.index("cn_new_result = _apply_v78_suba_new_volume_overlay_policy")
     blend_pos = source.index("cn_result = blend_v78_suba_results")
 
     assert new_leg_pos < new_overlay_pos < blend_pos

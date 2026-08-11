@@ -389,12 +389,22 @@ def test_v78_spy_volume_gate_fail_closed_when_volume_source_ends_before_price_in
 
     monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
     monkeypatch.setattr(module, "_v78_fetch_spy_volume", lambda _index: (stale_volume, "test stale volume"))
+    monkeypatch.setattr(
+        module,
+        "_v78_fetch_spy_volume_stooq",
+        lambda _index: (pd.Series(False, index=_index, dtype=bool), "unavailable: test stooq unavailable"),
+    )
+    monkeypatch.setattr(
+        module,
+        "_load_v78_spy_volume_cache",
+        lambda: (_ for _ in ()).throw(FileNotFoundError("test cache missing")),
+    )
 
     gate, source = module._v78_spy_volume_gate(index)
 
     assert gate.index.equals(index)
-    assert gate.tolist() == [True, True, True]
-    assert "stale" in source
+    assert gate.tolist() == [False, False, True]
+    assert "unresolved SPY volume 2026-06-12..2026-06-12" in source
     assert "fail_closed" in source
 
 

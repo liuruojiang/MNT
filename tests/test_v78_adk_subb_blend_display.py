@@ -301,7 +301,7 @@ def test_v78_suba_and_adk_blends_reset_legacy_execution_cost_fields():
     assert np.isnan(float(adk.loc[dates[0], "dk_execution_turnover"]))
 
 
-def test_subb_regular_rebalance_records_skip_volreg_cash_model_changes():
+def test_subb_regular_rebalance_records_keep_same_day_model_change_when_volreg_enters_cash():
     module = load_v78_module()
     dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
     result = pd.DataFrame(
@@ -320,10 +320,12 @@ def test_subb_regular_rebalance_records_skip_volreg_cash_model_changes():
 
     records = module.extract_us_rot_rebalances(result, since_date=pd.Timestamp("2026-06-12"))
 
-    assert records == []
+    assert len(records) == 1
+    assert "QQQM 50.0%->0.0%" in records[0]["卖出"]
+    assert "GLDM 50.0%->100.0%" in records[0]["买入"]
 
 
-def test_subb_regular_rebalance_records_skip_volreg_transition_model_changes():
+def test_subb_regular_rebalance_records_keep_same_day_model_change_when_volreg_exits_cash():
     module = load_v78_module()
     dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
     result = pd.DataFrame(
@@ -344,7 +346,9 @@ def test_subb_regular_rebalance_records_skip_volreg_transition_model_changes():
 
     records = module.extract_us_rot_rebalances(result, since_date=pd.Timestamp("2026-06-12"))
 
-    assert records == []
+    assert len(records) == 1
+    assert "QQQM 50.0%->60.0%" in records[0]["买入"]
+    assert "GLDM 50.0%->40.0%" in records[0]["卖出"]
 
 
 def test_v78_logvol_high_vol_scales_target_weights_not_return_discount(monkeypatch):
@@ -791,7 +795,7 @@ def test_v78_live_signal_adk_uses_effective_row_and_net_exposure_alert():
     adk_block = source.split("### Sub-A-DK: V7.8双子策略", 1)[1].split("_write_volume_warning_panel", 1)[0]
 
     assert "_dk_intraday3 = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2" in adk_block
-    assert "_dk_effective_idx3 = -2 if _dk_intraday3 else -1" in adk_block
+    assert "_dk_effective_idx3 = -1" in adk_block
     assert '_dk_effective_holding3 = cn_dk_result["holding"].iloc[_dk_effective_idx3]' in adk_block
     assert "dk_current_name3 = _dk_pos_str(_dk_effective_holding3)" in adk_block
     assert "_adk_net_exposure_changed(cn_dk_result, _dk_effective_idx3, _dk_hypo_idx3)" in adk_block
@@ -816,7 +820,7 @@ def test_v78_signal_adk_uses_net_exposure_not_legacy_single_leg_hypo():
     assert "ADK净敞口已变化" in adk_block
     assert "ADK净敞口无变化" in adk_block
     assert "_adk_net_exposure_signal_text" in signal_info_block
-    assert '"V7.8 ADK为双腿component-net；执行优先看账户级净敞口表"' in signal_info_block
+    assert '"V7.8 ADK为双腿component-net；当前净敞口看已生效表，收盘目标看两腿未移位Top-1与各腿风控"' in signal_info_block
     assert '"signal_text": _dk_latest_name' not in signal_info_block
     assert "_dk_pair_display(_dk_latest_pair)" not in signal_info_block
 
@@ -845,8 +849,10 @@ def test_v78_adk_display_branches_before_single_leg_volscale_projection():
     module = load_v78_module()
     for method in (module.CombinedStrategyV78._handle_signal, module.CombinedStrategyV78._handle_live_signal):
         source = inspect.getsource(method)
-        adk_block = source.split('if "weight" in cn_dk_result.columns', 1)[1].split("_write_v78_adk_new_leg_then_summary", 1)[0]
+        adk_block = source.split("# ── DK vol-scaling", 1)[1].split("_write_v78_adk_new_leg_then_summary", 1)[0]
 
+        assert '"v78_adk_final_exposure" in cn_dk_result.columns' in adk_block
+        assert "_write_v78_adk_leg_status_table" in adk_block
         assert adk_block.index('"v78_adk_final_exposure" in cn_dk_result.columns') < adk_block.index("_compute_next_vol_scale")
 
 
@@ -984,11 +990,21 @@ def test_v78_subb_spy_volume_fail_mode_is_parameterized(monkeypatch):
         "_v78_fetch_spy_volume",
         lambda index: (pd.Series(False, index=index, dtype=bool), "unavailable: test missing"),
     )
+    monkeypatch.setattr(
+        module,
+        "_v78_fetch_spy_volume_stooq",
+        lambda _index: (pd.Series(False, index=_index, dtype=bool), "unavailable: test stooq unavailable"),
+    )
+    monkeypatch.setattr(
+        module,
+        "_load_v78_spy_volume_cache",
+        lambda: (_ for _ in ()).throw(FileNotFoundError("test cache missing")),
+    )
 
     monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open")
     gate, source = module._v78_spy_volume_gate(dates)
     assert gate.tolist() == [False, False]
-    assert source.startswith("unavailable:")
+    assert "unavailable: test missing" in source
 
     monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
     gate, source = module._v78_spy_volume_gate(dates)
@@ -1297,15 +1313,58 @@ def test_v78_adk_display_uses_unified_two_leg_status_and_rank_sections():
 
     assert "**V7.8 ADK 混合腿拆分（沿用7.7展示样式）**" in text
     assert "**V7.8 ADK 子策略状态**" in text
-    assert "| 腿 | 配对范围 | 分腿Top-1配对/方向 | 排名分数 | 质量过滤 | 风控/过滤 | 腿内敞口 | 组合贡献 |" in text
+    assert "| 腿 | 配对范围 | 分腿Top-1配对/方向 | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 腿内最终敞口 | 组合贡献 |" in text
     assert "| V7.7 ADK | 正式8配对 | 做多 上证50 / 做空 创业板 | `44.00` | R²质控" in text
     assert f"| {module.V78_ADK_NEW_LABEL} | 全10配对 + score-hot | 做多 中证500 / 做空 沪深300 | `99.00`" in text
     assert "**V7.8 ADK 两个子策略Top-3" in text
-    assert "V7.7 ADK（正式8配对） 实时Top-3" in text
-    assert "New ADK all10 score-hot（全10配对 + score-hot） 实时Top-3" in text
+    assert "V7.7 ADK（正式8配对） 实时基础Top-3" in text
+    assert "New ADK all10 score-hot（全10配对 + score-hot） 实时基础Top-3" in text
     assert "- 1. **上证50/创业板** | 实时分数 `44.00` | 方向 +1" in text
     assert "- 1. **沪深300/中证500** | 实时分数 `99.00` | 方向 -1" in text
-    assert "← 若现在收盘将执行" in text
+    assert "← 收盘基础Top-1" in text
+    assert "← 若现在收盘将执行" not in text
+
+
+def test_v78_adk_rank_table_marks_score_hot_filtered_top1_as_non_executable():
+    module = load_v78_module()
+    date = pd.Timestamp("2026-08-11")
+    pair = "SZ50/ZZ1000"
+    v77 = pd.DataFrame(
+        {"top_pair": [pair], "direction": [-1], "weight": [0.57]}, index=[date]
+    )
+    v77.attrs["signals_df"] = pd.DataFrame({pair: [64.05]}, index=[date])
+    v77.attrs["pair_data"] = {
+        pair: pd.DataFrame({"signal": [-1], "position": [-1]}, index=[date])
+    }
+    new = pd.DataFrame(
+        {
+            "top_pair": [pair],
+            "direction": [0],
+            "weight": [0.0],
+            "v78_score_overheat_score": [64.05],
+            "v78_score_overheat_scale": [0.0],
+            "v78_score_overheat_on": [True],
+        },
+        index=[date],
+    )
+    new.attrs["signals_df"] = pd.DataFrame({pair: [64.05]}, index=[date])
+    new.attrs["pair_data"] = {
+        pair: pd.DataFrame({"signal": [-1], "position": [-1]}, index=[date])
+    }
+    blend = pd.DataFrame({"v78_adk_final_exposure": [0.285]}, index=[date])
+    blend.attrs["v78_adk_v77"] = v77
+    blend.attrs["v78_adk_new"] = new
+    chunks = []
+
+    module._write_v78_adk_leg_rank_tables(chunks.append, blend, -1, use_shifted=False)
+    text = "".join(chunks)
+    new_block = text.split("New ADK all10 score-hot", 1)[1]
+
+    assert "这里只展示若现在收盘的基础排名，不等于最终执行" in text
+    assert "score-hot 判定分数 64.05 > 恢复线 20，继续防守，乘数 x0.00" in new_block
+    assert "过滤后最终为空仓" in new_block
+    assert "不会执行该配对" in new_block
+    assert "← 若现在收盘将执行" not in text
 
 
 def test_v78_adk_summary_labels_position_context():
@@ -1350,7 +1409,7 @@ def test_v78_adk_summary_labels_position_context():
     assert "**ADK持仓口径:** **若现在收盘目标（非当前正式持仓）**" in text
     assert "当前正式持仓以上方“当前已生效双腿持仓”和“账户级净敞口”表为准" in text
     assert "| 腿 | 组合权重 | 若现在收盘双腿配对/方向 | 腿内敞口 | 组合贡献 |" in text
-    assert "| 腿 | 配对范围 | 若现在收盘分腿Top-1配对/方向 | 排名分数 | 质量过滤 | 风控/过滤 | 腿内敞口 | 组合贡献 |" in text
+    assert "| 腿 | 配对范围 | 若现在收盘分腿Top-1配对/方向 | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 腿内最终敞口 | 组合贡献 |" in text
 
 
 def test_v78_adk_current_holding_summary_shows_composite_and_legs():
