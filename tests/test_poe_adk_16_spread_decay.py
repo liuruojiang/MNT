@@ -768,7 +768,7 @@ def test_realtime_context_rebuilds_online_without_embedded_artifacts(tmp_path, m
     assert len(curves["forward_zz1000_hs300"]) < len(panel)
 
 
-def test_realtime_context_fails_closed_when_required_online_asset_missing(monkeypatch):
+def test_realtime_context_isolates_missing_online_asset(monkeypatch):
     bot = load_bot_module()
     index = pd.bdate_range("2026-01-01", periods=120)
     panel = make_required_price_panel(bot, index).drop(columns=["cyb", "cyb_amount", "cyb_volume"])
@@ -780,10 +780,13 @@ def test_realtime_context_fails_closed_when_required_online_asset_missing(monkey
 
     curves, _metas, online = bot.load_strategy_context(include_realtime=True)
 
-    assert curves == {}
-    assert online["ok"] is False
-    assert "missing required online assets" in online["error"]
-    assert "cyb" in online["error"]
+    assert online["ok"] is True
+    affected = [config.key for config in bot.STRATEGIES if "cyb" in bot.STRATEGY_LEGS[config.key]]
+    unaffected = [config.key for config in bot.STRATEGIES if "cyb" not in bot.STRATEGY_LEGS[config.key]]
+    assert all(curves[key].empty for key in affected)
+    assert all(not curves[key].empty for key in unaffected)
+    assert "cyb" in panel.attrs["missing_price_assets"]
+    assert all("cyb" in str(online["strategy_input_diagnostics"][key]["reason"]) for key in affected)
 
 
 def test_realtime_context_does_not_full_history_rebuild(monkeypatch):
@@ -1314,7 +1317,7 @@ def test_snapshot_score_fixture_has_no_formula_partition_regressions():
     rows = bot.snapshot_score_diffs(panel)
     failures = [row for row in rows if row["status"] != "ok"]
 
-    assert len(rows) == 15
+    assert len(rows) == 16
     assert failures == []
 
 
@@ -1825,15 +1828,16 @@ def test_suffix_high_metric_family_is_treated_as_high_not_low():
     assert gate.loc[index[-1]] == 0.0
 
 
-def test_validate_online_price_panel_rejects_nonpositive_prices(monkeypatch):
+def test_validate_online_price_panel_isolates_nonpositive_prices(monkeypatch):
     bot = load_bot_module()
     index = pd.date_range("2026-07-01", periods=3, freq="D")
     panel = make_required_price_panel(bot, index)
     panel.loc[index[-1], "zz1000"] = 0.0
     monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 7, 10, tzinfo=bot.BJ_TZ))
 
-    with pytest.raises(RuntimeError, match="non-positive"):
-        bot._validate_online_price_panel(panel)
+    bot._validate_online_price_panel(panel)
+
+    assert any("zz1000" in item for item in panel.attrs["invalid_price_assets"])
 
 
 def test_validate_online_price_panel_rejects_stale_prices(monkeypatch):
@@ -1847,7 +1851,7 @@ def test_validate_online_price_panel_rejects_stale_prices(monkeypatch):
         bot._validate_online_price_panel(panel)
 
 
-def test_validate_online_price_panel_requires_current_overlay_metric(monkeypatch):
+def test_validate_online_price_panel_degrades_lagged_overlay_metric(monkeypatch):
     bot = load_bot_module()
     index = pd.date_range("2026-07-01", periods=10, freq="D")
     panel = make_required_price_panel(bot, index)
@@ -1855,11 +1859,14 @@ def test_validate_online_price_panel_requires_current_overlay_metric(monkeypatch
     monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 7, 10, tzinfo=bot.BJ_TZ))
     config = bot.STRATEGIES[0]
 
-    with pytest.raises(RuntimeError, match="latest"):
-        bot._validate_online_price_panel(
-            panel,
-            {config.key: {"amount_overlay": {"enabled": True, "series": "zz1000_amount", "window": 3}}},
-        )
+    bot._validate_online_price_panel(
+        panel,
+        {config.key: {"amount_overlay": {"enabled": True, "series": "zz1000_amount", "window": 3}}},
+    )
+
+    diagnostic = panel.attrs["strategy_input_diagnostics"][config.key]
+    assert diagnostic["status"] == "degraded"
+    assert diagnostic["confirmed_through"] == index[-2].strftime("%Y-%m-%d")
 
 
 def test_amount_history_fallback_does_not_accept_volume_proxy(monkeypatch):
@@ -1877,6 +1884,65 @@ def test_amount_history_fallback_does_not_accept_volume_proxy(monkeypatch):
         bot._fetch_amount_history_with_fallback("zz1000", "1.000852")
 
 
+def test_amount_sources_normalize_to_cny(monkeypatch):
+    bot = load_bot_module()
+    monkeypatch.setattr(bot, "requests", None)
+    monkeypatch.setattr(
+        bot,
+        "_get_json",
+        lambda *args, **kwargs: {
+            "data": [
+                {
+                    "tradeDate": "2026-08-11",
+                    "close": "100",
+                    "tradingVol": "20",
+                    "tradingValue": "2.5",
+                }
+            ]
+        },
+    )
+    csindex = bot._fetch_csindex_amount("1.000852", lmt=1)
+    assert csindex.iloc[-1]["amount"] == 250_000_000.0
+
+    monkeypatch.setattr(
+        bot,
+        "_get_json",
+        lambda *args, **kwargs: [
+            {
+                "status": 0,
+                "hq": [["2026-08-11", "99", "100", "1", "1%", "98", "101", "20", "3.5", "0"]],
+            }
+        ],
+    )
+    sohu = bot._fetch_sohu_amount("1.000852", lmt=1)
+    assert sohu.iloc[-1]["amount"] == 35_000.0
+
+
+def test_amount_history_selects_source_reaching_price_date(monkeypatch):
+    bot = load_bot_module()
+    stale_index = pd.bdate_range(end="2026-08-11", periods=60)
+    current_index = stale_index.append(pd.DatetimeIndex([pd.Timestamp("2026-08-12")]))
+
+    def frame(index, amount):
+        return pd.DataFrame({"close": 100.0, "volume": 10.0, "amount": amount}, index=index)
+
+    calls = []
+    monkeypatch.setattr(bot, "_fetch_sohu_amount", lambda *args, **kwargs: calls.append("sohu") or frame(stale_index, 1.0))
+    monkeypatch.setattr(bot, "_fetch_eastmoney_kline", lambda *args, **kwargs: calls.append("eastmoney") or frame(current_index, 1.0))
+    monkeypatch.setattr(bot, "_fetch_csindex_amount", lambda *args, **kwargs: calls.append("csindex") or frame(stale_index, 1.0))
+
+    selected, source, attempts = bot._fetch_amount_history_with_fallback(
+        "zz1000",
+        "1.000852",
+        target_date=pd.Timestamp("2026-08-12"),
+    )
+
+    assert source == "EastMoney amount"
+    assert selected.index[-1] == pd.Timestamp("2026-08-12")
+    assert calls == ["sohu", "eastmoney"]
+    assert any("2026-08-11" in item for item in attempts)
+
+
 def test_snapshot_seed_rows_reject_seed_date_outside_signal_frame(monkeypatch):
     bot = load_bot_module()
     config = make_strategy(bot, "future_seed", "Future Seed")
@@ -1886,7 +1952,7 @@ def test_snapshot_seed_rows_reject_seed_date_outside_signal_frame(monkeypatch):
     assert bot._snapshot_seed_rows(config, signal_frame) == []
 
 
-def test_load_strategy_context_fails_closed_on_snapshot_score_mismatch(monkeypatch):
+def test_load_strategy_context_rebuilds_on_snapshot_score_mismatch(monkeypatch):
     bot = load_bot_module()
     config = make_strategy(bot, "snapshot_mismatch", "Snapshot Mismatch")
     index = pd.to_datetime(["2026-01-02", "2026-01-03"])
@@ -1903,8 +1969,10 @@ def test_load_strategy_context_fails_closed_on_snapshot_score_mismatch(monkeypat
 
     _curves, _metas, online = bot.load_strategy_context(include_realtime=False)
 
-    assert online["ok"] is False
-    assert "snapshot" in online["error"]
+    assert online["ok"] is True
+    assert online["snapshot_warnings"]
+    assert not _curves[config.key].empty
+    assert "snapshot_warning" in _curves[config.key].attrs
 
 
 def test_target_vol_deadband_defaults_to_absolute_and_resets_when_signal_off():
@@ -2043,3 +2111,271 @@ def test_main_sanitizes_internal_errors_and_returns_failure(monkeypatch):
     rendered = "".join(writes)
     assert "secret" not in rendered
     assert "D:/private/path" not in rendered
+
+
+def test_strategy_panel_clamps_only_lagged_overlay_strategy():
+    bot = load_bot_module()
+    index = pd.date_range("2026-07-01", periods=10, freq="D")
+    panel = make_required_price_panel(bot, index)
+    panel.loc[index[-1], "zz1000_amount"] = math.nan
+    config = bot.STRATEGIES[0]
+    meta = {"amount_overlay": {"enabled": True, "series": "zz1000_amount", "window": 3}}
+
+    limited, diagnostic = bot._strategy_panel_for_online(config, meta, panel)
+
+    assert diagnostic["status"] == "degraded"
+    assert limited.index[-1] == index[-2]
+    assert panel.index[-1] == index[-1]
+
+
+def test_formal_legacy_strategy_uses_ratio_return_and_sample_std():
+    bot = load_bot_module()
+    legacy = bot.STRATEGIES[0]
+    sample_std = next(config for config in bot.STRATEGIES if config.key == "forward_cyb_zz1000")
+    legacy_meta = bot.load_meta(legacy)
+    sample_meta = bot.load_meta(sample_std)
+    index = pd.date_range("2026-01-01", periods=2, freq="D")
+    price = pd.DataFrame({"zz1000": [100.0, 100.0], "hs300": [100.0, 90.0]}, index=index)
+
+    spread_return = bot._formal_spread_return(
+        price,
+        "zz1000",
+        "hs300",
+        bot._strategy_return_formula(legacy_meta),
+    )
+
+    assert math.isclose(spread_return.iloc[-1], (1.0 / 0.9) - 1.0)
+    assert bot._strategy_vol_ddof(sample_meta) == 1
+
+
+def test_combo_gross_return_reconciles_to_net_plus_cost():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=3, freq="D")
+    curves = {}
+    for config in bot.STRATEGIES:
+        curves[config.key] = pd.DataFrame(
+            {
+                "return": [0.01, -0.02, 0.03],
+                "gross_return": [0.012, -0.018, 0.032],
+                "cost": [0.002, 0.002, 0.002],
+                "turnover": [0.2, 0.2, 0.2],
+                "gross_exposure": [1.0, 1.0, 1.0],
+            },
+            index=index,
+        )
+
+    combos = bot.build_combo_curves(curves)
+
+    for frame in combos.values():
+        pd.testing.assert_series_equal(
+            frame["gross_return"] - frame["cost"],
+            frame["return"],
+            check_names=False,
+        )
+
+
+def test_metrics_include_initial_nav_peak_and_handle_bankruptcy():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=60, freq="D")
+    loss_curve = pd.DataFrame({"return": [-0.5, 0.5] + [0.0] * 58}, index=index)
+    bankrupt_curve = pd.DataFrame({"return": [-1.1] + [0.0] * 59}, index=index)
+
+    loss = bot.metrics_for_curve(loss_curve)
+    bankrupt = bot.metrics_for_curve(bankrupt_curve)
+
+    assert math.isclose(loss["max_dd"], -0.5)
+    assert bankrupt["max_dd"] == -1.0
+    assert math.isnan(bankrupt["ann_return"])
+    assert "zero or below" in bankrupt["reason"]
+
+
+def test_metric_confirmation_streak_resets_across_missing_day():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=3, freq="D")
+    panel = pd.DataFrame(
+        {
+            "zz1000_amount": [100.0, math.nan, 100.0],
+            "hs300_amount": [100.0, 100.0, 100.0],
+        },
+        index=index,
+    )
+
+    _ratio, gate = bot._metric_gate_series(
+        {"family": "low_pair", "window": 1, "threshold": 1.0, "confirm_days": 2},
+        panel,
+        "zz1000",
+        "hs300",
+        "amount",
+    )
+
+    assert gate.loc[index[-1]] == 0.0
+
+
+def test_online_signal_does_not_bridge_internal_price_gap():
+    bot = load_bot_module()
+    index = pd.date_range("2026-01-01", periods=4, freq="D")
+    panel = pd.DataFrame(
+        {
+            "zz1000": [100.0, 101.0, 102.0, 103.0],
+            "hs300": [100.0, math.nan, 101.0, 102.0],
+        },
+        index=index,
+    )
+    frame = bot._online_signal_frame_for_strategy(
+        bot.STRATEGIES[0],
+        {"common_start": "2026-01-01", "signal": {"bias_ma": 1, "mom_day": 1}},
+        panel,
+    )
+
+    assert math.isnan(frame.loc[index[1], "spread_return"])
+    assert math.isnan(frame.loc[index[2], "spread_return"])
+
+
+def test_invalid_snapshot_date_and_numeric_strings_are_tolerated(monkeypatch):
+    bot = load_bot_module()
+    config = make_strategy(bot, "snapshot_edge", "Snapshot Edge")
+    signal_frame = pd.DataFrame({"score": [1.0], "spread_close": [1.0]}, index=[pd.Timestamp("2026-01-01")])
+    monkeypatch.setattr(
+        bot,
+        "STATE_SNAPSHOT",
+        {"snapshot_edge": {"as_of": "not-a-date", "values": {"score": "1.0", "nav": "2.0"}}},
+    )
+
+    assert bot._snapshot_seed_rows(config, signal_frame) == []
+
+    monkeypatch.setattr(
+        bot,
+        "STATE_SNAPSHOT",
+        {"snapshot_edge": {"as_of": "2026-01-01", "values": {"score": "1.0", "nav": "2.0"}}},
+    )
+    seeded = bot._snapshot_seed_rows(config, signal_frame)
+    assert seeded[0][1]["nav"] == 2.0
+
+
+def test_query_normalization_handles_format_chars_fullwidth_and_decimal_years(monkeypatch):
+    bot = load_bot_module()
+    index = pd.date_range("2020-01-01", "2026-01-01", freq="D")
+    start, end, _label = bot.parse_date_range("过去1.5年表现", index)
+    monkeypatch.setattr(bot, "render_params", lambda live=False: "params")
+    monkeypatch.setattr(bot, "render_signal_history", lambda query: "history")
+
+    assert 540 <= (end - start).days <= 550
+    assert bot.render_query("参\u200b数 ＮＡＶ") == "params"
+    assert bot.render_query("历\u200b史\n信号") == "history"
+
+
+def test_explicit_old_range_requests_bars_back_to_start(monkeypatch):
+    bot = load_bot_module()
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 8, 12, tzinfo=bot.BJ_TZ))
+
+    bars = bot._performance_query_lookback_bars("2016-01-01--2017-01-01 表现")
+
+    assert bars is not None and bars > 2500
+
+
+def test_panel_validation_rejects_ambiguous_index_shapes():
+    bot = load_bot_module()
+    panel = make_required_price_panel(bot, pd.date_range("2026-01-01", periods=3, freq="D"))
+    duplicate = pd.concat([panel, panel.iloc[[-1]]])
+
+    with pytest.raises(RuntimeError, match="duplicate"):
+        bot._validate_online_price_panel(duplicate)
+    with pytest.raises(RuntimeError, match="DatetimeIndex"):
+        bot._validate_online_price_panel(panel.reset_index(drop=True))
+
+
+def test_live_snapshot_uses_current_signal_and_current_overlay_together():
+    bot = load_bot_module()
+    config = bot.STRATEGIES[0]
+    index = pd.to_datetime(["2026-01-01", "2026-01-02"])
+    signal_frame = pd.DataFrame(
+        {
+            "spread_close": [1.0, 1.01],
+            "spread_return": [0.0, 0.01],
+            "score": [1.0, 1.0],
+            "r2": [1.0, 1.0],
+            "raw_signal": [1.0, 1.0],
+            "vol_indicator": [0.1, 0.3],
+            "vol_gate": [0.0, 1.0],
+            "vol_scale": [0.5, 0.5],
+        },
+        index=index,
+    )
+    curve = pd.DataFrame(
+        {
+            "target": [1.0, 1.0],
+            "exec_signal": [1.0, 1.0],
+            "score": [1.0, 1.0],
+            "gross_exposure": [1.0, 1.0],
+            "base_gross_exposure": [1.0, 1.0],
+            "target_vol_scale": [1.0, 1.0],
+            "nav": [1.0, 1.01],
+            "online_provisional_bar": [0.0, 1.0],
+        },
+        index=index,
+    )
+    curve.attrs["online_signal_frame"] = bot._OnlineSignalFrameRef(signal_frame)
+    meta = {
+        "signal": {"score_threshold": 0.0},
+        "vol_overheat": {"enabled": True, "window": 1, "threshold": 0.2, "scale": 0.5},
+    }
+    online = {
+        "ok": True,
+        "probes": {config.key: {"score": 1.0, "target": 1.0, "amount_state": {"enabled": False}}},
+    }
+
+    snapshot = bot._strategy_signal_snapshot(config, curve, meta, online, live=True)
+
+    assert "收盘信号后）**50.0%**" in snapshot["exposure"]
+
+
+def test_realtime_quote_date_prevents_holiday_ghost_bar(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range(end="2026-09-30", periods=80)
+    history = pd.DataFrame(
+        {
+            "close": [100.0] * len(index),
+            "volume": [10_000.0] * len(index),
+            "amount": [1_000_000.0] * len(index),
+        },
+        index=index,
+    )
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 10, 1, 10, 0, tzinfo=bot.BJ_TZ))
+    monkeypatch.setattr(bot, "_fetch_price_history_with_fallback", lambda *args, **kwargs: (history.copy(), "test", []))
+    monkeypatch.setattr(
+        bot,
+        "_fetch_realtime_snapshot_with_fallback",
+        lambda *args, **kwargs: ({"close": 101.0, "amount": 2_000_000.0, "quote_date": "2026-09-30"}, "test realtime"),
+    )
+
+    panel, meta = bot._fetch_online_price_panel(include_realtime=True)
+
+    assert pd.Timestamp("2026-10-01") not in panel.index
+    assert meta["live_assets"] == []
+
+
+def test_postclose_realtime_snapshot_fills_same_day_amount(monkeypatch):
+    bot = load_bot_module()
+    index = pd.bdate_range(end="2026-08-12", periods=80)
+    history = pd.DataFrame(
+        {
+            "close": [100.0] * len(index),
+            "volume": [10_000.0] * len(index),
+            "amount": [1_000_000.0] * (len(index) - 1) + [math.nan],
+        },
+        index=index,
+    )
+    monkeypatch.setattr(bot, "beijing_now", lambda: bot.datetime(2026, 8, 12, 16, 0, tzinfo=bot.BJ_TZ))
+    monkeypatch.setattr(bot, "_fetch_price_history_with_fallback", lambda *args, **kwargs: (history.copy(), "test", []))
+    monkeypatch.setattr(
+        bot,
+        "_fetch_realtime_snapshot_with_fallback",
+        lambda *args, **kwargs: ({"close": 100.0, "amount": 2_000_000.0, "quote_date": "2026-08-12"}, "test realtime"),
+    )
+
+    panel, meta = bot._fetch_online_price_panel(include_realtime=False)
+
+    for asset in bot.CN_PRICE_SECIDS:
+        assert panel.loc[index[-1], f"{asset}_amount"] == 2_000_000.0
+    assert meta["mode"] == "daily"
+    assert meta["live_assets"] == []

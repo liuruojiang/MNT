@@ -1,24 +1,27 @@
-# Handoff: ADK Six Spread Poe Bot
+# Handoff: ADK 16-Spread Poe Bot
 
 ## Workspace
 
 - Repo: `D:\动量策略\A股美股动量组合策略`
-- Current date/context: 2026-06-08, Asia/Shanghai.
+- Current implementation review: 2026-08-13, Asia/Shanghai.
 - Follow local `AGENTS.md` rules:
   - For ADK/DK-style formal tests, explicitly respect index publication/common-sample windows.
   - Do not use pre-publication backfill in formal conclusions.
   - Keep signal/live signal/params/live params parity.
   - If no tests exist, run smallest real verification, usually `python -m py_compile ...` plus smoke commands.
 
-## User Goal
+## Current Production State
 
-Create a Poe-native bot for the 6 newly finalized ADK spread sub-strategies, using the same style and query surface as `mnt_bot V 7.7 plus.py`.
+The original six-leg design has been expanded into the self-contained
+`poe_adk_16_spread_v1_0_bot.py`. The production registry is the 16 entries in
+`STRATEGIES`; the eight forward/reverse pair definitions in `PAIR_DEFS` are the
+source of truth for combination reports.
 
 The user explicitly wants:
 
 - A Poe bot, not just local research scripts.
 - Display style to imitate `mnt_bot V 7.7 plus.py` query outputs as closely as practical.
-- The 6 sub-strategies exposed individually.
+- All 16 sub-strategies exposed individually.
 - A separate `组合表现` query that reports:
   - the 3 forward/reverse 50/50 pair combos, and
   - the total combo that equal-weights those 3 pair combos at 1/3 each.
@@ -27,7 +30,6 @@ The user explicitly wants:
 
 - Use `momentum-strategy-workspace-router`.
 - Use `quant-research`.
-- Because this creates/modifies a bot feature, use Superpowers `brainstorming` before implementation if that skill is active in the next thread. The design was already discussed with the user, but the next thread should either continue from this handoff or get explicit user approval before coding.
 - Poe packaging preference from prior project convention: make a Poe-native self-contained Python script, not a wrapper depending on local research modules that Poe cannot import.
 
 ## Reference Bot To Mimic
@@ -65,11 +67,9 @@ Key style expectations from V7.7:
   - `净值曲线`
   - date-range signal history.
 
-## Proposed New Bot File
+## Production Bot File
 
-Recommended filename:
-
-- `poe_adk_six_spread_v1_0_bot.py`
+- `poe_adk_16_spread_v1_0_bot.py`
 
 It should be self-contained for Poe runtime:
 
@@ -77,7 +77,11 @@ It should be self-contained for Poe runtime:
 - It may include a local compatibility path for smoke tests.
 - It should contain constants, loaders, calculations, query parser, report formatting, and Poe interaction layer in one file.
 
-## Six Sub-Strategies
+## Original Six Sub-Strategies
+
+These six entries describe the original compatibility core. Do not infer the
+current production registry from this historical list; inspect `STRATEGIES` in
+the production bot for all 16 legs.
 
 Use the finalized local scripts as source-of-truth for logic and parameter metadata:
 
@@ -136,11 +140,12 @@ Amount data used by finalized strategies:
   - `outputs/adk_zz1000_sz50_amount_eastmoney.csv`
   - `outputs/adk_zz1000_sz50_amount_eastmoney_meta.json`
 
-When implementing the bot, inspect the six final scripts and copy the actual parameter logic, not just the names above.
+When changing a leg, inspect its final research script and the current embedded
+metadata; do not copy parameters from this historical summary alone.
 
 ## Existing Generated Output Files
 
-The six final scripts currently generate daily CSV and metrics JSON under:
+The original six final scripts generated daily CSV and metrics JSON under:
 
 - `outputs/final_adk_spread/`
 
@@ -213,7 +218,8 @@ Use current latest-row values:
 
 For individual sub-strategy performance.
 
-Output 6 rows:
+Output 16 rows, one for each current `STRATEGIES` entry. The original six rows
+listed below remain part of that output:
 
 - forward ZZ1000/HS300
 - reverse HS300/ZZ1000
@@ -249,7 +255,9 @@ This is the user's explicit extra requirement.
 
 It should be separate from normal `表现`.
 
-Output exactly these 4 rows:
+The current implementation outputs eight 50/50 forward/reverse pairs from
+`PAIR_DEFS` plus their equal-weight total. The four rows below describe the
+original six-leg requirement and are retained as historical context:
 
 1. `中证1000/沪深300 正反50/50`
    - `50% forward ZZ1000/HS300 + 50% reverse HS300/ZZ1000`
@@ -346,41 +354,43 @@ Do not rely on these as final if source data has refreshed; rerun and read back.
 
 ## Verification Commands
 
-Before final handoff/completion in the next thread, run:
+Before handoff/completion, run:
 
 ```powershell
-python -m py_compile "poe_adk_six_spread_v1_0_bot.py"
+python -m py_compile "poe_adk_16_spread_v1_0_bot.py"
+python -m pytest tests/test_poe_adk_16_spread_decay.py -q
 ```
 
 Suggested local smoke tests, depending on local compatibility shim:
 
 ```powershell
-python "poe_adk_six_spread_v1_0_bot.py" "信号"
-python "poe_adk_six_spread_v1_0_bot.py" "实时信号"
-python "poe_adk_six_spread_v1_0_bot.py" "参数"
-python "poe_adk_six_spread_v1_0_bot.py" "实时参数"
-python "poe_adk_six_spread_v1_0_bot.py" "表现 过去三年"
-python "poe_adk_six_spread_v1_0_bot.py" "组合表现 过去三年"
-python "poe_adk_six_spread_v1_0_bot.py" "2025年至今的信号"
+python "poe_adk_16_spread_v1_0_bot.py" "信号"
+python "poe_adk_16_spread_v1_0_bot.py" "实时信号"
+python "poe_adk_16_spread_v1_0_bot.py" "参数"
+python "poe_adk_16_spread_v1_0_bot.py" "实时参数"
+python "poe_adk_16_spread_v1_0_bot.py" "表现 过去三年"
+python "poe_adk_16_spread_v1_0_bot.py" "组合表现 过去三年"
+python "poe_adk_16_spread_v1_0_bot.py" "2025年至今的信号"
 ```
 
 Also run:
 
 ```powershell
-git diff --check -- "poe_adk_six_spread_v1_0_bot.py"
+git diff --check -- "poe_adk_16_spread_v1_0_bot.py"
 ```
 
 If generated charts are implemented, smoke test:
 
 ```powershell
-python "poe_adk_six_spread_v1_0_bot.py" "组合净值曲线 过去三年"
+python "poe_adk_16_spread_v1_0_bot.py" "组合净值曲线 过去三年"
 ```
 
 ## Risks / Notes
 
-- The current worktree is dirty with many untracked research artifacts. Do not revert them.
-- Use `apply_patch` for manual edits.
-- For risky edits to existing production scripts, back up first. For a new bot file, backup is not needed unless modifying existing code.
+- The Poe production path is online-only (`POE_ONLINE_ONLY=True`); local generated artifacts are parity references, not its primary runtime context.
+- A strategy with a missing/nonpositive required online asset is isolated and reported unavailable rather than poisoning unrelated legs.
+- Snapshot seeds are accepted only when their recomputed score is consistent; otherwise the affected leg rebuilds from available online history and exposes a warning.
+- Legacy ratio-return legs use their configured return formula and sample-standard-deviation convention. Preserve those per-leg semantics during refactors.
+- Back up the production script before changing signal, return, overlay, or online data logic.
 - The user cares strongly about real-data readback. Do not present fabricated metrics.
-- If the bot initially uses generated daily CSVs for local smoke testing, label that path clearly and do not pretend it is a fully Poe-portable runtime until the self-contained rebuild is implemented.
-- The main challenge is display parity with `V7.7`, not just calculation.
+- Keep signal, live signal, params, live params, performance, and NAV query surfaces aligned.

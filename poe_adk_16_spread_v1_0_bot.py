@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import types
+import unicodedata
 import urllib.request
 import zlib
 from datetime import datetime, timezone, timedelta
@@ -135,6 +136,12 @@ LEGACY_RELATIVE_SCORE_KEYS = {
     "forward_zz1000_sz50",
     "reverse_sz50_zz1000",
 }
+RATIO_RETURN_KEYS = set(LEGACY_RELATIVE_SCORE_KEYS)
+SAMPLE_STD_KEYS = {
+    "forward_cyb_zz1000",
+    "reverse_zz1000_cyb",
+    "forward_cyb_sz50",
+}
 
 STATE_SNAPSHOT = {
     "forward_zz1000_hs300": {"as_of": "2026-06-12", "values": {"nav": 2.774600617908, "nav_high": 2.932931431918, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -26.297305895275}},
@@ -146,7 +153,7 @@ STATE_SNAPSHOT = {
     "forward_zz1000_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.172013827796, "nav_high": 3.231228029486, "base_nav": 3.297418687443, "base_nav_high": 3.358973909399, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 0.381628571571, "target_vol_raw_scale": 0.377206792156, "score": -28.176271172283}},
     "reverse_sz50_zz1000": {"as_of": "2026-06-12", "values": {"nav": 3.388301924779, "nav_high": 3.527667372032, "gross_exposure": 0.0, "base_gross_exposure": 1.0, "target_vol_scale": 1.0, "score": 29.451040077473, "nav_defense_gate": 1.0}},
     "forward_cyb_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.521521268556, "nav_high": 3.6430003972, "base_nav": 4.748953353932, "base_nav_high": 4.97131642832, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "target_vol_raw_scale": 0.915822218458, "score": -1.514196682145}},
-    "reverse_sz50_cyb": {"as_of": "2026-06-12", "values": {"nav": 3.544513026629, "nav_high": 3.685251920166, "gross_exposure": 0.083878502614, "base_gross_exposure": 0.083878502614, "target_vol_scale": 1.0, "decay_gate": 0.0}},
+    "reverse_sz50_cyb": {"as_of": "2026-06-12", "values": {"nav": 3.544513026629, "nav_high": 3.685251920166, "gross_exposure": 0.083878502614, "base_gross_exposure": 0.083878502614, "target_vol_scale": 1.0, "score": 4.136869794474, "decay_gate": 0.0}},
     "forward_zz500_sz50": {"as_of": "2026-06-12", "values": {"nav": 3.285688299949, "nav_high": 3.364608150221, "gross_exposure": 0.0, "base_gross_exposure": 0.0, "target_vol_scale": 1.0, "score": -8.107319458701, "decay_mult": 1.0}},
     "reverse_sz50_zz500": {"as_of": "2026-06-12", "values": {"nav": 2.923011883905, "nav_high": 3.116913297545, "gross_exposure": 0.922980051067, "base_gross_exposure": 0.922980051067, "target_vol_scale": 1.0, "score": 4.880159127596, "decay_mult": 1.0}},
     "forward_hs300_zz500": {"as_of": "2026-06-05", "values": {"nav": 2.196628228962, "nav_high": 2.244068034773, "gross_exposure": 1.057997445795, "base_gross_exposure": 1.057997445795, "target_vol_scale": 1.057997445795, "score": 4.928667688218}},
@@ -1366,6 +1373,8 @@ def load_meta(config: StrategyConfig) -> dict:
         meta = canonicalize_meta(meta)
     if "score_formula" not in meta:
         meta["score_formula"] = "legacy_relative_slope_10000" if config.key in LEGACY_RELATIVE_SCORE_KEYS else "weighted_slope"
+    meta.setdefault("return_formula", "spread_ratio_return" if config.key in RATIO_RETURN_KEYS else "leg_return_difference")
+    meta.setdefault("vol_ddof", 1 if config.key in SAMPLE_STD_KEYS else 0)
     return meta
 
 
@@ -1565,7 +1574,8 @@ def _fetch_csindex_amount(secid: str, *, beg: str = "20050101", lmt: int = ONLIN
                 "date": item.get("tradeDate"),
                 "close": float(item.get("close")),
                 "volume": float(item.get("tradingVol", 0) or 0),
-                "amount": float(trading_value),
+                # CSIndex tradingValue is reported in CNY 100 millions.
+                "amount": float(trading_value) * 100_000_000.0,
             }
         )
     if not rows:
@@ -1600,7 +1610,8 @@ def _fetch_sohu_amount(secid: str, *, beg: str = "20050101", lmt: int = 10000) -
                 "date": item[0],
                 "close": float(item[2]),
                 "volume": float(item[7]),
-                "amount": float(item[8]),
+                # Sohu labels this field as 成交金额(万); normalize to CNY.
+                "amount": float(item[8]) * 10_000.0,
             }
         )
     if not rows:
@@ -1629,13 +1640,16 @@ def _fetch_amount_history_with_fallback(
     asset: str,
     secid: str,
     lookback_bars: int = ONLINE_FETCH_LOOKBACK_BARS,
+    target_date: Optional[pd.Timestamp] = None,
 ) -> tuple[pd.DataFrame, str, list[str]]:
     attempts: list[str] = []
     sources = (
+        ("Sohu amount", lambda: _fetch_sohu_amount(secid, lmt=lookback_bars)),
         ("EastMoney amount", lambda: _fetch_eastmoney_kline(secid, lookback_bars=lookback_bars)),
         ("CSIndex official amount", lambda: _fetch_csindex_amount(secid, lmt=lookback_bars)),
-        ("Sohu amount", lambda: _fetch_sohu_amount(secid, lmt=lookback_bars)),
     )
+    target = _naive_normalized_timestamp(target_date) if target_date is not None else None
+    candidates: list[tuple[pd.Timestamp, int, pd.DataFrame, str]] = []
     for source_name, fetcher in sources:
         try:
             frame = fetcher()
@@ -1643,17 +1657,32 @@ def _fetch_amount_history_with_fallback(
             if len(frame) > 50 and int(amount.dropna().shape[0]) > 50:
                 out = frame.copy()
                 out["amount"] = amount
-                return out, source_name, attempts
-            attempts.append(f"{source_name}: too few amount rows ({int(amount.dropna().shape[0])})")
+                today = pd.Timestamp(beijing_now().date()).normalize()
+                out = out.loc[pd.DatetimeIndex(out.index).normalize() <= today]
+                amount = pd.to_numeric(out.get("amount"), errors="coerce")
+                valid = amount[(amount > 0) & amount.notna()]
+                if valid.empty:
+                    attempts.append(f"{source_name}: no non-future amount rows")
+                    continue
+                latest = _naive_normalized_timestamp(valid.index[-1])
+                candidates.append((latest, int(valid.shape[0]), out, source_name))
+                if target is not None and latest >= target:
+                    return out, source_name, attempts
+                attempts.append(f"{source_name}: available through {latest:%Y-%m-%d}, target={target:%Y-%m-%d}" if target is not None else f"{source_name}: available through {latest:%Y-%m-%d}")
+            else:
+                attempts.append(f"{source_name}: too few amount rows ({int(amount.dropna().shape[0])})")
         except Exception as exc:
             attempts.append(f"{source_name}: {exc}")
+    if candidates:
+        _latest, _coverage, out, source_name = max(candidates, key=lambda item: (item[0], item[1]))
+        return out, source_name, attempts
     raise RuntimeError(" | ".join(attempts))
 
 
 def _fetch_eastmoney_realtime_snapshot(secid: str) -> Optional[dict[str, float]]:
     url = (
         "https://push2.eastmoney.com/api/qt/stock/get"
-        f"?secid={secid}&fields=f43,f46,f47,f48&ut=fa5fd1943c7b386f172d6893dbfba10b"
+        f"?secid={secid}&fields=f43,f46,f47,f48,f124&ut=fa5fd1943c7b386f172d6893dbfba10b"
     )
     try:
         data = _get_json(url, timeout=8, headers={"Referer": "https://quote.eastmoney.com/"}).get("data")
@@ -1668,6 +1697,9 @@ def _fetch_eastmoney_realtime_snapshot(secid: str) -> Optional[dict[str, float]]
             out["volume"] = float(data.get("f47"))
         if data.get("f48") not in (None, "-"):
             out["amount"] = float(data.get("f48"))
+        if data.get("f124") not in (None, "-"):
+            quote_time = pd.to_datetime(int(data.get("f124")), unit="s", utc=True).tz_convert(BJ_TZ)
+            out["quote_date"] = quote_time.strftime("%Y-%m-%d")
         return out
     except Exception:
         return None
@@ -1697,6 +1729,8 @@ def _fetch_sina_realtime_snapshot(asset: str) -> Optional[dict[str, float]]:
             out["volume"] = float(parts[8])
         if len(parts) > 9 and parts[9] not in ("", "-"):
             out["amount"] = float(parts[9])
+        if len(parts) > 30 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", parts[30] or ""):
+            out["quote_date"] = parts[30]
         return out
     except Exception:
         return None
@@ -1730,6 +1764,10 @@ def _fetch_tencent_realtime_snapshot(asset: str) -> Optional[dict[str, float]]:
                 out["amount"] = float(amount_part)
         elif len(parts) > 57 and parts[57] not in ("", "-"):
             out["amount"] = float(parts[57]) * 10000.0
+        if len(parts) > 30:
+            date_match = re.match(r"(\d{4})(\d{2})(\d{2})", parts[30] or "")
+            if date_match:
+                out["quote_date"] = "-".join(date_match.groups())
         return out
     except Exception:
         return None
@@ -1816,6 +1854,7 @@ def _fetch_online_price_panel(
 
     for asset, secid in CN_PRICE_SECIDS.items():
         try:
+            realtime_amount_source: Optional[str] = None
             frame, source_name, attempts = _fetch_price_history_with_fallback(
                 asset,
                 secid,
@@ -1831,24 +1870,34 @@ def _fetch_online_price_panel(
             if include_realtime and latest_date == today and _is_cn_preclose_at(bj):
                 frame.loc[frame.index == frame.index[-1], "is_live_bar"] = True
                 live_assets.append(asset)
-            if include_realtime and _can_use_cn_realtime_snapshot_at(bj):
+            use_realtime_snapshot = _can_use_cn_realtime_snapshot_at(bj) and (
+                include_realtime or not _is_cn_preclose_at(bj)
+            )
+            if use_realtime_snapshot:
                 realtime_snapshot, realtime_source = _fetch_realtime_snapshot_with_fallback(asset, secid, source_name)
                 if realtime_snapshot is not None:
-                    last_close = float(frame["close"].iloc[-1]) if not frame.empty else math.nan
                     realtime_close = float(realtime_snapshot["close"])
-                    if latest_date == today and _is_cn_preclose_at(bj):
+                    quote_date_raw = realtime_snapshot.get("quote_date")
+                    quote_date = _naive_normalized_timestamp(quote_date_raw) if quote_date_raw else None
+                    if latest_date == today and quote_date == today:
                         last_idx = frame.index[-1]
                         frame.loc[last_idx, "close"] = realtime_close
                         if "volume" in realtime_snapshot:
                             frame.loc[last_idx, "volume"] = realtime_snapshot["volume"]
                         if "amount" in realtime_snapshot:
                             frame.loc[last_idx, "amount"] = realtime_snapshot["amount"]
+                            realtime_amount_source = realtime_source
+                        if _is_cn_preclose_at(bj):
+                            frame.loc[last_idx, "is_live_bar"] = True
+                            if asset not in live_assets:
+                                live_assets.append(asset)
                         if realtime_source:
                             source_name = f"{source_name}+{realtime_source}"
-                    elif latest_date < today and (not math.isfinite(last_close) or abs(realtime_close / last_close - 1.0) > 1e-7):
+                    elif latest_date < today and quote_date == today:
+                        is_provisional = bool(include_realtime and _is_cn_preclose_at(bj))
                         live_payload = {
                             "close": realtime_close,
-                            "is_live_bar": True,
+                            "is_live_bar": is_provisional,
                             "volume": realtime_snapshot.get("volume", math.nan),
                             "amount": realtime_snapshot.get("amount", math.nan),
                         }
@@ -1857,19 +1906,36 @@ def _fetch_online_price_panel(
                             index=pd.DatetimeIndex([today], name=frame.index.name),
                         )
                         frame = pd.concat([frame, live_row])
-                        live_assets.append(asset)
+                        if "amount" in realtime_snapshot:
+                            realtime_amount_source = realtime_source
+                        if is_provisional:
+                            live_assets.append(asset)
                         if realtime_source:
                             source_name = f"{source_name}+{realtime_source}"
             frame = frame[~frame.index.duplicated(keep="last")].sort_index()
             current_amount = pd.to_numeric(frame.get("amount", pd.Series(index=frame.index, dtype=float)), errors="coerce")
             if int(current_amount.dropna().shape[0]) <= 50:
                 try:
+                    price_values = pd.to_numeric(frame.get("close"), errors="coerce").dropna()
+                    price_latest_for_amount = pd.Timestamp(price_values.index[-1]).normalize() if not price_values.empty else None
                     amount_frame, amount_source, amount_attempts = _fetch_amount_history_with_fallback(
                         asset,
                         secid,
                         lookback_bars=lookback_bars,
+                        target_date=price_latest_for_amount,
                     )
                     amount_value = pd.to_numeric(amount_frame.get("amount"), errors="coerce")
+                    overlap = current_amount.dropna().index.intersection(amount_value.dropna().index)
+                    if len(overlap):
+                        baseline = amount_value.loc[overlap].abs().replace(0, math.nan)
+                        relative_diff = ((current_amount.loc[overlap] - amount_value.loc[overlap]).abs() / baseline).dropna()
+                        inconsistent = relative_diff[relative_diff > 0.01]
+                        if not inconsistent.empty:
+                            current_amount.loc[inconsistent.index] = math.nan
+                            amount_fallbacks[asset] = (
+                                f"same-day amount disagreement >1%; used {amount_source} for "
+                                + ",".join(pd.Timestamp(item).strftime("%Y-%m-%d") for item in inconsistent.index[-3:])
+                            )
                     merged_index = frame.index.union(amount_value.index)
                     frame = frame.reindex(merged_index)
                     frame["amount"] = current_amount.combine_first(amount_value).reindex(merged_index)
@@ -1877,9 +1943,13 @@ def _fetch_online_price_panel(
                         current_volume = pd.to_numeric(frame.get("volume", pd.Series(index=frame.index, dtype=float)), errors="coerce")
                         fallback_volume = pd.to_numeric(amount_frame.get("volume"), errors="coerce")
                         frame["volume"] = current_volume.combine_first(fallback_volume).reindex(merged_index)
-                    amount_sources[asset] = f"{amount_source} end={amount_value.dropna().index[-1].strftime('%Y-%m-%d')}"
+                    amount_source_label = amount_source
+                    if realtime_amount_source:
+                        amount_source_label += f"+{realtime_amount_source} current"
+                    amount_sources[asset] = f"{amount_source_label} end={frame['amount'].dropna().index[-1].strftime('%Y-%m-%d')}"
                     if amount_attempts:
-                        amount_fallbacks[asset] = " -> ".join(amount_attempts)
+                        prior = amount_fallbacks.get(asset)
+                        amount_fallbacks[asset] = " | ".join(filter(None, [prior, " -> ".join(amount_attempts)]))
                 except Exception as exc:
                     amount_errors[asset] = f"real amount unavailable: {exc}"
             else:
@@ -2009,12 +2079,41 @@ def _consecutive_true_live(mask: pd.Series) -> pd.Series:
     return pd.Series(out, index=mask.index, dtype=float)
 
 
-def _formal_spread_return(price: pd.DataFrame, long_asset: str, short_asset: str) -> pd.Series:
+def _strategy_return_formula(meta: dict) -> str:
+    value = str(meta.get("return_formula") or "leg_return_difference").strip().lower()
+    if value in {"spread_ratio_return", "ratio", "ratio_return", "spread_close_return"}:
+        return "spread_ratio_return"
+    return "leg_return_difference"
+
+
+def _strategy_vol_ddof(meta: dict) -> int:
+    try:
+        return 1 if int(meta.get("vol_ddof", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _formal_spread_return(
+    price: pd.DataFrame,
+    long_asset: str,
+    short_asset: str,
+    return_formula: str = "leg_return_difference",
+) -> pd.Series:
     if long_asset not in price.columns or short_asset not in price.columns:
         return pd.Series(dtype=float)
-    long_ret = pd.to_numeric(price[long_asset], errors="coerce").pct_change()
-    short_ret = pd.to_numeric(price[short_asset], errors="coerce").pct_change()
-    return (long_ret.fillna(0.0) - short_ret.fillna(0.0)).reindex(price.index)
+    long_close = pd.to_numeric(price[long_asset], errors="coerce")
+    short_close = pd.to_numeric(price[short_asset], errors="coerce")
+    if str(return_formula).strip().lower() == "spread_ratio_return":
+        result = (long_close / short_close.replace(0, math.nan)).pct_change(fill_method=None)
+    else:
+        long_ret = long_close.pct_change(fill_method=None)
+        short_ret = short_close.pct_change(fill_method=None)
+        result = long_ret - short_ret
+    valid_pair = long_close.notna() & short_close.notna()
+    if bool(valid_pair.any()):
+        first_valid = valid_pair[valid_pair].index[0]
+        result.loc[first_valid] = 0.0
+    return result.reindex(price.index)
 
 
 def _metric_family_is_high(family: str) -> bool:
@@ -2161,8 +2260,8 @@ def _metric_gate_series(
             return pd.Series(dtype=float), pd.Series(dtype=float)
         raw = pd.to_numeric(panel[metric_col], errors="coerce")
 
-    raw = pd.to_numeric(raw, errors="coerce").dropna().sort_index()
-    if len(raw) < max(window, 2):
+    raw = pd.to_numeric(raw, errors="coerce").sort_index()
+    if int(raw.notna().sum()) < max(window, 2):
         return pd.Series(dtype=float), pd.Series(dtype=float)
     ratio = raw / raw.rolling(window).mean().replace(0, math.nan)
     if _metric_family_is_high(family):
@@ -2170,6 +2269,93 @@ def _metric_gate_series(
     else:
         gate = _consecutive_true_live(ratio <= threshold) >= confirm_days
     return ratio, gate.astype(float)
+
+
+def _naive_normalized_timestamp(value: object) -> pd.Timestamp:
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.tz_localize(None)
+    return timestamp.normalize()
+
+
+def _positive_finite_series(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(dtype=float)
+    values = pd.to_numeric(frame[column], errors="coerce")
+    mask = values.notna() & values.map(lambda item: math.isfinite(float(item))) & (values > 0)
+    return values.loc[mask]
+
+
+def _strategy_panel_for_online(
+    config: StrategyConfig,
+    meta: dict,
+    panel: pd.DataFrame,
+    *,
+    require_overlays: bool = True,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Return a strategy-safe panel, clamped to its last fully confirmed input date."""
+    legs = STRATEGY_LEGS.get(config.key)
+    diagnostic: dict[str, object] = {"strategy": config.key, "status": "ok"}
+    if not legs:
+        diagnostic.update(status="unavailable", reason="missing strategy legs")
+        return pd.DataFrame(), diagnostic
+    if not isinstance(panel.index, pd.DatetimeIndex) or panel.empty:
+        diagnostic.update(status="unavailable", reason="empty or non-datetime online panel")
+        return pd.DataFrame(), diagnostic
+
+    work = panel.copy()
+    index = pd.DatetimeIndex(work.index)
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    work.index = index
+    work = work.loc[~work.index.duplicated(keep="last")].sort_index()
+
+    required: list[tuple[str, int]] = [(asset, 2) for asset in legs]
+    if require_overlays:
+        for _label, columns, min_rows in _required_overlay_metric_specs(meta, legs[0], legs[1]):
+            required.extend((column, min_rows) for column in columns)
+
+    latest_by_column: dict[str, pd.Timestamp] = {}
+    problems: list[str] = []
+    for column, min_rows in required:
+        valid = _positive_finite_series(work, column)
+        if column in work.columns:
+            numeric = pd.to_numeric(work[column], errors="coerce")
+            finite_positive = numeric.notna() & numeric.map(lambda item: math.isfinite(float(item))) & (numeric > 0)
+            work[column] = numeric.where(finite_positive)
+        if len(valid) < int(min_rows):
+            problems.append(f"{column} rows={len(valid)}/{int(min_rows)}")
+            continue
+        latest_by_column[column] = _naive_normalized_timestamp(valid.index[-1])
+    if problems:
+        diagnostic.update(status="unavailable", reason="; ".join(problems))
+        empty = pd.DataFrame()
+        empty.attrs["online_input_diagnostic"] = diagnostic
+        return empty, diagnostic
+
+    price_latest = min(latest_by_column[asset] for asset in legs)
+    confirmed_through = min(latest_by_column.values())
+    mask = pd.DatetimeIndex(work.index).normalize() <= confirmed_through
+    limited = work.loc[mask].copy()
+    if limited.empty:
+        diagnostic.update(status="unavailable", reason="no rows through common confirmed date")
+        limited.attrs["online_input_diagnostic"] = diagnostic
+        return limited, diagnostic
+    diagnostic.update(
+        confirmed_through=confirmed_through.strftime("%Y-%m-%d"),
+        price_through=price_latest.strftime("%Y-%m-%d"),
+        lag_days=max(0, int((price_latest - confirmed_through).days)),
+        required_columns=sorted(latest_by_column),
+    )
+    if confirmed_through < price_latest:
+        diagnostic["status"] = "degraded"
+        diagnostic["reason"] = (
+            f"required overlay data confirmed through {confirmed_through:%Y-%m-%d}; "
+            f"price through {price_latest:%Y-%m-%d}"
+        )
+    limited.attrs.update(panel.attrs)
+    limited.attrs["online_input_diagnostic"] = diagnostic
+    return limited, diagnostic
 
 
 def _live_amount_state(
@@ -2207,8 +2393,10 @@ def _live_probe_for_strategy(
     seed_curve: Optional[pd.DataFrame] = None,
 ) -> Optional[dict[str, object]]:
     legs = STRATEGY_LEGS.get(config.key)
-    if not legs or any(asset not in panel.columns for asset in legs):
+    strategy_panel, diagnostic = _strategy_panel_for_online(config, meta, panel)
+    if not legs or strategy_panel.empty:
         return None
+    panel = strategy_panel
     long_asset, short_asset = legs
     pair = panel[[long_asset, short_asset]].dropna().copy()
     start = _effective_online_start(config, meta, pair.index.min())
@@ -2217,7 +2405,7 @@ def _live_probe_for_strategy(
         return None
     ratio = pair[long_asset] / pair[short_asset]
     close = ratio / float(ratio.iloc[0])
-    spread_return = _formal_spread_return(pair, long_asset, short_asset)
+    spread_return = _formal_spread_return(pair, long_asset, short_asset, _strategy_return_formula(meta))
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
     bias_ma = int(signal.get("bias_ma") or 60)
     mom_day = int(signal.get("mom_day") or 20)
@@ -2248,7 +2436,7 @@ def _live_probe_for_strategy(
     vol_value = math.nan
     vol_scale = math.nan
     if vol_window not in (None, ""):
-        vol_series = spread_return.rolling(int(vol_window)).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_return.rolling(int(vol_window)).std(ddof=_strategy_vol_ddof(meta)) * math.sqrt(ANNUAL_DAYS)
         if pd.notna(vol_series.iloc[-1]):
             vol_value = float(vol_series.iloc[-1])
             if vol_section.get("kind") == "downonly_tv":
@@ -2269,24 +2457,41 @@ def _live_probe_for_strategy(
         "vol_overheat_scale": vol_scale,
         "amount_state": amount_state,
         "mode": panel.attrs.get("mode", "daily"),
+        "online_input_diagnostic": diagnostic,
     }
 
 
-def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel: pd.DataFrame) -> pd.DataFrame:
+def _online_signal_frame_for_strategy(
+    config: StrategyConfig,
+    meta: dict,
+    panel: pd.DataFrame,
+    *,
+    require_overlays: bool = True,
+) -> pd.DataFrame:
     legs = STRATEGY_LEGS.get(config.key)
-    if not legs or any(asset not in panel.columns for asset in legs):
-        return pd.DataFrame()
+    strategy_panel, diagnostic = _strategy_panel_for_online(
+        config,
+        meta,
+        panel,
+        require_overlays=require_overlays,
+    )
+    if not legs or strategy_panel.empty:
+        empty = pd.DataFrame()
+        empty.attrs["online_input_diagnostic"] = diagnostic
+        return empty
+    panel = strategy_panel
     long_asset, short_asset = legs
-    price = panel[[long_asset, short_asset]].dropna().copy()
-    if price.empty:
+    price = panel[[long_asset, short_asset]].copy()
+    complete_prices = price.dropna(how="any")
+    if complete_prices.empty:
         return pd.DataFrame()
-    start = _effective_online_start(config, meta, price.index.min())
+    start = _effective_online_start(config, meta, complete_prices.index.min())
     price = price.loc[price.index >= start]
     if price.empty:
         return pd.DataFrame()
     ratio = price[long_asset] / price[short_asset]
     close = ratio / float(ratio.iloc[0])
-    spread_return = _formal_spread_return(price, long_asset, short_asset)
+    spread_return = _formal_spread_return(price, long_asset, short_asset, _strategy_return_formula(meta))
     signal = meta.get("signal", {}) if isinstance(meta.get("signal", {}), dict) else {}
     score = _bias_momentum_score_for_live(
         close,
@@ -2347,7 +2552,7 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
             out["volume_ma_ratio"] = ratio_series.reindex(out.index)
     vol = _vol_overlay_section(meta)
     if vol.get("enabled") and vol.get("window") not in (None, ""):
-        vol_series = spread_return.rolling(int(vol.get("window"))).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_return.rolling(int(vol.get("window"))).std(ddof=_strategy_vol_ddof(meta)) * math.sqrt(ANNUAL_DAYS)
         for col in ("overheat_indicator", "volhot_indicator", "vol_indicator", "realized_vol", "base_realized_vol"):
             out[col] = vol_series
         if vol.get("kind") == "downonly_tv":
@@ -2365,6 +2570,8 @@ def _online_signal_frame_for_strategy(config: StrategyConfig, meta: dict, panel:
             gate = (vol_series >= float(vol.get("threshold", math.inf))).astype(float)
             for col in ("overheat_gate", "volhot_gate", "vol_gate"):
                 out[col] = gate
+    out.attrs.update(panel.attrs)
+    out.attrs["online_input_diagnostic"] = diagnostic
     return out
 
 
@@ -2397,12 +2604,22 @@ def snapshot_score_diffs(
         if not as_of_raw:
             rows.append(base_row)
             continue
-        signal_frame = _online_signal_frame_for_strategy(config, meta, panel)
+        try:
+            signal_frame = _online_signal_frame_for_strategy(config, meta, panel, require_overlays=False)
+        except TypeError as exc:
+            if "require_overlays" not in str(exc):
+                raise
+            signal_frame = _online_signal_frame_for_strategy(config, meta, panel)
         if signal_frame.empty or "score" not in signal_frame.columns:
             base_row["status"] = "missing_signal"
             rows.append(base_row)
             continue
-        as_of = pd.Timestamp(as_of_raw).normalize()
+        try:
+            as_of = _naive_normalized_timestamp(as_of_raw)
+        except (TypeError, ValueError, OverflowError):
+            base_row["status"] = "invalid_as_of"
+            rows.append(base_row)
+            continue
         index = pd.DatetimeIndex(signal_frame.index)
         matches = index[index.normalize() == as_of]
         if len(matches) == 0:
@@ -2455,10 +2672,21 @@ def _online_target_series(close: pd.Series, score: pd.Series, meta: dict, r2: Op
 
 
 def _previous_online_value(series: pd.Series, idx: pd.Timestamp) -> float:
-    prior = pd.to_numeric(series.loc[series.index < idx], errors="coerce").dropna()
-    if prior.empty:
+    cache_key = "_poe_previous_value_cache"
+    cached = series.attrs.get(cache_key)
+    signature = (len(series), series.index[0] if len(series) else None, series.index[-1] if len(series) else None)
+    if not isinstance(cached, tuple) or len(cached) != 2 or cached[0] != signature:
+        valid = pd.to_numeric(series, errors="coerce").dropna().sort_index()
+        valid = valid.loc[~valid.index.duplicated(keep="last")]
+        series.attrs[cache_key] = (signature, valid)
+    else:
+        valid = cached[1]
+    if valid.empty:
         return math.nan
-    return float(prior.iloc[-1])
+    position = int(valid.index.searchsorted(pd.Timestamp(idx), side="left")) - 1
+    if position < 0:
+        return math.nan
+    return float(valid.iloc[position])
 
 
 def _online_target_vol_scale(
@@ -2634,7 +2862,7 @@ def _fill_online_execution_row(
     target_vol = meta.get("target_vol", {}) if isinstance(meta.get("target_vol", {}), dict) else {}
     tv_window = int(target_vol.get("target_vol_window") or 20)
     if vol_series is None:
-        vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+        vol_series = spread_returns.rolling(tv_window).std(ddof=_strategy_vol_ddof(meta)) * math.sqrt(ANNUAL_DAYS)
     if curve_so_far.empty:
         row["target"] = 0.0
         row["exec_signal"] = 0.0
@@ -2739,7 +2967,7 @@ def _extend_curves_with_online_prices(
             refreshed[config.key] = curve
             continue
         long_asset, short_asset = legs
-        price = panel[[long_asset, short_asset]].dropna().copy()
+        price = online_signal[[long_asset, short_asset]].copy() if not online_signal.empty else pd.DataFrame()
         if price.empty or curve.empty:
             refreshed[config.key] = curve
             continue
@@ -2749,7 +2977,7 @@ def _extend_curves_with_online_prices(
         if len(price) < 2 or pd.Timestamp(price.index[-1]).normalize() <= last_date:
             refreshed[config.key] = curve
             continue
-        spread_return = _formal_spread_return(price, long_asset, short_asset)
+        spread_return = pd.to_numeric(online_signal["spread_return"], errors="coerce")
         new_dates = [idx for idx in spread_return.index if pd.Timestamp(idx).normalize() > last_date and pd.notna(spread_return.loc[idx])]
         if not new_dates:
             refreshed[config.key] = curve
@@ -2788,6 +3016,7 @@ def _extend_curves_with_online_prices(
         extra = pd.DataFrame([row for _, row in rows], index=pd.DatetimeIndex([idx for idx, _ in rows]))
         rebuilt = pd.concat([curve, extra], axis=0).sort_index()
         rebuilt.attrs["online_signal_frame"] = _OnlineSignalFrameRef(online_signal)
+        rebuilt.attrs["online_input_diagnostic"] = online_signal.attrs.get("online_input_diagnostic", {})
         refreshed[config.key] = rebuilt
     return refreshed
 
@@ -2819,11 +3048,17 @@ def _build_curves_from_online_prices(
         if "spread_return" in signal_frame.columns:
             spread_returns = pd.to_numeric(signal_frame["spread_return"], errors="coerce")
         else:
-            spread_returns = spread.pct_change()
-        vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
-        valid_index = signal_frame.loc[spread.notna()].index
+            spread_returns = spread.pct_change(fill_method=None)
+            if bool(spread.notna().any()):
+                spread_returns.loc[spread.dropna().index[0]] = 0.0
+        vol_series = spread_returns.rolling(tv_window).std(ddof=_strategy_vol_ddof(meta)) * math.sqrt(ANNUAL_DAYS)
+        valid_index = signal_frame.loc[spread_returns.notna()].index
         tail_index = list(valid_index if full_history else valid_index[-ONLINE_REBUILD_LOOKBACK_BARS:])
         rows: list[tuple[pd.Timestamp, dict]] = [] if full_history else _snapshot_seed_rows(config, signal_frame)
+        snapshot_expected = bool(STATE_SNAPSHOT.get(config.key))
+        snapshot_fallback_rebuild = bool(not full_history and snapshot_expected and not rows)
+        if snapshot_fallback_rebuild:
+            tail_index = list(valid_index)
         if rows:
             seed_date = rows[-1][0]
             tail_index = [idx for idx in tail_index if pd.Timestamp(idx) > seed_date]
@@ -2859,6 +3094,9 @@ def _build_curves_from_online_prices(
             index=pd.DatetimeIndex([idx for idx, _ in rows]),
         ).sort_index()
         built.attrs["online_signal_frame"] = _OnlineSignalFrameRef(signal_frame)
+        built.attrs["online_input_diagnostic"] = signal_frame.attrs.get("online_input_diagnostic", {})
+        if snapshot_fallback_rebuild:
+            built.attrs["snapshot_warning"] = "snapshot unavailable or inconsistent; rebuilt from available online history"
         curves[config.key] = built
     return curves
 
@@ -2869,11 +3107,32 @@ def _snapshot_seed_rows(config: StrategyConfig, signal_frame: pd.DataFrame) -> l
     values = snapshot.get("values")
     if not as_of or not isinstance(values, dict):
         return []
-    seed_idx = pd.Timestamp(str(as_of))
-    if seed_idx not in signal_frame.index:
+    try:
+        seed_date = _naive_normalized_timestamp(as_of)
+    except (TypeError, ValueError, OverflowError):
         return []
-    row = {k: float(v) for k, v in values.items() if isinstance(v, (int, float)) and math.isfinite(float(v))}
-    for col, value in signal_frame.loc[seed_idx].items():
+    signal_index = pd.DatetimeIndex(signal_frame.index)
+    if signal_index.tz is not None:
+        signal_index = signal_index.tz_localize(None)
+    matches = signal_index[signal_index.normalize() == seed_date]
+    if len(matches) == 0:
+        return []
+    seed_idx = pd.Timestamp(matches[-1])
+    signal_values = signal_frame.loc[seed_idx]
+    if isinstance(signal_values, pd.DataFrame):
+        signal_values = signal_values.iloc[-1]
+    snapshot_score = _safe_float(values.get("score"))
+    recomputed_score = _safe_float(signal_values.get("score"))
+    if math.isfinite(snapshot_score) and math.isfinite(recomputed_score):
+        tolerance = max(SNAPSHOT_SCORE_ABS_TOL, SNAPSHOT_SCORE_REL_TOL * abs(snapshot_score))
+        if abs(snapshot_score - recomputed_score) > tolerance:
+            return []
+    row: dict[str, float] = {}
+    for key, value in values.items():
+        number = _safe_float(value)
+        if math.isfinite(number):
+            row[key] = number
+    for col, value in signal_values.items():
         if col not in row and pd.notna(value):
             try:
                 row[col] = float(value)
@@ -2895,22 +3154,18 @@ def _snapshot_seed_rows(config: StrategyConfig, signal_frame: pd.DataFrame) -> l
     return [(seed_idx, row)]
 
 
-def _validate_snapshot_score_diffs(panel: pd.DataFrame, metas: dict[str, dict]) -> None:
+def _validate_snapshot_score_diffs(panel: pd.DataFrame, metas: dict[str, dict]) -> list[str]:
     rows = snapshot_score_diffs(panel, metas)
     bad: list[str] = []
     for item in rows:
         status = str(item.get("status") or "")
         abs_diff = _safe_float(item.get("abs_diff"))
         if status in {"as_of_not_in_panel", "missing_recomputed_score"}:
+            bad.append(f"{item.get('key')}: {status}")
             continue
         if status != "ok":
             bad.append(f"{item.get('key')}: {status}")
-        elif math.isfinite(abs_diff) and abs_diff > SNAPSHOT_SCORE_ABS_TOL:
-            bad.append(f"{item.get('key')}: abs_diff={abs_diff:.6g}")
-    if bad:
-        preview = "; ".join(bad[:8])
-        suffix = f"; +{len(bad) - 8} more" if len(bad) > 8 else ""
-        raise RuntimeError(f"snapshot score validation failed: {preview}{suffix}")
+    return bad
 
 
 def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.DataFrame], dict[str, dict], dict[str, object]]:
@@ -2926,7 +3181,7 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
     try:
         panel, online_meta = _fetch_online_price_panel(include_realtime=include_realtime)
         _validate_online_price_panel(panel, metas)
-        _validate_snapshot_score_diffs(panel, metas)
+        snapshot_warnings = _validate_snapshot_score_diffs(panel, metas)
         if curves and all(not frame.empty for frame in curves.values()):
             curves = _extend_curves_with_online_prices(curves, metas, panel)
             data_mode = "local_artifacts_plus_online"
@@ -2937,7 +3192,15 @@ def load_strategy_context(include_realtime: bool = False) -> tuple[dict[str, pd.
             config.key: _live_probe_for_strategy(config, metas[config.key], panel, seed_curve=curves.get(config.key))
             for config in STRATEGIES
         }
-        online = {**online_meta, "ok": True, "error": None, "probes": probes, "data_mode": data_mode}
+        online = {
+            **online_meta,
+            "ok": True,
+            "error": None,
+            "probes": probes,
+            "data_mode": data_mode,
+            "snapshot_warnings": snapshot_warnings,
+            "strategy_input_diagnostics": panel.attrs.get("strategy_input_diagnostics", {}),
+        }
     except Exception as exc:
         if curves:
             online["error"] = str(exc)
@@ -2950,6 +3213,7 @@ _PERFORMANCE_CONTEXT_CACHE: dict[str, object] = {}
 _PERFORMANCE_QUERY_CONTEXT_CACHE: dict[str, dict[str, object]] = {}
 _PERFORMANCE_CONTEXT_TTL_SECONDS = 180.0
 _PERFORMANCE_QUERY_CONTEXT_MAX_ENTRIES = 16
+_PERFORMANCE_CONTEXT_LOCK = threading.Lock()
 _PERFORMANCE_QUERY_CONTEXT_LOCK = threading.Lock()
 
 
@@ -2971,6 +3235,11 @@ def _prune_performance_query_cache(now: Optional[float] = None) -> None:
 
 
 def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object]]:
+    with _PERFORMANCE_CONTEXT_LOCK:
+        return _load_performance_curves_locked()
+
+
+def _load_performance_curves_locked() -> tuple[dict[str, pd.DataFrame], dict[str, object]]:
     now = time.monotonic()
     cached = _PERFORMANCE_CONTEXT_CACHE.get("value")
     cached_at = float(_PERFORMANCE_CONTEXT_CACHE.get("cached_at", 0.0) or 0.0)
@@ -3000,7 +3269,7 @@ def load_performance_curves() -> tuple[dict[str, pd.DataFrame], dict[str, object
         online = {"ok": False, "error": str(exc), "data_mode": "embedded_artifacts"}
     value = (curves, online)
     _PERFORMANCE_CONTEXT_CACHE.clear()
-    _PERFORMANCE_CONTEXT_CACHE.update({"cached_at": now, "value": value})
+    _PERFORMANCE_CONTEXT_CACHE.update({"cached_at": time.monotonic(), "value": value})
     return value
 
 
@@ -3031,7 +3300,13 @@ def _performance_query_years(query: str) -> Optional[float]:
 
 
 def _performance_query_lookback_bars(query: str) -> Optional[int]:
-    years = _performance_query_years(query)
+    explicit = _parse_explicit_date_range(str(query or ""))
+    if explicit is not None:
+        start, _requested_end = explicit
+        today = pd.Timestamp(beijing_now().date()).normalize()
+        years = max(0.25, max(1, int((today - start.normalize()).days)) / 365.25)
+    else:
+        years = _performance_query_years(query)
     if years is None or years <= 0:
         return None
     warmup_bars = max(ONLINE_REBUILD_LOOKBACK_BARS, 420)
@@ -3139,11 +3414,11 @@ def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
         frame["forward_return"] = fwd.loc[idx, "return"].astype(float)
         frame["reverse_return"] = rev.loc[idx, "return"].astype(float)
         frame["return"] = pair_return.astype(float)
-        frame["gross_return"] = frame["return"]
         frame["cost"] = (
             _aligned_numeric_column(fwd, idx, "cost") * 0.5
             + _aligned_numeric_column(rev, idx, "cost") * 0.5
         )
+        frame["gross_return"] = frame["return"] + frame["cost"]
         frame["turnover"] = (
             _aligned_numeric_column(fwd, idx, "turnover") * 0.5
             + _aligned_numeric_column(rev, idx, "turnover") * 0.5
@@ -3174,8 +3449,8 @@ def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
         total[f"{pair_key}_forward_return"] = curves[_forward_key].loc[total.index, "return"].astype(float)
         total[f"{pair_key}_reverse_return"] = curves[_reverse_key].loc[total.index, "return"].astype(float)
     total["return"] = total_return.astype(float)
-    total["gross_return"] = total["return"]
     total["cost"] = pd.concat([combos[k].loc[total.index, "cost"] for k in pair_returns], axis=1).mean(axis=1)
+    total["gross_return"] = total["return"] + total["cost"]
     total["turnover"] = pd.concat([combos[k].loc[total.index, "turnover"] for k in pair_returns], axis=1).mean(axis=1)
     total["gross_exposure"] = pd.concat([combos[k].loc[total.index, "gross_exposure"] for k in pair_returns], axis=1).mean(axis=1)
     total["nav"] = _nav_from_returns(total["return"])
@@ -3183,9 +3458,10 @@ def build_combo_curves(curves: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
     return combos
 
 
-def drawdown(nav: pd.Series) -> pd.Series:
+def drawdown(nav: pd.Series, initial_nav: float = 1.0) -> pd.Series:
     nav = nav.astype(float)
-    return nav / nav.cummax() - 1.0
+    running_peak = nav.cummax().clip(lower=float(initial_nav))
+    return nav / running_peak - 1.0
 
 
 def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
@@ -3209,7 +3485,8 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         unavailable = _unavailable_curve(reason)
         return metrics_for_curve(unavailable)
     raw_returns = pd.to_numeric(curve["return"], errors="coerce")
-    returns = raw_returns.dropna()
+    finite_mask = raw_returns.notna() & raw_returns.map(lambda item: math.isfinite(float(item)))
+    returns = raw_returns.loc[finite_mask]
     invalid_count = int(len(raw_returns) - len(returns))
     if returns.empty:
         reason = str(curve.attrs.get("unavailable_reason") or "empty valid return series")
@@ -3219,8 +3496,9 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
     rows = int(len(returns))
     final_nav = float(nav.iloc[-1])
     period_return = final_nav - 1.0
-    max_dd = float(drawdown(nav).min())
-    if rows >= MIN_ANNUALIZED_METRIC_ROWS:
+    bankrupt = bool((returns <= -1.0).any()) or not math.isfinite(final_nav) or final_nav <= 0.0
+    max_dd = max(-1.0, float(drawdown(nav).min()))
+    if rows >= MIN_ANNUALIZED_METRIC_ROWS and not bankrupt:
         ann_return = final_nav ** (ANNUAL_DAYS / max(rows, 1)) - 1.0
         ann_vol = float(returns.std(ddof=0) * math.sqrt(ANNUAL_DAYS)) if rows > 1 else math.nan
         sharpe = ann_return / ann_vol if ann_vol > 1e-12 else math.nan
@@ -3230,9 +3508,18 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         ann_vol = math.nan
         sharpe = math.nan
         calmar = math.nan
+    reason_parts: list[str] = []
+    if invalid_count:
+        reason_parts.append(f"dropped {invalid_count} invalid return rows")
+    if bankrupt:
+        reason_parts.append("NAV reached zero or below; annualized metrics unavailable")
+    start_value = returns.index[0]
+    end_value = returns.index[-1]
+    start_text = start_value.strftime("%Y-%m-%d") if hasattr(start_value, "strftime") else str(start_value)
+    end_text = end_value.strftime("%Y-%m-%d") if hasattr(end_value, "strftime") else str(end_value)
     return {
-        "start": returns.index[0].strftime("%Y-%m-%d"),
-        "end": returns.index[-1].strftime("%Y-%m-%d"),
+        "start": start_text,
+        "end": end_text,
         "rows": rows,
         "period_return": period_return,
         "ann_return": ann_return,
@@ -3241,12 +3528,14 @@ def metrics_for_curve(curve: pd.DataFrame) -> dict[str, Union[float, int, str]]:
         "sharpe": sharpe,
         "calmar": calmar,
         "final_nav": final_nav,
-        "reason": f"dropped {invalid_count} invalid return rows" if invalid_count else "",
+        "reason": "; ".join(reason_parts),
     }
 
 
 def _normalize_query(query: str) -> str:
-    q = (query or "").strip()
+    q = unicodedata.normalize("NFKC", str(query or ""))
+    q = "".join(char for char in q if unicodedata.category(char) != "Cf")
+    q = q.strip()
     replacements = {}
     for old, new in replacements.items():
         q = q.replace(old, new)
@@ -3334,6 +3623,13 @@ def _parse_explicit_date_range(query: str) -> Optional[tuple[pd.Timestamp, pd.Ti
     return None
 
 
+def _subtract_years(timestamp: pd.Timestamp, years: float) -> pd.Timestamp:
+    value = float(years)
+    if value.is_integer():
+        return timestamp - pd.DateOffset(years=int(value))
+    return timestamp - pd.Timedelta(days=max(1, int(round(value * 365.25))))
+
+
 def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp, pd.Timestamp, str]:
     q = str(query or "").upper()
     raw = str(query or "")
@@ -3361,7 +3657,7 @@ def parse_date_range(query: str, index: pd.DatetimeIndex) -> tuple[pd.Timestamp,
         natural = _parse_natural_relative_window(raw)
         if natural is not None:
             label, years = natural
-            start = end - pd.DateOffset(years=years)
+            start = _subtract_years(end, years)
         elif "10Y" in q or "TEN_Y" in q or "最近10年" in raw or "最近十年" in raw:
             start = end - pd.DateOffset(years=10)
             label = "最近10年"
@@ -4006,30 +4302,43 @@ def _required_overlay_metric_specs(meta: dict, long_asset: str, short_asset: str
 
 def _validate_online_price_panel(panel: pd.DataFrame, metas: Optional[dict[str, dict]] = None) -> None:
     today = pd.Timestamp(beijing_now().date()).normalize()
-    if isinstance(panel.index, pd.DatetimeIndex) and len(panel.index) > 0:
-        latest_index_date = pd.Timestamp(panel.index.max()).normalize()
-        if latest_index_date > today:
-            raise RuntimeError(f"online price panel has future date: {latest_index_date:%Y-%m-%d}")
-        enforce_freshness = bool(panel.attrs.get("fetched_at") or panel.attrs.get("enforce_freshness"))
-        if enforce_freshness and (today - latest_index_date).days > 7:
-            raise RuntimeError(f"stale online price panel: latest={latest_index_date:%Y-%m-%d}, today={today:%Y-%m-%d}")
+    if not isinstance(panel, pd.DataFrame) or panel.empty:
+        raise RuntimeError("online price panel is empty")
+    if not isinstance(panel.index, pd.DatetimeIndex):
+        raise RuntimeError("online price panel requires a DatetimeIndex")
+    if panel.index.tz is not None:
+        raise RuntimeError("online price panel index must be timezone-naive trading dates")
+    if panel.index.has_duplicates:
+        raise RuntimeError("online price panel contains duplicate dates")
+    if not panel.index.is_monotonic_increasing:
+        raise RuntimeError("online price panel dates are not sorted")
+    latest_index_date = pd.Timestamp(panel.index.max()).normalize()
+    if latest_index_date > today:
+        raise RuntimeError(f"online price panel has future date: {latest_index_date:%Y-%m-%d}")
+    enforce_freshness = bool(panel.attrs.get("fetched_at") or panel.attrs.get("enforce_freshness"))
+    if enforce_freshness and (today - latest_index_date).days > 10:
+        raise RuntimeError(f"stale online price panel: latest={latest_index_date:%Y-%m-%d}, today={today:%Y-%m-%d}")
 
     missing_assets = [
         asset
         for asset in CN_PRICE_SECIDS
         if asset not in panel.columns or _panel_column_value_count(panel, asset) <= 0
     ]
-    if missing_assets:
+    if len(missing_assets) == len(CN_PRICE_SECIDS):
         errors = panel.attrs.get("errors", {}) if isinstance(panel.attrs.get("errors", {}), dict) else {}
         detail = ", ".join(
             f"{asset} ({errors.get(asset)})" if errors.get(asset) else asset
             for asset in missing_assets
         )
         raise RuntimeError(f"missing required online assets: {detail}")
+    if missing_assets:
+        panel.attrs["missing_price_assets"] = missing_assets
 
     latest_dates: dict[str, pd.Timestamp] = {}
     invalid_prices: list[str] = []
     for asset in CN_PRICE_SECIDS:
+        if asset not in panel.columns:
+            continue
         values = pd.to_numeric(panel[asset], errors="coerce")
         finite = values[values.map(lambda item: math.isfinite(float(item)) if pd.notna(item) else False)]
         if finite.empty:
@@ -4040,43 +4349,26 @@ def _validate_online_price_panel(panel: pd.DataFrame, metas: Optional[dict[str, 
             invalid_prices.append(f"{asset}: non-positive price at {pd.Timestamp(non_positive.index[-1]).strftime('%Y-%m-%d')}")
         latest_dates[asset] = pd.Timestamp(finite.index[-1]).normalize()
     if invalid_prices:
-        raise RuntimeError("non-positive or invalid online prices: " + "; ".join(invalid_prices[:8]))
+        panel.attrs["invalid_price_assets"] = invalid_prices
+    if not latest_dates:
+        raise RuntimeError("online price panel has no valid price assets")
     if latest_dates:
         latest = max(latest_dates.values())
         lagged = [f"{asset} latest={date:%Y-%m-%d}" for asset, date in latest_dates.items() if date != latest]
         if lagged:
-            raise RuntimeError(f"misaligned latest online price dates: panel latest={latest:%Y-%m-%d}; " + "; ".join(lagged[:8]))
+            panel.attrs["lagged_price_assets"] = lagged
 
-    if metas is None:
-        return
-
-    missing_metrics: list[str] = []
-    latest_price_date = max(latest_dates.values()) if latest_dates else pd.Timestamp(panel.index.max()).normalize()
-    for config in STRATEGIES:
-        legs = STRATEGY_LEGS.get(config.key)
-        if not legs:
-            continue
-        meta = metas.get(config.key, {}) if isinstance(metas, dict) else {}
-        for label, columns, min_rows in _required_overlay_metric_specs(meta, legs[0], legs[1]):
-            for column in columns:
-                if column not in panel.columns:
-                    missing_metrics.append(f"{config.key}:{label}:{column} missing")
-                    continue
-                series = pd.to_numeric(panel[column], errors="coerce")
-                valid = series[(series > 0) & series.notna()]
-                count = int(valid.shape[0])
-                if count < min_rows:
-                    missing_metrics.append(f"{config.key}:{label}:{column} rows={count}/{min_rows}")
-                    continue
-                metric_latest = pd.Timestamp(valid.index[-1]).normalize()
-                if metric_latest < latest_price_date:
-                    missing_metrics.append(
-                        f"{config.key}:{label}:{column} latest={metric_latest:%Y-%m-%d}/{latest_price_date:%Y-%m-%d}"
-                    )
-    if missing_metrics:
-        preview = "; ".join(missing_metrics[:12])
-        suffix = f"; +{len(missing_metrics) - 12} more" if len(missing_metrics) > 12 else ""
-        raise RuntimeError(f"missing required online overlay metrics: {preview}{suffix}")
+    if metas is not None:
+        diagnostics: dict[str, dict[str, object]] = {}
+        for config in STRATEGIES:
+            _limited, diagnostic = _strategy_panel_for_online(
+                config,
+                metas.get(config.key, {}) if isinstance(metas, dict) else {},
+                panel,
+            )
+            if diagnostic.get("status") != "ok":
+                diagnostics[config.key] = diagnostic
+        panel.attrs["strategy_input_diagnostics"] = diagnostics
 
 
 def _nav_drawdown_value(curve: pd.DataFrame) -> tuple[float, str]:
@@ -5040,7 +5332,7 @@ def _post_close_display_row(curve: pd.DataFrame, row: pd.Series, meta: dict) -> 
         spread_returns = pd.to_numeric(signal_frame["spread_return"], errors="coerce")
     else:
         spread_returns = spread.pct_change()
-    vol_series = spread_returns.rolling(tv_window).std(ddof=0) * math.sqrt(ANNUAL_DAYS)
+    vol_series = spread_returns.rolling(tv_window).std(ddof=_strategy_vol_ddof(meta)) * math.sqrt(ANNUAL_DAYS)
     raw_scale, target_scale, suppressed = _online_target_vol_scale(
         out,
         row,
@@ -5093,19 +5385,20 @@ def _strategy_signal_snapshot(
         if (~provisional).any():
             confirmed_curve = confirmed_curve.loc[~provisional]
     row = confirmed_curve.iloc[-1]
+    decision_row = curve.iloc[-1] if live and not curve.empty else row
     probe: Optional[dict[str, object]] = None
     if live and isinstance(online, dict):
         candidate = online.get("probes", {}).get(config.key)  # type: ignore[assignment]
         if isinstance(candidate, dict):
             probe = candidate
-    display_row = _post_close_display_row(confirmed_curve, row, meta)
+    display_row = _post_close_display_row(curve, decision_row, meta)
 
     sample_end = confirmed_curve.index[-1].strftime("%Y-%m-%d")
     sample_start = confirmed_curve.index[0].strftime("%Y-%m-%d")
     exposure = _safe_float(row.get("gross_exposure", row.get("net_exposure", 0.0)), 0.0)
     effective_exposure = exposure
-    signal_value = _extract_signal_for_row(row, probe)
-    score = _extract_score_for_row(row, probe)
+    signal_value = _extract_signal_for_row(display_row, probe)
+    score = _extract_score_for_row(display_row, probe)
     target_signal = _to_binary_signal(signal_value)
     base_signal_exposure = 1.0 if target_signal == 1 else 0.0 if target_signal == 0 else math.nan
     exec_signal_value = _first_numeric(row, ("exec_signal", "target"))
@@ -5175,7 +5468,7 @@ def _strategy_signal_snapshot(
         if _target_vol_deadband(tv) not in (None, ""):
             tv_text += f"；deadband {'触发' if math.isfinite(suppressed) and suppressed > 0 else '未触发'}"
 
-    detail_rows = _overlay_detail_rows(confirmed_curve, display_row, meta, probe=probe, live=live)
+    detail_rows = _overlay_detail_rows(curve, display_row, meta, probe=probe, live=live)
     detail_lines = [f"{name}：{detail}" for name, detail in detail_rows]
     target_label = "本期target"
     signal_label = "本期信号"
@@ -5237,6 +5530,18 @@ def render_signal(live: bool = False) -> str:
             lines.append("- Data source: Poe 在线重建（公开指数日线/实时快照 + 脚本内嵌参数 metadata），不读取本地正式 artifacts。")
             usage = "实时信号展示" if live else "运行信号（日线收盘口径）展示"
             lines.append(f"- Usage: 用于 Poe {usage}；与本地正式回测 artifacts 可能存在小幅差异。")
+        diagnostics = online.get("strategy_input_diagnostics", {})
+        if isinstance(diagnostics, dict):
+            degraded = [item for item in diagnostics.values() if isinstance(item, dict) and item.get("status") == "degraded"]
+            unavailable = [item for item in diagnostics.values() if isinstance(item, dict) and item.get("status") == "unavailable"]
+            if degraded:
+                confirmations = sorted({str(item.get("confirmed_through")) for item in degraded})
+                lines.append(f"- Input fallback: {len(degraded)} legs use the latest common confirmed date ({', '.join(confirmations)}).")
+            if unavailable:
+                lines.append(f"- Isolated unavailable legs: {len(unavailable)}; unaffected legs continue normally.")
+        snapshot_warnings = online.get("snapshot_warnings", [])
+        if isinstance(snapshot_warnings, list) and snapshot_warnings:
+            lines.append(f"- Snapshot fallback warnings: {len(snapshot_warnings)}; affected legs rebuild from available history.")
     else:
         lines.append("- Data source: unavailable")
     lines.append("")
@@ -5493,9 +5798,7 @@ def render_nav_chart(query: str, combo: bool = False) -> str:
 
 def render_query(query: str) -> str:
     normalized = _normalize_query(query)
-    compact = normalized.replace(" ", "")
-    if "净值" in compact or "NAV" in normalized.upper():
-        return render_nav_chart(normalized, combo=("组合" in compact))
+    compact = re.sub(r"\s+", "", normalized)
     if "历史" in compact and "信号" in compact:
         return render_signal_history(normalized)
     if "参数" in compact and "实时" in compact:
@@ -5506,6 +5809,9 @@ def render_query(query: str) -> str:
         return render_performance(normalized, combo=True)
     if "表现" in compact:
         return render_performance(normalized, combo=False)
+    nav_upper = compact.upper()
+    if "净值曲线" in compact or "NAV曲线" in nav_upper or compact in {"净值", "NAV"}:
+        return render_nav_chart(normalized, combo=("组合" in compact))
     if "信号" in compact:
         return render_signal(live=("实时" in compact))
     return render_signal(live=True)

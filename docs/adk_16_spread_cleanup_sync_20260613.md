@@ -264,3 +264,29 @@ Conclusion:
 - `consensus16` is the only line where the cooldown family remains a plausible research candidate.
 - `direct16` and `transitive16` are too unstable: many candidates improve recent 1Y drawdown while worsening full-sample drawdown or sacrificing too much annualized return.
 - Treat cooldown as `research_only_do_not_promote_without_walk_forward`.
+
+## Online Integrity Hardening - 2026-08-13
+
+The Poe bot remains online-only and self-contained. The current production
+registry contains 16 directed legs and eight 50/50 forward/reverse pairs.
+
+This repair aligned the online rebuild with each leg's formal semantics:
+
+- legacy ratio-return legs use their configured spread-ratio return and sample
+  standard deviation instead of the generic leg-return difference;
+- strategy-local missing or nonpositive inputs make only the affected leg
+  unavailable, while unrelated legs remain queryable;
+- snapshot seeds are checked against the recomputed score and fall back to an
+  online-history rebuild with an explicit warning when inconsistent;
+- performance metrics preserve the initial NAV peak, reject bankrupt annualized
+  returns, and keep combo gross return equal to net return plus cost;
+- live snapshots pair the current signal with the current overlay state and do
+  not create a holiday ghost bar.
+
+The retained regression entrypoint is:
+
+```powershell
+python -m py_compile "poe_adk_16_spread_v1_0_bot.py"
+python -m pytest tests/test_poe_adk_16_spread_decay.py -q
+git diff --check -- "poe_adk_16_spread_v1_0_bot.py" "tests/test_poe_adk_16_spread_decay.py"
+```
