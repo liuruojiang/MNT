@@ -408,33 +408,6 @@ def test_v78_spy_volume_gate_fail_closed_when_volume_source_ends_before_price_in
     assert "fail_closed" in source
 
 
-def test_v78_microcap_loader_accepts_current_v20_targetvol15_official_nav(tmp_path, monkeypatch):
-    module = load_v78_module()
-    repo_root = tmp_path / "A股美股动量组合策略"
-    microcap_outputs = tmp_path / "微盘股对冲策略" / "outputs"
-    microcap_outputs.mkdir(parents=True)
-    nav_path = microcap_outputs / "microcap_top100_mom16_targetvol15_max1p5_v2_0_costed_nav.csv"
-    pd.DataFrame(
-        {
-            "date": ["2026-06-29", "2026-06-30"],
-            "return_net": [0.01, -0.02],
-        }
-    ).to_csv(nav_path, index=False)
-
-    monkeypatch.setattr(module, "_repo_base_dir", lambda: str(repo_root))
-
-    ret = module._load_microcap_daily_ret(expected_latest_date=pd.Timestamp("2026-06-30"))
-
-    assert ret.index[-1] == pd.Timestamp("2026-06-30")
-    assert ret.iloc[-1] == -0.02
-
-    with pytest.raises(Exception) as excinfo:
-        module._load_microcap_daily_ret(expected_latest_date=pd.Timestamp("2026-07-01"))
-
-    assert "targetvol15" in str(excinfo.value)
-    assert "targetvol25" not in str(excinfo.value)
-
-
 def test_v78_run_strategies_passes_strict_subb_open_execution_to_all_subb_legs():
     module = load_v78_module()
     source = inspect.getsource(module.CombinedStrategyBase._run_strategies)
@@ -463,6 +436,6 @@ def test_v78_production_spec_includes_manual_run_checklist():
         "US adjusted open coverage",
         "Sub-A volume overlay",
         "External gates",
-        "Microcap/Sub-D",
+        "Sub-C data and scale state",
     ):
         assert required_text in spec_text
