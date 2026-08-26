@@ -1,0 +1,302 @@
+{
+  "status": "PASS",
+  "created_at": "2026-08-26T18:43:26+08:00",
+  "production_code_changed": false,
+  "versions": {
+    "V7.8": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.8 plus.py",
+    "V7.9": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 7.9 plus.py"
+  },
+  "official_entrypoint": "CombinedStrategyV78._fetch_data -> _run_strategies -> _get_subc_daily_ret -> _performance_combined_daily_returns",
+  "formal_refresh_status": "PASS",
+  "formal_market_ranges": {
+    "cn_close": [
+      "2014-10-17",
+      "2026-08-26",
+      2886
+    ],
+    "cn_dk_close": [
+      "2014-10-17",
+      "2026-08-26",
+      2885
+    ],
+    "us_rot_close": [
+      "2007-05-30",
+      "2026-08-25",
+      4841
+    ],
+    "us_prod_daily": [
+      "2003-01-02",
+      "2026-08-25",
+      5949
+    ]
+  },
+  "formal_end": "2026-08-25",
+  "btc_start": "2022-01-01",
+  "subc_pre_btc_policy": "5% allocation earns BIL; 1 bp switch cost at eligibility",
+  "weights": {
+    "Sub-B": 0.5,
+    "Sub-C": 0.5
+  },
+  "formal_parity": {
+    "V7.8": {
+      "subb_source": "fresh official_daily_returns_and_nav.csv",
+      "subc_post_2022_max_abs_diff_vs_official": 3.0531133177191805e-16,
+      "subc_post_2022_rows": 1164
+    },
+    "V7.9": {
+      "subb_source": "fresh official_daily_returns_and_nav.csv",
+      "subc_post_2022_max_abs_diff_vs_official": 3.0531133177191805e-16,
+      "subc_post_2022_rows": 1164
+    }
+  },
+  "proxy_provenance": {
+    "subb_proxy_sources": {
+      "QQQ": {
+        "proxy": "^NDX",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "EMXC": {
+        "proxy": "VEIEX",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "EFA": {
+        "proxy": "VGTSX",
+        "source": "Yahoo",
+        "start": "1996-04-29",
+        "end": "2026-08-25",
+        "rows": 7630
+      },
+      "GLD": {
+        "proxy": "GC=F",
+        "source": "Yahoo",
+        "start": "2000-08-30",
+        "end": "2026-08-26",
+        "rows": 6521
+      },
+      "AGG": {
+        "proxy": "VUSTX",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "DBC": {
+        "proxy": "^SPGSCI",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-26",
+        "rows": 7965
+      },
+      "BIL": {
+        "proxy": "VFISX",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "SPY": {
+        "proxy": "SPY",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "TLT": {
+        "proxy": "VUSTX",
+        "source": "Yahoo",
+        "start": "1995-01-03",
+        "end": "2026-08-25",
+        "rows": 7964
+      },
+      "UUP": {
+        "proxy": "DX-Y.NYB",
+        "source": "Yahoo",
+        "start": "1995-01-02",
+        "end": "2026-08-26",
+        "rows": 8034
+      },
+      "DBMF": {
+        "proxy": "RYMFX",
+        "source": "Yahoo",
+        "start": "2007-02-22",
+        "end": "2026-08-25",
+        "rows": 4908
+      },
+      "KMLM": {
+        "proxy": "AQMNX",
+        "source": "Yahoo",
+        "start": "2010-01-05",
+        "end": "2026-08-25",
+        "rows": 4185
+      },
+      "BTC-USD": {
+        "proxy": "BTC-USD",
+        "source": "Yahoo",
+        "start": "2014-09-17",
+        "end": "2026-08-26",
+        "rows": 4362
+      }
+    },
+    "subc_proxy_sources": [
+      {
+        "ticker": "VTI",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2001-06-15",
+        "end": "2026-08-25",
+        "rows": 6335
+      },
+      {
+        "ticker": "QQQ",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "1999-03-10",
+        "end": "2026-08-25",
+        "rows": 6908
+      },
+      {
+        "ticker": "DFSVX",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "1993-02-26",
+        "end": "2026-08-25",
+        "rows": 8431
+      },
+      {
+        "ticker": "AVUV",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2019-09-26",
+        "end": "2026-08-25",
+        "rows": 1737
+      },
+      {
+        "ticker": "EFA",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2001-08-27",
+        "end": "2026-08-25",
+        "rows": 6285
+      },
+      {
+        "ticker": "VEA",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2007-07-26",
+        "end": "2026-08-25",
+        "rows": 4801
+      },
+      {
+        "ticker": "DISVX",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "1994-12-29",
+        "end": "2026-08-25",
+        "rows": 7966
+      },
+      {
+        "ticker": "AVDV",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2019-09-26",
+        "end": "2026-08-25",
+        "rows": 1737
+      },
+      {
+        "ticker": "IEI",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2007-01-11",
+        "end": "2026-08-25",
+        "rows": 4936
+      },
+      {
+        "ticker": "VGIT",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2009-11-23",
+        "end": "2026-08-25",
+        "rows": 4213
+      },
+      {
+        "ticker": "BIL",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2007-05-30",
+        "end": "2026-08-25",
+        "rows": 4841
+      },
+      {
+        "ticker": "RYMFX",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2007-02-22",
+        "end": "2026-08-25",
+        "rows": 4908
+      },
+      {
+        "ticker": "AQMIX",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2010-01-05",
+        "end": "2026-08-25",
+        "rows": 4185
+      },
+      {
+        "ticker": "DBMF",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2019-05-08",
+        "end": "2026-08-25",
+        "rows": 1835
+      },
+      {
+        "ticker": "KMLM",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2020-12-02",
+        "end": "2026-08-25",
+        "rows": 1438
+      },
+      {
+        "ticker": "GLD",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2004-11-18",
+        "end": "2026-08-25",
+        "rows": 5475
+      },
+      {
+        "ticker": "BTC-USD",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "2014-09-17",
+        "end": "2026-08-26",
+        "rows": 4362
+      },
+      {
+        "ticker": "SPY",
+        "source": "Yahoo",
+        "adjustment": "Yahoo adjusted close with scale-aligned same-ticker gap repair",
+        "start": "1993-01-29",
+        "end": "2026-08-25",
+        "rows": 8450
+      }
+    ],
+    "subc_excluded_unconfirmed_date": "2026-08-26",
+    "subc_calendar": "SPY sessions",
+    "subc_execution": "close-based proxy overlay; not formal tradable open execution"
+  },
+  "notes": [
+    "Formal Sub-B comes from the just-refreshed official output.",
+    "Formal Sub-C reuses production daily components and sleeve-vol overlays with only the pre-2022 BTC return replaced by BIL.",
+    "Proxy Sub-B preserves strict adjusted-open execution inside the existing long-proxy harness.",
+    "Proxy Sub-C is close-based and diagnostic only."
+  ]
+}
