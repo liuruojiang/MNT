@@ -1,5 +1,19 @@
 # Task State
 
+## Active Task 2026-08-24: V7.8 / V7.9 Volatility Management And Sleeve Diversification Audit
+
+- Goal: verify whether V7.8 and V7.9 implement the paper-style volatility-management idea, then evaluate sleeve independence and crisis-correlation concentration using the official four-sleeve return path.
+- Official path: `CombinedStrategyV78._fetch_data -> _run_strategies -> _get_subc_daily_ret -> _performance_combined_daily_returns`.
+- Versions: `mnt_bot V 7.8 plus.py` and `mnt_bot V 7.9 plus.py`.
+- Required comparison: identical real-data window, official costs and execution timing, full/10Y/5Y/3Y/1Y CAGR and max drawdown or explicit N/A.
+- Diagnostics: sleeve-level target-vol chain and cap saturation; full/stress/down-market correlations; diversification ratio and marginal drawdown contributions.
+- Safety: research outputs only; do not change production code, registries, bot logic, or live configuration.
+- Planned output: `outputs/v78_v79_vol_management_and_sleeve_diversification_20260824/`.
+- Status: complete. Official refresh passed through 2026-08-21 after a transient Sub-A amount-source fail-closed was rechecked with `unresolved_rows=0`.
+- Main findings: sleeve-level volatility management is active; no final portfolio target-vol layer; V7.9 has a higher-risk Sub-B budget; high-volatility periods compress four sleeves into two market clusters.
+- Verification: production entrypoint audit PASS; drawdown contribution max reconciliation error `1.5e-15`; `23 passed, 1 warning` for Sub-C sleeve-vol and Sub-B VolReg regressions; production and research scripts compile.
+- Production changes: none. Only this task-state note and research outputs were added.
+
 ## Cleanup Anchor - 2026-06-13
 
 - Poe 16-leg file under repair on 2026-06-13: `poe_adk_16_spread_v1_0_bot.py`.
