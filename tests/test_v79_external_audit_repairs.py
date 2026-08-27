@@ -16,6 +16,64 @@ def load_v79_module():
     return module
 
 
+def test_subb_retired_overlays_are_absent_from_v79_production_and_query_surfaces():
+    module = load_v79_module()
+
+    new_line_source = inspect.getsource(module.run_v78_subb_new_line)
+    strategy_source = inspect.getsource(module.CombinedStrategyBase._run_strategies)
+    param_writer_source = inspect.getsource(module._write_v78_subb_param_tables)
+    query_source = "\n".join(
+        inspect.getsource(getattr(module.CombinedStrategyV78, name))
+        for name in ("_handle_signal", "_handle_live_signal", "_handle_params", "_handle_live_params")
+    )
+
+    assert "_v78_spy_volume_gate" not in new_line_source
+    assert "logvol_high_vol" not in new_line_source
+    assert "apply_subb_dbc_profit_guard_overlay" not in strategy_source
+    assert "_v78_subb_volume_warning" not in query_source
+    assert "_write_subb_dbc_profit_guard_status" not in query_source
+    assert "SPY量/MA60" not in param_writer_source
+    assert "rv≥50%" not in param_writer_source
+    assert module.SUBB_DBC_PROFIT_GUARD_ENABLED is False
+    assert module.V78_SUBB_EXECUTION_MODE == "component_net_with_volreg"
+    assert module.US_ROT_TARGET_VOL == pytest.approx(0.30)
+    assert module.US_ROT_TOP_N == 2
+    assert module.US_ROT_VOLREG_ENABLED is True
+    assert "DBC" in module.US_ROT_POOL
+
+
+def test_v79_logvol_target_has_no_spy_volume_or_high_vol_discount(monkeypatch):
+    module = load_v79_module()
+    dates = pd.bdate_range("2024-01-02", periods=390)
+    close = pd.DataFrame(
+        100.0,
+        index=dates,
+        columns=list(dict.fromkeys(module.US_ROT_POOL + ["BIL"])),
+    )
+    dummy_scores = pd.DataFrame(0.0, index=dates, columns=module.US_ROT_POOL)
+
+    monkeypatch.setattr(module, "_v78_score_log_weighted", lambda close_df: dummy_scores)
+    monkeypatch.setattr(module, "_v78_target_from_scores", lambda *args, **kwargs: {"QQQ": 1.0})
+    monkeypatch.setattr(
+        module,
+        "_v78_spy_volume_gate",
+        lambda _index: (_ for _ in ()).throw(AssertionError("retired SPY volume path called")),
+    )
+    monkeypatch.setattr(module, "_us_signal_days", lambda close_df, start_idx: set(range(start_idx, len(close_df))))
+    monkeypatch.setattr(module, "US_ROT_COMMISSION", 0.0)
+
+    out = module.run_v78_subb_new_line(close, line="logvol")
+    signal_rows = out[out["is_signal"]]
+
+    assert not signal_rows.empty
+    row = signal_rows.iloc[0]
+    assert float(row["target_w_QQQ"]) == pytest.approx(1.0)
+    assert float(row["target_w_BIL"]) == pytest.approx(0.0)
+    assert "volume_gate_next" not in out.columns
+    assert "volume_scale_next" not in out.columns
+    assert "logvol_high_vol_on" not in out.columns
+
+
 def test_newa_volume_policy_skips_overlay_when_feature_is_unresolved():
     module = load_v79_module()
     dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
@@ -271,46 +329,6 @@ def test_subb_bias_and_logvol_scores_require_every_configured_window():
     assert bias.iloc[389].notna().all()
     assert logvol.iloc[250].isna().all()
     assert logvol.iloc[320].notna().all()
-
-
-def test_spy_volume_failure_uses_cached_history_and_fails_closed_only_for_missing_tail(monkeypatch):
-    module = load_v79_module()
-    dates = pd.bdate_range("2026-01-02", periods=70)
-    cached = pd.Series(100.0, index=dates[:-2], dtype=float)
-    cached.iloc[-5:] = 200.0
-    unavailable = lambda index: (pd.Series(False, index=index, dtype=bool), "unavailable: network")
-    monkeypatch.setattr(module, "_v78_fetch_spy_volume", unavailable)
-    monkeypatch.setattr(module, "_v78_fetch_spy_volume_stooq", unavailable)
-    monkeypatch.setattr(module, "_load_v78_spy_volume_cache", lambda: cached)
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
-
-    gate, source = module._v78_spy_volume_gate(dates)
-
-    assert not bool(gate.iloc[0])
-    assert bool(gate.iloc[-3])
-    assert gate.iloc[-2:].all()
-    assert "local-cache" in source
-    assert "fail_closed" in source
-
-
-def test_subb_volume_warning_reports_partially_unresolved_spy_tail():
-    module = load_v79_module()
-    date = pd.Timestamp("2026-06-12")
-    component = pd.DataFrame(
-        {
-            "volume_source": [
-                "local-cache SPY volume | unresolved SPY volume 2026-06-12..2026-06-12 (1 dates); fail_closed"
-            ]
-        },
-        index=[date],
-    )
-    result = pd.DataFrame(index=[date])
-    result.attrs["v78_subb_bias"] = component
-
-    warning = module._v78_subb_volume_warning(result)
-
-    assert "Bias" in warning
-    assert "fail-closed" in warning
 
 
 def test_subb_model_rebalance_is_kept_when_volreg_transitions_same_day():

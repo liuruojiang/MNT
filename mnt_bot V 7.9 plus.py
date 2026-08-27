@@ -591,12 +591,11 @@ V78_SUBB_NEW_LOGVOL_WEIGHT = 0.25
 V78_LABEL = "V7.9"
 V78_SUBA_NEW_LABEL = "New A TV1.0"
 V78_ADK_NEW_LABEL = "New ADK all10 score-hot"
-V78_SUBB_BIAS_LABEL = "New B bias-level + SPY volume"
-V78_SUBB_LOGVOL_LABEL = "New B log-weighted vol-hot + SPY volume"
+V78_SUBB_BIAS_LABEL = "New B bias-level"
+V78_SUBB_LOGVOL_LABEL = "New B log-weighted"
 V78_SUBA_EXECUTION_MODE = "component_net"
 V78_ADK_EXECUTION_MODE = "component_net_with_net_exposure_display"
-V78_SUBB_EXECUTION_MODE = "component_net_with_volreg_and_dbc_profit_guard"
-V78_SUBB_SPY_VOLUME_FAIL_MODE = "fail_closed"  # warn_open / fail_closed / raise
+V78_SUBB_EXECUTION_MODE = "component_net_with_volreg"
 V78_ADK_NEW_SCORE_HOT_ENTER = 80.0
 V78_ADK_NEW_SCORE_HOT_EXIT = 20.0
 V78_ADK_NEW_SCORE_HOT_SCALE = 0.0
@@ -624,7 +623,7 @@ US_ROT_VOLREG_THRESHOLD = 1.8   # 短/长波动率比进入阈值
 US_ROT_VOLREG_EXIT_THRESHOLD = 1.4  # 短/长波动率比退出阈值
 US_ROT_VOLREG_DEFENSE_SCALE = 0.00
 US_ROT_VOLREG_SCALE_ASSETS = ("QQQ", "EMXC")
-SUBB_DBC_PROFIT_GUARD_ENABLED = True
+SUBB_DBC_PROFIT_GUARD_ENABLED = False  # retired from the V7.9 production path
 SUBB_DBC_PROFIT_GUARD_ASSET = "DBC"
 SUBB_DBC_PROFIT_GUARD_CASH_ASSET = "BIL"
 SUBB_DBC_PROFIT_GUARD_RETAIN_L1 = 0.50
@@ -8105,7 +8104,6 @@ def run_v78_subb_new_line(close_df, line="bias", us_open=None, strict_open_execu
     )
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     signal_days = _us_signal_days(close_df, start_idx)
-    volume_gate, volume_source = _v78_spy_volume_gate(close_df.index)
     holdings = {"BIL": 1.0}
     target = {"BIL": 1.0}
     pending_act = None
@@ -8147,13 +8145,14 @@ def run_v78_subb_new_line(close_df, line="bias", us_open=None, strict_open_execu
         is_signal = i in signal_days
         rebalanced = False
         turnover = 0.0
-        gate_next = bool(volume_gate.reindex(close_df.index).iloc[i])
-        volume_scale = 0.75 if gate_next else 1.0
-        logvol_high_vol_on = bool(line == "logvol" and np.isfinite(rv) and rv >= 0.50)
-        logvol_high_vol_scale = 0.75 if logvol_high_vol_on else 1.0
         if is_signal:
-            base_target = _v78_target_from_scores(scores.iloc[i], vol_df.iloc[i], scale, top_n=US_ROT_TOP_N, abs_threshold=abs_threshold)
-            target = _v78_apply_equity_scale(base_target, volume_scale * logvol_high_vol_scale)
+            base_target = _v78_target_from_scores(
+                scores.iloc[i], vol_df.iloc[i], scale,
+                top_n=US_ROT_TOP_N, abs_threshold=abs_threshold,
+            )
+            # Preserve the pre-retirement account-normalization convention
+            # without applying SPY-volume or LogVol high-vol discounts.
+            target = _v78_normalize_weights(base_target)
             all_a = set(target) | set(holdings)
             turnover = sum(abs(target.get(a, 0.0) - holdings.get(a, 0.0)) for a in all_a if a != "BIL")
             pending_act = dict(target)
@@ -8169,11 +8168,6 @@ def run_v78_subb_new_line(close_df, line="bias", us_open=None, strict_open_execu
             "turnover": float(turnover),
             "target_vol_scale": float(scale),
             "realized_vol": float(rv) if np.isfinite(rv) else np.nan,
-            "volume_gate_next": bool(gate_next),
-            "volume_scale_next": float(volume_scale),
-            "logvol_high_vol_on": bool(logvol_high_vol_on),
-            "logvol_high_vol_scale": float(logvol_high_vol_scale),
-            "volume_source": volume_source,
             "line": line,
         }
         for asset in w_assets:
@@ -8195,18 +8189,17 @@ def _v78_subb_new_line_hypo_weights(close_df, result_df, line="bias", row_idx=-1
         raise ValueError(line)
     vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
     scale = 1.0
-    volume_scale = 1.0
-    logvol_high_vol_scale = 1.0
     if result_df is not None and len(result_df) > 0:
         try:
             result_row = result_df.iloc[row_idx]
             scale = float(result_row.get("target_vol_scale", 1.0) or 1.0)
-            volume_scale = float(result_row.get("volume_scale_next", 1.0) or 1.0)
-            logvol_high_vol_scale = float(result_row.get("logvol_high_vol_scale", 1.0) or 1.0)
         except Exception:
             pass
-    base_target = _v78_target_from_scores(scores.iloc[row_idx], vol_row, scale, top_n=US_ROT_TOP_N, abs_threshold=0.0)
-    return _v78_apply_equity_scale(base_target, volume_scale * (logvol_high_vol_scale if line == "logvol" else 1.0))
+    base_target = _v78_target_from_scores(
+        scores.iloc[row_idx], vol_row, scale,
+        top_n=US_ROT_TOP_N, abs_threshold=0.0,
+    )
+    return _v78_normalize_weights(base_target)
 
 
 def _v78_subb_new_line_hypo_weights_from_blend(close_df, us_rot_result, line="bias", row_idx=-1):
@@ -9230,6 +9223,167 @@ def _write_v79_adk_execution_chain(w, cn_dk_result, idx=-1, close_label="若现�
     return summary
 
 
+def _query_action_instruction(changed, intraday, query_kind):
+    """Return one unambiguous user action for the current query surface."""
+    if query_kind in {"params", "live_params"}:
+        return "本页只用于核对状态和参数；实际操作请以“实时信号”的操作卡为准。"
+    if intraday:
+        if query_kind == "signal":
+            return "盘中尚未确认：现在不操作；如需观察盘中假设，请查询“实时信号”。"
+        return "盘中仅观察：现在不操作；临近收盘复核，收盘确认后再按目标执行。"
+    if changed:
+        return "收盘目标已确认：若尚未执行，按目标调整；若已执行，不要重复下单。"
+    return "目标与当前一致：维持，不操作。"
+
+
+def _suba_query_overview(cn_result, idx=-1):
+    if cn_result is None or len(cn_result) == 0:
+        return {"rows": [], "changed": False, "current_exposure": np.nan, "target_exposure": np.nan}
+    row = cn_result.iloc[idx]
+    specs = [
+        ("V7.7A原版", V78_SUBA_V77_WEIGHT, "v78_suba_v77"),
+        (V78_SUBA_NEW_LABEL, V78_SUBA_NEW_TV10_WEIGHT, "v78_suba_new"),
+    ]
+    rows = []
+    for label, blend_weight, prefix in specs:
+        current_holding = str(row.get(f"{prefix}_holding", "cash") or "cash")
+        target_holding = str(row.get(f"{prefix}_target", current_holding) or "cash")
+        current_weight = float(row.get(f"{prefix}_weight", 0.0) or 0.0)
+        target_weight = float(row.get(f"{prefix}_target_weight", current_weight) or 0.0)
+        if current_weight <= 1e-12:
+            current_holding = "cash"
+        if target_weight <= 1e-12:
+            target_holding = "cash"
+        changed = current_holding != target_holding or abs(current_weight - target_weight) > 1e-4
+        if current_holding != target_holding:
+            action = "换仓"
+        elif abs(current_weight - target_weight) > 1e-4:
+            action = "调整敞口"
+        else:
+            action = "维持"
+        rows.append({
+            "leg": label,
+            "current": f"{CN_NAMES.get(current_holding, current_holding)} / {current_weight:.2f}x",
+            "target": f"{CN_NAMES.get(target_holding, target_holding)} / {target_weight:.2f}x",
+            "action": action,
+            "changed": changed,
+            "current_contribution": blend_weight * current_weight,
+            "target_contribution": blend_weight * target_weight,
+        })
+    current_exposure = float(row.get("v78_suba_final_exposure", sum(item["current_contribution"] for item in rows)) or 0.0)
+    target_exposure = float(row.get("v78_suba_target_exposure", sum(item["target_contribution"] for item in rows)) or 0.0)
+    return {
+        "rows": rows,
+        "changed": any(item["changed"] for item in rows) or abs(current_exposure - target_exposure) > 1e-4,
+        "current_exposure": current_exposure,
+        "target_exposure": target_exposure,
+    }
+
+
+def _adk_query_overview(cn_dk_result, idx=-1):
+    if cn_dk_result is not None and "v78_adk_final_exposure" in cn_dk_result.columns:
+        rich = _v79_adk_execution_summary(cn_dk_result, idx)
+        return {
+            "rows": [
+                {
+                    "leg": item["leg"],
+                    "current": item["current_final_text"],
+                    "target": item["target_final_text"],
+                    "action": "调整" if item["changed"] else "维持",
+                    "changed": bool(item["changed"]),
+                }
+                for item in rich["rows"]
+            ],
+            "changed": bool(rich["changed"]),
+            "current_net": rich.get("current_net", {}),
+            "target_net": rich.get("target_net", {}),
+            "target_is_exact": True,
+        }
+    change_rows = _v78_adk_close_target_change_rows(cn_dk_result, idx) if cn_dk_result is not None else []
+    return {
+        "rows": [
+            {
+                "leg": item["leg"],
+                "current": item["current_text"],
+                "target": item["target_text"],
+                "action": "换配对/方向" if item["changed"] else "维持",
+                "changed": bool(item["changed"]),
+            }
+            for item in change_rows
+        ],
+        "changed": any(bool(item["changed"]) for item in change_rows),
+        "current_net": {},
+        "target_net": {},
+        "target_is_exact": False,
+    }
+
+
+def _format_signed_exposure(value):
+    value = float(value or 0.0)
+    if abs(value) <= 1e-12:
+        return "0.00x"
+    return f"{'多' if value > 0 else '空'} {abs(value):.2f}x"
+
+
+def _write_a_adk_query_overview(
+    w,
+    cn_result,
+    cn_dk_result,
+    *,
+    cn_intraday=False,
+    dk_intraday=False,
+    query_kind="signal",
+):
+    """Lead every A/ADK query with current -> target -> action -> timing."""
+    w("## ✅ A / ATK（ADK）操作总览｜先看这里\n\n")
+    if query_kind in {"params", "live_params"}:
+        w("> 这是核对页，不是下单页；需要操作时请查询“实时信号”。\n\n")
+
+    suba = _suba_query_overview(cn_result, -1)
+    suba_mark = "🔴" if suba["changed"] else "🟢"
+    w(f"### A策略（Sub-A）｜{suba_mark} {'需要调整' if suba['changed'] else '维持'}\n\n")
+    if suba["rows"]:
+        w("| 分腿 | 当前已生效 | 收盘最终目标 | 操作 |\n")
+        w("|:-|:-|:-|:-|\n")
+        for item in suba["rows"]:
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
+        w(
+            f"| **A策略合计** | **{suba['current_exposure']:.2f}x** | "
+            f"**{suba['target_exposure']:.2f}x** | **{'调整' if suba['changed'] else '维持'}** |\n"
+        )
+    else:
+        w("⚠️ A策略状态不可用。\n")
+    w(f"\n**现在怎么做：{_query_action_instruction(suba['changed'], cn_intraday, query_kind)}**\n\n")
+
+    adk = _adk_query_overview(cn_dk_result, -1)
+    adk_mark = "🔴" if adk["changed"] else "🟢"
+    w(f"### ATK / ADK策略（Sub-A-DK）｜{adk_mark} {'需要调整' if adk['changed'] else '维持'}\n\n")
+    if adk["rows"]:
+        w("| 分腿 | 当前已生效 | 收盘最终目标 | 操作 |\n")
+        w("|:-|:-|:-|:-|\n")
+        for item in adk["rows"]:
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
+    else:
+        w("⚠️ ADK策略状态不可用。\n")
+    if adk["target_net"]:
+        w("\n**账户净敞口（实际执行优先看）**\n\n")
+        w("| 指数 | 当前净敞口 | 目标净敞口 | 调整量 |\n")
+        w("|:-|:-|:-|:-|\n")
+        assets = sorted(set(adk["current_net"]) | set(adk["target_net"]))
+        for asset in assets:
+            current = float(adk["current_net"].get(asset, 0.0) or 0.0)
+            target = float(adk["target_net"].get(asset, 0.0) or 0.0)
+            delta = target - current
+            w(
+                f"| {_dk_leg_name(asset)} | {_format_signed_exposure(current)} | "
+                f"**{_format_signed_exposure(target)}** | {_format_signed_exposure(delta)} |\n"
+            )
+    elif adk["rows"] and not adk["target_is_exact"]:
+        w("\n> 当前兼容路径只给出配对/方向变化；精确腿内敞口继续以下方 VolScale 与覆盖层状态表为准。\n")
+    w(f"\n**现在怎么做：{_query_action_instruction(adk['changed'], dk_intraday, query_kind)}**\n\n")
+    w("> 下方是计算依据与风控明细，用于复核；是否操作及目标仓位以上方操作总览为准。\n\n---\n\n")
+
+
 def _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=False, top_n=3):
     specs = [
         ("V7.7 ADK", cn_dk_result.attrs.get("v78_adk_v77"), "正式8配对"),
@@ -9734,8 +9888,7 @@ def _write_v78_subb_param_tables(w):
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
     w(f"| 四腿混合 | **官方腿25% / EMA腿25% / Bias腿25% / LogVol腿25%** | 四腿分别计算目标，再汇总为V7.9综合执行目标 |\n")
     w(f"| 混合后波动口径 | **不二次归一** | {SUBB_BLEND_VOL_NOTE} |\n")
-    w("| V7.9 NAV成本口径 | **final-account net** | 四腿、VolReg与DBC Guard先合成最终账户目标，再按相邻最终有效仓位净变化只收一次成交成本；组件腿成本仅作诊断，不重复扣费。 |\n")
-    w(f"| SPY量能取数失败 | **{V78_SUBB_SPY_VOLUME_FAIL_MODE}** | fail_closed means Bias/LogVol conservatively derisk {_subb_volreg_scaled_assets_text()} by 0.75 if SPY volume is unavailable; local runs without Yahoo access may be more defensive than Poe/live runs. |\n")
+    w("| V7.9 NAV成本口径 | **final-account net** | 四腿与VolReg先合成最终账户目标，再按相邻最终有效仓位净变化只收一次成交成本；组件腿成本仅作诊断，不重复扣费。 |\n")
     w(f"| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n")
     w(f"| 调仓保护 | **{US_ROT_REBALANCE_THRESHOLD}x** | 逐窗口挑战者保护；新资产需超过最弱在位者{US_ROT_REBALANCE_THRESHOLD:.2f}x才允许替换 |\n")
     w(f"| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n")
@@ -9746,8 +9899,6 @@ def _write_v78_subb_param_tables(w):
         "按最终账户超额毛敞口逐日扣除，可通过US_ROT_FINANCING_SPREAD_BPS配置 |\n"
     )
     w(f"| 信号频率 | **周度** | 每周最后一个交易日(≤周四) |\n")
-    if SUBB_DBC_PROFIT_GUARD_ENABLED:
-        w(f"| DBC/PDBC profit guard | **on** | {_subb_dbc_profit_guard_rule_text()} |\n")
     if US_ROT_VOLREG_ENABLED:
         w(f"| VolReg风险过热 | **开启** | {_subb_volreg_rule_text()}；{US_ROT_VOLREG_BACKTEST_NOTE} |\n")
     w(f"| 历史可比性 | **phased/proxy** | {_subb_history_disclosure_text()} |\n")
@@ -9777,15 +9928,12 @@ def _write_v78_subb_param_tables(w):
     w("| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n")
     w("| score口径 | **price/MA160,260,390 = 3/2/1加权** | 按price/MA(lb)-1排名；不是官方腿动量窗口 |\n")
     w("| target-vol / 窗口 / 最大杠杆 | **25% / 40日 / max1.5x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n")
-    w(f"| 成交量过滤 | **SPY量/MA60≥1.5 -> {_subb_volreg_scaled_assets_text()} ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
 
     w("\n**LogVol腿参数**\n\n")
     w("| 参数 | 值 | 说明 |\n|:-|:-|:-|\n")
     w("| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n")
     w("| score口径 | **log return 120/200/320 = 60%/30%/10%** | 独立于官方腿160/260/390窗口 |\n")
     w("| target-vol / 窗口 / 最大杠杆 | **30% / 40日 / max1.25x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n")
-    w(f"| 成交量过滤 | **SPY量/MA60≥1.5 -> {_subb_volreg_scaled_assets_text()} ×0.75** | 差额转BIL；只作用于本腿，不改其他腿 |\n")
-    w(f"| vol-hot仓位降档 | **rv≥50% -> {_subb_volreg_scaled_assets_text()}目标仓位×0.75** | 仅LogVol腿；仅在信号日作用于下一期目标仓位，不做每日强制降仓；差额转BIL，并同步进入target/actual/turnover/cost |\n")
     w(f"\n资产池: **{n_etfs}只** | {', '.join(etf_labels)}\n")
 
 
@@ -10453,7 +10601,7 @@ def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=No
         gross_returns.append(gross_ret)
         # This turnover is an overlay diagnostic, not another payable virtual
         # leg.  The final-account rebuild below charges the net target change
-        # once after VolReg and DBC Guard have both finished.
+        # once after the four-leg blend and active VolReg overlay have finished.
         final_returns.append(gross_ret)
         turnovers.append(turnover)
         costs.append(cost)
@@ -10897,9 +11045,9 @@ def _rebuild_subb_account_execution_costs(
 ):
     """Rebuild Sub-B return/cost from the final account target exactly once.
 
-    Component-leg, VolReg and DBC-guard turnover remains available in their
-    diagnostic columns, but payable commission is the adjacent change in the
-    post-overlay effective account weights.  A changed target owns T-close to
+    Component-leg and VolReg turnover remains available in their diagnostic
+    columns, but payable commission is the adjacent change in the final
+    effective account weights.  A changed target owns T-close to
     T+1-open at the old weights and T+1-open to close at the new weights.
     """
     if us_rot_result is None or len(us_rot_result) == 0:
@@ -14507,13 +14655,6 @@ class CombinedStrategyBase:
                 us_open=getattr(self, "_us_open", None),
                 strict_open_execution=strict_subb_open_execution,
             )
-        if SUBB_DBC_PROFIT_GUARD_ENABLED:
-            us_rot_result = apply_subb_dbc_profit_guard_overlay(
-                us_rot_result,
-                us_rot_close,
-                us_open=getattr(self, "_us_open", None),
-                strict_open_execution=strict_subb_open_execution,
-            )
         us_rot_result = _rebuild_subb_account_execution_costs(
             us_rot_result,
             close_df=us_rot_close,
@@ -14643,10 +14784,6 @@ class CombinedStrategyBase:
         hypo_us_w = dict(blended_hypo_us_w)
         if US_ROT_VOLREG_ENABLED and volreg_defense_next:
             hypo_us_w, _ = _apply_subb_volreg_defense_scale_to_weights(hypo_us_w, True)
-        hypo_us_w = _apply_subb_dbc_profit_guard_scale_to_weights(
-            hypo_us_w,
-            _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
-        )
         if is_us_signal:
             rebalanced_b = _subb_model_rebalanced_value(us_rot_result.iloc[-1])
             rloc = len(us_rot_result) - 1
@@ -15441,7 +15578,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w = msg.write
             w("## 📊 操作信号（收盘确认）\n\n")
             w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n")
-            w("### Sub-A: A股乖离动量轮动\n")
+            _write_a_adk_query_overview(
+                w,
+                cn_result,
+                cn_dk_result,
+                cn_intraday=cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2,
+                dk_intraday=cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2,
+                query_kind="signal",
+            )
+            w("### Sub-A: V7.9双腿综合｜A策略详细依据\n")
             cn_close_bj = beijing_time_str(cn_date, "CN", "close")
             w(f"数据: 东财K线 | 收盘: {cn_close_bj}")
             if cn_unconfirmed and cn_data_is_today:
@@ -15551,7 +15696,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 if _knives2:
                     _kn_names2 = "、".join(f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives2)
                     w(f"**防接刀:** 🔪 {_kn_names2} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n")
-            w("\n---\n\n### Sub-A-DK: V7.9双子策略（V7.7正式8配对 + New all10 score-hot）\n")
+            w("\n---\n\n### Sub-A-DK: V7.9双子策略｜ATK / ADK详细依据\n")
             dk_close_bj = beijing_time_str(dk_date, "CN", "close")
             w(f"数据来源: 中证指数+东财K线 | 5指数；V7.7正式{len(ADK_OFFICIAL_PAIR_ORDER)}对 + New全10对 | 收盘: {dk_close_bj}")
             if cn_unconfirmed and dk_data_is_today:
@@ -15692,9 +15837,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
-            _subb_volume_warning = _v78_subb_volume_warning(us_rot_result)
-            if _subb_volume_warning:
-                w(f"{_subb_volume_warning}\n")
             w("下方先展示四腿贡献，再汇总为综合执行目标。\n")
             # VolReg风控状态
             _vr = d.get("volreg_ratio")
@@ -15711,7 +15853,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w(f"🟢 **VolReg风险过热:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n")
                 if _vr_defense_next and not _vr_defense:
                     w(f"📌 VolReg后实际执行目标: **{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n")
-            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             if us_signal_confirmed:
                 _last_us_sig_date = us_date
             else:
@@ -15737,15 +15878,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 _us_prev_w,
                 force_cash=_force_volreg_cash_display,
             )
-            if not _force_volreg_cash_display and len(us_rot_result) > 0:
-                _guard_row = us_rot_result.iloc[-1]
-                if _subb_dbc_profit_guard_pending(_guard_row):
-                    _guard_target_w = _subb_dbc_profit_guard_display_target_weights(us_rot_result, -1)
-                    if _guard_target_w:
-                        _us_display_w = _guard_target_w
-                        _us_prev_w = dict(current_us_w)
-                        _us_all_etfs = set(_us_all_etfs) | set(_us_display_w) | set(_us_prev_w)
-                        _us_rebalanced = True
             _us_display_turnover = sum(abs(_us_display_w.get(e, 0) - _us_prev_w.get(e, 0)) for e in _us_all_etfs if e not in ("BIL", "CASH"))
             _us_schedule = _coerce_session_index(getattr(self, "_us_open", None))
             if _us_schedule is None:
@@ -16005,13 +16137,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
             since_date=cutoff,
         )
         all_rebalances.extend([r for r in volreg_rebs if pd.Timestamp(r["日期"]) >= cutoff])
-        dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(
-            d["us_rot_result"],
-            us_rot_close=us_rot_close,
-            us_open=_us_open,
-            since_date=cutoff,
-        )
-        all_rebalances.extend([r for r in dbc_guard_rebs if pd.Timestamp(r["日期"]) >= cutoff])
         prod_rebs = extract_prod_rebalances(d["prod_details"], d["prod_monthly"], us_prod_daily=us_prod_daily, us_open=_us_open)
         all_rebalances.extend([r for r in prod_rebs if pd.Timestamp(r["日期"]) >= cutoff])
         vs_rebs = extract_subc_vs_rebalances(us_prod_daily, d.get("prod_sig_a"), d.get("prod_sig_b"), us_open=_us_open)
@@ -16129,7 +16254,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
                          f"（{'、'.join(live_markets)}盘中，收盘前信号可能变化）\n\n")
             else:
                 w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 基于收盘数据（非盘中）\n\n")
-            w("### Sub-A: A股轮动\n")
+            _write_a_adk_query_overview(
+                w,
+                cn_result,
+                cn_dk_result,
+                cn_intraday=cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2,
+                dk_intraday=cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2,
+                query_kind="live_signal",
+            )
+            w("### Sub-A: V7.9双腿综合｜A策略详细依据\n")
             cn_close_bj = beijing_time_str(cn_date, "CN", "close")
             w(f"数据: 东财K线 | 收盘: {cn_close_bj}")
             if cn_unconfirmed and cn_data_is_today:
@@ -16234,7 +16367,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     if _knives3:
                         _kn_names3 = "、".join(f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives3)
                         w(f"**防接刀:** 🔪 {_kn_names3} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n")
-            w("\n---\n\n### Sub-A-DK: V7.9双子策略（V7.7正式8配对 + New all10 score-hot）\n")
+            w("\n---\n\n### Sub-A-DK: V7.9双子策略｜ATK / ADK详细依据\n")
             dk_close_bj3 = beijing_time_str(dk_date, "CN", "close")
             w(f"数据来源: 中证指数+东财K线 | 5指数；V7.7正式{len(ADK_OFFICIAL_PAIR_ORDER)}对 + New全10对 | 收盘: {dk_close_bj3}")
             if cn_unconfirmed and dk_data_is_today:
@@ -16353,9 +16486,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w("实盘->proxy: " + ", ".join(f"{k}->{v}" for k, v in changed.items()) + "\n")
             w(f"阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n")
             w(f"{_v78_subb_default_rule_text()}\n")
-            _subb_volume_warning_live = _v78_subb_volume_warning(us_rot_result)
-            if _subb_volume_warning_live:
-                w(f"{_subb_volume_warning_live}\n")
             w("持仓表展示当前实际持有；四腿表展示假设今日调仓目标，并给出两者差异。\n")
             # VolReg风控 (详细视图)
             _vr_detail = d.get("volreg_ratio")
@@ -16370,7 +16500,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     w(f"🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             w("\n")
-            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             _us_live_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
             _us_live_gate = _subb_inflation_gate_context(us_rot_close, -1)
             _us_mix_live = _us_mix_display_context(
@@ -16548,7 +16677,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 strategy_params_error = _short_error(exc)
         with _sm() as msg:
             w = msg.write
-            w("## ⚙️ 策略参数总览\n\n### Sub-A: A股乖离动量轮动 (v7.7 linear3x + abs20 gate)\n\n")
+            w("## ⚙️ 策略参数总览\n\n")
+            _write_a_adk_query_overview(
+                w,
+                cn_result_params,
+                cn_dk_result_params,
+                query_kind="params",
+            )
+            w("### Sub-A: V7.9双腿综合｜A策略参数与计算依据\n\n")
             _write_v78_suba_param_tables(w)
             w("\n**当前分腿仓位因果链:**\n")
             if cn_result_params is not None and len(cn_result_params) > 0:
@@ -16563,7 +16699,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f"5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n")
             w("6. 无冷却期限制；近收盘信号按当日收盘手工执行，收益状态机用shift(1)避免未来函数\n")
             w("\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n")
-            w("\n---\n\n### Sub-A-DK: V7.9双子策略（V7.7正式8配对 + New all10 score-hot）\n\n")
+            w("\n---\n\n### Sub-A-DK: V7.9双子策略｜ATK / ADK参数与计算依据\n\n")
             _write_v78_adk_param_tables(w)
             w("\n**当前持仓状态:**\n\n")
             if cn_dk_result_params is not None and len(cn_dk_result_params) > 0:
@@ -16604,8 +16740,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
             if US_ROT_VOLREG_ENABLED:
                 w(f"7. VolReg风险过热: {_subb_volreg_rule_text()}。T日收盘计算 → T+1日执行\n")
                 w(f"   - {US_ROT_VOLREG_BACKTEST_NOTE}\n")
-            if SUBB_DBC_PROFIT_GUARD_ENABLED:
-                w(f"8. DBC/PDBC profit guard: price-only, no score decay; {_subb_dbc_profit_guard_rule_text()}. Applied after VolReg with next-open execution.\n")
             w("\n**执行方式:** 美股因时差无法收盘价执行 -> T+1 adjusted open 执行；回测按旧仓隔夜 + 新仓日内拆分，缺少 required open 时中止。\n")
             w("\n---\n\n")
             _write_subc_param_summary(w)
@@ -16656,7 +16790,15 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"⏱ **北京时间 {bj_ts}** 基于收盘数据\n\n")
             w(f"A股收盘: {cn_close_bj} | "
                       f"美股收盘: {us_close_bj}\n\n")
-            w("### Sub-A: V7.9双腿综合（V7.7A原版 + New A TV1.0）\n\n")
+            _write_a_adk_query_overview(
+                w,
+                cn_result,
+                cn_dk_result,
+                cn_intraday=cn_unconfirmed and cn_data_is_today and len(cn_result) >= 2,
+                dk_intraday=cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2,
+                query_kind="live_params",
+            )
+            w("### Sub-A: V7.9双腿综合｜A策略实时参数与计算依据\n\n")
             _write_v78_suba_param_tables(w)
             w("\n")
             cn_close_with_bond = _add_cn_bond_column(cn_close, msg, context="Sub-A参数展示")
@@ -16729,7 +16871,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w(f"\n**VolScale rebalance: {float(_cn_sc_raw_p):.2f}x -> {_cn_next_scale_p:.2f}x; manual same-day close execution after near-close confirmation**\n")
                     else:
                         w(f"\n**Final exposure:** **{_cn_sc_p:.2f}x** (same-day close execution basis)\n")
-            w("\n---\n\n### Sub-A-DK: V7.9双子策略（V7.7正式8配对 + New all10 score-hot）\n\n")
+            w("\n---\n\n### Sub-A-DK: V7.9双子策略｜ATK / ADK实时参数与计算依据\n\n")
             _write_v78_adk_param_tables(w)
             w("\n")
             _dk_params_intraday = cn_unconfirmed and dk_data_is_today and len(cn_dk_result) >= 2
@@ -16837,7 +16979,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     w(f"🟢 **VolReg风险过热:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n")
             # 信号日状态
-            _write_subb_dbc_profit_guard_status(w, us_rot_result, -1)
             us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
             us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
             is_us_signal_p = (len(us_rot_close) - 1) in us_signal_set_p
@@ -16910,10 +17051,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _hypo_us_w_p = dict(_blended_hypo_us_w_p)
             if US_ROT_VOLREG_ENABLED and _vr_defense_next_p:
                 _hypo_us_w_p, _ = _apply_subb_volreg_defense_scale_to_weights(_hypo_us_w_p, True)
-            _hypo_us_w_p = _apply_subb_dbc_profit_guard_scale_to_weights(
-                _hypo_us_w_p,
-                _subb_dbc_profit_guard_latest_next_scale(us_rot_result),
-            )
             _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
             w(f"**① 官方腿分窗口动量排名（{_subb_window_label_for_display('/')}）:**\n\n")
             w("下表只对应官方腿；EMA/Bias/LogVol腿在后续子策略腿状态表中单独展示。\n\n")
@@ -17244,18 +17381,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 for rec in volreg_period_rebs:
                     w(f"| {rec['日期']} | {rec.get('卖出', '—')} | {rec.get('买入', '—')} |\n")
                 w("\n")
-            dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
-            dbc_guard_period_rebs = [
-                rec for rec in dbc_guard_rebs
-                if start_date <= pd.Timestamp(rec["日期"]) <= end_date
-            ]
-            if dbc_guard_period_rebs:
-                w(f"**Sub-B DBC Guard 有效仓位切换 ({len(dbc_guard_period_rebs)}次):**\n\n")
-                w("| 日期 | 卖出 | 买入 |\n")
-                w("|:--|:--|:--|\n")
-                for rec in dbc_guard_period_rebs:
-                    w(f"| {rec['日期']} | {rec.get('卖出', '—')} | {rec.get('买入', '—')} |\n")
-                w("\n")
     def _handle_nav_chart(self, query, *, chart_only=False):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
@@ -17533,8 +17658,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
         all_rebalances.extend([r for r in us_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
         volreg_rebs = extract_subb_volreg_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
         all_rebalances.extend([r for r in volreg_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
-        dbc_guard_rebs = extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open)
-        all_rebalances.extend([r for r in dbc_guard_rebs if start_date <= pd.Timestamp(r["日期"]) <= end_date])
         prod_rebs = extract_prod_rebalances(
             prod_details, prod_monthly, us_prod_daily=us_prod_daily, us_open=_us_open,
         )

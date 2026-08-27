@@ -239,7 +239,9 @@ def test_v78_live_signal_uses_suba_display_fields_not_single_leg_hypo():
     module = load_v78_module()
     compute_source = inspect.getsource(module.CombinedStrategyV78._compute_signal_data)
     live_source = inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
-    suba_block = live_source.split('w("### Sub-A: A股轮动', 1)[1].split("# ── Sub-A vol-scaling", 1)[0]
+    suba_block = live_source.split(
+        'w("### Sub-A: V7.8双腿综合｜A策略详细依据', 1
+    )[1].split("# ── Sub-A vol-scaling", 1)[0]
 
     assert '"cn_current_display": cn_display_state.get("current_display")' in compute_source
     assert '"cn_target_display": cn_display_state.get("target_display")' in compute_source

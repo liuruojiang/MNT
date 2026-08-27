@@ -1,5 +1,15 @@
 # Task State
 
+## Current Production: V8.0 Unified Poe Bot
+
+- Authority: `mnt_bot V 8.0 plus.py`, generated deterministically by `tools/build_v80_unified.py` from the V7.8/V7.9 source baselines.
+- Shared strategies: Sub-A 15%, Sub-A-DK 15%, and Sub-C 30% use the synchronized V7.9 host implementation.
+- Independent B strategies: B7.8 20% and B7.9 20%; each has separate targets, execution costs, holdings, NAV, and query detail.
+- Query order: A/ATK(ADK) overview, B7.8/B7.9 overview, C overview, then detailed calculation and risk evidence.
+- Sub-B execution remains `T close signal -> T+1 adjusted open execution -> T+1 close return`.
+- Poe artifact contract: self-contained single file, `# poe: name=Strategy-Signal-V80`, compact editor-safe output, and Python 3.11 syntax compatibility.
+- Cleanup boundary: temporary V8/adversarial test harnesses and runtime caches are disposable; existing tracked regression suites remain authoritative and are retained.
+
 ## Active Task 2026-08-24: V7.8 / V7.9 Volatility Management And Sleeve Diversification Audit
 
 - Goal: verify whether V7.8 and V7.9 implement the paper-style volatility-management idea, then evaluate sleeve independence and crisis-correlation concentration using the official four-sleeve return path.

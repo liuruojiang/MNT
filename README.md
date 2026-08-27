@@ -1,12 +1,14 @@
 # A-Share / US Momentum Combo Strategy
 
-This workspace contains the A-share / US momentum combo strategy family, including the V7.x `mnt_bot` production signal path.
+This workspace contains the A-share / US momentum combo strategy family, including the unified V8.0 `mnt_bot` production query path.
 
 ## Current Stage
 
-V7.9 is the current production bot; V7.8 remains a supported production baseline.
-Both scripts contain four sleeves only: Sub-A 15%, Sub-A-DK 15%, Sub-B 40%, and
-Sub-C 30%.
+V8.0 is the current Poe-ready production bot. It shares the synchronized A,
+ATK/ADK, and C implementations, while running the V7.8 and V7.9 B strategies
+independently. Portfolio/PV weights are Sub-A 15%, Sub-A-DK 15%, B7.8 20%,
+B7.9 20%, and Sub-C 30%. V7.8 and V7.9 remain the source baselines used to
+build and audit the two B variants.
 
 The shared production invariants are:
 
@@ -22,14 +24,18 @@ The shared production invariants are:
   next adjusted open, and uses a 0.35 scale-change deadband. BTC, bonds, and CTA
   remain unscaled.
 
-V7.9 combines the Sub-B official and EMA legs at 50/50. Its VolReg scales
-`QQQ/EMXC` only, while `DBC/PDBC` remains under its price-only profit guard. UUP
-is an optional observation series in V7.9, not a required trading input.
+B7.8 uses Top-3, a 4% absolute-momentum threshold, and a 1.05x replacement
+buffer; B7.9 uses Top-2, a 0% threshold, and no replacement buffer. Each keeps
+its own target-vol and VolReg rules, execution costs, holdings, and NAV. The
+retired SPY-volume/LogVol-high-vol discounts and DBC/PDBC profit guard are not
+part of the current production paths.
 
 ## Main Files
 
-- `mnt_bot V 7.9 plus.py`: current production bot and strategy implementation.
-- `mnt_bot V 7.8 plus.py`: supported V7.8 production baseline.
+- `mnt_bot V 8.0 plus.py`: current self-contained Poe production bot; upload this file.
+- `tools/build_v80_unified.py`: deterministic builder for the compact Poe-safe V8.0 artifact.
+- `mnt_bot V 7.9 plus.py`: V7.9 shared host and B7.9 source baseline.
+- `mnt_bot V 7.8 plus.py`: B7.8 source baseline.
 - `poe_adk_16_spread_v1_0_bot.py`: Poe-native online ADK 16-leg bot.
 - `run_v78_substrategy_poe_overlay_test.py`: V7.8 overlay comparison runner.
 - `docs/V7.8_PRODUCTION_SPEC.md`: production assumptions, execution policy, external-gate freshness policy, and manual run checklist.
@@ -51,7 +57,8 @@ Research-only reproducibility utilities:
 Run these commands after touching production behavior:
 
 ```powershell
-python -m py_compile "mnt_bot V 7.8 plus.py" "mnt_bot V 7.9 plus.py" "poe_adk_16_spread_v1_0_bot.py"
+python "tools/build_v80_unified.py"
+python -m py_compile "mnt_bot V 7.8 plus.py" "mnt_bot V 7.9 plus.py" "mnt_bot V 8.0 plus.py" "tools/build_v80_unified.py" "poe_adk_16_spread_v1_0_bot.py"
 python -m pytest tests/test_v78_v79_adversarial_repairs.py tests/test_v78_v79_subc_sleeve_vol.py -q
 python -m pytest tests/test_poe_adk_16_spread_decay.py -q
 python -m pytest tests -q
@@ -64,7 +71,7 @@ from the deterministic regression suite.
 
 ## Manual Execution Notes
 
-V7.8 is a signal and manual-execution workflow. It does not submit broker orders.
+V8.0 is a signal and manual-execution workflow. It does not submit broker orders.
 
 - Sub-A and ADK intentionally use near-close live signal -> same-day close manual execution.
 - Sub-B uses T close signal -> T+1 adjusted open execution -> T+1 close return.

@@ -351,7 +351,7 @@ def test_subb_regular_rebalance_records_keep_same_day_model_change_when_volreg_e
     assert "GLDM 50.0%->40.0%" in records[0]["卖出"]
 
 
-def test_v78_logvol_high_vol_scales_target_weights_not_return_discount(monkeypatch):
+def test_v78_logvol_has_no_high_vol_or_spy_volume_target_discount(monkeypatch):
     module = load_v78_module()
     dates = pd.bdate_range("2024-01-02", periods=390)
     close = pd.DataFrame(index=dates)
@@ -364,18 +364,29 @@ def test_v78_logvol_high_vol_scales_target_weights_not_return_discount(monkeypat
 
     monkeypatch.setattr(module, "_v78_score_log_weighted", lambda close_df: dummy_scores)
     monkeypatch.setattr(module, "_v78_target_from_scores", lambda *args, **kwargs: {"QQQ": 1.0})
-    monkeypatch.setattr(module, "_v78_spy_volume_gate", lambda index: (pd.Series(False, index=index), "test volume"))
     monkeypatch.setattr(module, "_us_signal_days", lambda close_df, start_idx: set(range(start_idx, len(close_df))))
     monkeypatch.setattr(module, "US_ROT_COMMISSION", 0.0)
 
     out = module.run_v78_subb_new_line(close, line="logvol")
-    high_vol_signals = out[out["is_signal"] & out["logvol_high_vol_on"]]
+    signal_rows = out[out["is_signal"]]
 
-    assert not high_vol_signals.empty
-    row = high_vol_signals.iloc[0]
-    assert float(row["logvol_high_vol_scale"]) == 0.75
-    assert abs(float(row["target_w_QQQ"]) - 0.75) < 1e-12
-    assert abs(float(row["target_w_BIL"]) - 0.25) < 1e-12
+    assert not signal_rows.empty
+    row = signal_rows.iloc[0]
+    assert abs(float(row["target_w_QQQ"]) - 1.0) < 1e-12
+    assert abs(float(row["target_w_BIL"])) < 1e-12
+    assert "logvol_high_vol_on" not in out.columns
+    assert "volume_gate_next" not in out.columns
+
+
+def test_v78_subb_production_path_omits_retired_overlays():
+    module = load_v78_module()
+    new_line_source = inspect.getsource(module.run_v78_subb_new_line)
+    strategy_source = inspect.getsource(module.CombinedStrategyBase._run_strategies)
+
+    assert "_v78_spy_volume_gate" not in new_line_source
+    assert "logvol_high_vol" not in new_line_source
+    assert "apply_subb_dbc_profit_guard_overlay" not in strategy_source
+    assert module.SUBB_DBC_PROFIT_GUARD_ENABLED is False
 
 
 def test_v78_subb_volreg_is_applied_after_final_v78_blend():
@@ -688,12 +699,13 @@ def test_v78_subb_param_tables_list_each_leg_separately():
     assert "25% / 40日 / max1.5x" in text
     assert "log return 120/200/320 = 60%/30%/10%" in text
     assert "30% / 40日 / max1.25x" in text
-    assert "SPY量/MA60≥1.5 -> QQQ/EMXC/EFA ×0.75" in text
+    assert "SPY量/MA60≥1.5 -> QQQ/EMXC/EFA ×0.75" not in text
     assert "component-net" in text
     assert "V7.7 official+EMA account-level blend is pre-netted before entering V7.8 as the 50% V7.7 component" in text
-    assert "fail_closed" in text
-    assert "local runs without Yahoo access may be more defensive" in text
-    assert "rv≥50% -> QQQ/EMXC/EFA目标仓位×0.75" in text
+    assert "fail_closed" not in text
+    assert "local runs without Yahoo access may be more defensive" not in text
+    assert "rv≥50% -> QQQ/EMXC/EFA目标仓位×0.75" not in text
+    assert "DBC/PDBC profit guard" not in text
     assert "| 官方腿 |" not in text
     assert "| EMA腿 |" not in text
     assert "| Bias腿 |" not in text
@@ -982,50 +994,6 @@ def test_v78_adk_legacy_single_leg_switch_alert_and_hypo_key_are_removed():
     assert 'd["hypo_dk"]' not in source
 
 
-def test_v78_subb_spy_volume_fail_mode_is_parameterized(monkeypatch):
-    module = load_v78_module()
-    dates = pd.to_datetime(["2026-06-11", "2026-06-12"])
-    monkeypatch.setattr(
-        module,
-        "_v78_fetch_spy_volume",
-        lambda index: (pd.Series(False, index=index, dtype=bool), "unavailable: test missing"),
-    )
-    monkeypatch.setattr(
-        module,
-        "_v78_fetch_spy_volume_stooq",
-        lambda _index: (pd.Series(False, index=_index, dtype=bool), "unavailable: test stooq unavailable"),
-    )
-    monkeypatch.setattr(
-        module,
-        "_load_v78_spy_volume_cache",
-        lambda: (_ for _ in ()).throw(FileNotFoundError("test cache missing")),
-    )
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open")
-    gate, source = module._v78_spy_volume_gate(dates)
-    assert gate.tolist() == [False, False]
-    assert "unavailable: test missing" in source
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
-    gate, source = module._v78_spy_volume_gate(dates)
-    assert gate.tolist() == [True, True]
-    assert "fail_closed" in source
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "raise")
-    try:
-        module._v78_spy_volume_gate(dates)
-    except RuntimeError as exc:
-        assert "SPY volume unavailable" in str(exc)
-    else:
-        raise AssertionError("raise mode should stop when SPY volume is unavailable")
-
-
-def test_v78_subb_spy_volume_default_is_fail_closed():
-    module = load_v78_module()
-
-    assert module.V78_SUBB_SPY_VOLUME_FAIL_MODE == "fail_closed"
-
-
 def test_v78_us_yahoo_daily_timestamps_are_parsed_in_utc():
     module = load_v78_module()
     source = inspect.getsource(module._fetch_us_yahoo)
@@ -1110,31 +1078,6 @@ def test_v78_cn_and_adk_trading_day_basis_are_unified():
     assert module.CN_DK_TRADING_DAYS == module.CN_TRADING_DAYS
 
 
-def test_v78_subb_volume_warning_reports_configured_fail_mode(monkeypatch):
-    module = load_v78_module()
-    dates = pd.to_datetime(["2026-06-12"])
-    result = pd.DataFrame({"return": [0.0]}, index=dates)
-    result.attrs["v78_subb_bias"] = pd.DataFrame(
-        {"volume_source": ["unavailable: SPY volume missing"]},
-        index=dates,
-    )
-    result.attrs["v78_subb_logvol"] = pd.DataFrame(
-        {"volume_source": ["ok"]},
-        index=dates,
-    )
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "warn_open")
-    text = module._v78_subb_volume_warning(result)
-
-    assert "SPY volume unavailable" in text
-    assert "Bias" in text
-    assert "未执行" in text
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
-    text = module._v78_subb_volume_warning(result)
-    assert "保守降权" in text
-
-
 def test_signal_excel_uses_plain_no_for_non_signal_rows():
     module = load_v78_module()
 
@@ -1170,7 +1113,7 @@ def test_v78_subb_hypothetical_new_leg_weights_read_component_result_attrs():
     close = _synthetic_subb_close_with_macro_winners(module)
     dates = close.index
     bias_component = pd.DataFrame(
-        {"target_vol_scale": [1.23], "volume_scale_next": [0.75]},
+        {"target_vol_scale": [1.23]},
         index=[dates[-1]],
     )
     blended = pd.DataFrame(index=[dates[-1]])
@@ -1231,7 +1174,6 @@ def test_v78_subb_window_lbs_are_safe_for_display_if_global_is_polluted():
 def test_v78_subb_bias_and_logvol_macro_assets_stay_in_full_pool_when_inflation_gate_off():
     module = load_v78_module()
     close = _synthetic_subb_close_with_macro_winners(module)
-    module._v78_spy_volume_gate = lambda index: (pd.Series(False, index=index), "test volume")
 
     assert module._subb_active_ranking_codes(close, -1) == module.US_ROT_BASE_POOL
 

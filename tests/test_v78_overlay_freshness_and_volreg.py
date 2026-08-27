@@ -382,32 +382,6 @@ def test_subb_rotation_mix_strict_open_execution_rejects_missing_open(monkeypatc
         )
 
 
-def test_v78_spy_volume_gate_fail_closed_when_volume_source_ends_before_price_index(monkeypatch):
-    module = load_v78_module()
-    index = pd.to_datetime(["2026-06-10", "2026-06-11", "2026-06-12"])
-    stale_volume = pd.Series([100.0, 200.0], index=index[:2])
-
-    monkeypatch.setattr(module, "V78_SUBB_SPY_VOLUME_FAIL_MODE", "fail_closed")
-    monkeypatch.setattr(module, "_v78_fetch_spy_volume", lambda _index: (stale_volume, "test stale volume"))
-    monkeypatch.setattr(
-        module,
-        "_v78_fetch_spy_volume_stooq",
-        lambda _index: (pd.Series(False, index=_index, dtype=bool), "unavailable: test stooq unavailable"),
-    )
-    monkeypatch.setattr(
-        module,
-        "_load_v78_spy_volume_cache",
-        lambda: (_ for _ in ()).throw(FileNotFoundError("test cache missing")),
-    )
-
-    gate, source = module._v78_spy_volume_gate(index)
-
-    assert gate.index.equals(index)
-    assert gate.tolist() == [False, False, True]
-    assert "unresolved SPY volume 2026-06-12..2026-06-12" in source
-    assert "fail_closed" in source
-
-
 def test_v78_run_strategies_passes_strict_subb_open_execution_to_all_subb_legs():
     module = load_v78_module()
     source = inspect.getsource(module.CombinedStrategyBase._run_strategies)
