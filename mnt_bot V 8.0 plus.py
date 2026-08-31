@@ -8723,9 +8723,10 @@ def _write_v80_subb_risk_chain(w, result, label):
         conclusion = 'VolReg未触发或已恢复；不因VolReg削减风险资产。'
     w(f'- VolReg：本收盘SPY {short_w}/{long_w}日波动比={ratio_text}｜进入 **>{enter:.2f}**｜恢复 **<{recover:.2f}**｜当前生效Overlay={current_overlay:.2f}x（由上一收盘比率决定）｜下一目标Overlay={next_overlay:.2f}x。{conclusion}\n')
 
-def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intraday=False, us_rot_close=None):
+def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intraday=False, us_rot_close=None, is_signal_day=None):
     w('## 🇺🇸 B策略总览｜B7.8 / B7.9独立账户\n\n')
     w('> Sub-B内部各占50%（总组合各20%）；独立计算、扣费和执行。组合从50:50起始后随净值自然漂移，不做日频再平衡。\n\n')
+    w('> 执行时序：**常规周四收盘确认周度信号，下一美股交易日（通常周五）开盘执行**；其他交易日的盘中变化仅供参考，不产生新的B策略调仓指令。遇休市按实际交易日调整。\n\n')
     variants = [('B7.8', us_rot_result.attrs.get('v80_b78') if us_rot_result is not None else None), ('B7.9', us_rot_result)]
     signal_info = {}
     for label, result in variants:
@@ -8747,8 +8748,15 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
             signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
             continue
         changed = any((abs(item['delta']) >= 0.0005 for item in rows))
-        mark = '🔴' if changed else '🟢'
-        w(f"### {label}｜Sub-B的50% / 总组合20%｜{mark} {('目标变化' if changed else '维持')}\n\n")
+        if query_kind in {'params', 'live_params'}:
+            mark, status_text, target_title = ('🔴' if changed else '🟢', '模型目标变化' if changed else '模型目标维持', '模型目标')
+        elif is_signal_day is False:
+            mark, status_text, target_title = ('🟡', '非信号日参考', '参考目标（不执行）')
+        elif us_intraday:
+            mark, status_text, target_title = ('🟡', '信号日盘中假设变化' if changed else '信号日盘中假设维持', '盘中假设目标')
+        else:
+            mark, status_text, target_title = ('🔴' if changed else '🟢', '周度目标变化' if changed else '周度目标维持', '本周确认目标')
+        w(f'### {label}｜Sub-B的50% / 总组合20%｜{mark} {status_text}\n\n')
         last = result.iloc[-1]
         if query_kind in {'params', 'live_params'}:
             if label == 'B7.8':
@@ -8769,7 +8777,7 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
                 volreg_exit = US_ROT_VOLREG_EXIT_THRESHOLD
             w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜绝对动量>{abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
         if rows:
-            w('| ETF | 当前已生效 | T收盘目标 | 调整量 |\n')
+            w(f'| ETF | 当前已生效 | {target_title} | 调整量 |\n')
             w('|:-|------:|------:|------:|\n')
             for item in rows:
                 delta_text = f"{item['delta']:+.1%}" if abs(item['delta']) >= 0.0005 else '—'
@@ -8779,16 +8787,27 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
         _write_v80_subb_risk_chain(w, result, label)
         if query_kind in {'params', 'live_params'}:
             action = '本页只核对参数；实际操作以“实时信号”为准。'
+        elif is_signal_day is False:
+            if us_intraday and pd.Timestamp(result.index[-1]).dayofweek == 4:
+                action = '今天（周五）是上一周四信号的执行日，不是新信号日；只按周四收盘确认目标在本次开盘执行，**不要把周五盘中变化当成新调仓指令**。'
+            else:
+                action = '本收盘不是B策略周度信号日；表内变化只是参考测算，**不调仓**。等待常规周四收盘确认，下一美股交易日（通常周五）开盘执行。'
         elif us_intraday:
-            action = '美股盘中目标未收盘确认；现在不执行，等待 T 收盘确认。'
+            action = '今天是B策略周度信号日，但当前只是盘中假设；**现在不调仓**。等待收盘确认，若目标变化则下一美股交易日（通常周五）开盘执行。'
         elif changed:
-            action = 'T收盘目标已确认；按 T+1 adjusted open 执行。已执行则勿重复。'
+            action = '本周信号日收盘目标已确认；下一美股交易日（通常周五）开盘执行。已执行则勿重复。'
         else:
-            action = '目标不变，维持；无需下单。'
+            action = '本周信号日收盘目标已确认且不变；下一交易日无需调仓。'
         if query_kind not in {'params', 'live_params'}:
             w(f'\n**现在怎么做：{action}**\n\n')
-        confirmed = not us_intraday
-        signal_info[label] = {'is_signal': bool(changed and confirmed), 'signal_text': ', '.join((f"{item['live_name']} {item['target']:.1%}" for item in rows)) or '无目标', 'note': '独立账户；盘中假设，等待T收盘确认' if us_intraday else '独立账户；T收盘确认后于T+1 adjusted open执行'}
+        confirmed = bool(is_signal_day is True and (not us_intraday))
+        if is_signal_day is False:
+            note = '独立账户；非周度信号日，仅供参考，不执行'
+        elif us_intraday:
+            note = '独立账户；周度信号日盘中假设，等待收盘确认'
+        else:
+            note = '独立账户；周度收盘确认后于下一美股交易日开盘执行'
+        signal_info[label] = {'is_signal': bool(changed and confirmed), 'signal_text': ', '.join((f"{item['live_name']} {item['target']:.1%}" for item in rows)) or '无目标', 'note': note}
     w('> B7.8与B7.9必须分别核对、分别下单，不合并持仓。\n\n')
     return signal_info
 
@@ -12827,7 +12846,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w('## 📊 操作信号（收盘确认）\n\n')
             w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
             signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=False, dk_intraday=False, query_kind='signal'))
-            signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close))
+            signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close, is_signal_day=is_us_signal))
             signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=us_signal_live)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
@@ -12966,7 +12985,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             else:
                 w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 基于收盘数据（非盘中）\n\n')
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal')
-            _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
+            _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close, is_signal_day=is_us_signal)
             _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=us_open and us_data_is_today)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)

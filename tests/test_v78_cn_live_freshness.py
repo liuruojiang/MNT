@@ -12,6 +12,70 @@ def load_v78_module():
     return module
 
 
+def load_v80_module():
+    root = Path(__file__).resolve().parents[1]
+    path = root / "mnt_bot V 8.0 plus.py"
+    spec = importlib.util.spec_from_file_location("mnt_bot_v80_plus", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_v80_subb_non_signal_day_is_reference_only(monkeypatch):
+    module = load_v80_module()
+    dates = pd.to_datetime(["2026-08-31"])
+    b78 = pd.DataFrame({"effective_w_QQQ": [0.2], "target_w_QQQ": [0.4]}, index=dates)
+    b79 = pd.DataFrame({"effective_w_QQQ": [0.3], "target_w_QQQ": [0.5]}, index=dates)
+    b79.attrs["v80_b78"] = b78
+    monkeypatch.setattr(module, "_write_v80_subb_risk_chain", lambda *_args, **_kwargs: None)
+    chunks = []
+
+    info = module._write_v80_subb_overview(
+        chunks.append,
+        b79,
+        query_kind="live_signal",
+        us_intraday=True,
+        is_signal_day=False,
+    )
+    text = "".join(chunks)
+
+    assert "常规周四收盘确认周度信号" in text
+    assert "下一美股交易日（通常周五）开盘执行" in text
+    assert "非信号日参考" in text
+    assert "参考目标（不执行）" in text
+    assert "本收盘不是B策略周度信号日" in text
+    assert info["B7.8"]["is_signal"] is False
+    assert info["B7.9"]["is_signal"] is False
+
+    friday = b79.copy()
+    friday.index = pd.to_datetime(["2026-08-28"])
+    friday_b78 = b78.copy()
+    friday_b78.index = friday.index
+    friday.attrs["v80_b78"] = friday_b78
+    friday_chunks = []
+    module._write_v80_subb_overview(
+        friday_chunks.append, friday, query_kind="live_signal", us_intraday=True, is_signal_day=False
+    )
+    assert "周五）是上一周四信号的执行日，不是新信号日" in "".join(friday_chunks)
+
+    confirmed_chunks = []
+    confirmed = module._write_v80_subb_overview(
+        confirmed_chunks.append,
+        b79,
+        query_kind="signal",
+        us_intraday=False,
+        is_signal_day=True,
+    )
+    confirmed_text = "".join(confirmed_chunks)
+    assert "周度目标变化" in confirmed_text
+    assert "本周确认目标" in confirmed_text
+    assert "本周信号日收盘目标已确认" in confirmed_text
+    assert confirmed["B7.8"]["is_signal"] is True
+    assert confirmed["B7.9"]["is_signal"] is True
+    assert "is_signal_day=is_us_signal" in inspect.getsource(module.CombinedStrategyV78._handle_signal)
+    assert "is_signal_day=is_us_signal" in inspect.getsource(module.CombinedStrategyV78._handle_live_signal)
+
+
 def test_fetch_us_yahoo_daily_dates_are_parsed_in_utc():
     module = load_v78_module()
     source = inspect.getsource(module._fetch_us_yahoo)
