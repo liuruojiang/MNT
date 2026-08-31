@@ -8,6 +8,9 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import io
+import base64
+import struct
+import zlib
 import re
 import json
 import os
@@ -132,9 +135,9 @@ CN_ENTRY_WAIT_DAYS = None
 CN_SWITCH_BUFFER = 1.0
 CN_BOND_CODE = '1.H11077'
 CN_BOND_NAME = '10Y国债'
-CN_TARGET_VOL = 0.3
+CN_TARGET_VOL = 0.2
 CN_VOL_WINDOW = 80
-CN_MAX_LEV = 1.5
+CN_MAX_LEV = 1.25
 CN_MIN_LEV = 0.1
 CN_SCALE_THRESHOLD = 0.0
 CN_ENTRY_INITIAL_FRACTION = 1.0
@@ -150,7 +153,6 @@ CN_SA_VOLUME_RULE_MODE = 'or'
 CN_SA_VOLUME_SCALE = 0.0
 CN_SA_VOLUME_HISTORY_BEG = '20000101'
 CN_SA_VOLUME_ZZ2000_SECID = '2.932000'
-CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS = (('1.563300', '中证2000ETF'), ('0.159531', '中证2000ETF'), ('1.562660', '中证2000ETF'), ('0.159532', '中证2000ETF'), ('0.159533', '中证2000ETF'), ('0.159535', '中证2000ETF'), ('0.159536', '中证2000ETF'))
 CN_SA_VOLUME_ZZ2000_MA = 20
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = '0.399006'
@@ -180,6 +182,11 @@ CN_NAMES = {'1.930955': '中证红利低波100', '0.399006': '创业板', '1.000
 CN_ZZHL_INDEX_SECID = '1.930955'
 CN_CSINDEX_PRICE_INDEX_CODES = {'1.930955': '930955'}
 CN_VENDOR_SECID_ALIASES = {'1.930955': ['2.930955', '1.930955']}
+CN_CSINDEX_PRICE_PROXY_SECIDS = {'1.930955': '1.515100'}
+CN_EMBEDDED_930955_B85 = 'c-l4EdAv{M_6P9uwa+meL!@NNkW8tNGF3$8sY0euqEbkRAGdJ1)J<qGC1XkEA(=9i>2ed5G7}<0$k=2&zvsQL^Ur?m?|1M0JZpW{XMNUsp1luN&6<>daJHmG-;7B~iTj=mhk^H{r6t~LmXs6~Y97uqUJr*=--g5Hs^My#@o8yM`;>6jrg=ED{UKbKvN9Y}iiIbR<PZOS)GYjb<We}){xTf))(;oP><ecV%ZIDU=fc_gaC4$+I7{7lHvGKsc=*{gZ#Yzl!eP<nFvm|d!dbub;p!LJ!&#RW;p}ROFw}4BoK*<_<?Is<IdX(UkAmSsgWJQ|@xQ~>R93BVs2nVf#@`h#6wDS5X@;tmFC1Pj8ZNXi70!M=6YeXYA)Gz3J)CvV6)t>oHJtT46b`K#h6`shg+t@yq@?8Wg~M6?YvDrKUEwhMM6mStd%}N9u7sc0ONX=JH-*C!!TqS!w(#F@BUjxL&K~_U9Fl^$(G{4UW>5<-E&C%JZVsL&Pktc$_g_E%FD)GIUJyq4=caJ>t?)cnARH=Y4u{1T!-YP<(!|;e;p#0vL;SCBSP%w{9^>WY(?(%cJ{D97!$+;et;7@Iu!Ajg47w?x7R`0v{jPQnkEK*u9)2DL>`@-|Fvpr(!+n1wg`WjXv?5P9J7|vEehRjn5YV*&p~Re2NILrn_R)ReY&M&(<PL{1!u{`K;fZXbFsg1i95(1ibMy@NMSmv3&%(z9o>l9>nK{rWs*)v~6$SR#qv67y;^8bioNFHmKf7fOKO1qi0q72gXQQ?SIe44@u<kEl?+PT0mYH|n@$hqqP#iG%4nsA+h_Ohx*3BDn<GDbFsHC4;Ahez{drpO)?}sU)mF8U*z)3vi>a)iCDBu#U68*bS<#?DVB`bP=!lQB=+;dAfbYtWm_uVa)y#>Bk&Tw`z%#k|tULb<A((mCyPHz1e9E_#})+IXQ?hrg}55GHvXP#)i#f+)^eVj8%tgq(2B53g;=vE8fVp&$7GsQ6R-e1FoS|!6-*_*>qb(yhRGA;9L3C}JMw?s8z`ibC;=Xt98wo1P|aDIse8Fm0W<Z9w(`SJMH@UsuXJuiYo`4M5=_x}-(%hHeMJHHQyY=Jq^d+1XQ1)de;TcqEZ5ag&SbH5gfy2g8p=V^f;$;a^TEf$nyX>Y)OA}Di>{2ajMi)GP3`KSgamN!&(Q8@0F{NXGrZKCx;QJ4kS0+N}Ja^V#S-DS3V9xLx>xqv}*0+JIUexIwKL8J69;fc4%*S!*~ms<uxw@839`r)vIW#oA@dq)ZtLcQDuy+yb`274ue`ZZ7`>RbrohCdI#y)0NF=^mlBHHg9s!d;ooLs>N-h8RLGI6Hyfs{{X1c7n5#iFOc*77YJT80+HXYF4!lS`y_2Ne{XDHT$Z|!Cu(DiXU%yteMC9$+ryQmgG7ht|}|)8){!*Y}AQ*Kfr>Mt}X-i{9to53{34wX}{mXg+XSk9wv`2aG`|obms4i*t9tWCFPXaViBAeE=1Lskrx^XfuCF?97dvT5t&lm&4czTS#W8Mwhav0m2$O_h>=K_3T8ybRgD2gehOd<n3gZt9Noi$8U~m|2`h=#mjtSsIj*|;1cc@oZ+3`VlrZITe7=)PJ&KNfh4w?9&+%AB+`S#c2BGL=^X4(YA13PQZ~$}z0o##Ulo7m#9NLB=@;~UNad5w@-*c<BoOwa;N&x#$nsd@@rz?dElQ{SYb34bvZI1hb`_Um7bmLY_7uJaML7uO{uzE~;gEPlW-k7=HVNM-Chj@0o$0~-|qFo~Rjd@Sdzf#WDh47?4Eyz;=(S?0GLA(s951tHXKN)`i&G2*fJ5K(_g;5Z{>MYI3r?RL~2YBSZ55b-nxxNdB=xucT8^o1?Qv-+o&8inTy~ISz@b6#JssgNf%d&j3XCl)+)4vpSp^4;d;=ZyD^USfCWPHi+OCTA==_ibr<cT%r&A31O>@TVlncF-lP1I1N*OQ>w(vysQlvQVxor*+ZD$^#5^t3Qa@*LuO)p)O%sLM@a1c*f@U**62Mk%KTR1mEzYCt(p?1po<K!)fe7<?hmYYF@lqP0*@vx<>TiRvVcO}X9SP!gZdSK-#U@N=m)@5P<rkhNE^^lL_@k@_+rs+oTdBuadP=*3vtAV^T6g+xpt4^4^NjJUCpwPWyaGt+9y%ie<AhQF&=@DmW{YGSqv^2-SKVyps6)+2qxg`W{~$er|AP=0r|P$=@DK=we?M3?YH%KyRnhr7eoKY4zW;eQZ-ROO^U()1DJjMU<XP;sIaLffpOGU4ot@514+a7)VDn3Dpv{=tuEIBB_#Dh-vuc7`t)=o!tWa2a@1+=YrP_z#HxQX9((=pjm24)%BOav|TE$-I7_%UX@_jNn!@!OdSvjSABFL7hy#ufv7wgmDV|n(%0ktM$X60hRFItY^c|PZ?BJW4*-W*-cr&91l3_sN6Lv7cT7lFC&$SJPcaqiH*8~uLVA?0gIIApC1Zmqt8JIx!St9BMKZ5t(gyoq4wTEmVmv^L=^#cTgb-f3agHDW(YWQnX*+FAj%PnVWLre#gK20>k8)cBbMf_@O$zbvc%u}Kyrc8OR#Q%EZdG7W3g_nHogGtGZBDY*fcbxMwHPg_ekfneEZzhHk!}d;sJ1SEz<lbNe)w=MKJxWj1Gl>=5|ZA;C^yDwB3d(4LH3on34M7{BYJm4&FllT0N${l>4<X>>bH;l)1e*-M4zU(8I!HHMiEm?@k_Vi&r9Ya54}NQifbOo*%HwS<uVRCgS!4zO2@H6vWf7HPHtIr4#(xX`Z?o`TSCvO&R`>M}0q)IHEA$&r7JB*P`b3yz;!39*#<7<$iq^`T@4P1j|j)Tl2h}IjZecY}|Z}=kcno2olaBxe2J%XXyn3HAJs+IQ*BAZx8-)W<nrWbW~8fV@Yl!FOc1bsQe}5S|=~3VNQK1bdT1hC_3(E-){n+N2NPv?UF-~zjR+R&FSH4h7iHj7DTX;p-u^C9k=WaI7ch%g`blQKN2Km1$1!;a<pJ-__=~AFZbX47}zrSf?<WwJJP<5)>dq5tpBqxew(g!6Z0ltQ>h0mh^$=yf>2%ft&x%+YsIUQ*T$>$0-~^TvzGXoaA8lU@bfZ+GSSnvAw!er<JI685{Rc7e!dcY4Y0-JWnUcXqQNLbPm|Y#v)5%*A%Ja|7|#9<rbW+l=3KBe<GeZ;OOZ-gstzIR5epW}iYfB)rAjmrcU#N~&pv4QhiKDNQfN1Vw3IGqtVHJCoL>B6hP76ODx<}lqP5i%lLPF@C5>0UnS(iAlu@?^3!-tE(uvu`Ej^LCJVhTbMrDz3E#7b7(QlSehwe>ZOKvyiPR}+b&9_p~0V4Pity`tv_(^}79g=s`h!1FcH#O=G<Ugnotc=@p-0i@YZOFe!(%naa@8sLBaTgRkk8USqPp(xj**DQ+dC311{dlZbFCcY2S&<b?UsvXbdB4M}oi3blVX!ckP?N_Be7v077vw7%;=d)#&4O!}%~4Xbb46MeAzDj$Zt0dh4G>3hBVHe!mH`uV6o2fwp-71*fS6sT3=I}U2ZKkMD`Czkhn?#5H0)e2#rwofrIg&`ur5SDdc!CufU^Lp`#7r#rVP&JlH9FgG)TCA3`rN2WyT2USC8i(5Tn-#{9DMMES9w->@%F{p%t$#`Z>r~L10(o{sw;hlh(C0Z$}7aGf^M-)ewN6O_T+&o!Ju6(-{K#&v>gz;77RnY0!gcoq*P+_y00VTU9(>eiixAIv%>$-FzRzACYRusq)z{UWVlar4(ZR+bzAI_JMTnA_MjVwml0zMaL!Nzb-#k>X75ExsNvLaZ#u{CoL^&y`$Gdg}{xW<nUBcp<v5kHThn)jA!n5^76E0P&XOB9|n`5aYDOQQoi*<q;YK7WYI9iY>O6!q1JcS;;<^-^O!@bvRN@Nw*{A(FkX=h*Xhuzurn4lvL*GC;hWol7z&qypu4!rVt@rz%Mn2_pJR1gf<ZMvl35E|3uAKz4kdTC+NsFj*^+5DX4ggj2_k(8Rr0ZPg^)ds&zUhIUd32y#f@-uFkXwBZ7p`r4DraA6{RMN?=O1WT6nNX+PB2hWNcqd52{MU=|CL8qhXjmPX)Usc&RR|hVv0zE1)AgbbmOzfKroq^p!bgTKvpKm0LZw!9+>1SgQ6T**r(Wp7Yogv3y5RM!IFcDeVxX)CbN^&g>zt^;L*<_CVVoN?$VeRbujC=bf{|l#?joDN%T90e>erNTEruQEz4T4?t|7&jY4}3)>`YeQJ@ZtU<YTE5<HRQ#t^)GH|Yvn{xIe9x!D)N<CJlG(+XPaP2??egHPJOzCRxrc)kCXVCweJQIC+R0Q7%9!6*3vH%8;F=MI6P8_whq5B#qd)l#dg;@5r%hc1e#jd3HD*pm@_BvsxZw&thCcY>NZ*Jh06>}dhyp1XYLvCfcIUp42C=!Fw>?rXa7jNJMEspxA0mbOcW^!|{vxm)F((v1u`w3c{X6bsgcn(i5%8FQClMpW1&TLPVpUaj<aJL*6t`f#l)ohx0Y$g1vn4_PzyE3a{o<6I@G{?1RcOWai<QCdrSQRf{FRE&7q*^C7k41(Pu0999d*JtXyq;mfR!N+ngWq9${Xmt(yHfm7R&@vqqUZ}i<nl8g+RjrZ2DrH~ManJ6Lm}Q&q~Eu3zLd<BCOpeQY!4th%%d?W=^Ft>4e-WhNo-$v7}S~?zKs^5pC0`KBX=<QP94A@Ja`)#aU<M;w$BLc%-p4wuBE132>F&8Z^vNM8MwT@+&WnlUehU*(itU~`+QKis8@#ca6bi?!ELPV@!%P_ESI4L4Ydo$UxnX5t;-GsE(q-X&>gM#H<N0qnuO*|%g>pLVanuRIb8`PnV7Z!8pGVO)hNYfz%`LB6BIc5^>X^Y<1I!W2ETzeYg$URYUq6hCkHA@n}TT>-`2l;TtI(MEN8M{Ca|xezy=AM7j#Rg#ea2{Ys~wLnwQ}I&z7LcIdAOoBwny;D@`#68>)*b<2C15ONH62y6C=vTxbc&<zcqu^^|{?$0ne~a5s11%t_TR2korQnM~BION=;nPG`Y37fx6d&U4|I{&bltbWPT7@kG(H>8;RXCfW_PQmW*iGGHYK<7R9gy*g;`f5Qr5DcOHhQ~rT<!=N#kL9elNI|u8rpuP*=D1nRRRu$Y`=!rTC?hk&RN08%g*=b*3q&m}|`>&{yCCytCR&`<>kEI?RJ4*JU1k~a&`j_s%xi>J`H6l$(=}Ni(i~o{mkzp8|-Eo5lDc6a@GX$VW@F@D~lW?K57e;Hp(uf2$Wv(ktyDARttg#a;9V7~6wL+KJ*H2D2gHU#0=ayhSn7c=Rzs(c#0GrT<J;#}STC2<o&`Z1=x5rwIX}^H3Ffp%Eo8;=Mt_s;S8gUCab0GSnP{yK(gt4AncuQ@p#*Ayq&K^P8ApjjgvIqa})Eb-w-Do&JiN)h3`;~xr)LqP*nd2_wRhMs7O#ZfIZh|fQu%xTQtpvWjq|3sVg)(ZSFy0>OW%5L?r*4X?q(*78QdC$PYywV8LQzD8y(=_X(cRE^9EcC0d{12aZkuKT#8(F^UY1`Yv^^~Xrm0gXQW;v((T>tVW~6A89>nKNc$LbQ0aohg9}Sal;p%>E_uFt;p+q;tuqPRQRTQ$DqlRk#t)X%NV$i#GFE^@hSkeyS<ury%Ynh{iEe55sMN6*{Vn5LFpfJW#^&cDEW4-76-9+2<5si3xIM6ZW;YQ)?fzcL3^yO6<bxL!x6U{b=TMH}oU-)qme!Ujzv@D!T1Tl)Tw2=lhr-Nu!bXXl;>1ND9UT0blJ}Wg2X&mBhxvip~Ge}x=4w0(c?)Y1Z?}b4-%dfa{CdPQ5BIf@9@dC6hdMTZqYdCW;Ae5Zs=8sXYv;6pi=asBZMp=1v@wWMZ;;>2Z9-xUOF}pv7d(Dz|HNb}J|Mq&eDfd??376e+4*!1hMESV4FzC;5>td*)^6k3pDHp%?l+!gPT1?fkm7~55VA^FhF9+R-3H&s!9WmQdj~%i1Wotaq?qi!F()3qizDn6S?Uon$JC_*?AGGSQ`|&I@rpmW?CEU&$q9Q+D!nNrxOjIFSX{>XT($C|C7?vC%&7+LmNKs!WZttSSKh){(LA)jWO#X}0->6Kn^gTG$DuD}iS>K2si|I=}P4BqRyy_9|rJk6qe9i~~O&tNI)vU_Emb7>S(N@U{dVfgit<34;E=)F556g$Rm5g_f4g;~`XPQ7+aj&ROG2T4391k)a4WTdN89BmubzMDa<FYija>=d7jCay~?;-Wzlj$p<YDz*}+SXRk4-u3OHfs(*DBhl!CEN|4B306=m%=wiJaQ7+Q{tOb*{Oo#L#4|sU2f_ky9>m31UAKDc~~8M-k`g2t(#GHz^Z+ak>rhR=})vek*d?SKX-ffY362jwogzhak`rOR&%<zo?*YxwhpeQ)-&jSq^Ym6m*n|5s`3U&>xY;Nw6!^P6!*t(Gn_4ygF9u}gO(#5O+LJ-7l(4cInRfHBpH4c88nN`RdaP({HzZmHt?;mu5S!82AcfdFTDAo0^j24ZDei(5-tvmh{|KrW`0x`sExusS82;_39v-N{4$MLBdU*TvEMWAnJ{mLSIjnD6)!9Btz4+B^p;UhM%mh(qfcB7oVoFfdTcLj6ThMUZ@KJwR~tGa-X05@ld*0O`&SydqGFyy1anT;gBW0+m^XsP78lBhNBsWnSlH-^{xZ}rYIi34Ypr8m5$-0G`T}R}Rs*`akX>I=8FcSb(J5qeorT1E(%?>5z0ARr&T7Mck~PUe+rm{r+&OS9CDVF4RCZ=Rkx{uIKE+yhOT6a>=eZbrM6T}9V()@vKDjm6$iK&`hvV_<xCY|(0yNH9?0K;n<uvkaRj7yXY?epWl${-(ZADsMkKf9~p9RpN3*@ymHhnI!>l&bdeTId?eGxHFLE|VS|F)<pNUsX1_Komw3kRRKYtWnOjh5{1x+S{;enC5ZnA5q)^(I~}BRuc>&ZAGU8y+Rj^JuKu2Iv{a#gfan+ZCW63D46C#vSo?8=Bp3qH`fDvUZlRzf0%NqEG;@Hpq(n5-}E;Y&KH9`a<_=OJIQ-IuWHZYU%QW_*KiVr}P`C9vg*2pE(@Y`2WF-MIgCLMm<3Qa@pDW-^(UH^Rd1=n2G^*RQ!@(#vjJD3j(lGR<t$1ZddbYVW$YnDgs}_Y#CX4i3Ppm&!?1x#kL_w#QPhb?T$Iuy}W-t-j^4=ggJVe{AnwP_`{tR%sq$#OC2<o$>)ht9<9)N^G>(l{-=&-i-2B)X+@MT=Y@Gq;@021vwfLV1H}1k;B4!y#}vE+?Y%VXDuOiPCiA{6qkgxgoEf=F+M(ZS&!h31UVC;F<bZwFl~kZ1Nn5Oye4}9c`}o5GRZPA;Wy)Q2$UEZb9Uc|H><u!d5_Id^ntc3n`tBBrCbA^bWp0yOvSH#zfl75@i#^{%ES+Ykc$Ip>g-JpBqM2&rcM!kFo5IiCH(Intn|u$eW=Vq&^=sp$_|?|74Gn+ImvO1wFSz!`M^1^;hWbYLP#jB|1P3#g_s$^)+UAx*0|>ywUeHcP`HC)V725dC=-jea!k$fyE2q@>+_GQ-npLwBj>-QO`ou4b{|{q#YDiy%ZZ`(?RlNF!iIP9?vj#qAwN0?m%jXOvvO7`uQEqK=^Rwi-m_D`+tFp0Rr1juLPxP&6>mDwBk*2;H&;~9aIh#NtZ$p9V02_g3YY=HKfAg3;fn4un(_9@{A-w;CgDvS=+#?-B(P#A~b*1V3mu|eMj}9{TF+8p2uuCS-3|SHVC|d8cY8T0<qANWs<JY771|7h3zIBSXULd|0oWneJKhs(YXm@>VBns;s=73}|TRyS(aM~?r4Ny}9)HB14SBNQNB*Zdh`+%(7%<}@{!r{`RK4+Vv^RN}xx@00La|zqH6Q+j!;_hA{7Fy~(#H&I(*2@Sz^#C3G8Xd|;Hs7iu<`9ar@rEBQIqJXT)NHEAq#@jSHDx6hZ?r(&po|TBU8@l`h@(3w+{bD_J)$rj1rnN$=PZJcK;tRd*oj*``@>YA;<uJxX$^M7-(~m=tO88mS1;p_y5cWLN>#OY?b)-qd#iS<05WWv=H0Qg=`cOOj~`{;o4#*aXx@uDfL2gD#=)sx5*{E+d&AERRX@~ssv58Q@1#m{&>Y33S~G9b52D^~xpf;3U5{Uc6O<JizTxU>12h|HU0Z=}v<$T(%lvuPrtxQB7FaLFFKCHT{64vjp-RQeg0%FHe(ol;m1*&(5_=_XWarEhXjG=Lx7&(6fzRtLJ+|gde_`2LE@VdPhVENNn~H<@J?rk3N>RK8eA%F@sX&tDO%kW4L;PWrue_fAP3jh9dn%%rG*N{R{p4Cl0<V_$voC-VYvjiV$90zatEIZ2zHlzbqXlsdP(P{}B_kre<7_km_)si+%YditbG0IK`(5p1wmsJD&HUGq%>8NPLcnf*h{ncW46>kzP~>HJX%QSIzMmT4K?*#JGu{~{zvSn8H{IAhO58yO_M_v^@dq0cJJ~2RgnK>fzd?bNSfs`GXWEoi$WBSbWCrc?GndVa1nSLT>7~NypB*hl<yUS_Umm6r!FeLnp9^u{`KSeDc{jHe!Qt^McA9-zVr$tGjYaEu8_sXi;uJ}jODu;jN`E!@Z*Gke!K3`0VYc>`(oNj_DtSFgN-NQ!t}gWRpYK2t&p|vFG4DZIzBBn5<Z5oKxDN;SXrh}j@*}{0OH_vl-g>3{6^XbEl555CC^q#czJ=sbUKUh<ef7o4Cuu1z05yen9MY_FUwKwN6mK8~VrFTp(;7>l%DDMSR{h81_duht27IuP)iZhga&4!T!xu8XhS_rcdgG(p|9$e>Q?3>xGVuayU*;Q~LSmKHZ;+ji%h2e7SI;|3wa56AHtH`e=MwV{a$*16aA6u!H#GUnzo++g@e7_^l=>74hKj<?XVR<b3{SM=%u;FfiXu`Kur=9ofVq>5GLKbtJaNc>7vc|Rp_?byjeU#gWqolmBX<a-N%_D4XQ@gDK~7btZ-sOGDdy*R^{}dTZ~QWQclt-ItM$~irOPo+Z!u-OhCOOUutO5hwOzCUrp<lbmWf;U*xKlr^~QcqG(sAbhD&w+_M$njh25j9-`iJdqxb2;f+LvyBz0^mjBUS6@1<VW*bGM7-42_}r+-aw1vs}z$)fICKoft9KW_H^{2xziFnl0z#`aErL9S<I-H`lyXPx+fRWo6*E|kFJquk%lf@dl9WzshrR!MFdhdxE)?>wm4aiORumfH<=Rc_@rZ<%;IRf_+Db$5r1%Gg+pI_asW61*Al8xynTjNf01c^WqTlm4y4wLkFc2Nc+@vB?YACwbYxY_HP$3(b*VnO(>8)odQFKiFuFGNhn1IlN!=-xRV>^_Zg+;g6K<cg-;-ykAb<f<9>yHq#6=Q_DtL|F-u&xv;!^=3zUj@!p~J)*ux-S@T{9U>|9>p7Tk;1J)Y3EKnb`@@f^A9Sfqe&k+jut-_7AF#XfFB&*Q&Eo>TAUFGyxDP6%pPOtdXx|Und6Hwn;MMF{f5s@Arzh9uhGwcSGv!QWYoSbyS_ehDE>(kQyAD%4BY5'
+CN_EMBEDDED_930955_ROWS = 2585
+CN_EMBEDDED_930955_RAW_BYTES = 12928
+CN_EMBEDDED_930955_CRC32 = 4289036388
 CN_ZZHL_PRE_INDEX_CODE = 'H00922'
 CN_CSINDEX_CANDIDATES = {'H20955': ['H20955']}
 CN_H_PROXY_SECIDS = {'1.H00016': '1.000016', '1.H00852': '1.000852', '1.H00905': '1.000905', '1.H11077': '1.000012'}
@@ -312,8 +319,10 @@ def _v78_subb_inflation_status_text(pressure_on):
     official = '🟢 官方腿宏观池开启：DBMF/KMLM参与官方腿候选' if bool(pressure_on) else '🔴 官方腿宏观池关闭：DBMF/KMLM不参与官方腿候选'
     other = '🟢 EMA/Bias/LogVol全池开启：DBMF/KMLM始终参与这三条腿排名；UUP仅作观察指标'
     return f'{official}\n{other}'
-V78_SUBA_V77_WEIGHT = 0.5
-V78_SUBA_NEW_TV10_WEIGHT = 0.5
+V78_SUBA_V77_WEIGHT = 1.0
+V78_SUBA_NEW_TV10_WEIGHT = 0.0
+V80_ADK_PRODUCTION_MODE = 'new_adk_only_score_hot'
+V80_ADK_PRODUCTION_WEIGHT = 1.0
 V78_ADK_V77_WEIGHT = 0.5
 V78_ADK_NEW_PRIMARY_WEIGHT = 0.5
 V78_SUBB_V77_WEIGHT = 0.5
@@ -327,8 +336,9 @@ V78_SUBB_LOGVOL_LABEL = 'New B log-weighted'
 V78_SUBA_EXECUTION_MODE = 'component_net'
 V78_ADK_EXECUTION_MODE = 'component_net_with_net_exposure_display'
 V78_SUBB_EXECUTION_MODE = 'component_net_with_volreg'
+V80_QUERY_COMPACT_DISPLAY = True
 V78_ADK_NEW_SCORE_HOT_ENTER = 80.0
-V78_ADK_NEW_SCORE_HOT_EXIT = 20.0
+V78_ADK_NEW_SCORE_HOT_EXIT = 40.0
 V78_ADK_NEW_SCORE_HOT_SCALE = 0.0
 V78_SUBA_NEW_MA = 40
 V78_SUBA_NEW_MOM_DAY = 20
@@ -553,9 +563,9 @@ def _latest_us_required_close_date(asof_date=None):
 
 def _is_cn_required_close_day(date_value):
     dt = pd.Timestamp(date_value).normalize()
-    if dt.year > max(CN_MARKET_HOLIDAY_YEARS):
-        warnings.warn(f'CN market holiday calendar is not configured for {dt.year}; falling back to weekdays excluding Jan 1.', RuntimeWarning, stacklevel=2)
-        return dt.weekday() < 5 and dt.strftime('%m-%d') != '01-01'
+    if dt.year not in CN_MARKET_HOLIDAY_YEARS:
+        warnings.warn(f'CN market holiday calendar is not configured for {dt.year}; treating the session as unavailable.', RuntimeWarning, stacklevel=2)
+        return False
     return dt.weekday() < 5 and dt.strftime('%Y-%m-%d') not in CN_MARKET_HOLIDAYS
 
 def _latest_cn_required_close_date(asof_date=None):
@@ -566,6 +576,14 @@ def _latest_cn_required_close_date(asof_date=None):
             return candidate.normalize()
         candidate -= pd.Timedelta(days=1)
     raise poe.BotError(f'A股交易日历无法在 {current.date().isoformat()} 前找到最近收盘日。')
+
+def _latest_cn_data_required_date(asof_datetime=None):
+    current = pd.Timestamp(beijing_now() if asof_datetime is None else asof_datetime)
+    current_day = current.normalize()
+    after_close = current.hour > 15 or (current.hour == 15 and (current.minute > 0 or current.second > 0 or current.microsecond > 0))
+    if after_close and _is_cn_required_close_day(current_day):
+        return current_day
+    return _latest_cn_required_close_date(current_day)
 
 def _latest_portfolio_advisory_required_close_date(asof_date=None):
     generic_required = _latest_required_close_date(asof_date)
@@ -662,9 +680,7 @@ def _write_cn_after_close_stale_warning_or_raise(write, cn_raw, bj_today, includ
     if not stale_codes:
         return
     stale_names = '、'.join((CN_NAMES.get(s, s) for s in stale_codes))
-    if not include_cn_live_snapshot:
-        raise poe.BotError('A股收盘数据未完整更新，不能生成正式收盘信号: ' + stale_names)
-    write(f'  ⚠️ **数据延迟:** {stale_names} 尚未更新到今天({bj_today})，信号可能不准确，请稍后重新查询\n')
+    raise poe.BotError('A股收盘数据未完整更新，不能生成正式收盘信号: ' + stale_names)
 
 def _should_strict_cn_bond(include_cn_live_snapshot=False, cn_after_close=False):
     return not bool(include_cn_live_snapshot) or bool(cn_after_close)
@@ -1416,32 +1432,6 @@ def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
     symbol = 'cn_' + code
     return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name='Sohu fund amount')
 
-def _fetch_zz2000_etf_amount_proxy(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
-    candidates = []
-    errors = []
-    for secid, name in CN_SA_VOLUME_ZZ2000_ETF_PROXY_SECIDS:
-        try:
-            df = _fetch_cn_sohu_fund_amount(secid, beg=beg, lmt=lmt)
-            amount = pd.to_numeric(df['amount'], errors='coerce').dropna()
-            if df.empty or amount.empty:
-                errors.append(f'{secid}: empty')
-                continue
-            candidates.append({'secid': secid, 'name': name, 'df': df, 'latest_date': df.index[-1], 'latest_amount': float(amount.iloc[-1])})
-        except _DATA_FETCH_ERRORS as exc:
-            errors.append(f'{secid}: {exc}')
-    if not candidates:
-        raise DataUnavailableError(f"ZZ2000 ETF proxy unavailable; tried {' | '.join(errors[-3:])}")
-    latest_date = max((item['latest_date'] for item in candidates))
-    same_date = [item for item in candidates if item['latest_date'] == latest_date]
-    selected = max(same_date, key=lambda item: item['latest_amount'])
-    code = selected['secid'].split('.')[-1]
-    source = f'Sohu ETF amount proxy {code}'
-    out = selected['df'].copy()
-    out['source'] = source
-    out['proxy_name'] = selected['name']
-    out['proxy_secid'] = selected['secid']
-    return (out, source)
-
 def _fetch_cn_qq_kline(secid, datalen=2000):
     market, code = secid.split('.')
     symbol = ('sh' if market == '1' else 'sz') + code
@@ -1609,6 +1599,20 @@ def _fetch_cn_h_proxy(secid):
             time.sleep(1)
     raise last_err or ValueError(f'H proxy returned no usable data for {secid} -> {proxy_secid}')
 
+def _fetch_cn_price_index_proxy(secid):
+    proxy_secid = CN_CSINDEX_PRICE_PROXY_SECIDS.get(secid)
+    if not proxy_secid:
+        raise ValueError(f'no price-index proxy configured for {secid}')
+    last_err = None
+    for name, fetcher in [('Sina ETF return proxy', lambda s=proxy_secid: _fetch_cn_sina(s)), ('QQ ETF return proxy', lambda s=proxy_secid: _fetch_cn_qq_kline(s)), ('EastMoney ETF return proxy', lambda s=proxy_secid: _fetch_cn_eastmoney(s))]:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50:
+                return (df, f'{name}:{proxy_secid}')
+        except _DATA_FETCH_ERRORS as exc:
+            last_err = exc
+    raise last_err or ValueError(f'price-index proxy returned no usable data for {secid} -> {proxy_secid}')
+
 def _stitch_cn_proxy_returns(base_df, proxy_df):
     if base_df is None or len(base_df) == 0:
         return proxy_df
@@ -1661,27 +1665,67 @@ def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
         return realtime_proxy_close
     return last_close * (float(realtime_proxy_close) / prev_proxy_close)
 
-def _fetch_cn_realtime_close(secid):
+def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None):
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).strftime('%Y%m%d')
+    for candidate_secid in candidate_secids:
+        parts = str(candidate_secid).split('.', 1)
+        if len(parts) != 2 or parts[0] not in {'0', '1'}:
+            continue
+        symbol = ('sh' if parts[0] == '1' else 'sz') + parts[1]
+        try:
+            resp = requests.get(f'https://qt.gtimg.cn/q={symbol}', timeout=5, headers={'Referer': 'https://gu.qq.com/'})
+            resp.raise_for_status()
+            text = resp.content.decode('gbk', errors='ignore')
+            payload = text.split('"', 2)[1] if '"' in text else ''
+            fields = payload.split('~')
+            if len(fields) > 30 and str(fields[30])[:8] == expected:
+                price = float(fields[3])
+                if np.isfinite(price) and price > 0:
+                    return price
+        except _DATA_FETCH_ERRORS:
+            pass
+        try:
+            resp = requests.get(f'https://hq.sinajs.cn/list={symbol}', timeout=5, headers={'Referer': 'https://finance.sina.com.cn/'})
+            resp.raise_for_status()
+            text = resp.content.decode('gb18030', errors='ignore')
+            payload = text.split('"', 2)[1] if '"' in text else ''
+            fields = payload.split(',')
+            if len(fields) > 30 and str(fields[30]).replace('-', '') == expected:
+                price = float(fields[3])
+                if np.isfinite(price) and price > 0:
+                    return price
+        except _DATA_FETCH_ERRORS:
+            pass
+    return None
+
+def _fetch_cn_realtime_close(secid, expected_date=None):
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
     proxy_secid = CN_H_PROXY_SECIDS.get(secid)
     candidate_secids = [proxy_secid] if proxy_secid else _vendor_secid_candidates(secid)
     for candidate_secid in candidate_secids:
         try:
-            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f43,f44,f45,f46,f60&ut=fa5fd1943c7b386f172d6893dbfba10b'
+            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f43,f44,f45,f46,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
             resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
             resp.raise_for_status()
-            data = resp.json().get('data')
-            if not data:
+            payload = resp.json()
+            if not isinstance(payload, dict):
+                raise DataSchemaError('EastMoney realtime response is not an object')
+            data = payload.get('data')
+            if not isinstance(data, dict):
                 continue
             f43 = data.get('f43')
             f46 = data.get('f46')
-            if f43 is None or f46 is None or f43 == '-' or (f46 == '-'):
+            f124 = data.get('f124')
+            if f43 is None or f46 is None or f124 is None or (f43 == '-') or (f46 == '-'):
                 continue
-            if float(f46) <= 0:
+            quote_date = datetime.fromtimestamp(float(f124), tz=timezone.utc).astimezone(ZoneInfo('Asia/Shanghai')).date()
+            price = float(f43) / 100.0
+            if quote_date != expected or float(f46) <= 0 or (not np.isfinite(price)) or (price <= 0):
                 continue
-            return float(f43) / 100.0
+            return price
         except _DATA_FETCH_ERRORS:
             continue
-    return None
+    return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected)
 
 def _supplement_today_close(df, secid, bj_today, msg=None):
     if df is None or len(df) == 0:
@@ -1711,7 +1755,7 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
         if col != 'close' and col not in new_row.columns:
             new_row[col] = np.nan
     new_row['is_live_bar'] = True
-    new_row['source'] = f'EastMoney realtime proxy:{CN_H_PROXY_SECIDS[secid]}' if secid in CN_H_PROXY_SECIDS else 'EastMoney realtime snapshot'
+    new_row['source'] = f'CN multi-source realtime proxy:{CN_H_PROXY_SECIDS[secid]}' if secid in CN_H_PROXY_SECIDS else 'CN multi-source realtime snapshot'
     df = pd.concat([df, new_row])
     if 'is_live_bar' not in df.columns:
         df['is_live_bar'] = False
@@ -1735,10 +1779,15 @@ def _add_cn_bond_column(cn_close, msg=None, context='Sub-A', strict=False, inclu
         bond_close = pd.to_numeric(bond_df['close'], errors='coerce').dropna()
         if strict:
             expected_date = pd.Timestamp(cn_close_with_bond.index.max()).normalize()
-            latest_bond_date = pd.Timestamp(bond_close.index.max()).normalize() if not bond_close.empty else None
-            if latest_bond_date is None or latest_bond_date < expected_date:
+            normalized = bond_close.copy()
+            normalized.index = pd.DatetimeIndex(pd.to_datetime(normalized.index)).normalize()
+            expected_values = normalized.loc[normalized.index == expected_date]
+            expected_value = float(expected_values.iloc[-1]) if len(expected_values) else np.nan
+            latest_bond_date = pd.Timestamp(normalized.index.max()).normalize() if not normalized.empty else None
+            if not np.isfinite(expected_value) or expected_value <= 0:
                 latest_text = latest_bond_date.date().isoformat() if latest_bond_date is not None else 'missing'
-                raise poe.BotError(f'{context}: {CN_BOND_NAME}数据过期，latest={latest_text}, expected={expected_date.date().isoformat()}')
+                raise poe.BotError(f'{context}: {CN_BOND_NAME}缺少目标日有效数据，latest={latest_text}, expected={expected_date.date().isoformat()}')
+            bond_df = bond_df.loc[pd.DatetimeIndex(pd.to_datetime(bond_df.index)).normalize() <= expected_date]
         cn_close_with_bond[CN_BOND_CODE] = bond_df['close'].reindex(cn_close_with_bond.index)
         cn_close_with_bond = cn_close_with_bond.ffill()
         if msg is not None:
@@ -1778,10 +1827,42 @@ def _load_recent_cn_official_cache(secid, min_rows=50):
     if df is None or len(df) <= int(min_rows):
         raise ValueError(f'cache rows={(0 if df is None else len(df))} <= {min_rows}')
     latest = pd.Timestamp(df.index[-1]).normalize()
-    required = _latest_cn_required_close_date()
+    required = _latest_cn_data_required_date()
     if latest < required:
         raise ValueError(f'cache latest {latest.date().isoformat()} < required {required.date().isoformat()}')
     return df
+
+def _load_embedded_930955_official_cache():
+    raw = zlib.decompress(base64.b85decode(CN_EMBEDDED_930955_B85.encode('ascii')))
+    if len(raw) != CN_EMBEDDED_930955_RAW_BYTES or zlib.crc32(raw) & 4294967295 != CN_EMBEDDED_930955_CRC32:
+        raise DataSchemaError('embedded 930955 cache checksum mismatch')
+    ordinal, close_cents = struct.unpack_from('<II', raw, 0)
+    dates = [datetime.fromordinal(int(ordinal))]
+    closes = [float(close_cents) / 100.0]
+    offset = 8
+    for _ in range(CN_EMBEDDED_930955_ROWS - 1):
+        day_delta, price_delta = struct.unpack_from('<Bi', raw, offset)
+        offset += 5
+        ordinal += int(day_delta)
+        close_cents += int(price_delta)
+        dates.append(datetime.fromordinal(int(ordinal)))
+        closes.append(float(close_cents) / 100.0)
+    if offset != len(raw):
+        raise DataSchemaError('embedded 930955 cache length mismatch')
+    out = pd.DataFrame({'close': closes}, index=pd.DatetimeIndex(dates, name='date'))
+    if len(out) != CN_EMBEDDED_930955_ROWS or out.index[0] != pd.Timestamp('2016-01-04') or out.index[-1] != pd.Timestamp('2026-08-21'):
+        raise DataSchemaError('embedded 930955 cache date range mismatch')
+    return out
+
+def _load_cn_official_base_with_embedded(secid):
+    try:
+        df = _load_cn_official_cache(secid)
+        return (df, f'csindex-cache:{pd.Timestamp(df.index[-1]).date().isoformat()}')
+    except (OSError, ValueError, KeyError):
+        if secid != CN_ZZHL_INDEX_SECID:
+            raise
+        df = _load_embedded_930955_official_cache()
+        return (df, f'embedded csindex-cache:{pd.Timestamp(df.index[-1]).date().isoformat()}')
 
 def _cn_strategy_data_path():
     base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
@@ -1838,7 +1919,7 @@ def _price_column_frame(df, source_col, output_col):
 
 def _build_cn_stock_close_frame(cn_raw):
     frames = [_price_column_frame(cn_raw[secid], 'close', secid) for secid in CN_STOCK_CODES]
-    return pd.concat(frames, axis=1).ffill().dropna(subset=CN_STOCK_CODES)
+    return pd.concat(frames, axis=1).sort_index().ffill(limit=1).dropna(subset=CN_STOCK_CODES)
 
 def _build_cn_dk_close_frame(dk_dfs):
     frames = [_price_column_frame(dk_dfs[col], col, col) for col in CN_DK_COLS]
@@ -1865,6 +1946,7 @@ def fetch_cn_kline(secid):
     attempts = []
     if secid in CN_CSINDEX_PRICE_INDEX_CODES:
         index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
+        required_date = _latest_cn_data_required_date()
         try:
             df = _load_recent_cn_official_cache(secid)
             cache_date = df.index[-1].strftime('%Y-%m-%d')
@@ -1874,19 +1956,43 @@ def fetch_cn_kline(secid):
         for vendor_secid in _vendor_secid_candidates(secid):
             try:
                 df = _fetch_cn_eastmoney(vendor_secid)
-                if df is not None and len(df) > 50:
+                if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
                     return (df, f'EastMoney:{vendor_secid}')
+                if df is not None and len(df) > 50:
+                    attempts.append(f'EastMoney:{vendor_secid}:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
             except _DATA_FETCH_ERRORS as e:
                 last_err = e
                 attempts.append(f'EastMoney:{vendor_secid}:{e}')
                 time.sleep(1)
         try:
             df = _fetch_cn_sina(secid)
-            if df is not None and len(df) > 50:
+            if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
                 return (df, 'Sina')
+            if df is not None and len(df) > 50:
+                attempts.append(f'Sina:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
         except _DATA_FETCH_ERRORS as e:
             last_err = e
             attempts.append(f'Sina:{e}')
+            time.sleep(1)
+        try:
+            base_df, base_source = _load_cn_official_base_with_embedded(secid)
+            proxy_df, proxy_source = _fetch_cn_price_index_proxy(secid)
+            stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
+            if len(stitched) > 50 and pd.Timestamp(stitched.index[-1]).normalize() >= required_date:
+                return (stitched, f'{base_source}+{proxy_source}')
+            attempts.append(f'proxy:stale {pd.Timestamp(stitched.index[-1]).date().isoformat()}')
+        except _DATA_FETCH_ERRORS + (OSError, KeyError) as proxy_err:
+            attempts.append(f'proxy:{proxy_err}')
+        try:
+            df = _fetch_cn_csindex(index_code)
+            if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
+                _save_cn_official_cache(secid, df)
+                return (df, f'csindex:{index_code}')
+            if df is not None and len(df) > 50:
+                attempts.append(f'csindex:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f'csindex:{e}')
             time.sleep(1)
         try:
             df = _load_cn_official_cache(secid)
@@ -1895,22 +2001,6 @@ def fetch_cn_kline(secid):
                 return (df, f'csindex-cache:{cache_date}')
         except (OSError, ValueError, KeyError) as cache_err:
             attempts.append(f'cache:{cache_err}')
-        try:
-            df = _fetch_cn_csindex(index_code)
-            if df is not None and len(df) > 50:
-                _save_cn_official_cache(secid, df)
-                return (df, f'csindex:{index_code}')
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f'csindex:{e}')
-            time.sleep(1)
-            try:
-                df = _load_cn_official_cache(secid)
-                if df is not None and len(df) > 50:
-                    cache_date = df.index[-1].strftime('%Y-%m-%d')
-                    return (df, f'csindex-cache:{cache_date}')
-            except (OSError, ValueError, KeyError) as cache_err:
-                attempts.append(f'cache:{cache_err}')
     elif code.startswith('H'):
         base_df = None
         base_source = None
@@ -2052,14 +2142,18 @@ def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma
     feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
     return (signal.astype(bool), feature)
 
-def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=None):
     errors = []
     if secid == CN_SA_VOLUME_ZZ2000_SECID:
-        sources = [('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)), ('ZZ2000 ETF proxy', lambda: _fetch_zz2000_etf_amount_proxy(beg=beg, lmt=lmt)), ('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('Sina volume proxy', lambda: _fetch_cn_sina_amount_proxy(secid)), ('QQ volume proxy', lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))]
+        sources = [('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt))]
     elif secid == CN_SA_VOLUME_CYB_SECID:
-        sources = [('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt)), ('QQ volume proxy', lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)), ('Sina volume proxy', lambda: _fetch_cn_sina_amount_proxy(secid))]
+        sources = [('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))]
     else:
-        sources = [('Sina volume proxy', lambda: _fetch_cn_sina_amount_proxy(secid)), ('QQ volume proxy', lambda: _fetch_cn_qq_amount_proxy(secid, datalen=lmt)), ('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)), ('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))]
+        sources = []
+        if secid in CN_CSI_AMOUNT_INDEX_CODES:
+            sources.append(('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)))
+        sources.extend([('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))])
+    expected = pd.Timestamp(expected_date).normalize() if expected_date is not None else None
     for source_name, fetcher in sources:
         try:
             value = fetcher()
@@ -2069,21 +2163,31 @@ def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, l
                 df = value
             if df is not None and len(df) > 50 and ('amount' in df.columns):
                 out = df.copy()
+                amount = pd.to_numeric(out['amount'], errors='coerce').replace([np.inf, -np.inf], np.nan)
+                valid = amount.where(amount > 0).dropna()
+                if len(valid) < 50:
+                    errors.append(f'{source_name}: valid amount rows={len(valid)}')
+                    continue
+                latest_valid = pd.Timestamp(valid.index.max()).normalize()
+                if expected is not None and latest_valid < expected:
+                    errors.append(f'{source_name}: latest valid amount {latest_valid.date().isoformat()} < expected {expected.date().isoformat()}')
+                    continue
+                out['amount'] = amount
                 out['source'] = source_name
                 return (out, source_name)
             errors.append(f'{source_name}: empty')
         except _DATA_FETCH_ERRORS as exc:
             errors.append(f'{source_name}: {exc}')
             time.sleep(0.5)
-    raise DataUnavailableError(f"{label} volume data unavailable; tried {' | '.join(errors[-3:])}")
+    raise DataUnavailableError(f"{label} amount data unavailable; verified same-index amount sources tried: {' | '.join(errors[-3:])}")
 
-def _load_suba_volume_signal():
+def _load_suba_volume_signal(expected_date=None):
     specs = {}
     sources = {}
     errors = {}
     for name, label, secid, ma, days in [('zz2000', 'ZZ2000', CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS), ('cyb', 'CYB', CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)]:
         try:
-            df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000)
+            df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date)
             specs[name] = {'amount': df['amount'], 'ma': ma, 'days': days}
             sources[name] = source
         except _DATA_FETCH_ERRORS as exc:
@@ -3127,17 +3231,6 @@ def _select_cn_ideal_asset(scores, r2_dict, row_pos, holding='cash', abs_mom_dic
     r2_val = _cn_series_value_at(r2_dict.get(best), row_pos) if r2_dict else np.nan
     if pd.isna(r2_val) or float(r2_val) < CN_R2_THRESHOLD:
         return 'cash'
-    if abs_mom_dict is not None:
-        abs_val = _cn_series_value_at(abs_mom_dict.get(best), row_pos)
-        if pd.isna(abs_val) or float(abs_val) <= CN_ABS_MOM_THRESHOLD:
-            return 'cash'
-    if holding != 'cash' and holding != best and (holding in scores):
-        hold_score = scores.get(holding)
-        hold_r2 = _cn_series_value_at(r2_dict.get(holding), row_pos) if r2_dict else np.nan
-        hold_abs = _cn_series_value_at(abs_mom_dict.get(holding), row_pos) if abs_mom_dict is not None else 1.0
-        holding_ok = not pd.isna(hold_score) and float(hold_score) > 0 and (not pd.isna(hold_r2)) and (float(hold_r2) >= CN_R2_THRESHOLD) and (not pd.isna(hold_abs)) and (float(hold_abs) > CN_ABS_MOM_THRESHOLD)
-        if holding_ok and CN_SWITCH_BUFFER > 1.0:
-            return best if float(best_score) > float(hold_score) * CN_SWITCH_BUFFER else holding
     return best
 
 def _suba_single_calc_bias_momentum(close, bias_ma, mom_day, weight_end):
@@ -3362,20 +3455,15 @@ def _normalize_suba_single_asset_gate(single_asset_signal_gate, index):
 def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
     bond_code = CN_BOND_CODE
     all_codes = equity_codes + [bond_code]
-    bias_dict, r2_dict, abs_mom_dict = ({}, {}, {})
+    bias_dict, r2_dict = ({}, {})
     for code in all_codes:
         if code not in close_df.columns:
             continue
         bias_dict[code] = calc_bias_momentum(close_df[code])
         r2_dict[code] = calc_rolling_r2(close_df[code])
-        abs_mom_dict[code] = close_df[code].pct_change(CN_ABS_MOM_DAY)
-    start_idx = max(CN_BIAS_N + CN_MOM_DAY, CN_R2_WINDOW + 1, CN_ABS_MOM_DAY + 1)
+    start_idx = max(CN_BIAS_N + CN_MOM_DAY, CN_R2_WINDOW + 1)
     holding = 'cash'
     holding_fraction = 0.0
-    pending_entry_target = None
-    pending_entry_since = None
-    pending_entry_days = 0
-    single_asset_gates = _normalize_suba_single_asset_gate(single_asset_signal_gate, close_df.index)
     rows = []
     for i in range(start_idx, len(close_df)):
         date = close_df.index[i]
@@ -3388,73 +3476,10 @@ def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
         top_code = max(scores, key=scores.get) if scores else 'cash'
         top_score = scores.get(top_code, np.nan)
         top_r2 = _cn_series_value_at(r2_dict.get(top_code), i) if top_code != 'cash' else np.nan
-        top_abs = _cn_series_value_at(abs_mom_dict.get(top_code), i) if top_code != 'cash' and abs_mom_dict is not None else np.nan
-        ideal = 'cash'
-        if scores:
-            ideal = _select_cn_ideal_asset(scores, r2_dict, i, holding=holding, abs_mom_dict=abs_mom_dict)
-        raw_ideal = ideal
-        single_gate_pass = True
-        single_gate_blocked = False
-        if raw_ideal != 'cash' and raw_ideal in single_asset_gates:
-            single_gate_pass = bool(single_asset_gates[raw_ideal].iloc[i])
-            if not single_gate_pass:
-                ideal = 'cash'
-                single_gate_blocked = True
-        signal_target = ideal if ideal != holding else None
-        trade_target = None
-        trade_fraction = holding_fraction
-        is_signal = False
-        if holding == 'cash':
-            if ideal != 'cash':
-                initial_fraction = float(np.clip(CN_ENTRY_INITIAL_FRACTION, 0.0, 1.0))
-                trade_target = ideal
-                trade_fraction = initial_fraction
-                is_signal = initial_fraction > 0.0
-                if initial_fraction >= 1.0 - 1e-12:
-                    pending_entry_target = None
-                    pending_entry_since = None
-                    pending_entry_days = 0
-                else:
-                    pending_entry_target = ideal
-                    pending_entry_since = date
-                    pending_entry_days = 0
-        else:
-            is_partial_pending = pending_entry_target is not None and holding == pending_entry_target and (holding_fraction < 1.0 - 1e-12)
-            if is_partial_pending:
-                if signal_target is not None:
-                    trade_target = signal_target
-                    trade_fraction = 0.0 if signal_target == 'cash' else 1.0
-                    is_signal = True
-                    pending_entry_target = None
-                    pending_entry_since = None
-                    pending_entry_days = 0
-                else:
-                    prev_close = close_df.iloc[i - 1][pending_entry_target] if i > 0 else np.nan
-                    curr_close = close_df.iloc[i][pending_entry_target]
-                    is_down_day = pd.notna(prev_close) and pd.notna(curr_close) and (float(curr_close) < float(prev_close))
-                    if is_down_day:
-                        trade_target = pending_entry_target
-                        trade_fraction = 1.0
-                        pending_entry_target = None
-                        pending_entry_since = None
-                        pending_entry_days = 0
-                        is_signal = True
-                    else:
-                        pending_entry_days += 1
-                        if CN_ENTRY_WAIT_DAYS is not None and pending_entry_days >= int(CN_ENTRY_WAIT_DAYS):
-                            trade_target = pending_entry_target
-                            trade_fraction = 1.0
-                            pending_entry_target = None
-                            pending_entry_since = None
-                            pending_entry_days = 0
-                            is_signal = True
-            elif signal_target is not None:
-                trade_target = signal_target
-                trade_fraction = 0.0 if signal_target == 'cash' else 1.0
-                is_signal = True
-                pending_entry_target = None
-                pending_entry_since = None
-                pending_entry_days = 0
+        ideal = _select_cn_ideal_asset(scores, r2_dict, i) if scores else 'cash'
+        trade_target = ideal if ideal != holding else None
+        trade_fraction = 0.0 if ideal == 'cash' else 1.0
+        is_signal = trade_target is not None
         old_h = holding
         old_fraction = holding_fraction
         if old_h == 'cash' or old_fraction <= 1e-12 or i == 0:
@@ -3474,7 +3499,7 @@ def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
             holding_fraction = float(trade_fraction) if holding != 'cash' else 0.0
         else:
             holding_fraction = old_fraction
-        rows.append({'date': date, 'holding': holding, 'holding_fraction': holding_fraction, 'is_signal': is_signal, 'target': trade_target, 'asset_component': asset_component, 'cash_component': cash_component, 'trade_cost': trade_cost, 'pending_entry_target': pending_entry_target, 'pending_entry_since': pending_entry_since, 'pending_entry_days': pending_entry_days, 'suba_top_code': top_code, 'suba_top_score': top_score, 'suba_top_r2': top_r2, 'suba_top_abs_mom': top_abs, 'suba_top_score_pass': bool(pd.notna(top_score) and float(top_score) > 0.0), 'suba_top_r2_pass': bool(pd.notna(top_r2) and float(top_r2) >= CN_R2_THRESHOLD), 'suba_top_abs_pass': bool(pd.notna(top_abs) and float(top_abs) > CN_ABS_MOM_THRESHOLD), 'suba_raw_ideal': raw_ideal, 'suba_single_gate_raw_ideal': raw_ideal, 'suba_single_gate_pass': single_gate_pass, 'suba_single_gate_blocked': single_gate_blocked})
+        rows.append({'date': date, 'holding': holding, 'holding_fraction': holding_fraction, 'is_signal': is_signal, 'target': trade_target, 'asset_component': asset_component, 'cash_component': cash_component, 'trade_cost': trade_cost, 'suba_top_code': top_code, 'suba_top_score': top_score, 'suba_top_r2': top_r2, 'suba_top_score_pass': bool(pd.notna(top_score) and float(top_score) > 0.0), 'suba_top_r2_pass': bool(pd.notna(top_r2) and float(top_r2) >= CN_R2_THRESHOLD), 'suba_raw_ideal': ideal})
     df = pd.DataFrame(rows).set_index('date')
     raw_ret = (df['asset_component'] + df['cash_component']).values.copy()
     base_weight = df['holding_fraction'].fillna(0.0).values
@@ -3513,6 +3538,9 @@ def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
     scaled_gross = 1.0 + df['asset_component'].values + df['cash_component'].values
     df['return'] = scaled_gross * (1.0 - df['trade_cost'].values) - 1.0
     df['nav'] = (1 + df['return']).cumprod()
+    df.attrs['suba_bias_mom'] = bias_dict
+    df.attrs['suba_r2'] = r2_dict
+    df.attrs['suba_score_codes'] = [code for code in all_codes if code in bias_dict]
     return df
 
 def _v78_weighted_linear_slope(values, window, weight_end=1.0, normalize_first=False):
@@ -3675,7 +3703,7 @@ CN_SA_CASH_OVERLAY_ENABLED = False
 CN_SA_CASH_OVERLAY_DECAY_RATIO = 0.55
 CN_SA_CASH_OVERLAY_RECOVERY_RATIO = 0.9
 CN_SA_CASH_OVERLAY_WARMUP_DAYS = 5
-CN_SA_SAME_SIDE_OVERHEAT_ENABLED = True
+CN_SA_SAME_SIDE_OVERHEAT_ENABLED = False
 CN_SA_SAME_SIDE_OVERHEAT_ENTER = 0.27
 CN_SA_SAME_SIDE_OVERHEAT_EXIT = 0.24
 CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
@@ -4520,13 +4548,15 @@ def _rebuild_dk_effective_execution_costs(dk_result, pair_data, commission=CN_DK
     out['nav'] = (1.0 + out['return']).cumprod()
     return _sync_dk_execution_fields(out)
 
-def run_dk_strategy(cn_close, cn_dk_close, official_pair_order=None, r2_quality_enabled=None):
+def run_dk_strategy(cn_close, cn_dk_close, official_pair_order=None, r2_quality_enabled=None, top_n=None):
     from itertools import combinations
     if official_pair_order is None:
         official_pair_order = ADK_OFFICIAL_PAIR_ORDER
     official_pairs = set(official_pair_order)
     if r2_quality_enabled is None:
         r2_quality_enabled = CN_DK_R2_QUALITY_ENABLED
+    if top_n is None:
+        top_n = CN_DK_TOP_N
     idx_series = {}
     for name, info in CN_DK_INDICES.items():
         src_df = cn_dk_close if info['src'] == 'dk' else cn_close
@@ -4547,7 +4577,7 @@ def run_dk_strategy(cn_close, cn_dk_close, official_pair_order=None, r2_quality_
         raise ValueError('No valid DK pairs')
     rets_df = pd.DataFrame(pair_rets)
     signals_df = pd.DataFrame(pair_abs_mom)
-    combined_ret = _build_top_n_dk(rets_df, signals_df, CN_DK_TOP_N)
+    combined_ret = _build_top_n_dk(rets_df, signals_df, int(top_n))
     signals_shifted = signals_df.shift(1)
     common_idx = combined_ret.index
     top_pair_list = []
@@ -4615,20 +4645,20 @@ def _v78_all_adk_pair_order():
             pairs.append(f'{left}/{right}')
     return tuple(pairs)
 
-def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=20.0, derisk_scale=0.0):
+def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=40.0, derisk_scale=0.0):
     if dk_result is None or len(dk_result) == 0:
         return dk_result
     out = dk_result.copy()
     active_score = _extract_active_pair_score(out)
+    decision_score = _extract_active_pair_score(out, signal_shift=1)
     base_ret = out.get('return_before_dk_execution_cost', out['return']).fillna(0.0).astype(float)
     base_weight = out.get('weight', pd.Series(1.0, index=out.index)).fillna(1.0).astype(float)
     scales = []
     costs = []
     on = False
     prev_scale = 1.0
-    prev_score = np.nan
     for dt in out.index:
-        score_for_today = prev_score
+        score_for_today = decision_score.loc[dt]
         if pd.notna(score_for_today):
             if on and float(score_for_today) <= float(exit):
                 on = False
@@ -4639,10 +4669,10 @@ def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=20.0, derisk_scale=
         costs.append(2.0 * CN_DK_COMMISSION * float(base_weight.loc[dt]) * delta if delta > 1e-12 else 0.0)
         scales.append(cur_scale)
         prev_scale = cur_scale
-        prev_score = active_score.loc[dt]
     scale_s = pd.Series(scales, index=out.index, dtype=float)
     cost_s = pd.Series(costs, index=out.index, dtype=float)
     out['v78_score_overheat_score'] = active_score
+    out['v78_score_overheat_decision_score'] = decision_score
     out['v78_score_overheat_scale'] = scale_s
     out['v78_score_overheat_on'] = scale_s < 0.999999
     out['v78_score_overheat_cost_indicative'] = cost_s
@@ -4652,7 +4682,7 @@ def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=20.0, derisk_scale=
     return _rebuild_dk_effective_execution_costs(out, out.attrs.get('pair_data', {}), CN_DK_COMMISSION)
 
 def run_v78_adk_new_primary(cn_close, cn_dk_close):
-    result = run_dk_strategy(cn_close, cn_dk_close, official_pair_order=_v78_all_adk_pair_order(), r2_quality_enabled=False)
+    result = run_dk_strategy(cn_close, cn_dk_close, official_pair_order=_v78_all_adk_pair_order(), r2_quality_enabled=False, top_n=1)
     return apply_v78_adk_score_overheat(result, enter=V78_ADK_NEW_SCORE_HOT_ENTER, exit=V78_ADK_NEW_SCORE_HOT_EXIT, derisk_scale=V78_ADK_NEW_SCORE_HOT_SCALE)
 
 def _v78_adk_aggregate_asset_weights(row):
@@ -4668,6 +4698,46 @@ def _v78_adk_aggregate_asset_weights(row):
         if short_leg:
             net[short_leg] = net.get(short_leg, 0.0) - weight
     return {asset: exposure for asset, exposure in sorted(net.items()) if abs(exposure) > 1e-12}
+
+def run_v80_adk_new_only(cn_close, cn_dk_close):
+    """Run the single V8.0 production ADK strategy: all10 with score-hot."""
+    component = run_v78_adk_new_primary(cn_close, cn_dk_close)
+    out = component.copy(deep=True)
+    idx = out.index
+    holdings = out.get('holding', pd.Series('none_0', index=idx)).fillna('none_0').astype(str)
+    weights = pd.to_numeric(out.get('weight', pd.Series(0.0, index=idx)), errors='coerce').fillna(0.0)
+    long_legs = out.get('long_leg', pd.Series(None, index=idx))
+    short_legs = out.get('short_leg', pd.Series(None, index=idx))
+    out['v78_adk_new_holding'] = holdings
+    out['v78_adk_new_weight'] = weights
+    out['v78_adk_final_exposure'] = weights
+    out['final_exposure'] = weights
+    out['final_long_short_legs'] = [{'new': {'holding': holding, 'long_leg': long_leg, 'short_leg': short_leg, 'weight': V80_ADK_PRODUCTION_WEIGHT * float(weight)}} for holding, long_leg, short_leg, weight in zip(holdings, long_legs, short_legs, weights)]
+    out['adk_net_asset_exposure'] = out.apply(_v78_adk_aggregate_asset_weights, axis=1)
+    out['adk_net_long_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: weight for asset, weight in net.items() if weight > 1e-12})
+    out['adk_net_short_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: -weight for asset, weight in net.items() if weight < -1e-12})
+    out['v78_blend_label'] = 'ADK策略（全10配对 + score-hot）'
+    out['v78_adk_component_net_return'] = out['return']
+    out['cost_basis_note'] = 'single production ADK component; execution costs already included'
+    out['v80_adk_production_mode'] = V80_ADK_PRODUCTION_MODE
+    out.attrs.pop('v78_adk_v77', None)
+    out.attrs['v78_adk_new'] = component
+    out.attrs['v80_adk_production_mode'] = V80_ADK_PRODUCTION_MODE
+    out.attrs['v80_adk_production_weight'] = V80_ADK_PRODUCTION_WEIGHT
+    return out
+
+def _v80_adk_is_new_only(cn_dk_result):
+    if cn_dk_result is None:
+        return False
+    return cn_dk_result.attrs.get('v80_adk_production_mode') == V80_ADK_PRODUCTION_MODE
+
+def _v80_adk_component_specs(cn_dk_result):
+    if _v80_adk_is_new_only(cn_dk_result):
+        component = cn_dk_result.attrs.get('v78_adk_new')
+        if component is None:
+            component = cn_dk_result
+        return [('ADK策略', '全10配对 + score-hot', V80_ADK_PRODUCTION_WEIGHT, component, True)]
+    return [('V7.7 ADK', '正式8配对', V78_ADK_V77_WEIGHT, cn_dk_result.attrs.get('v78_adk_v77'), False), (V78_ADK_NEW_LABEL, '全10配对 + score-hot', V78_ADK_NEW_PRIMARY_WEIGHT, cn_dk_result.attrs.get('v78_adk_new'), True)]
 
 def blend_v78_adk_results(v77_result, new_result):
     common_index = v77_result.dropna(subset=['return']).index.intersection(new_result.dropna(subset=['return']).index)
@@ -4712,17 +4782,18 @@ def blend_v78_adk_results(v77_result, new_result):
     out.attrs['v78_adk_new'] = new_result
     return out
 
-def _extract_active_pair_score(dk_result):
+def _extract_active_pair_score(dk_result, signal_shift=0):
     signals_df = dk_result.attrs.get('signals_df')
     if signals_df is None or len(dk_result) == 0:
         raise KeyError('signals_df is missing from dk_result attrs.')
     if 'top_pair' not in dk_result.columns:
         raise KeyError('top_pair column is required for score-decay overlay.')
+    score_frame = signals_df.shift(int(signal_shift)) if int(signal_shift) else signals_df
     scores = []
     for dt, pair in dk_result['top_pair'].fillna('none').items():
         score = None
-        if pair != 'none' and pair in signals_df.columns and (dt in signals_df.index):
-            raw = signals_df.loc[dt, pair]
+        if pair != 'none' and pair in score_frame.columns and (dt in score_frame.index):
+            raw = score_frame.loc[dt, pair]
             if pd.notna(raw):
                 score = float(raw)
         scores.append(score)
@@ -6032,7 +6103,7 @@ def _write_unified_suba_leg_rows(w, title, subtitle, rows):
     if subtitle:
         w(f' ({subtitle})')
     w('\n\n')
-    w('| # | 资产 | 排名分数 | 质量过滤 | 动量过滤 | 状态 |\n')
+    w('| # | 资产 | 排名分数 | R²质量 | 正动量条件 | 状态 |\n')
     w('|:-|:-|------:|:-|:-|:-|\n')
     for rank, row in enumerate(rows, 1):
         marker = ' 🎯' if row.get('selected') else ''
@@ -6067,20 +6138,17 @@ def _v78_suba_v77_leg_rows(bias_mom, r2, abs_mom, codes, idx, current_holding='c
     for row in rows:
         bm = row['current_momentum']
         r2v = row['current_r2']
-        absv = row['current_abs_mom']
         r2_pass = pd.notna(r2v) and float(r2v) >= CN_R2_THRESHOLD
-        abs_pass = _suba_abs_mom_pass(absv)
         bm_pass = pd.notna(bm) and float(bm) > 0
-        unified.append({'name': row['asset_name'], 'score_text': f'{float(bm):+.1f}' if pd.notna(bm) else 'N/A', 'quality_text': f"R² {float(r2v):.3f} {('通过' if r2_pass else '未通过')}" if pd.notna(r2v) else 'R² N/A', 'momentum_text': f"{CN_ABS_MOM_DAY}日 {_format_suba_abs_mom(absv)} {('通过' if abs_pass else '未通过')}", 'status': row['status'], 'selected': bool(len(unified) == 0 and bm_pass and r2_pass and abs_pass), 'current_holding': row['code'] == current_holding})
+        unified.append({'name': row['asset_name'], 'score_text': f'{float(bm):+.1f}' if pd.notna(bm) else 'N/A', 'quality_text': f"R² {float(r2v):.3f} {('通过' if r2_pass else '未通过')}" if pd.notna(r2v) else 'R² N/A', 'momentum_text': 'score>0通过' if bm_pass else 'score≤0未通过', 'status': row['status'], 'selected': bool(len(unified) == 0 and bm_pass and r2_pass), 'current_holding': row['code'] == current_holding})
     return unified
 
 def _write_v78_suba_v77_leg_signal_table(w, bias_mom, r2, abs_mom, codes, idx, current_holding='cash'):
     rows = _v78_suba_v77_leg_rows(bias_mom, r2, abs_mom, codes, idx, current_holding=current_holding)
-    _write_unified_suba_leg_rows(w, 'V7.7A原版 子策略状态', f'先定原始Top-1 → 只验Top-1；失败直接Cash，不递补第2名。bias_mom排序 + R²≥{CN_R2_THRESHOLD:.2f} + {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%}', rows)
+    _write_unified_suba_leg_rows(w, 'A策略状态', f'先定原始Top-1 → 只验Top-1；score>0且R²≥{CN_R2_THRESHOLD:.2f}才持有；失败直接Cash，不递补第2名', rows)
 
 def _write_v78_suba_leg_signal_tables(w, cn_result, idx, bias_mom, r2, abs_mom, codes, current_holding='cash'):
     _write_v78_suba_v77_leg_signal_table(w, bias_mom, r2, abs_mom, codes, idx, current_holding=current_holding)
-    _write_v78_suba_new_leg_signal_table(w, cn_result, idx)
 
 def _v78_suba_display_leg_snapshot(cn_result, idx):
     n = len(cn_result)
@@ -6159,18 +6227,13 @@ def _v79_suba_leg_execution_rows(cn_result, idx):
             return '原始排名无有效候选'
         score = source.get('suba_top_score', np.nan)
         r2 = source.get('suba_top_r2', np.nan)
-        abs_mom = source.get('suba_top_abs_mom', np.nan)
         failed = []
         if not _bool(source.get('suba_top_score_pass', False)):
             failed.append(f'排名分数{_fmt_v78_score(score)}≤0')
         if not _bool(source.get('suba_top_r2_pass', False)):
             failed.append(f'R² {_fmt_v78_score(r2)}<{CN_R2_THRESHOLD:.2f}')
-        if not _bool(source.get('suba_top_abs_pass', False)):
-            failed.append(f'{CN_ABS_MOM_DAY}日动量{_format_suba_abs_mom(abs_mom)}≤{CN_ABS_MOM_THRESHOLD:.0%}')
-        if _bool(source.get('suba_single_gate_blocked', False)):
-            failed.append('单资产独立门控未通过')
         detail = '、'.join(failed) if failed else '执行目标为Cash'
-        return f'Top-1={CN_NAMES.get(code, code)}未通过：{detail}；V7.7A只检查Top-1，不递补第2名'
+        return f'Top-1={CN_NAMES.get(code, code)}未通过：{detail}；旧A只检查Top-1，不递补第2名'
 
     def _new_cash_reason(source):
         code = str(source.get('v78_raw_top', 'cash') or 'cash')
@@ -6242,6 +6305,55 @@ def _v79_suba_leg_execution_rows(cn_result, idx):
     return rows
 
 def _write_v79_suba_execution_chain(w, cn_result, idx):
+    if cn_result is not None and len(cn_result) > 0 and ('v78_suba_v77_holding' not in cn_result.columns):
+        n = len(cn_result)
+        pos = idx if idx >= 0 else n + idx
+        pos = int(np.clip(pos, 0, n - 1))
+        row = cn_result.iloc[pos]
+        date = cn_result.index[pos]
+        state = _suba_signal_display_state(cn_result, pos)
+        current_pos = pos - 1 if state['is_signal'] and pos > 0 else pos
+        current_row = cn_result.iloc[current_pos]
+        current_h = state['current_holding']
+        current_w = float(current_row.get('weight', 0.0) or 0.0)
+        final_h = state['target_holding']
+        final_w = float(row.get('weight', 0.0) or 0.0)
+        raw_h = str(row.get('pre_suba_volume_holding', final_h) or 'cash')
+        raw_w = float(row.get('pre_suba_volume_weight', final_w) or 0.0)
+        volume_on = bool(row.get('suba_volume_rule_on', False))
+        volume_scale = float(row.get('suba_volume_rule_scale', 1.0) or 0.0)
+
+        def _position(holding, weight):
+            if weight <= 1e-12 or holding == 'cash':
+                return 'Cash / 0.00x'
+            return f'{CN_NAMES.get(holding, holding)} / {weight:.2f}x'
+        blockers = []
+        if volume_on and volume_scale < 1.0 - 1e-12 and (raw_w > 1e-12):
+            blockers.append(f'成交额风控 ×{volume_scale:.2f}')
+        if raw_w <= 1e-12:
+            code = str(row.get('suba_top_code', 'cash') or 'cash')
+            score = row.get('suba_top_score', np.nan)
+            r2_value = row.get('suba_top_r2', np.nan)
+            failed = []
+            if pd.isna(score) or float(score) <= 0.0:
+                failed.append('排名分数≤0')
+            if pd.isna(r2_value) or float(r2_value) < CN_R2_THRESHOLD:
+                failed.append(f'R²<{CN_R2_THRESHOLD:.2f}')
+            reason = f"Top-1={CN_NAMES.get(code, code)}未通过：{('、'.join(failed) if failed else '无有效目标')}；不递补第2名"
+        elif blockers:
+            reason = '；'.join(blockers)
+        elif current_h != final_h:
+            reason = f'收盘后由{CN_NAMES.get(current_h, current_h)}换为{CN_NAMES.get(final_h, final_h)}'
+        elif abs(current_w - final_w) > 0.0001:
+            reason = f'资产不变；敞口 {current_w:.2f}x → {final_w:.2f}x'
+        else:
+            reason = '当前仓位与收盘最终目标一致'
+        w(f"\n**V8.0 A策略仓位因果链（{date.strftime('%Y-%m-%d')}）**\n\n")
+        w('| 策略 | 选拔规则 | 当前已生效 | 收盘原始目标 | 执行覆盖层 | 收盘最终目标 | 结论 |\n')
+        w('|:-|:-|:-|:-|:-|:-|:-|\n')
+        overlay = '；'.join(blockers) if blockers else '仅成交额风控，当前未触发'
+        w(f'| A策略 | 原始Top-1；score>0且R²通过，否则Cash；不递补 | {_position(current_h, current_w)} | {_position(raw_h, raw_w)} | {overlay} | {_position(final_h, final_w)} | **{reason}** |\n')
+        return
     rows = _v79_suba_leg_execution_rows(cn_result, idx)
     if not rows:
         return
@@ -6378,7 +6490,7 @@ def _v78_adk_leg_status_rows(cn_dk_result, idx):
     resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
     if resolved_idx is None:
         return []
-    specs = [('V7.7 ADK', '正式8配对', V78_ADK_V77_WEIGHT, cn_dk_result.attrs.get('v78_adk_v77'), False), (V78_ADK_NEW_LABEL, '全10配对 + score-hot', V78_ADK_NEW_PRIMARY_WEIGHT, cn_dk_result.attrs.get('v78_adk_new'), True)]
+    specs = _v80_adk_component_specs(cn_dk_result)
     rows = []
     for label, scope, blend_weight, result_df, is_new in specs:
         row = _v78_row_for_display(result_df, resolved_idx, date)
@@ -6406,8 +6518,10 @@ def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label='�
     rows = _v78_adk_leg_status_rows(cn_dk_result, idx)
     if not rows:
         return
-    w('\n**V8.0 ADK 子策略状态**\n\n')
-    w(f'| 腿 | 配对范围 | {position_col_label} | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 腿内最终敞口 | 组合贡献 |\n')
+    new_only = _v80_adk_is_new_only(cn_dk_result)
+    unit = '策略' if new_only else '腿'
+    w(f"\n**V8.0 ADK {('单策略' if new_only else '子策略')}状态**\n\n")
+    w(f'| {unit} | 配对范围 | {position_col_label} | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 最终敞口 | 实际贡献 |\n')
     w('|:-|:-|:-|------:|:-|------:|------:|------:|------:|------:|------:|------:|\n')
     for row in rows:
         score = row['score']
@@ -6476,7 +6590,7 @@ def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
     resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
     if resolved_idx is None:
         return []
-    specs = [('V7.7 ADK', V78_ADK_V77_WEIGHT, cn_dk_result.attrs.get('v78_adk_v77'), False), (V78_ADK_NEW_LABEL, V78_ADK_NEW_PRIMARY_WEIGHT, cn_dk_result.attrs.get('v78_adk_new'), True)]
+    specs = [(label, weight, result_df, is_new) for label, _scope, weight, result_df, is_new in _v80_adk_component_specs(cn_dk_result)]
     rows = []
     for label, blend_weight, result_df, is_new in specs:
         row = _v78_row_for_display(result_df, resolved_idx, date)
@@ -6493,9 +6607,7 @@ def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
             current_base_weight = float(row.get('base_weight_before_v78_score_hot', current_vol_scale) or 0.0)
             current_overlay_scale = float(row.get('v78_score_overheat_scale', 1.0) or 0.0)
             current_overlay_on = bool(row.get('v78_score_overheat_on', False))
-            prior_score = np.nan
-            if component_idx > 0 and 'v78_score_overheat_score' in result_df.columns:
-                prior_score = result_df['v78_score_overheat_score'].iloc[component_idx - 1]
+            prior_score = row.get('v78_score_overheat_decision_score', np.nan)
             trigger_pos = None
             trigger_score = np.nan
             trigger_date = None
@@ -6507,8 +6619,8 @@ def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
                     trigger_pos = int(prior_triggers[-1])
                     trigger_basis_pos = max(trigger_pos - 1, 0)
                     trigger_date = result_df.index[trigger_basis_pos]
-                    if 'v78_score_overheat_score' in result_df.columns:
-                        trigger_score = result_df['v78_score_overheat_score'].iloc[trigger_basis_pos]
+                    if 'v78_score_overheat_decision_score' in result_df.columns:
+                        trigger_score = result_df['v78_score_overheat_decision_score'].iloc[trigger_pos]
             if current_overlay_on:
                 trigger_text = ''
                 if trigger_date is not None and pd.notna(trigger_score):
@@ -6540,7 +6652,10 @@ def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
             target_pair, target_direction = (base_pair, base_direction)
         _, target_base_weight, vol_changed = _v79_adk_pair_next_vol_scale(result_df, target_pair, date, current_vol_scale)
         if is_new:
-            score_for_close = row.get('v78_score_overheat_score', np.nan)
+            signals_df = result_df.attrs.get('signals_df')
+            score_for_close = np.nan
+            if signals_df is not None and target_pair in signals_df.columns and (date in signals_df.index):
+                score_for_close = signals_df.loc[date, target_pair]
             target_overlay_on = current_overlay_on
             if pd.notna(score_for_close):
                 if target_overlay_on and float(score_for_close) <= V78_ADK_NEW_SCORE_HOT_EXIT:
@@ -6572,7 +6687,7 @@ def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
             current_reason = f'基础信号并未空仓；{current_reason}，{current_base_weight:.2f}x -> 0.00x'
         if vol_changed:
             target_overlay_text = f'VolScale {current_vol_scale:.2f}x->{target_base_weight:.2f}x；' + target_overlay_text
-        rows.append({'leg': label, 'blend_weight': float(blend_weight), 'current_base_pair': base_pair, 'current_base_direction': base_direction, 'current_base_weight': current_base_weight, 'current_base_text': f'{base_text} / {current_base_weight:.2f}x', 'current_overlay_text': current_reason, 'current_pair': current_pair, 'current_direction': current_direction, 'current_weight': current_final_weight, 'current_final_text': current_final_text, 'target_base_pair': target_pair, 'target_base_direction': target_direction, 'target_base_weight': float(target_base_weight), 'target_base_text': target_base_text, 'target_overlay_text': target_overlay_text, 'target_pair': final_target_pair, 'target_direction': final_target_direction, 'target_weight': target_final_weight, 'target_final_text': target_final_text, 'changed': bool(changed)})
+        rows.append({'leg': label, 'blend_weight': float(blend_weight), 'current_base_pair': base_pair, 'current_base_direction': base_direction, 'current_base_weight': current_base_weight, 'current_base_text': f'{base_text} / {current_base_weight:.2f}x', 'current_overlay_text': current_reason, 'current_pair': current_pair, 'current_direction': current_direction, 'current_weight': current_final_weight, 'current_final_text': current_final_text, 'target_base_pair': target_pair, 'target_base_direction': target_direction, 'target_base_weight': float(target_base_weight), 'target_base_text': target_base_text, 'target_overlay_text': target_overlay_text, 'target_pair': final_target_pair, 'target_direction': final_target_direction, 'target_weight': target_final_weight, 'target_final_text': target_final_text, 'target_score': float(score_for_close) if is_new and pd.notna(score_for_close) else np.nan, 'changed': bool(changed)})
     return rows
 
 def _v79_adk_execution_summary(cn_dk_result, idx=-1):
@@ -6596,7 +6711,8 @@ def _write_v79_adk_execution_chain(w, cn_dk_result, idx=-1, close_label='若现�
     mark = '🔴' if summary['changed'] else '🟢'
     verdict = '最终执行仓位将变化' if summary['changed'] else '最终执行仓位不变化'
     w(f'\n{mark} **ADK {close_label}：{verdict}。**（按配对、方向和腿内敞口综合判断）\n\n')
-    w('| 腿 | 当前基础信号 | 当前为何是该持仓 | 当前最终持仓 | 收盘基础目标 | 收盘后覆盖层 | 收盘最终目标 | 结论 |\n')
+    unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '腿'
+    w(f'| {unit} | 当前基础信号 | 当前为何是该持仓 | 当前最终持仓 | 收盘基础目标 | 收盘后覆盖层 | 收盘最终目标 | 结论 |\n')
     w('|:-|:-|:-|:-|:-|:-|:-|:-|\n')
     for row in rows:
         w(f"| {row['leg']} | {row['current_base_text']} | {row['current_overlay_text']} | {row['current_final_text']} | {row['target_base_text']} | {row['target_overlay_text']} | {row['target_final_text']} | **{('变化' if row['changed'] else '不变')}** |\n")
@@ -6616,6 +6732,26 @@ def _query_action_instruction(changed, intraday, query_kind):
 def _suba_query_overview(cn_result, idx=-1):
     if cn_result is None or len(cn_result) == 0:
         return {'rows': [], 'changed': False, 'current_exposure': np.nan, 'target_exposure': np.nan}
+    if 'v78_suba_v77_holding' not in cn_result.columns:
+        n = len(cn_result)
+        pos = idx if idx >= 0 else n + idx
+        pos = int(np.clip(pos, 0, n - 1))
+        state = _suba_signal_display_state(cn_result, pos)
+        row = cn_result.iloc[pos]
+        current_pos = pos - 1 if state['is_signal'] and pos > 0 else pos
+        current_row = cn_result.iloc[current_pos]
+        current_holding = state['current_holding']
+        target_holding = state['target_holding']
+        current_weight = float(current_row.get('weight', 0.0) or 0.0)
+        target_weight = float(row.get('weight', 0.0) or 0.0)
+        if current_weight <= 1e-12:
+            current_holding = 'cash'
+        if target_weight <= 1e-12:
+            target_holding = 'cash'
+        changed = current_holding != target_holding or abs(current_weight - target_weight) > 0.0001
+        action = '换仓' if current_holding != target_holding else '调整敞口' if changed else '维持'
+        item = {'leg': 'A策略', 'current': f'{CN_NAMES.get(current_holding, current_holding)} / {current_weight:.2f}x', 'target': f'{CN_NAMES.get(target_holding, target_holding)} / {target_weight:.2f}x', 'action': action, 'changed': changed}
+        return {'rows': [item], 'changed': changed, 'current_exposure': current_weight, 'target_exposure': target_weight}
     row = cn_result.iloc[idx]
     specs = [('V7.7A原版', V78_SUBA_V77_WEIGHT, 'v78_suba_v77'), (V78_SUBA_NEW_LABEL, V78_SUBA_NEW_TV10_WEIGHT, 'v78_suba_new')]
     rows = []
@@ -6653,32 +6789,165 @@ def _format_signed_exposure(value):
         return '0.00x'
     return f"{('多' if value > 0 else '空')} {abs(value):.2f}x"
 
+def _fmt_threshold_value(value, digits=2):
+    return '数据不可用' if pd.isna(value) else f'{float(value):.{digits}f}'
+
+def _write_suba_decision_explanation(w, cn_result):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    row = cn_result.iloc[-1]
+    top_code = str(row.get('suba_top_code', 'cash') or 'cash')
+    top_name = CN_NAMES.get(top_code, top_code)
+    score = row.get('suba_top_score', np.nan)
+    r2 = row.get('suba_top_r2', np.nan)
+    score_pass = bool(pd.notna(score) and float(score) > 0.0)
+    r2_pass = bool(pd.notna(r2) and float(r2) >= CN_R2_THRESHOLD)
+    raw_weight = float(row.get('pre_suba_volume_weight', row.get('weight', 0.0)) or 0.0)
+    final_weight = float(row.get('weight', 0.0) or 0.0)
+    volume_on = bool(row.get('suba_volume_rule_on', False))
+    volume_scale = float(row.get('suba_volume_rule_scale', 1.0) or 0.0)
+    unresolved = bool(row.get('suba_volume_unresolved', row.get('suba_volume_unavailable', False)))
+    zz_streak = row.get('suba_volume_zz2000_streak', np.nan)
+    cyb_streak = row.get('suba_volume_cyb_streak', np.nan)
+    volume_date = row.get('suba_volume_freshness_latest_date', None)
+    score_text = _fmt_threshold_value(score)
+    r2_text = _fmt_threshold_value(r2)
+
+    def _volume_streak_text(name, streak, ma_window, trigger_days):
+        if pd.isna(streak):
+            return f'{name}低于MA{ma_window}：连续天数不可用（触发需≥{trigger_days}日，无法判定）'
+        days = int(streak)
+        status = '已触发' if days >= int(trigger_days) else '未触发'
+        return f'{name}低于MA{ma_window}：连续{days}日（触发需≥{trigger_days}日，{status}）'
+    zz_status = _volume_streak_text('中证2000', zz_streak, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS)
+    cyb_status = _volume_streak_text('创业板', cyb_streak, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)
+    volume_date_text = '数据日期不可用' if volume_date is None or pd.isna(volume_date) else str(volume_date)
+    w('\n**开仓判定：**\n\n')
+    w(f"- 原始动量：Top-1={top_name}｜score={score_text}，要求 **>0**（{('通过' if score_pass else '未通过')}）｜R²={r2_text}，要求 **≥{CN_R2_THRESHOLD:.2f}**（{('通过' if r2_pass else '未通过')}）。Top-1任一项未通过即持Cash，**不递补第2名**。\n")
+    w(f'- 成交额覆盖：数据截至={volume_date_text}（最近已确认收盘）｜{zz_status}｜{cyb_status}｜成交额乘数={volume_scale:.2f}x。\n')
+    if unresolved:
+        conclusion = '成交额数据不可判定；禁止把当前结果当作正常可执行仓位。'
+    elif not (score_pass and r2_pass) or raw_weight <= 1e-12:
+        failed = []
+        if not score_pass:
+            failed.append(f'score={score_text}未达到>0')
+        if not r2_pass:
+            failed.append(f'R²={r2_text}未达到≥{CN_R2_THRESHOLD:.2f}')
+        detail = '、'.join(failed) if failed else '没有有效原始Top-1目标'
+        conclusion = f'未开仓直接原因是**原始动量未通过**（{detail}）'
+        if volume_on and volume_scale < 1.0 - 1e-12:
+            if volume_scale <= 1e-12:
+                conclusion += '；同时**成交额风控也已触发0.00x**，即使出现股票基础目标也会被清零'
+            else:
+                conclusion += f'；同时成交额风控已触发{volume_scale:.2f}x减仓'
+        conclusion += '。'
+    elif volume_on and volume_scale < 1.0 - 1e-12 and (final_weight <= 1e-12):
+        conclusion = f'原始动量已通过，但**成交额风控触发**，将{raw_weight:.2f}x降至0.00x，因此未开仓。'
+    elif final_weight <= 1e-12:
+        conclusion = '原始动量已有目标，但最终仓位为0；现有原因字段不足，禁止猜测，需停止执行并检查数据。'
+    else:
+        conclusion = f"原始动量已通过；成交额风控{('已触发' if volume_on else '未触发')}；最终目标={final_weight:.2f}x。"
+    w(f'- 结论：{conclusion}\n')
+
+def _write_adk_decision_explanation(w, cn_dk_result):
+    if cn_dk_result is None or len(cn_dk_result) == 0:
+        return
+    summary = _v79_adk_execution_summary(cn_dk_result, -1)
+    if not summary.get('rows'):
+        w('\n**开仓判定：** ADK状态字段不可用；本次不生成开仓结论。\n')
+        return
+    item = summary['rows'][0]
+    row = cn_dk_result.iloc[-1]
+    close_score = item.get('target_score', np.nan)
+    prior_score = row.get('v78_score_overheat_decision_score', np.nan)
+    current_hot = bool(row.get('v78_score_overheat_on', False))
+    target_hot = current_hot
+    if pd.notna(close_score):
+        if target_hot and float(close_score) <= V78_ADK_NEW_SCORE_HOT_EXIT:
+            target_hot = False
+        elif not target_hot and float(close_score) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+            target_hot = True
+    base_valid = item.get('target_base_pair', 'none') != 'none' and int(item.get('target_base_direction', 0) or 0) != 0
+    w('\n**开仓判定：**\n\n')
+    w(f"- 原始动量：固定Top-1={item.get('target_base_text', '无有效基础信号')}。\n")
+    if current_hot and pd.notna(prior_score) and (float(prior_score) > V78_ADK_NEW_SCORE_HOT_EXIT):
+        current_state_text = f'防守延续（{float(prior_score):.2f}>{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未恢复；不是本日重新触发）'
+    elif current_hot:
+        current_state_text = '防守开启'
+    else:
+        current_state_text = '防守关闭'
+    if current_hot and (not target_hot):
+        target_state_text = f'恢复（{float(close_score):.2f}≤{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}）' if pd.notna(close_score) else '恢复'
+    elif target_hot and current_hot:
+        target_state_text = f'继续防守（{float(close_score):.2f}>{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，仍未恢复）' if pd.notna(close_score) else '继续防守'
+    elif target_hot:
+        target_state_text = f'新触发（{float(close_score):.2f}≥{V78_ADK_NEW_SCORE_HOT_ENTER:.0f}）' if pd.notna(close_score) else '新触发'
+    else:
+        target_state_text = '防守关闭'
+    w(f'- score-hot滞回规则：历史分数达到 **≥{V78_ADK_NEW_SCORE_HOT_ENTER:.0f}** 后进入防守；此后必须降至 **≤{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}** 才恢复，防守乘数={V78_ADK_NEW_SCORE_HOT_SCALE:.2f}x。上一收盘score={_fmt_threshold_value(prior_score)}，当前={current_state_text}；本收盘score={_fmt_threshold_value(close_score)}，下一状态={target_state_text}。\n')
+    if current_hot and item.get('current_overlay_text'):
+        w(f"- 历史触发链：{item['current_overlay_text']}。\n")
+    if not base_valid:
+        conclusion = '未开仓原因是**原始动量没有有效Top-1配对**（通常为所需数据不足或无效），不是score-hot覆盖。'
+    elif target_hot and float(item.get('target_weight', 0.0) or 0.0) <= 1e-12:
+        conclusion = f"原始动量有效，但**score-hot处于防守状态**，基础敞口{float(item.get('target_base_weight', 0.0) or 0.0):.2f}x × {V78_ADK_NEW_SCORE_HOT_SCALE:.2f}=0.00x，因此未开仓/清仓。"
+    else:
+        conclusion = f"原始动量有效；score-hot下一状态={('开' if target_hot else '关')}；最终目标={item.get('target_final_text', '状态不可用')}。"
+    w(f'- 结论：{conclusion}\n')
+
 def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False, dk_intraday=False, query_kind='signal'):
-    w('## ✅ A / ATK（ADK）操作总览｜先看这里\n\n')
+    w('## 🇨🇳 A / ADK总览\n\n')
     if query_kind in {'params', 'live_params'}:
-        w('> 这是核对页，不是下单页；需要操作时请查询“实时信号”。\n\n')
+        w('> 参数核对页；下单只看“实时信号”。\n\n')
     suba = _suba_query_overview(cn_result, -1)
-    suba_mark = '🔴' if suba['changed'] else '🟢'
-    w(f"### A策略（Sub-A）｜{suba_mark} {('需要调整' if suba['changed'] else '维持')}\n\n")
+    suba_available = bool(suba['rows'])
+    suba_mark = '🔴' if suba_available and suba['changed'] else '🟢' if suba_available else '⚠️'
+    suba_status = '需要调整' if suba_available and suba['changed'] else '维持' if suba_available else '状态不可判定'
+    w(f'### A策略（Sub-A）｜{suba_mark} {suba_status}\n\n')
+    if cn_result is not None and len(cn_result) > 0:
+        w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：**A策略（单一生产策略）**｜MA{CN_BIAS_N}/动量{CN_MOM_DAY}日｜原始Top-1需score>0且R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD:.2f}，失败不递补｜目标波动{CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日｜杠杆{CN_MIN_LEV:.2f}–{CN_MAX_LEV:.2f}x\n\n')
+        w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜A股收盘执行\n\n')
     if suba['rows']:
-        w('| 分腿 | 当前已生效 | 收盘最终目标 | 操作 |\n')
+        w('| 策略 | 当前已生效 | 收盘最终目标 | 操作 |\n')
         w('|:-|:-|:-|:-|\n')
         for item in suba['rows']:
             w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
-        w(f"| **A策略合计** | **{suba['current_exposure']:.2f}x** | **{suba['target_exposure']:.2f}x** | **{('调整' if suba['changed'] else '维持')}** |\n")
     else:
         w('⚠️ A策略状态不可用。\n')
-    w(f"\n**现在怎么做：{_query_action_instruction(suba['changed'], cn_intraday, query_kind)}**\n\n")
+    _write_suba_decision_explanation(w, cn_result)
+    if cn_result is not None and len(cn_result) > 0:
+        a_row = cn_result.iloc[-1]
+        a_rv = a_row.get('realized_vol', np.nan)
+        a_raw_scale = a_row.get('scale_raw', np.nan)
+        a_volume_scale = a_row.get('suba_volume_rule_scale', 1.0)
+        a_volume_unresolved = bool(a_row.get('suba_volume_unresolved', a_row.get('suba_volume_unavailable', False)))
+        a_measure = f'已实现波动={float(a_rv):.1%}' if pd.notna(a_rv) else '已实现波动=N/A'
+        a_measure += f'｜VolScale={float(a_raw_scale):.2f}x' if pd.notna(a_raw_scale) else '｜VolScale=N/A'
+        a_measure += '｜成交额覆盖=不可判定（禁止按正常仓位执行）' if a_volume_unresolved else f'｜成交额乘数={float(a_volume_scale):.2f}x'
+        w(f"\n关键风控：目标波动={CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日（上限{CN_MAX_LEV:.2f}x）｜{a_measure}｜最终目标={suba['target_exposure']:.2f}x\n\n")
+    if query_kind not in {'params', 'live_params'}:
+        suba_action = _query_action_instruction(suba['changed'], cn_intraday, query_kind) if suba_available else '状态不可判定：停止执行并重试，不能按“维持”处理。'
+        w(f'**现在怎么做：{suba_action}**\n\n')
     adk = _adk_query_overview(cn_dk_result, -1)
-    adk_mark = '🔴' if adk['changed'] else '🟢'
-    w(f"### ATK / ADK策略（Sub-A-DK）｜{adk_mark} {('需要调整' if adk['changed'] else '维持')}\n\n")
+    adk_available = bool(adk['rows'])
+    adk_mark = '🔴' if adk_available and adk['changed'] else '🟢' if adk_available else '⚠️'
+    adk_status = '需要调整' if adk_available and adk['changed'] else '维持' if adk_available else '状态不可判定'
+    w(f'### ADK策略（Sub-A-DK）｜{adk_mark} {adk_status}\n\n')
+    if cn_dk_result is not None and len(cn_dk_result) > 0:
+        w(f"数据日期：**{pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if dk_intraday else '最近已确认收盘')}）\n\n")
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：**ADK策略（单一生产策略）**｜5指数全10对固定Top-1｜MA{CN_DK_BIAS_N}/动量{CN_DK_MOM_DAY}日｜score-hot进入/恢复/乘数={V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}/{V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x\n\n')
+        w(f'风控/执行：目标波动{CN_DK_TARGET_VOL:.0%}/{CN_DK_VOL_WINDOW}日｜杠杆{CN_DK_MIN_LEV:.1f}–{CN_DK_MAX_LEV:.1f}x｜|Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整｜每条多/空腿单边成本{CN_DK_COMMISSION:.3%}｜A股收盘执行\n\n')
     if adk['rows']:
-        w('| 分腿 | 当前已生效 | 收盘最终目标 | 操作 |\n')
+        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | 收盘最终目标 | 操作 |\n")
         w('|:-|:-|:-|:-|\n')
         for item in adk['rows']:
             w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
     else:
         w('⚠️ ADK策略状态不可用。\n')
+    _write_adk_decision_explanation(w, cn_dk_result)
     if adk['target_net']:
         w('\n**账户净敞口（实际执行优先看）**\n\n')
         w('| 指数 | 当前净敞口 | 目标净敞口 | 调整量 |\n')
@@ -6691,8 +6960,30 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
             w(f'| {_dk_leg_name(asset)} | {_format_signed_exposure(current)} | **{_format_signed_exposure(target)}** | {_format_signed_exposure(delta)} |\n')
     elif adk['rows'] and (not adk['target_is_exact']):
         w('\n> 当前兼容路径只给出配对/方向变化；精确腿内敞口继续以下方 VolScale 与覆盖层状态表为准。\n')
-    w(f"\n**现在怎么做：{_query_action_instruction(adk['changed'], dk_intraday, query_kind)}**\n\n")
-    w('> 下方是计算依据与风控明细，用于复核；是否操作及目标仓位以上方操作总览为准。\n\n---\n\n')
+    if cn_dk_result is not None and len(cn_dk_result) > 0:
+        adk_row = cn_dk_result.iloc[-1]
+        adk_rv = adk_row.get('realized_vol', np.nan)
+        adk_vol_scale = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+        adk_score = adk_row.get('v78_score_overheat_decision_score', np.nan)
+        adk_summary_rows = _v79_adk_execution_summary(cn_dk_result, -1).get('rows', [])
+        adk_close_score = adk_summary_rows[0].get('target_score', np.nan) if adk_summary_rows else np.nan
+        adk_hot_on = bool(adk_row.get('v78_score_overheat_on', False))
+        adk_hot_scale = float(adk_row.get('v78_score_overheat_scale', 1.0) or 0.0)
+        adk_measure = f'已实现波动={float(adk_rv):.1%}' if pd.notna(adk_rv) else '已实现波动=N/A'
+        adk_measure += f'｜VolScale={float(adk_vol_scale):.2f}x'
+        adk_measure += f"｜score-hot防守={('开启' if adk_hot_on else '关闭')}"
+        adk_measure += f'（上一收盘分数={float(adk_score):.2f}' if pd.notna(adk_score) else '（上一收盘分数=N/A'
+        adk_measure += f'，本收盘分数={float(adk_close_score):.2f}' if pd.notna(adk_close_score) else '，本收盘分数=N/A'
+        adk_measure += f'，乘数={adk_hot_scale:.2f}x）'
+        w(f'\n关键风控：{adk_measure}\n\n')
+    if query_kind not in {'params', 'live_params'}:
+        adk_action = _query_action_instruction(adk['changed'], dk_intraday, query_kind) if adk_available else '状态不可判定：停止执行并重试，不能按“维持”处理。'
+        w(f'**现在怎么做：{adk_action}**\n\n')
+    a_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in suba['rows'])) or '状态不可用'
+    adk_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in adk['rows'])) or '状态不可用'
+    a_date = pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d') if cn_result is not None and len(cn_result) else 'N/A'
+    adk_date = pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d') if cn_dk_result is not None and len(cn_dk_result) else 'N/A'
+    return {'Sub-A': {'is_signal': bool(suba_available and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': '状态不可用；不生成正式调整指令' if not suba_available else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
 _v80_b78_US_ROT_COMMISSION = 0.001
 _v80_b78_US_TRADING_DAYS = 252
 _v80_b78_US_ROT_FINANCING_BENCHMARK = 'BIL'
@@ -8311,93 +8602,23 @@ def _v80_subb_variant_rows(result, idx=-1, min_weight=0.0005, label='B7.9'):
         return []
     row = result.iloc[idx]
     assets = {col[2:] for col in result.columns if isinstance(col, str) and col.startswith('w_')} | {col[len('effective_w_'):] for col in result.columns if isinstance(col, str) and col.startswith('effective_w_')} | {col[len('actual_w_'):] for col in result.columns if isinstance(col, str) and col.startswith('actual_w_')} | {col[len('target_w_'):] for col in result.columns if isinstance(col, str) and col.startswith('target_w_')}
+    if not assets or not any((f'target_w_{asset}' in result.columns for asset in assets)):
+        raise DataSchemaError(f'{label} missing target weight fields')
     rows = []
     mapping = _v80_subb_mapping(label)
     for asset in sorted(assets):
         current = float(row.get(f'effective_w_{asset}', row.get(f'w_{asset}', row.get(f'actual_w_{asset}', 0.0))) or 0.0)
-        target = float(row.get(f'target_w_{asset}', current) or 0.0)
+        target_col = f'target_w_{asset}'
+        if target_col not in result.columns:
+            raise DataSchemaError(f'{label} missing {target_col}')
+        target = float(row.get(target_col))
+        if not np.isfinite(current) or not np.isfinite(target):
+            raise DataSchemaError(f'{label} non-finite weight for {asset}')
         if max(abs(current), abs(target), abs(target - current)) < min_weight:
             continue
         rows.append({'asset': asset, 'live_name': mapping.get(asset, asset), 'current': current, 'target': target, 'delta': target - current})
     rows.sort(key=lambda item: (-abs(item['target']), item['asset']))
     return rows
-
-def _v80_normalize_capital_config(config):
-    out = dict(config or {})
-    legacy = out.pop('Sub-B', None)
-    if legacy is not None and 'B7.8' not in out and ('B7.9' not in out):
-        amount = float(legacy)
-        if not np.isfinite(amount) or amount <= 0:
-            raise ValueError('legacy Sub-B capital must be finite and positive')
-        out['B7.8'] = amount * V80_SUBB_V78_SLEEVE_WEIGHT
-        out['B7.9'] = amount * V80_SUBB_V79_SLEEVE_WEIGHT
-    return out
-
-def _v80_normalize_position_config(config):
-    out = dict(config or {})
-    legacy = out.pop('Sub-B', None)
-    if legacy:
-        out['_V80_LEGACY_SUBB_UNSPLIT'] = legacy
-    return out
-
-def _v80_price_for_asset(us_rot_close, proxy, live):
-    if not isinstance(us_rot_close, pd.DataFrame):
-        return None
-    for ticker in (live, proxy):
-        if ticker not in us_rot_close.columns:
-            continue
-        values = pd.to_numeric(us_rot_close[ticker], errors='coerce')
-        values = values.where(np.isfinite(values) & (values > 0)).dropna()
-        if len(values) and values.index[-1] == us_rot_close.index[-1]:
-            return float(values.iloc[-1])
-    return None
-
-def _v80_normalize_account_positions(positions, label):
-    mapping = _v80_subb_mapping(label)
-    out = {}
-    for key, value in (positions or {}).items():
-        live = mapping.get(str(key).upper(), str(key).upper())
-        if live in out:
-            raise poe.BotError(f'{label}持仓 {live} 重复，请只保留实盘代码或代理代码之一。')
-        out[live] = value
-    return out
-
-def _v80_subb_account_rows(label, rows, us_rot_close):
-    capital_config = _v80_normalize_capital_config(_scan_capital_config(poe.default_chat) or {})
-    position_config = _v80_normalize_position_config(_scan_position_config(poe.default_chat) or {})
-    capital = capital_config.get(label)
-    positions = position_config.get(label) or {}
-    if positions:
-        positions = _v80_normalize_account_positions(positions, label)
-    mapping = _v80_subb_mapping(label)
-    live_prices = {item['live_name']: _v80_price_for_asset(us_rot_close, item['asset'], item['live_name']) for item in rows}
-    live_prices = {key: value for key, value in live_prices.items() if value is not None}
-    reverse_mapping = {live: proxy for proxy, live in mapping.items()}
-    for live in positions:
-        if live not in live_prices:
-            price = _v80_price_for_asset(us_rot_close, reverse_mapping.get(live, live), live)
-            if price is not None:
-                live_prices[live] = price
-    target_value = None
-    target_source = None
-    missing = []
-    if positions:
-        target_value, missing, target_source = _subb_position_adjustment_target_value(positions, live_prices, capital)
-    elif capital is not None:
-        target_value, target_source = (float(capital), 'capital')
-    account_rows = []
-    assets = set(positions)
-    assets.update((item['live_name'] for item in rows))
-    weight_by_live = {item['live_name']: item['target'] for item in rows}
-    for live in sorted(assets):
-        raw = positions.get(live, 0)
-        price = live_prices.get(live)
-        current_shares = _pos_entry_shares(raw, price or 0)
-        target_shares = _subb_target_shares(target_value, weight_by_live.get(live, 0.0), price) if target_value is not None else None
-        if not _pos_entry_is_nonzero(raw) and target_shares in (0, None):
-            continue
-        account_rows.append({'live': live, 'current': current_shares, 'target': target_shares, 'adjustment': None if target_shares is None else target_shares - current_shares})
-    return {'capital': capital, 'positions': positions, 'legacy_unsplit': bool(position_config.get('_V80_LEGACY_SUBB_UNSPLIT')), 'target_value': target_value, 'target_source': target_source, 'missing': missing, 'rows': account_rows}
 
 def _v80_map_rebalance_record(record, label):
     out = dict(record)
@@ -8421,20 +8642,115 @@ def _v80_extract_subb_rebalances(us_rot_result, us_rot_close=None, us_open=None,
         records.extend((_v80_map_rebalance_record(item, label) for item in base + overlay))
     return records
 
+def _v80_subb_risk_leg_rows(result, label):
+    """Return the four independent risk scales; the blend has no fifth scale."""
+    if result is None or len(result) == 0:
+        return []
+    is_b78 = label == 'B7.8'
+    trading_days = _v80_b78_US_TRADING_DAYS if is_b78 else US_TRADING_DAYS
+    vol_window = _v80_b78_US_ROT_VOL_WINDOW if is_b78 else US_ROT_VOL_WINDOW
+    ema_halflife = _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS if is_b78 else SUBB_V75_EMA_VOL_HALFLIFE_DAYS
+    last = result.iloc[-1]
+
+    def _rolling_rv(column):
+        if column not in result.columns:
+            return np.nan
+        hist = pd.to_numeric(result[column], errors='coerce').dropna().iloc[:-1]
+        if len(hist) < vol_window:
+            return np.nan
+        return float(np.std(hist.iloc[-vol_window:].to_numpy(), ddof=1) * np.sqrt(trading_days))
+
+    def _ema_rv():
+        if 'ema_return' not in result.columns:
+            return np.nan
+        hist = pd.to_numeric(result['ema_return'], errors='coerce').dropna().iloc[:-1]
+        if len(hist) < max(vol_window, ema_halflife):
+            return np.nan
+        return float(hist.ewm(halflife=ema_halflife, adjust=False).std().iloc[-1] * np.sqrt(trading_days))
+
+    def _component_row(attr_name):
+        component = result.attrs.get(attr_name)
+        if component is None or len(component) == 0:
+            return pd.Series(dtype=object)
+        date = result.index[-1]
+        try:
+            source = component.loc[date]
+            return source.iloc[-1] if isinstance(source, pd.DataFrame) else source
+        except Exception:
+            return component.iloc[-1]
+    official_scale = last.get('official_scale', np.nan)
+    if pd.isna(official_scale):
+        if 'official_return' in result.columns or 'return' in result.columns:
+            official_scale = _subb_official_scale_from_result(result)
+        else:
+            official_scale = last.get('scale_raw', np.nan)
+    ema_scale = last.get('ema_scale', np.nan)
+    if pd.isna(ema_scale):
+        ema_scale = _v80_b78_subb_v75_ema_scale_from_hist(pd.to_numeric(result.get('ema_return', pd.Series(dtype=float)), errors='coerce').dropna().iloc[:-1].to_numpy()) if is_b78 else _subb_v75_ema_scale_from_result(result)
+    bias = _component_row('v78_subb_bias')
+    logvol = _component_row('v78_subb_logvol')
+    return [{'leg': '官方', 'realized_vol': _rolling_rv('official_return'), 'scale': official_scale}, {'leg': 'EMA', 'realized_vol': _ema_rv(), 'scale': ema_scale}, {'leg': 'Bias', 'realized_vol': bias.get('realized_vol', np.nan), 'scale': bias.get('target_vol_scale', np.nan)}, {'leg': 'LogVol', 'realized_vol': logvol.get('realized_vol', np.nan), 'scale': logvol.get('target_vol_scale', np.nan)}]
+
+def _write_v80_subb_risk_chain(w, result, label):
+    if result is None or len(result) == 0:
+        return
+    is_b78 = label == 'B7.8'
+    short_w = _v80_b78_US_ROT_VOLREG_SHORT_W if is_b78 else US_ROT_VOLREG_SHORT_W
+    long_w = _v80_b78_US_ROT_VOLREG_LONG_W if is_b78 else US_ROT_VOLREG_LONG_W
+    enter = _v80_b78_US_ROT_VOLREG_THRESHOLD if is_b78 else US_ROT_VOLREG_THRESHOLD
+    recover = _v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD if is_b78 else US_ROT_VOLREG_EXIT_THRESHOLD
+    defense_scale = _v80_b78_US_ROT_VOLREG_DEFENSE_SCALE if is_b78 else US_ROT_VOLREG_DEFENSE_SCALE
+    next_state_fn = _v80_b78_volreg_next_cash_state if is_b78 else _volreg_next_cash_state
+    last = result.iloc[-1]
+    ratio = last.get('volreg_ratio', np.nan)
+    current_defense = bool(last.get('volreg_defense', False))
+    current_overlay = float(last.get('volreg_effective_scale', defense_scale if current_defense else 1.0) or 0.0)
+    next_defense = next_state_fn(current_defense, ratio)
+    next_overlay = float(defense_scale if next_defense else 1.0)
+    leg_parts = []
+    for item in _v80_subb_risk_leg_rows(result, label):
+        rv_text = f"{float(item['realized_vol']):.1%}" if pd.notna(item['realized_vol']) else '样本不足'
+        scale_text = f"{float(item['scale']):.2f}x" if pd.notna(item['scale']) else '字段缺失'
+        leg_parts.append(f"{item['leg']} {rv_text}/{scale_text}")
+    w('\n关键风控：\n\n')
+    w('- 四腿已实现波动/VolScale（各腿独立）：' + '｜'.join(leg_parts) + '\n')
+    ratio_text = f'{float(ratio):.2f}' if pd.notna(ratio) else '数据不可用'
+    if pd.isna(ratio):
+        conclusion = '本收盘比率不可判定，沿用当前VolReg状态。'
+    elif next_defense:
+        conclusion = 'VolReg防守开启；被覆盖的股票风险资产目标降至防守比例，差额转入BIL。'
+    else:
+        conclusion = 'VolReg未触发或已恢复；不因VolReg削减风险资产。'
+    w(f'- VolReg：本收盘SPY {short_w}/{long_w}日波动比={ratio_text}｜进入 **>{enter:.2f}**｜恢复 **<{recover:.2f}**｜当前生效Overlay={current_overlay:.2f}x（由上一收盘比率决定）｜下一目标Overlay={next_overlay:.2f}x。{conclusion}\n')
+
 def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intraday=False, us_rot_close=None):
-    w('## 🇺🇸 B策略双版本总览｜B7.8 + B7.9\n\n')
-    w('> **资金规则：Sub-B 内 B7.8 / B7.9 各占 50%；折算总组合各占 20%。** 两套 B 使用同一批行情独立计算、独立扣费；组合/PV按两条扣费后净值加权，下方目标仍分开显示，不混成一套持仓。查询区间共同起点按50/50建仓，之后随两条净值自然漂移，不额外做日频再平衡。\n\n')
+    w('## 🇺🇸 B策略总览｜B7.8 / B7.9独立账户\n\n')
+    w('> Sub-B内部各占50%（总组合各20%）；独立计算、扣费和执行。组合从50:50起始后随净值自然漂移，不做日频再平衡。\n\n')
     variants = [('B7.8', us_rot_result.attrs.get('v80_b78') if us_rot_result is not None else None), ('B7.9', us_rot_result)]
     signal_info = {}
     for label, result in variants:
-        if result is None:
-            raise ValueError(f'V8.0 {label} state is unavailable')
-        rows = _v80_subb_variant_rows(result, -1, label=label)
+        if result is None or len(result) == 0:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w('本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
+        try:
+            rows = _v80_subb_variant_rows(result, -1, label=label)
+        except (DataSchemaError, TypeError, ValueError, IndexError) as exc:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w(f'权重状态无效：{_short_error(exc)}；本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
+        if not rows:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w('没有可验证的当前/目标权重；本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
         changed = any((abs(item['delta']) >= 0.0005 for item in rows))
         mark = '🔴' if changed else '🟢'
         w(f"### {label}｜Sub-B的50% / 总组合20%｜{mark} {('目标变化' if changed else '维持')}\n\n")
+        last = result.iloc[-1]
         if query_kind in {'params', 'live_params'}:
-            last = result.iloc[-1]
             if label == 'B7.8':
                 top_n = V80_SUBB_V78_TOP_N
                 abs_threshold = _v80_b78_US_ROT_ABS_THRESHOLD
@@ -8451,13 +8767,7 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
                 max_lev = US_ROT_MAX_LEV
                 volreg_enter = US_ROT_VOLREG_THRESHOLD
                 volreg_exit = US_ROT_VOLREG_EXIT_THRESHOLD
-            realized = last.get('realized_vol', last.get('official_realized_vol', np.nan))
-            raw_scale = last.get('scale_raw', last.get('official_scale_raw', np.nan))
-            effective_scale = last.get('volreg_effective_scale', 1.0)
-            ratio = last.get('volreg_ratio', np.nan)
-            w(f'参数: Top{top_n}｜绝对动量>{abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
-            w(f'当前测量: 已实现波动={realized:.1%}｜' if pd.notna(realized) else '当前测量: 已实现波动=N/A｜')
-            w((f'原始scale={raw_scale:.2f}x｜' if pd.notna(raw_scale) else '原始scale=N/A｜') + (f'VolReg比率={ratio:.2f}｜' if pd.notna(ratio) else 'VolReg比率=N/A｜') + f'Overlay乘数={float(effective_scale):.2f}x｜最终执行权重见下表\n\n')
+            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜绝对动量>{abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
         if rows:
             w('| ETF | 当前已生效 | T收盘目标 | 调整量 |\n')
             w('|:-|------:|------:|------:|\n')
@@ -8466,22 +8776,7 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
                 w(f"| {item['live_name']} | {item['current']:.1%} | **{item['target']:.1%}** | {delta_text} |\n")
         else:
             w('⚠️ 本版本 B 状态不可用。\n')
-        account = _v80_subb_account_rows(label, rows, us_rot_close)
-        if account['legacy_unsplit']:
-            w('\n⚠️ 检测到旧版合并 Sub-B 持仓；无法安全拆分到 B7.8/B7.9。本次不生成任何 B 调仓数量，请分别设置两套持仓。\n')
-        elif account['missing']:
-            w('\n⚠️ 持仓价格缺失，数量计算已关闭: ' + ', '.join(account['missing']) + '\n')
-        elif account['rows']:
-            source_text = '已设置资金' if account['target_source'] == 'capital' else '本版本持仓市值'
-            w(f"\n**{label}独立账户调整**（基于{source_text} ${account['target_value']:,.0f}）\n\n")
-            w('| ETF | 当前股数 | 目标股数 | 调整 |\n|:-|------:|------:|------:|\n')
-            for item in account['rows']:
-                if item['target'] is None:
-                    target_text, adjustment_text = ('价格缺失', '不执行')
-                else:
-                    target_text = f"{item['target']:,}"
-                    adjustment_text = f"{item['adjustment']:+,}"
-                w(f"| {item['live']} | {item['current']:,} | {target_text} | {adjustment_text} |\n")
+        _write_v80_subb_risk_chain(w, result, label)
         if query_kind in {'params', 'live_params'}:
             action = '本页只核对参数；实际操作以“实时信号”为准。'
         elif us_intraday:
@@ -8490,9 +8785,11 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
             action = 'T收盘目标已确认；按 T+1 adjusted open 执行。已执行则勿重复。'
         else:
             action = '目标不变，维持；无需下单。'
-        w(f'\n**现在怎么做：{action}**\n\n')
-        signal_info[label] = {'is_signal': bool(changed), 'signal_text': ', '.join((f"{item['live_name']} {item['target']:.1%}" for item in rows)) or '无目标', 'note': '独立账户；T收盘确认后于T+1 adjusted open执行'}
-    w('> 下方 A/ADK/C 与 B7.8/B7.9 详细表用于复核；两套 B 的最终目标分别以上方对应表为准。\n\n')
+        if query_kind not in {'params', 'live_params'}:
+            w(f'\n**现在怎么做：{action}**\n\n')
+        confirmed = not us_intraday
+        signal_info[label] = {'is_signal': bool(changed and confirmed), 'signal_text': ', '.join((f"{item['live_name']} {item['target']:.1%}" for item in rows)) or '无目标', 'note': '独立账户；盘中假设，等待T收盘确认' if us_intraday else '独立账户；T收盘确认后于T+1 adjusted open执行'}
+    w('> B7.8与B7.9必须分别核对、分别下单，不合并持仓。\n\n')
     return signal_info
 
 def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False):
@@ -8500,21 +8797,56 @@ def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=F
     info = info or {}
     if not info:
         w('⚠️ C策略当前状态不可用；本次不生成正式调整指令。\n\n')
-        return
-    equity_current = float(info.get('current_scale', info.get('actual_scale', 1.0)))
-    equity_raw = float(info.get('next_target_scale', info.get('target_scale', equity_current)))
-    equity_next = float(info.get('next_scale', equity_current))
-    gold_current = float(info.get('gold_current_scale', 1.0))
-    gold_raw = float(info.get('gold_target_scale', gold_current))
-    gold_next = float(info.get('gold_next_scale', gold_current))
+        return {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+    try:
+        equity_current = float(info.get('current_scale', info.get('actual_scale')))
+        equity_raw = float(info.get('next_target_scale', info.get('target_scale')))
+        equity_next = float(info.get('next_scale'))
+        gold_current = float(info.get('gold_current_scale'))
+        gold_raw = float(info.get('gold_target_scale'))
+        gold_next = float(info.get('gold_next_scale'))
+        if not all((np.isfinite(v) and v >= 0.0 for v in (equity_current, equity_raw, equity_next, gold_current, gold_raw, gold_next))):
+            raise ValueError('non-finite scale')
+    except (TypeError, ValueError):
+        w('⚠️ C策略缩放状态缺失或无效；本次不生成正式调整指令。\n\n')
+        return {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
     equity_changed = bool(info.get('pending_adjustment', abs(equity_next - equity_current) > 0.001))
     gold_changed = bool(info.get('gold_pending_adjustment', abs(gold_next - gold_current) > 0.001))
     rv = info.get('rv_latest_no_shift', info.get('realized_vol'))
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：10ETF多资产｜股票袖SPY目标波动{PROD_VS_TARGET_VOL:.0%}/{PROD_VS_VOL_WINDOW}日｜黄金袖相对波动{PROD_GOLD_VS_SHORT_WINDOW}/{PROD_GOLD_VS_LONG_WINDOW}日｜scale {PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x｜调整死区{PROD_VS_THRESHOLD:.2f}｜下一美股开盘执行\n\n')
     w('| 模块 | 当前已生效 | 最新raw | 下一执行 | 状态 |\n')
     w('|:-|------:|------:|------:|:-|\n')
     w(f"| 股票袖 | {equity_current:.2f}x | {equity_raw:.2f}x | **{equity_next:.2f}x** | {('调整' if equity_changed else '维持')} |\n")
     w(f"| 黄金袖 | {gold_current:.2f}x | {gold_raw:.2f}x | **{gold_next:.2f}x** | {('调整' if gold_changed else '维持')} |\n")
     w('| BTC/债券/CTA | 1.00x | 1.00x | **1.00x** | 固定 |\n')
+    w('\n**各标的目标持仓（占C策略）**\n\n')
+    w('| ETF | 资产 | 基础权重 | 动量持有 | 当前已生效 | 下一执行 | 调整量 |\n')
+    w('|:-|:-|------:|------:|------:|------:|------:|\n')
+    current_asset_weights = info.get('current_asset_weights', {}) or {}
+    next_asset_weights = info.get('next_asset_weights', {}) or {}
+    momentum_signals = info.get('asset_momentum_signal', {}) or {}
+    for name, cfg in PROD_PORTFOLIO.items():
+        if cfg['cls'] in PROD_VS_SCALE_CLASSES:
+            current_asset_scale, next_asset_scale = (equity_current, equity_next)
+        elif name == 'GLDM':
+            current_asset_scale, next_asset_scale = (gold_current, gold_next)
+        else:
+            current_asset_scale = next_asset_scale = 1.0
+        momentum_signal = float(momentum_signals.get(name, 1.0))
+        current_weight = float(current_asset_weights.get(name, float(cfg['w']) * momentum_signal * current_asset_scale))
+        next_weight = float(next_asset_weights.get(name, float(cfg['w']) * momentum_signal * next_asset_scale))
+        if not all((np.isfinite(v) and v >= 0.0 for v in (momentum_signal, current_weight, next_weight))):
+            w(f"| {name} | {cfg['label']} | {float(cfg['w']):.1%} | N/A | N/A | N/A | 数据无效 |\n")
+            continue
+        delta = next_weight - current_weight
+        delta_text = f'{delta:+.1%}' if abs(delta) >= 0.0005 else '—'
+        w(f"| {name} | {cfg['label']} | {float(cfg['w']):.1%} | {momentum_signal:.0%} | {current_weight:.1%} | **{next_weight:.1%}** | {delta_text} |\n")
+    current_cash = float(info.get('current_cash_exposure', 0.0))
+    next_cash = float(info.get('next_cash_exposure', current_cash))
+    cash_delta = next_cash - current_cash
+    cash_delta_text = f'{cash_delta:+.1%}' if abs(cash_delta) >= 0.0005 else '—'
+    w(f'| {PROD_CASH} | Cash ETF | 0.0% | — | {current_cash:.1%} | **{next_cash:.1%}** | {cash_delta_text} |\n')
     measurement = f'SPY已实现波动={float(rv):.1%}｜' if rv is not None and pd.notna(rv) else 'SPY已实现波动=N/A｜'
     w('\n当前测量: ' + measurement + f"总毛敞口={float(info.get('next_gross_exposure', 1.0)):.1%}｜" + f"BIL={float(info.get('next_cash_exposure', 0.0)):.1%}｜" + f"融资={float(info.get('next_borrow_exposure', 0.0)):.1%}｜" + f"Overlay乘数={float(info.get('overlay_multiplier', 1.0)):.2f}x\n\n")
     changed = equity_changed or gold_changed
@@ -8526,7 +8858,134 @@ def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=F
         action = '收盘目标已确认；下一美股开盘执行。已执行则勿重复。'
     else:
         action = '股票袖与黄金袖均维持；无需下单。'
-    w(f'**现在怎么做：{action}**\n\n')
+    if query_kind not in {'params', 'live_params'}:
+        w(f'**现在怎么做：{action}**\n\n')
+    return {'is_signal': bool(changed and (not us_intraday)), 'signal_text': f'股票袖 {equity_next:.2f}x；黄金袖 {gold_next:.2f}x', 'note': '盘中假设，等待收盘确认' if us_intraday else '收盘确认后于下一美股开盘执行'}
+
+def _latest_series_value_at(series, date):
+    if series is None:
+        return np.nan
+    values = pd.to_numeric(series, errors='coerce')
+    try:
+        value = values.loc[pd.Timestamp(date)]
+        if isinstance(value, pd.Series):
+            value = value.iloc[-1]
+        return float(value) if pd.notna(value) else np.nan
+    except Exception:
+        history = values.loc[values.index <= pd.Timestamp(date)].dropna()
+        return float(history.iloc[-1]) if len(history) else np.nan
+
+def _adk_pair_score_detail_rows(cn_dk_result, idx=-1):
+    if cn_dk_result is None or len(cn_dk_result) == 0:
+        return []
+    signals_df = cn_dk_result.attrs.get('signals_df')
+    pair_data = cn_dk_result.attrs.get('pair_data', {})
+    if signals_df is None or len(signals_df) == 0:
+        return []
+    date = pd.Timestamp(cn_dk_result.index[idx])
+    if date not in signals_df.index:
+        return []
+    raw_scores = pd.to_numeric(signals_df.loc[date], errors='coerce')
+    all_pairs = list(_v78_all_adk_pair_order())
+    score_row = pd.Series({pair: raw_scores.get(pair, np.nan) for pair in all_pairs}, dtype=float)
+    ordered_pairs = sorted(all_pairs, key=lambda pair: (pd.isna(score_row[pair]), -float(score_row[pair]) if pd.notna(score_row[pair]) else 0.0, all_pairs.index(pair)))
+    current_pair = str(cn_dk_result.iloc[idx].get('top_pair', 'none') or 'none')
+    rows = []
+    for rank, pair in enumerate(ordered_pairs, 1):
+        score = score_row[pair]
+        pdata = pair_data.get(pair)
+        source = pd.Series(dtype=object)
+        if pdata is not None and date in pdata.index:
+            source = pdata.loc[date]
+            if isinstance(source, pd.DataFrame):
+                source = source.iloc[-1]
+        r2 = source.get('signal_r2', np.nan)
+        realized_vol = source.get('realized_vol', np.nan)
+        current_scale = source.get('scale', np.nan)
+        direction_value = source.get('signal', source.get('position', np.nan))
+        direction = int(direction_value) if pd.notna(direction_value) else 0
+        scale_update_date = None
+        if pdata is not None and 'scale' in pdata.columns:
+            scale_history = pd.to_numeric(pdata.loc[pdata.index <= date, 'scale'], errors='coerce').dropna()
+            if len(scale_history):
+                changed = scale_history.diff().abs().gt(1e-12)
+                changed.iloc[0] = True
+                scale_update_date = pd.Timestamp(changed[changed].index[-1])
+        if pd.notna(realized_vol) and pd.notna(current_scale):
+            latest_raw, next_scale, pending = _compute_next_vol_scale(float(realized_vol), float(current_scale), CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+        else:
+            latest_raw, next_scale, pending = (np.nan, current_scale, False)
+        tags = []
+        if pair == current_pair:
+            tags.append('当前配对')
+        if rank == 1 and pd.notna(score):
+            tags.append('收盘Top-1')
+        rows.append({'rank': rank, 'pair': pair, 'pair_display': _dk_pair_display(pair), 'score': float(score) if pd.notna(score) else np.nan, 'r2': float(r2) if pd.notna(r2) else np.nan, 'direction': direction, 'position_text': _dk_pos_str(f'{pair}_{direction}') if direction else '方向不可用', 'realized_vol': float(realized_vol) if pd.notna(realized_vol) else np.nan, 'current_scale': float(current_scale) if pd.notna(current_scale) else np.nan, 'scale_update_date': scale_update_date, 'latest_raw': float(latest_raw) if pd.notna(latest_raw) else np.nan, 'next_scale': float(next_scale) if pd.notna(next_scale) else np.nan, 'pending': bool(pending), 'tag': '、'.join(tags) if tags else '数据缺失，不参与排序' if pd.isna(score) else '—'})
+    return rows
+
+def _write_v80_a_adk_score_details(w, cn_result, cn_dk_result):
+    w('## 🔎 A / ADK基础评分明细\n\n')
+    w('> 本区统一放在C策略之后，只解释基础排名与VolScale来源；前面的操作结论不变。\n\n')
+    w('### A策略｜全部候选标的\n\n')
+    a_rows = []
+    if cn_result is not None and len(cn_result) > 0:
+        date = pd.Timestamp(cn_result.index[-1])
+        score_map = cn_result.attrs.get('suba_bias_mom', {})
+        r2_map = cn_result.attrs.get('suba_r2', {})
+        codes = cn_result.attrs.get('suba_score_codes', list(CN_EQUITY_CODES) + [CN_BOND_CODE])
+        for code in codes:
+            score = _latest_series_value_at(score_map.get(code), date)
+            r2 = _latest_series_value_at(r2_map.get(code), date)
+            a_rows.append({'code': code, 'name': CN_NAMES.get(code, code), 'score': score, 'r2': r2})
+    a_rows.sort(key=lambda row: (pd.isna(row['score']), -float(row['score']) if pd.notna(row['score']) else 0.0))
+    if a_rows:
+        w(f'规则：按score降序取原始Top-1；Top-1需score>0且R²≥{CN_R2_THRESHOLD:.2f}。\n\n')
+        w('| # | 标的 | score | R² | 判定 |\n|:-|:-|------:|------:|:-|\n')
+        for rank, row in enumerate(a_rows, 1):
+            score_text = f"{row['score']:.2f}" if pd.notna(row['score']) else 'N/A'
+            r2_text = f"{row['r2']:.3f}" if pd.notna(row['r2']) else 'N/A'
+            if pd.isna(row['score']):
+                verdict = '数据缺失，不参与排序'
+            elif rank == 1:
+                passed = row['score'] > 0 and pd.notna(row['r2']) and (row['r2'] >= CN_R2_THRESHOLD)
+                verdict = 'Top-1通过' if passed else 'Top-1未通过→Cash'
+            else:
+                verdict = '候选（不递补）'
+            w(f"| {rank} | {row['name']} | {score_text} | {r2_text} | {verdict} |\n")
+    else:
+        w('⚠️ A策略逐标的score/R²字段不可用。\n')
+    w('\n### ADK策略｜全部10个配对\n\n')
+    adk_rows = _adk_pair_score_detail_rows(cn_dk_result, -1)
+    if not adk_rows:
+        w('⚠️ ADK逐配对score/R²字段不可用。\n\n')
+        return
+    w(f'VolScale公式：`raw = clip({CN_DK_TARGET_VOL:.0%} / {CN_DK_VOL_WINDOW}日已实现波动率, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f})`；仅当|raw−当前|≥{CN_DK_SCALE_THRESHOLD:.2f}才更新。每个配对独立保存自己的VolScale。\n\n')
+    current = next((row for row in adk_rows if '当前配对' in row['tag']), None)
+    target = adk_rows[0]
+    if current is not None and pd.notna(current['current_scale']) and pd.notna(target['next_scale']):
+        current_raw_text = f"{current['latest_raw']:.2f}x" if pd.notna(current['latest_raw']) else 'N/A'
+        target_raw_text = f"{target['latest_raw']:.2f}x" if pd.notna(target['latest_raw']) else 'N/A'
+        current_update = current['scale_update_date'].strftime('%Y-%m-%d') if current['scale_update_date'] is not None else '日期不可用'
+        target_update = target['scale_update_date'].strftime('%Y-%m-%d') if target['scale_update_date'] is not None else '日期不可用'
+        if current['pair'] == target['pair']:
+            if abs(float(current['current_scale']) - float(target['next_scale'])) < 1e-12:
+                w(f"本次敞口来源：当前配对与收盘Top-1均为 **{current['pair_display']}**，配对未切换；沿用其在{current_update}更新的独立VolScale **{current['current_scale']:.2f}x**（最新raw {current_raw_text}，未跨死区）。\n\n")
+            else:
+                w(f"本次敞口来源：当前配对与收盘Top-1均为 **{current['pair_display']}**，配对未切换；最新raw {target_raw_text}已跨死区，VolScale由 **{current['current_scale']:.2f}x** 更新为 **{target['next_scale']:.2f}x**。\n\n")
+        else:
+            w(f"本次敞口来源：当前配对 **{current['pair_display']}** 沿用其在{current_update}更新的独立VolScale **{current['current_scale']:.2f}x**（最新raw {current_raw_text}）；收盘Top-1切换为 **{target['pair_display']}**，其下一VolScale为 **{target['next_scale']:.2f}x**（最近更新{target_update}，最新raw {target_raw_text}）。因此配对切换同时表现为 **{current['current_scale']:.2f}x → {target['next_scale']:.2f}x**。\n\n")
+    w('| # | 配对 | score | R² | 方向 | 已实现波动 | 当前VolScale（更新日） | 最新raw | 下一VolScale | 标记 |\n')
+    w('|:-|:-|------:|------:|:-|------:|------:|------:|------:|:-|\n')
+    for row in adk_rows:
+        score_text = f"{row['score']:.2f}" if pd.notna(row['score']) else 'N/A'
+        r2_text = f"{row['r2']:.3f}" if pd.notna(row['r2']) else 'N/A'
+        rv_text = f"{row['realized_vol']:.1%}" if pd.notna(row['realized_vol']) else 'N/A'
+        update_text = row['scale_update_date'].strftime('%m-%d') if row['scale_update_date'] is not None else 'N/A'
+        current_scale_text = f"{row['current_scale']:.2f}x（{update_text}）" if pd.notna(row['current_scale']) else 'N/A'
+        raw_text = f"{row['latest_raw']:.2f}x" if pd.notna(row['latest_raw']) else 'N/A'
+        next_scale_text = f"{row['next_scale']:.2f}x" if pd.notna(row['next_scale']) else 'N/A'
+        w(f"| {row['rank']} | {row['pair_display']} | {score_text} | {r2_text} | {row['position_text']} | {rv_text} | {current_scale_text} | {raw_text} | {next_scale_text} | {row['tag']} |\n")
+    w('\n')
 
 def _write_v80_b78_detail(w, us_rot_result, *, query_kind='signal'):
     b78, _ = _v80_subb_results(us_rot_result)
@@ -8548,19 +9007,11 @@ def _write_v80_b78_detail(w, us_rot_result, *, query_kind='signal'):
         warning = _v80_b78_v78_subb_volume_warning(b78)
         if warning:
             w('\n' + warning + '\n')
-    row = b78.iloc[-1]
-    realized = row.get('realized_vol', row.get('official_realized_vol', np.nan))
-    raw_scale = row.get('scale_raw', row.get('official_scale_raw', np.nan))
-    volreg_ratio = row.get('volreg_ratio', np.nan)
-    overlay = row.get('volreg_effective_scale', 1.0)
-    w('\n**B7.8当前风控链:** ')
-    w(f'已实现波动={float(realized):.1%}｜' if pd.notna(realized) else '已实现波动=N/A｜')
-    w(f'raw scale={float(raw_scale):.2f}x｜' if pd.notna(raw_scale) else 'raw scale=N/A｜')
-    w(f'VolReg比率={float(volreg_ratio):.2f}｜' if pd.notna(volreg_ratio) else 'VolReg比率=N/A｜')
-    w(f'Overlay乘数={float(overlay):.2f}x｜最终目标见前方B7.8总览。\n')
+    w('\n**B7.8当前风控链**\n')
+    _write_v80_subb_risk_chain(w, b78, 'B7.8')
 
 def _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=False, top_n=3):
-    specs = [('V7.7 ADK', cn_dk_result.attrs.get('v78_adk_v77'), '正式8配对'), (V78_ADK_NEW_LABEL, cn_dk_result.attrs.get('v78_adk_new'), '全10配对 + score-hot')]
+    specs = [(label, result_df, scope) for label, scope, _weight, result_df, _is_new in _v80_adk_component_specs(cn_dk_result)]
     sections = []
     for label, result_df, scope in specs:
         rows = _build_dk_rank_rows_at(result_df, idx=idx, use_shifted=use_shifted, top_n=top_n)
@@ -8572,7 +9023,7 @@ def _v78_adk_close_target_change_rows(cn_dk_result, idx=-1):
     resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
     if resolved_idx is None:
         return []
-    specs = [('V7.7 ADK', cn_dk_result.attrs.get('v78_adk_v77')), (V78_ADK_NEW_LABEL, cn_dk_result.attrs.get('v78_adk_new'))]
+    specs = [(label, result_df) for label, _scope, _weight, result_df, _is_new in _v80_adk_component_specs(cn_dk_result)]
     rows = []
     for label, result_df in specs:
         current = _v78_row_for_display(result_df, resolved_idx, date)
@@ -8617,7 +9068,8 @@ def _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False):
         score_label = '实时分数'
         timing = '实时基础Top-3'
         hint = '这里只展示若现在收盘的基础排名，不等于最终执行；Top-1行同时给出score-hot/过热/VolScale后的最终结论'
-    w(f'\n**V8.0 ADK 两个子策略Top-3（{hint}）:**\n')
+    title = '单策略Top-3' if _v80_adk_is_new_only(cn_dk_result) else '两个子策略Top-3'
+    w(f'\n**V8.0 ADK {title}（{hint}）:**\n')
     for section in sections:
         w(f"\n**{section['leg']}（{section['scope']}） {timing}**\n")
         execution = execution_by_leg.get(section['leg'])
@@ -8642,7 +9094,15 @@ def _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False):
 def _write_v78_adk_new_leg_rank_table(w, cn_dk_result, idx, use_shifted=False):
     _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=use_shifted)
 
-def _v78_adk_position_context_labels(position_context):
+def _v78_adk_position_context_labels(position_context, new_only=False):
+    if new_only:
+        if not position_context:
+            return ('当前配对/方向', 'Top-1配对/方向')
+        if str(position_context).startswith('若现在收盘'):
+            return ('若现在收盘配对/方向', '若现在收盘Top-1配对/方向')
+        if '当前已生效' in str(position_context):
+            return ('当前已生效配对/方向', '当前已生效Top-1配对/方向')
+        return (f'{position_context}配对/方向', f'{position_context}Top-1配对/方向')
     if not position_context:
         return ('当前双腿配对/方向', '分腿Top-1配对/方向')
     if str(position_context).startswith('若现在收盘'):
@@ -8651,24 +9111,28 @@ def _v78_adk_position_context_labels(position_context):
         return ('当前已生效双腿配对/方向', '当前已生效分腿Top-1配对/方向')
     return (f'{position_context}双腿配对/方向', f'{position_context}分腿Top-1配对/方向')
 
-def _write_v78_adk_position_context_note(w, position_context):
+def _write_v78_adk_position_context_note(w, position_context, new_only=False):
     if not position_context:
         return
     w(f'\n**ADK持仓口径:** **{position_context}**')
     if '非当前正式持仓' in str(position_context) or str(position_context).startswith('若现在收盘'):
-        w('；当前正式持仓以上方“当前已生效双腿持仓”和“账户级净敞口”表为准。')
+        holding_label = '当前已生效持仓' if new_only else '当前已生效双腿持仓'
+        w(f'；当前正式持仓以上方“{holding_label}”和“账户级净敞口”表为准。')
     else:
-        w('；下方表格展示当前正式持有的综合、分腿与账户级净敞口状态。')
+        detail = '单策略与账户级净敞口状态' if new_only else '综合、分腿与账户级净敞口状态'
+        w(f'；下方表格展示当前正式持有的{detail}。')
     w('\n')
 
 def _write_v78_adk_new_leg_then_summary(w, cn_dk_result, idx, use_shifted=False, position_context=None):
     is_close_target = not use_shifted and position_context is not None and ('目标' in str(position_context) or str(position_context).startswith('若现在收盘'))
     if is_close_target:
-        w('\n**ADK收盘目标口径:** 下表仅用当日未移位分数判断各腿配对/方向目标；当前正式持仓与账户级净敞口仍以上方已生效表为准。\n')
+        unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '各腿'
+        w(f'\n**ADK收盘目标口径:** 下表仅用当日未移位分数判断{unit}配对/方向目标；当前正式持仓与账户级净敞口仍以上方已生效表为准。\n')
         _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False)
         return
-    blend_col, status_col = _v78_adk_position_context_labels(position_context)
-    _write_v78_adk_position_context_note(w, position_context)
+    new_only = _v80_adk_is_new_only(cn_dk_result)
+    blend_col, status_col = _v78_adk_position_context_labels(position_context, new_only=new_only)
+    _write_v78_adk_position_context_note(w, position_context, new_only=new_only)
     _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label=blend_col)
     _write_v78_adk_net_exposure_table(w, cn_dk_result, idx)
     _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label=status_col)
@@ -8954,68 +9418,41 @@ def _write_v78_suba_param_tables(w):
     all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
     w('**全局执行口径**\n\n')
     w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
-    w(f'| V8.0共享腿 | **V7.7A {V78_SUBA_V77_WEIGHT:.0%} / New A TV1.0 {V78_SUBA_NEW_TV10_WEIGHT:.0%}** | 两条腿分别生成目标，再汇总为Sub-A执行目标 |\n')
+    w('| V8.0生产模式 | **A策略（单一生产策略）** | 仅此一条生产腿，不做版本区分 |\n')
     w(f'| 信号频率 | **日频** | 每个交易日检查信号 |\n')
     w(f'| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n')
     w(f'| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n')
     w(f"| 资产池 | **{len(CN_EQUITY_CODES) + 1}只** | {', '.join(all_names)} |\n")
-    w('\n**V7.7A原版参数**\n\n')
+    w('\n**A策略参数**\n\n')
     w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
     w(f'| 均线周期 | **{CN_BIAS_N}日** | price/MA{CN_BIAS_N}计算乖离率 |\n')
     w(f'| 斜率拟合窗口 | **{CN_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n')
-    w(f'| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** | 最近日权重更高；v7.7正式信号使用linear_recent_3x |\n')
-    w('| 选拔/递补顺序 | **先定原始Top-1，再验门槛；不递补** | 仅检查排名第1的R²和绝对动量；Top-1失败即持Cash，即使第2名全部通过也不会买入 |\n')
-    w(f'| 绝对动量过滤 | **{CN_ABS_MOM_DAY}日 > {CN_ABS_MOM_THRESHOLD:.0%}** | 候选资产近{CN_ABS_MOM_DAY}日实际涨跌幅需高于阈值，否则持现金 |\n')
+    w(f'| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** | 越近的数据权重越高 |\n')
+    w('| 排名有效条件 | **score > 0** | 原始Top-1动量必须为正，否则持Cash |\n')
+    w('| 选拔/递补顺序 | **原始Top-1失败不递补** | 只检查排名第1的score与R²；失败即持Cash，不改选第2名 |\n')
     w(f'| R²滚动窗口/门槛 | **{CN_R2_WINDOW}日 / {CN_R2_THRESHOLD}** | 所有资产(含国债)需R²≥门槛才持有 |\n')
-    w(f'| 持仓切换Buffer | **{CN_SWITCH_BUFFER:.2f}x** | 当前持仓仍合格时，新候选score需超过当前持仓{CN_SWITCH_BUFFER:.2f}x才切换 |\n')
-    w('\n**New A TV1.0参数**\n\n')
-    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
-    w(f'| MA/动量窗口 | **MA{V78_SUBA_NEW_MA} / {V78_SUBA_NEW_MOM_DAY}日** | New A score排名口径 |\n')
-    w('| 选拔/递补顺序 | **全池先过滤，再在合格池择优；允许递补** | 每只资产先独立检查score和绝对动量；原始第1名失败时，后续合格资产仍可成为最终Top-1 |\n')
-    w(f'| score阈值 | **>{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}** | score未通过则排除 |\n')
-    w(f'| 绝对动量过滤 | **abs{V78_SUBA_NEW_ABS_DAY}>{V78_SUBA_NEW_ABS_THRESHOLD:.0%}** | 绝对动量未通过则排除 |\n')
-    w(f'| 目标波动率/窗口/上限 | **{V78_SUBA_NEW_TARGET_VOL:.0%} / {V78_SUBA_NEW_VOL_WINDOW}日 / {V78_SUBA_NEW_MAX_LEV:.1f}x** | New A腿独立target-vol |\n')
-    w('| 成交额风控 | **启用时参与NewA目标权重** | V7.7A使用原Sub-A overlay；NewA使用专用volume overlay，按NewA状态机重建收益和成本 |\n')
     w('\n**Sub-A风控与执行参数**\n\n')
     w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
     w(f'| 波动率缩放目标/窗口 | **{CN_TARGET_VOL:.0%} / {CN_VOL_WINDOW}日** | 用策略收益率计算已实现波动率 |\n')
-    w(f'| 最大/最小杠杆 | **{CN_MAX_LEV:.1f}x / {CN_MIN_LEV:.1f}x** | VolScale上下限 |\n')
-    w(f'| Scale调整阈值 | **Δ≥{CN_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n')
-    w(f'| 建仓首笔比例 | **{CN_ENTRY_INITIAL_FRACTION:.0%}** | 从现金入场时先买入的目标仓位比例 |\n')
-    w(f"| 补仓等待天数 | **{('等回调' if CN_ENTRY_WAIT_DAYS is None else str(CN_ENTRY_WAIT_DAYS) + '日')}** | None=不设天数上限，只在下跌日补足剩余仓位 |\n")
-    w(f"| Cash Overlay | **{('启用' if CN_SA_CASH_OVERLAY_ENABLED else '关闭')}** | 触发/恢复 {CN_SA_CASH_OVERLAY_DECAY_RATIO:.0%}/{CN_SA_CASH_OVERLAY_RECOVERY_RATIO:.0%} |\n")
-    w(f"| V7.7A MA60过热止盈 | **{('启用' if CN_SA_SAME_SIDE_OVERHEAT_ENABLED else '关闭')}** | 仅作用于V7.7A腿；触发/恢复 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}，触发后{CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x |\n")
+    w(f'| 最大/最小杠杆 | **{CN_MAX_LEV:.2f}x / {CN_MIN_LEV:.2f}x** | VolScale上下限 |\n')
     w(f"| Sub-A成交额风控 | **{('启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭')}** | ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
 
 def _write_v78_adk_param_tables(w):
-    w('**全局执行口径**\n\n')
+    w('**V8.0 ADK生产口径**\n\n')
     w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
-    w(f'| V8.0共享腿 | **V7.7 ADK {V78_ADK_V77_WEIGHT:.0%} / New ADK {V78_ADK_NEW_PRIMARY_WEIGHT:.0%}** | 两条ADK腿分别选Top-1，再汇总为ADK执行敞口 |\n')
-    w('| 指数池 | **5指数** | 上证50, 沪深300, 中证500, 中证1000, 创业板 |\n')
+    w('| 生产策略 | **ADK策略（全10配对 + score-hot）** | 单一生产策略，不区分新旧 |\n')
+    w('| 指数池 | **5指数 / 全10对** | 上证50、沪深300、中证500、中证1000、创业板两两组合全池排名 |\n')
+    w('| 选拔数量 | **固定Top-1** | 只执行绝对乖离动量分数最高的一个配对 |\n')
+    w(f'| 均线周期/斜率窗口 | **MA{CN_DK_BIAS_N} / {CN_DK_MOM_DAY}日** | 每对计算乖离动量并按绝对分数排名 |\n')
+    w(f'| score-hot 进入/退出/乘数 | **{V78_ADK_NEW_SCORE_HOT_ENTER:.0f} / {V78_ADK_NEW_SCORE_HOT_EXIT:.0f} / {V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x** | 用前一收盘的Top-1分数触发或恢复；触发时清空ADK敞口 |\n')
     w(f'| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n')
-    w(f'| 交易成本 | **{CN_DK_COMMISSION:.3%}** | DK单边成本；翻转=4笔单边 |\n')
-    w('\n**V7.7 ADK参数**\n\n')
-    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
-    w(f"| 配对池 | **正式{len(ADK_OFFICIAL_PAIR_ORDER)}对** | {'、'.join((_dk_pair_display(p) for p in ADK_OFFICIAL_PAIR_ORDER))} |\n")
-    w(f'| 均线周期/斜率窗口 | **MA{CN_DK_BIAS_N} / {CN_DK_MOM_DAY}日** | 每对计算乖离动量，从正式池选|乖离动量|最大的Top-1 |\n')
-    w(f"| R²质量门槛 | **{('启用' if CN_DK_R2_QUALITY_ENABLED else '关闭')}** | 低于门槛的ADK配对不参与Top-1排名 |\n")
-    if CN_DK_R2_QUALITY_ENABLED:
-        w(f'| R²最低值 | **{CN_DK_R2_QUALITY_THRESHOLD:.2f}** | 仅过滤排名分数，方向仍来自原60/20乖离动量 |\n')
-    w(f"| Score衰减 | **{('启用' if CN_DK_PAIR_SCORE_DECAY_ENABLED else '关闭')}** | 7.7 ADK默认不使用pair score峰值衰减阈值 |\n")
-    w('\n**New ADK all10 score-hot参数**\n\n')
-    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
-    w('| 配对池 | **全10对** | 5指数两两组合全池参与排名 |\n')
-    w('| R²质量门槛 | **不启用** | New ADK不做R²过滤 |\n')
-    w('| score-hot | **80 / 20 / 0** | score过热时降低New ADK腿内敞口 |\n')
     w('\n**ADK风控与执行参数**\n\n')
     w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
     w(f'| 波动率缩放目标/窗口 | **{CN_DK_TARGET_VOL:.0%} / {CN_DK_VOL_WINDOW}日** | 用spread收益率计算已实现波动率 |\n')
     w(f'| 最大/最小杠杆 | **{CN_DK_MAX_LEV:.1f}x / {CN_DK_MIN_LEV:.1f}x** | VolScale上下限 |\n')
     w(f'| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n')
-    w(f"| 同向过热防守 | **{('启用' if CN_DK_SAME_SIDE_OVERHEAT_ENABLED else '关闭')}** | 触发/恢复 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}，触发后{CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE:.2f}x |\n")
+    w(f'| 交易成本 | **每条多/空腿单边{CN_DK_COMMISSION:.3%}** | 按实际多空腿换手计费；整组方向翻转对应4条单边换手 |\n')
     w(f'| ADK成交额风险警示 | **仅提示** | {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天时只进警示板，不改仓位 |\n')
-    w(f"| DD RiskGate | **{('启用' if CN_DK_RISK_GATE_ENABLED else '关闭')}** | 触发/恢复 <=-{CN_DK_RISK_GATE_ENTER:.0%} / >=-{CN_DK_RISK_GATE_EXIT:.0%}，防守仓位{CN_DK_RISK_GATE_DEFENSE_SCALE:.0%} |\n")
-    w('| RiskGate DD口径 | **risk_gate_base_dd** | 基于gate前执行成本净值判断，不是最终NAV回撤 |\n')
 
 def _us_threshold_check(available_scores, prev_w, threshold):
     if threshold <= 1.0:
@@ -10287,6 +10724,19 @@ def _drop_cn_unconfirmed_today(df):
     keep = [pd.Timestamp(idx).date() != today for idx in df.index]
     return df.loc[keep]
 
+def _latest_confirmed_cn_rule_date(index, bj_now=None):
+    """Return the latest confirmed CN close for close-only daily overlays."""
+    dates = pd.DatetimeIndex(pd.to_datetime(index, errors='coerce')).dropna().sort_values()
+    if len(dates) == 0:
+        return None
+    latest = pd.Timestamp(dates[-1]).normalize()
+    bj_now = beijing_now() if bj_now is None else bj_now
+    if _is_cn_today_preclose_unconfirmed_at(bj_now) and latest.date() == bj_now.date():
+        confirmed = dates[dates.date < bj_now.date()]
+        if len(confirmed) > 0:
+            return pd.Timestamp(confirmed[-1]).normalize()
+    return latest
+
 def _cn_record_close_confirmed(rec_date, bj_now, rec_time_text=None):
     if rec_date is None:
         return False
@@ -10588,149 +11038,6 @@ def parse_all_date_ranges(text):
             results.append((start, end))
     results.sort(key=lambda x: (x[1] - x[0]).days)
     return results
-CAPITAL_CONFIG_START = '<!--CAPITAL_CONFIG'
-CAPITAL_CONFIG_END = 'CAPITAL_CONFIG-->'
-
-def _scan_capital_config(chat):
-    config = None
-    for m in chat:
-        t = m.text
-        while True:
-            s = t.find(CAPITAL_CONFIG_START)
-            if s < 0:
-                break
-            e = t.find(CAPITAL_CONFIG_END, s)
-            if e < 0:
-                break
-            raw = t[s + len(CAPITAL_CONFIG_START):e].strip()
-            try:
-                config = json.loads(raw)
-            except (json.JSONDecodeError, ValueError):
-                pass
-            t = t[e + len(CAPITAL_CONFIG_END):]
-    return config
-
-def _build_capital_marker(config):
-    return f'\n{CAPITAL_CONFIG_START}\n{json.dumps(config, ensure_ascii=False)}\n{CAPITAL_CONFIG_END}\n'
-POSITION_CONFIG_START = '<!--POSITION_CONFIG'
-POSITION_CONFIG_END = 'POSITION_CONFIG-->'
-
-def _scan_position_config(chat):
-    config = None
-    for m in chat:
-        t = m.text
-        while True:
-            s = t.find(POSITION_CONFIG_START)
-            if s < 0:
-                break
-            e = t.find(POSITION_CONFIG_END, s)
-            if e < 0:
-                break
-            raw = t[s + len(POSITION_CONFIG_START):e].strip()
-            try:
-                config = json.loads(raw)
-            except (json.JSONDecodeError, ValueError):
-                pass
-            t = t[e + len(POSITION_CONFIG_END):]
-    return config
-
-def _build_position_marker(config):
-    return f'\n{POSITION_CONFIG_START}\n{json.dumps(config, ensure_ascii=False)}\n{POSITION_CONFIG_END}\n'
-
-def _pos_entry_value(val, price):
-    if isinstance(val, dict) and 'amount' in val:
-        return float(val['amount'])
-    shares = int(float(val)) if isinstance(val, (int, float)) else 0
-    return shares * price if price else 0
-
-def _pos_entry_is_nonzero(val):
-    if isinstance(val, dict) and 'amount' in val:
-        return abs(float(val['amount'])) > 0
-    return isinstance(val, (int, float)) and abs(float(val)) > 0
-
-def _pos_entry_needs_price_for_value(val):
-    return not (isinstance(val, dict) and 'amount' in val)
-
-def _normalize_subb_position_keys(pos):
-    out = {}
-    for key, value in (pos or {}).items():
-        live = _ROT_PROXY_TO_LIVE.get(str(key).upper(), str(key).upper())
-        if live in out and isinstance(out[live], (int, float)) and isinstance(value, (int, float)):
-            out[live] += value
-        elif live in out and isinstance(out[live], dict) and isinstance(value, dict) and ('amount' in out[live]) and ('amount' in value):
-            out[live] = dict(out[live], amount=float(out[live]['amount']) + float(value['amount']))
-        elif live in out:
-            raise poe.BotError(f'Sub-B持仓 {live} 同时存在股数和金额两种口径，请统一为一种。')
-        else:
-            out[live] = value
-    return out
-
-def _subb_target_shares(target_value, weight, price, min_weight=0.005):
-    if not isinstance(weight, (int, float)) or weight <= min_weight:
-        return 0
-    if price and price > 0:
-        return int(float(target_value) * float(weight) / price)
-    return None
-
-def _subb_position_adjustment_target_value(position_config, live_prices, capital=None):
-    position_config = _normalize_subb_position_keys(position_config)
-    live_prices = live_prices or {}
-    held_etfs = sorted((etf for etf, raw_pos in position_config.items() if _pos_entry_is_nonzero(raw_pos)))
-    missing_prices = [etf for etf in held_etfs if _pos_entry_needs_price_for_value(position_config.get(etf)) and etf not in live_prices]
-    if missing_prices:
-        if capital and capital > 0:
-            return (float(capital), missing_prices, 'capital')
-        return (None, missing_prices, 'unavailable')
-    total_value = sum((_pos_entry_value(position_config.get(etf, 0), live_prices.get(etf, 0)) for etf in held_etfs))
-    if total_value > 0:
-        return (float(total_value), [], 'positions')
-    if capital and capital > 0:
-        return (float(capital), [], 'capital')
-    return (None, [], 'unavailable')
-
-def _pos_entry_shares(val, price):
-    if isinstance(val, dict) and 'amount' in val:
-        return int(float(val['amount']) / price) if price and price > 0 else 0
-    return int(float(val)) if isinstance(val, (int, float)) else 0
-
-def _calc_quantities(capital, weights, prices):
-    result = {}
-    for etf, w in weights.items():
-        if not isinstance(w, (int, float)) or w < 0.005:
-            continue
-        amount = capital * w
-        price = prices.get(etf)
-        if price and price > 0:
-            qty = int(amount / price)
-            result[etf] = {'weight': w, 'amount': round(amount, 2), 'price': round(price, 2), 'qty': qty}
-        else:
-            result[etf] = {'weight': w, 'amount': round(amount, 2), 'price': None, 'qty': None}
-    return result
-
-def _position_csv_column_map(columns):
-    col_map = {}
-    for c in columns:
-        cl = str(c).strip().lower()
-        if cl in ('策略', 'strategy', 'sub', '子策略'):
-            col_map['strategy'] = c
-        elif cl in ('etf', 'ticker', '代码', '标的', 'code', 'symbol'):
-            col_map['etf'] = c
-        elif cl in ('数量', 'shares', 'qty', '股数', '持仓', 'quantity'):
-            col_map['shares'] = c
-        elif cl in ('amount', '金额', '市值', 'market_value'):
-            col_map['amount'] = c
-    return col_map
-
-def _position_csv_entry(row, col_map):
-    has_shares = 'shares' in col_map and pd.notna(row[col_map['shares']])
-    has_amount = 'amount' in col_map and pd.notna(row[col_map['amount']])
-    if has_shares and has_amount:
-        raise poe.BotError('CSV同一行同时存在数量和金额，请只保留一种持仓口径。')
-    if has_amount:
-        return {'amount': float(row[col_map['amount']])}
-    if has_shares:
-        return int(float(row[col_map['shares']]))
-    raise poe.BotError('CSV持仓行缺少数量或金额。')
 
 def _parse_json_from_response(text, required_fields=None):
     m = re.search('```json\\s*(\\{.*?\\})\\s*```', text, re.DOTALL)
@@ -10754,96 +11061,6 @@ def _call_llm_text_or_raise(prompt, context):
         return response.text
     except Exception as exc:
         raise poe.BotError(f'{context} LLM解析失败: {_short_error(exc)}') from exc
-
-def _parse_number_with_unit(text):
-    m = re.search('([0-9]+(?:\\.[0-9]+)?)\\s*(百万|萬|万|千|k|K)?', str(text))
-    if not m:
-        return None
-    value = float(m.group(1))
-    unit = m.group(2) or ''
-    if unit in ('百万',):
-        value *= 1000000
-    elif unit in ('萬', '万'):
-        value *= 10000
-    elif unit in ('千', 'k', 'K'):
-        value *= 1000
-    return value
-
-def _parse_simple_capital_config(text):
-    raw = str(text or '')
-    compact = raw.replace('：', ':')
-    parsed = {}
-    for strategy in ('Sub-A-DK', 'Sub-A', 'B7.8', 'B7.9', 'Sub-B', 'Sub-C'):
-        m = re.search(f'{re.escape(strategy)}\\s*[:：]?\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)', compact, re.I)
-        if m:
-            amount = _parse_number_with_unit(m.group(1))
-            if amount and amount > 0:
-                parsed[strategy] = amount
-    if parsed:
-        return _v80_normalize_capital_config(parsed)
-    usd = None
-    cn = None
-    m = re.search('(?:美元|USD|\\$)\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)', compact, re.I)
-    if not m:
-        m = re.search('([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)\\s*(?:美元|USD)', compact, re.I)
-    if m:
-        usd = _parse_number_with_unit(m.group(1))
-    m = re.search('(?:人民币|RMB|CNY|A股)\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)', compact, re.I)
-    if not m:
-        m = re.search('([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)\\s*(?:人民币|RMB|CNY)', compact, re.I)
-    if m:
-        cn = _parse_number_with_unit(m.group(1))
-    if cn and cn > 0:
-        parsed['Sub-A'] = cn * 0.5
-        parsed['Sub-A-DK'] = cn * 0.5
-    if usd and usd > 0:
-        us_total_weight = PERFORMANCE_COMBO_WEIGHTS['B7.8'] + PERFORMANCE_COMBO_WEIGHTS['B7.9'] + PERFORMANCE_COMBO_WEIGHTS['Sub-C']
-        parsed['B7.8'] = usd * PERFORMANCE_COMBO_WEIGHTS['B7.8'] / us_total_weight
-        parsed['B7.9'] = usd * PERFORMANCE_COMBO_WEIGHTS['B7.9'] / us_total_weight
-        parsed['Sub-C'] = usd * PERFORMANCE_COMBO_WEIGHTS['Sub-C'] / us_total_weight
-    return _v80_normalize_capital_config(parsed) if parsed else None
-
-def _parse_simple_position_config(text):
-    raw = str(text or '')
-    compact = raw.replace('：', ':')
-    parsed = {}
-    strategy = next((s for s in ('Sub-A-DK', 'Sub-A', 'B7.8', 'B7.9', 'Sub-B', 'Sub-C') if re.search(re.escape(s), compact, re.I)), None)
-    if not strategy:
-        return None
-    body = compact[compact.lower().find(strategy.lower()) + len(strategy):]
-    if strategy in ('B7.8', 'B7.9', 'Sub-B', 'Sub-C'):
-        items = {}
-        for ticker, qty in re.findall('\\b([A-Z]{2,6}(?:-[A-Z]+)?)\\b\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(?:股|shares?)?', body, re.I):
-            if ticker.upper() not in {'SUB', 'USD', 'RMB', 'CNY'}:
-                items[ticker.upper()] = int(float(qty))
-        if items:
-            parsed[strategy] = items
-    elif strategy == 'Sub-A':
-        name_to_code = {'红利低波100': '1.930955', '红利低波': '1.930955', '创业板': '0.399006', '上证50': '1.000016', '中证1000': '1.000852', '中证500': '1.000905', '国债': '1.H11077', '10Y': '1.H11077'}
-        items = {}
-        for name, code in name_to_code.items():
-            m = re.search(f'{re.escape(name)}\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)', body, re.I)
-            if m:
-                amount = _parse_number_with_unit(m.group(1))
-                if amount and amount > 0:
-                    items[code] = {'amount': amount}
-        if items:
-            parsed[strategy] = items
-    elif strategy == 'Sub-A-DK':
-        name_to_key = {'创业板': '创业板', '中证1000': '中证1000', '上证50': '上证50', '沪深300': '沪深300', '中证500': '中证500'}
-        items = {}
-        for side, prefix in (('做多', '做多_'), ('做空', '做空_')):
-            for name, key in name_to_key.items():
-                m = re.search(f'{side}\\s*{re.escape(name)}\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)', body)
-                if not m:
-                    m = re.search(f'{side}\\s*([0-9]+(?:\\.[0-9]+)?\\s*(?:百万|萬|万|千|k|K)?)\\s*{re.escape(name)}', body)
-                if m:
-                    amount = _parse_number_with_unit(m.group(1))
-                    if amount and amount > 0:
-                        items[prefix + key] = {'amount': amount}
-        if items:
-            parsed[strategy] = items
-    return parsed or None
 
 def _lookup_next_open(ticker, signal_date, us_open, us_close_df=None):
     if us_open is None:
@@ -11051,7 +11268,7 @@ def _series_value_at(series, date, pos):
     return np.nan
 
 def _suba_abs_mom_pass(abs_val):
-    return pd.notna(abs_val) and float(abs_val) > CN_ABS_MOM_THRESHOLD
+    return True
 
 def _suba_filter_status(bm, r2_val, abs_val):
     if pd.notna(bm) and float(bm) <= 0:
@@ -11060,11 +11277,7 @@ def _suba_filter_status(bm, r2_val, abs_val):
         return 'R²=N/A ❌'
     if float(r2_val) < CN_R2_THRESHOLD:
         return f'R²={float(r2_val):.3f} ❌'
-    if pd.isna(abs_val):
-        return f'{CN_ABS_MOM_DAY}日动量=N/A ❌'
-    if float(abs_val) <= CN_ABS_MOM_THRESHOLD:
-        return f'{CN_ABS_MOM_DAY}日动量={float(abs_val):+.1%} ≤ {CN_ABS_MOM_THRESHOLD:.0%} ❌'
-    return f'R²={float(r2_val):.3f} ✅ / {CN_ABS_MOM_DAY}日动量={float(abs_val):+.1%} ✅'
+    return f'R²={float(r2_val):.3f} ✅'
 
 def _format_suba_abs_mom(abs_val):
     return f'{float(abs_val):+.1%}' if pd.notna(abs_val) else '—'
@@ -11312,7 +11525,7 @@ def extract_dk_rebalances(dk_result, strategy_name='Sub-A-DK', cn_dk_close=None)
 
 def extract_v78_adk_rebalances(v78_adk_result, cn_dk_close=None, since_date=None):
     records = []
-    components = [('V7.7 ADK', V78_ADK_V77_WEIGHT, v78_adk_result.attrs.get('v78_adk_v77')), (V78_ADK_NEW_LABEL, V78_ADK_NEW_PRIMARY_WEIGHT, v78_adk_result.attrs.get('v78_adk_new'))]
+    components = [(label, component_weight, component) for label, _scope, component_weight, component, _is_new in _v80_adk_component_specs(v78_adk_result)]
     for label, component_weight, component in components:
         if component is None or len(component) == 0:
             continue
@@ -11642,6 +11855,7 @@ def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ti
     sig_a_lookup = {dt.to_period('M'): prod_sig_a.loc[dt] for dt in prod_sig_a.index}
     sig_b_lookup = {dt.to_period('M'): prod_sig_b.loc[dt] for dt in prod_sig_b.index} if use_blend else {}
     asset_returns = {}
+    asset_signals = {}
     for name, cfg in portfolio.items():
         proxy = cfg['proxy']
         asset_daily = daily_ret[proxy].fillna(0.0)
@@ -11665,8 +11879,10 @@ def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ti
             daily_sig_b = daily_sig_b.ffill().fillna(0.0)
             ret_b = daily_sig_b * asset_daily + (1.0 - daily_sig_b) * cash_daily
             asset_returns[name] = blend_a * ret_a + blend_b * ret_b
+            asset_signals[name] = blend_a * daily_sig_a + blend_b * daily_sig_b
         else:
             asset_returns[name] = ret_a
+            asset_signals[name] = daily_sig_a
     holdings = pd.Series({name: cfg['w'] for name, cfg in portfolio.items()}, dtype=float)
     previous_value = float(holdings.sum())
     previous_year = daily_ret.index[0].year
@@ -11689,6 +11905,7 @@ def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ti
             exposure = float(holdings[name] / previous_value)
             contribution = exposure * float(asset_returns[name].loc[date])
             row[f'exposure::{name}'] = exposure
+            row[f'signal::{name}'] = float(asset_signals[name].loc[date])
             row[f'contribution::{name}'] = contribution
             base_return += contribution
         row['base_return'] = base_return
@@ -11879,20 +12096,33 @@ def _build_subc_vs_info(us_prod_daily, components, actual_scale=None, target_vol
     gold_raw = float(np.clip(gold_long_latest / gold_short_latest, min_lev, max_lev)) if gold_short_latest is not None and gold_short_latest > 0 and (gold_long_latest is not None) else gold_current
     gold_next = gold_raw if abs(gold_raw - gold_current) >= threshold - 1e-09 else gold_current
     equity_names = [name for name, cfg in PROD_PORTFOLIO.items() if cfg['cls'] in PROD_VS_SCALE_CLASSES]
-    equity_exposure = float(sum((components[f'exposure::{n}'].iloc[-1] for n in equity_names)))
-    gold_exposure = float(components['exposure::GLDM'].iloc[-1])
-    total_base_exposure = float(sum((components[f'exposure::{name}'].iloc[-1] for name in PROD_PORTFOLIO)))
-    fixed_exposure = total_base_exposure - equity_exposure - gold_exposure
+    asset_base_exposure = {name: float(components[f'exposure::{name}'].iloc[-1]) for name in PROD_PORTFOLIO}
+    asset_signal = {name: float(components.get(f'signal::{name}', pd.Series(1.0, index=index)).iloc[-1]) for name in PROD_PORTFOLIO}
+    if not all((np.isfinite(value) and 0.0 <= value <= 1.0 for value in asset_signal.values())):
+        raise DataSchemaError('Sub-C component ledger contains invalid momentum signals')
+    asset_risk_exposure = {name: asset_base_exposure[name] * asset_signal[name] for name in PROD_PORTFOLIO}
+    equity_exposure = float(sum((asset_risk_exposure[n] for n in equity_names)))
+    gold_exposure = float(asset_risk_exposure['GLDM'])
+    total_base_exposure = float(sum(asset_base_exposure.values()))
+    fixed_exposure = float(sum((asset_risk_exposure[name] for name in PROD_PORTFOLIO if name not in equity_names and name != 'GLDM')))
+    base_signal_cash = float(sum((asset_base_exposure[name] * (1.0 - asset_signal[name]) for name in PROD_PORTFOLIO)))
 
     def _gross(eq_scale, au_scale):
         return fixed_exposure + equity_exposure * eq_scale + gold_exposure * au_scale
 
     def _cash(eq_scale, au_scale):
-        return max(1.0 - eq_scale, 0.0) * equity_exposure + max(1.0 - au_scale, 0.0) * gold_exposure
+        return base_signal_cash + max(1.0 - eq_scale, 0.0) * equity_exposure + max(1.0 - au_scale, 0.0) * gold_exposure
 
     def _borrow(eq_scale, au_scale):
         return max(eq_scale - 1.0, 0.0) * equity_exposure + max(au_scale - 1.0, 0.0) * gold_exposure
-    return {'signal_ticker': PROD_VS_SIGNAL_TICKER, 'scale_scope': 'equity_only', 'realized_vol': realized_vol, 'rv_latest_no_shift': realized_vol, 'realized_vol_basis': 'SPY_latest_close_for_next_session', 'target_vol': target_vol, 'actual_scale': current_scale, 'current_scale': current_scale, 'prev_actual_scale': float(actual_scale.iloc[-2]) if len(actual_scale) >= 2 else current_scale, 'target_scale': equity_raw, 'next_target_scale': equity_raw, 'next_scale': equity_next, 'pending_adjustment': abs(equity_next - current_scale) > 0.001, 'equity_base_exposure': equity_exposure, 'gold_signal_ticker': PROD_GOLD_VS_SIGNAL_TICKER, 'gold_short_vol': gold_short_latest, 'gold_long_vol': gold_long_latest, 'gold_current_scale': gold_current, 'gold_target_scale': gold_raw, 'gold_next_scale': gold_next, 'gold_pending_adjustment': abs(gold_next - gold_current) > 0.001, 'gold_base_exposure': gold_exposure, 'fixed_base_exposure': fixed_exposure, 'current_gross_exposure': _gross(current_scale, gold_current), 'next_gross_exposure': _gross(equity_next, gold_next), 'current_cash_exposure': _cash(current_scale, gold_current), 'next_cash_exposure': _cash(equity_next, gold_next), 'current_borrow_exposure': _borrow(current_scale, gold_current), 'next_borrow_exposure': _borrow(equity_next, gold_next), 'rebalance_deadband': threshold, 'overlay_multiplier': 1.0, 'final_execution_scale': equity_next, 'btc_scale': 1.0}
+    current_asset_weights = {}
+    next_asset_weights = {}
+    for name in PROD_PORTFOLIO:
+        current_asset_scale = current_scale if name in equity_names else gold_current if name == 'GLDM' else 1.0
+        next_asset_scale = equity_next if name in equity_names else gold_next if name == 'GLDM' else 1.0
+        current_asset_weights[name] = asset_risk_exposure[name] * current_asset_scale
+        next_asset_weights[name] = asset_risk_exposure[name] * next_asset_scale
+    return {'signal_ticker': PROD_VS_SIGNAL_TICKER, 'scale_scope': 'equity_only', 'realized_vol': realized_vol, 'rv_latest_no_shift': realized_vol, 'realized_vol_basis': 'SPY_latest_close_for_next_session', 'target_vol': target_vol, 'actual_scale': current_scale, 'current_scale': current_scale, 'prev_actual_scale': float(actual_scale.iloc[-2]) if len(actual_scale) >= 2 else current_scale, 'target_scale': equity_raw, 'next_target_scale': equity_raw, 'next_scale': equity_next, 'pending_adjustment': abs(equity_next - current_scale) > 0.001, 'equity_base_exposure': equity_exposure, 'gold_signal_ticker': PROD_GOLD_VS_SIGNAL_TICKER, 'gold_short_vol': gold_short_latest, 'gold_long_vol': gold_long_latest, 'gold_current_scale': gold_current, 'gold_target_scale': gold_raw, 'gold_next_scale': gold_next, 'gold_pending_adjustment': abs(gold_next - gold_current) > 0.001, 'gold_base_exposure': gold_exposure, 'fixed_base_exposure': fixed_exposure, 'asset_base_exposure': asset_base_exposure, 'asset_momentum_signal': asset_signal, 'current_asset_weights': current_asset_weights, 'next_asset_weights': next_asset_weights, 'current_gross_exposure': _gross(current_scale, gold_current), 'next_gross_exposure': _gross(equity_next, gold_next), 'current_cash_exposure': _cash(current_scale, gold_current), 'next_cash_exposure': _cash(equity_next, gold_next), 'current_borrow_exposure': _borrow(current_scale, gold_current), 'next_borrow_exposure': _borrow(equity_next, gold_next), 'rebalance_deadband': threshold, 'overlay_multiplier': 1.0, 'final_execution_scale': equity_next, 'btc_scale': 1.0}
 
 def _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b=None, us_open=None, strict_open_execution=False):
     components = _compute_daily_subc_components_phased(us_prod_daily, prod_sig_a, PROD_CASH, prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
@@ -12315,18 +12545,14 @@ class CombinedStrategyBase:
 
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
         cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
-        suba_single_gate = _build_suba_single_strategy_gates(cn_close_with_bond) if CN_SA_SINGLE_GATE_ENABLED else None
-        cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES, single_asset_signal_gate=suba_single_gate)
-        if CN_SA_CASH_OVERLAY_ENABLED:
-            cn_result = apply_suba_cash_peak_decay_overlay(cn_result, cn_close_with_bond, decay_ratio_threshold=CN_SA_CASH_OVERLAY_DECAY_RATIO, recovery_ratio_threshold=CN_SA_CASH_OVERLAY_RECOVERY_RATIO, commission=CN_COMMISSION)
-        if CN_SA_SAME_SIDE_OVERHEAT_ENABLED:
-            cn_result = apply_suba_same_side_overheat_overlay(cn_result, cn_close_with_bond, enter_threshold=CN_SA_SAME_SIDE_OVERHEAT_ENTER, exit_threshold=CN_SA_SAME_SIDE_OVERHEAT_EXIT, derisk_scale=CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE)
+        cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
         suba_volume_signal = None
         suba_volume_feature = None
         if CN_SA_VOLUME_OVERLAY_ENABLED:
             try:
-                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal()
-                suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=cn_close_with_bond.index.max(), rule_key='suba_volume')
+                suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
+                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date)
+                suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
                 if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature):
                     raise poe.BotError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。信号查询可降级显示“0%仓位扩展风控不可判定，不应按正常仓位执行”。')
                 cn_result = _apply_suba_volume_overlay_policy(cn_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
@@ -12336,22 +12562,8 @@ class CombinedStrategyBase:
                 if not allow_unresolved_suba_volume:
                     raise poe.BotError('Sub-A成交额风控数据不可用，正式回测/绩效查询已中止；信号查询可降级显示“成交额风控不可判定”。') from exc
                 cn_result = _mark_suba_volume_unavailable(cn_result, exc)
-        cn_v77_result = cn_result
-        cn_new_result = run_v78_suba_new_tv10(cn_close_with_bond, CN_EQUITY_CODES)
-        if CN_SA_VOLUME_OVERLAY_ENABLED and suba_volume_signal is not None:
-            cn_new_result = _apply_v78_suba_new_volume_overlay_policy(cn_new_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
-        cn_result = blend_v78_suba_results(cn_v77_result, cn_new_result)
-        cn_dk_result = run_dk_strategy(cn_close, cn_dk_close)
-        if CN_DK_PAIR_SCORE_DECAY_ENABLED:
-            cn_dk_result = apply_dk_pair_score_peak_decay_overlay(cn_dk_result, decay_ratio_threshold=CN_DK_PAIR_SCORE_DECAY_RATIO, recovery_ratio_threshold=CN_DK_PAIR_SCORE_RECOVERY_RATIO, derisk_scale=CN_DK_PAIR_SCORE_DERISK_SCALE, commission=CN_DK_COMMISSION)
-        if CN_DK_SAME_SIDE_OVERHEAT_ENABLED:
-            cn_dk_result = apply_dk_same_side_overheat_overlay(cn_dk_result, enter_threshold=CN_DK_SAME_SIDE_OVERHEAT_ENTER, exit_threshold=CN_DK_SAME_SIDE_OVERHEAT_EXIT, derisk_scale=CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE, commission=CN_DK_COMMISSION)
-        if CN_DK_RISK_GATE_ENABLED:
-            cn_dk_result = apply_dk_drawdown_risk_gate(cn_dk_result, enter=CN_DK_RISK_GATE_ENTER, scale_defense=CN_DK_RISK_GATE_DEFENSE_SCALE, exit_value=CN_DK_RISK_GATE_EXIT, cooldown_days=CN_DK_RISK_GATE_COOLDOWN_DAYS)
-        cn_dk_result = _rebuild_dk_effective_execution_costs(cn_dk_result, cn_dk_result.attrs.get('pair_data', {}), CN_DK_COMMISSION)
-        cn_dk_v77_result = cn_dk_result
-        cn_dk_new_result = run_v78_adk_new_primary(cn_close, cn_dk_close)
-        cn_dk_result = blend_v78_adk_results(cn_dk_v77_result, cn_dk_new_result)
+        cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'
+        cn_dk_result = run_v80_adk_new_only(cn_close, cn_dk_close)
         us_rot_result = _run_v80_subb_variants(us_rot_close, us_open=getattr(self, '_us_open', None), strict_open_execution=strict_subb_open_execution)
         prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
         if _subc_enabled():
@@ -12386,7 +12598,6 @@ class CombinedStrategyBase:
             if code in cn_close_with_bond.columns:
                 bias_mom_cn[code] = calc_bias_momentum(cn_close_with_bond[code])
                 r2_cn[code] = calc_rolling_r2(cn_close_with_bond[code])
-                abs_mom_cn[code] = cn_close_with_bond[code].pct_change(CN_ABS_MOM_DAY)
         scores_today = {}
         for code in all_codes_display:
             if code in bias_mom_cn:
@@ -12476,196 +12687,7 @@ class CombinedStrategyBase:
             subc_snapshot = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
             subc_vs_info = subc_snapshot['info']
         return {'cn_result': cn_result, 'cn_dk_result': cn_dk_result, 'us_rot_result': us_rot_result, 'prod_monthly': prod_monthly, 'prod_details': prod_details, 'prod_sig_a': prod_sig_a, 'prod_sig_b': prod_sig_b, 'cn_date': cn_date, 'is_cn_signal': is_cn_signal, 'cn_current': cn_current, 'cn_target': cn_display_state['target_holding'], 'cn_post_signal_holding': cn_display_state['post_signal_holding'], 'cn_current_display': cn_display_state.get('current_display'), 'cn_target_display': cn_display_state.get('target_display'), 'cn_post_display': cn_display_state.get('post_display'), 'cn_display_state': cn_display_state, 'bias_mom_cn': bias_mom_cn, 'r2_cn': r2_cn, 'abs_mom_cn': abs_mom_cn, 'scores_today': scores_today, 'dk_date': dk_date, 'is_dk_signal': is_dk_signal, 'dk_current': dk_current, 'dk_top_pair': dk_top_pair, 'dk_direction': dk_direction, 'dk_pair_changed': dk_pair_changed, 'dk_direction_changed': dk_direction_changed, 'dk_long_leg': dk_long_leg, 'dk_short_leg': dk_short_leg, 'dk_rank_current': dk_rank_current, 'dk_rank_today': dk_rank_today, 'dk_hypo_top_pair': dk_hypo_top_pair, 'dk_hypo_direction': dk_hypo_direction, 'us_date': us_date, 'us_signal_set': us_signal_set, 'is_us_signal': is_us_signal, 'current_us_w': current_us_w, 'us_scale': us_scale, 'last_confirmed_us_scale': last_confirmed_us_scale, 'prev_us_w': prev_us_w, 'hypo_us_w': hypo_us_w, 'model_hypo_us_w': model_hypo_us_w, 'effective_hypo_us_w': hypo_us_w, 'ema_hypo_us_w': ema_hypo_us_w, 'blended_hypo_us_w': blended_hypo_us_w, 'hypo_prev_mix_risky_by_lb': hypo_prev_mix_risky_by_lb, 'hypo_prev_ema_risky': hypo_prev_ema_risky, 'rebalanced_b': rebalanced_b, 'would_rebalance': would_rebalance, 'turnover_b': turnover_b, 'all_a': all_a, 'rot_w_cols': rot_w_cols, 'current_am_raw': current_am_raw, 'current_sma_raw': current_sma_raw, 'last_sig_month': last_sig_month, 'subc_vs_info': subc_vs_info, 'subc_snapshot': subc_snapshot, 'volreg_ratio': volreg_ratio_today, 'volreg_cash_today': volreg_cash_today, 'volreg_cash_next': volreg_cash_next, 'volreg_defense_today': volreg_defense_today, 'volreg_defense_next': volreg_defense_next}
-
-    def _handle_set_capital(self):
-        existing = _scan_capital_config(poe.default_chat) or {}
-        ctx_parts = []
-        for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-            v = existing.get(s)
-            if v:
-                ctx_parts.append(f'- {s}: {v:,.0f}')
-            else:
-                ctx_parts.append(f'- {s}: 未设置')
-        prompt = f'解析资金设置。\n\n资金设置支持: Sub-A, Sub-A-DK, B7.8, B7.9, Sub-C；输入旧Sub-B时自动50/50拆分\nV8.0默认组合权重: Sub-A 15%, Sub-A-DK 15%, B7.8 20%, B7.9 20%, Sub-C 30%\n注意: Sub-A和Sub-A-DK使用人民币, B7.8/B7.9/Sub-C使用美元\n\n当前已设置:\n{chr(10).join(ctx_parts)}\n\n用户输入: {poe.query.text}\n\n输出```json格式:\n```json\n{{\n  "Sub-A": 数字或null,\n  "Sub-A-DK": 数字或null,\n  "B7.8": 数字或null,\n  "B7.9": 数字或null,\n  "Sub-C": 数字或null\n}}\n```\n\n规则:\n1. 用户说"Sub-B 5万美元" -> B7.8: 25000, B7.9: 25000\n2. 用户分别指定人民币和美元金额 -> 人民币按Sub-A:Sub-A-DK=15:15拆分；美元按B7.8:B7.9:Sub-C=20:20:30拆分\n   例: "人民币300万, 美元70万" -> Sub-A: 1500000, Sub-A-DK: 1500000, B7.8: 200000, B7.9: 200000, Sub-C: 300000\n3. 用户说"总共100万, 按V8.0默认比例" (未区分币种) -> Sub-A: 150000, Sub-A-DK: 150000, B7.8: 200000, B7.9: 200000, Sub-C: 300000\n4. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)\n5. "万"=10000, "百万"=1000000, "千"=1000\n6. 金额只填数字(不带货币符号), 单位统一为该策略的对应货币(A股=人民币, 美股=美元)\n7. 用户说"总共7万美元给美股" -> B7.8 20000, B7.9 20000, Sub-C 30000\n8. 关键: 人民币/RMB/CNY -> 只分给Sub-A和Sub-A-DK; 美元/USD -> 只分给B7.8、B7.9和Sub-C'
-        parsed = _parse_simple_capital_config(poe.query.text)
-        with _sm() as msg:
-            w = msg.write
-            w('⏳ 正在解析资金设置...\n')
-        response = types.SimpleNamespace(text=json.dumps(parsed, ensure_ascii=False)) if parsed is not None else types.SimpleNamespace(text=_call_llm_text_or_raise(prompt, '资金配置'))
-        try:
-            parsed = _parse_json_from_response(response.text, [])
-        except (json.JSONDecodeError, ValueError):
-            raise poe.BotError('无法解析资金设置，请用更明确的语言，例如:\n- 设置资金 Sub-B 5万美元\n- 设置资金 A股共20万 美股共8万美元\n- 设置资金 总共100万人民币 按默认比例')
-        config = _v80_normalize_capital_config(existing)
-        parsed = _v80_normalize_capital_config(parsed)
-        for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-            v = parsed.get(s)
-            if v is not None and isinstance(v, (int, float)) and (v > 0):
-                config[s] = v
-        currency = {'Sub-A': '¥', 'Sub-A-DK': '¥', 'B7.8': '$', 'B7.9': '$', 'Sub-C': '$'}
-        with _sm() as msg:
-            w = msg.write
-            w('## 💰 资金配置已更新\n\n| 策略 | 资金 | active权重 |\n|:-|-----:|:-|\n')
-            for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-                v = config.get(s)
-                c = currency[s]
-                _sw = PERFORMANCE_COMBO_WEIGHTS.get(s, STRATEGY_WEIGHTS.get(s, 0.0))
-                if v:
-                    w(f'| {s} | {c}{v:,.0f} | {_sw:.0%} |\n')
-                else:
-                    w(f'| {s} | 未设置 | {_sw:.0%} |\n')
-            w('\n✅ 信号查询时将自动计算目标持仓数量\n')
-            w(_build_capital_marker(config))
-
-    def _handle_set_position(self):
-        existing = _scan_position_config(poe.default_chat) or {}
-        csv_data = None
-        for att in poe.query.attachments:
-            if att.name and att.name.lower().endswith('.csv'):
-                csv_data = att.get_contents().decode('utf-8', errors='replace')
-                break
-        cap_updated = False
-        if csv_data:
-            try:
-                df = pd.read_csv(io.StringIO(csv_data))
-                df.columns = [c.strip() for c in df.columns]
-                config = dict(existing)
-                col_map = _position_csv_column_map(df.columns)
-                if 'etf' not in col_map or ('shares' not in col_map and 'amount' not in col_map):
-                    raise poe.BotError('CSV格式不正确。需要至少包含ETF和数量两列。\n支持的列名:\n- ETF列: ETF, ticker, 代码, 标的, code, symbol\n- 数量列: 数量, shares, qty, 股数, 持仓, quantity\n- 金额列: amount, 金额, 市值, market_value\n- 策略列(可选): 策略, strategy, sub')
-                if 'strategy' in col_map:
-                    for _, row in df.iterrows():
-                        strat = str(row[col_map['strategy']]).strip()
-                        etf = str(row[col_map['etf']]).strip()
-                        if strat == 'Sub-B':
-                            raise poe.BotError('V8.0仓位必须分别标记为B7.8或B7.9，不能使用合并Sub-B。')
-                        if strat not in {'Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C'}:
-                            raise poe.BotError(f'未知策略: {strat}')
-                        if strat not in config:
-                            config[strat] = {}
-                        config[strat][etf] = _position_csv_entry(row, col_map)
-                else:
-                    query_text = poe.query.text.strip()
-                    strategy = None
-                    for s in ['Sub-A-DK', 'Sub-A', 'B7.8', 'B7.9', 'Sub-C']:
-                        if s.lower() in query_text.lower() or s in query_text:
-                            strategy = s
-                            break
-                    if not strategy:
-                        us_rot_etfs = set(_ROT_PROXY_TO_LIVE.keys()) | set(_ROT_PROXY_TO_LIVE.values())
-                        etfs = [str(r).strip().upper() for r in df[col_map['etf']]]
-                        if any((e in us_rot_etfs for e in etfs)):
-                            raise poe.BotError('V8.0检测到B策略ETF，但不能判断属于B7.8还是B7.9；请在消息或CSV策略列中明确版本。')
-                        else:
-                            raise poe.BotError('无法判断仓位属于哪个策略。请在消息中指明策略，例如:\n"设置仓位 Sub-B" 并附上CSV文件')
-                    config[strategy] = {}
-                    for _, row in df.iterrows():
-                        etf = str(row[col_map['etf']]).strip()
-                        config[strategy][etf] = _position_csv_entry(row, col_map)
-            except poe.BotError:
-                raise
-            except Exception as e:
-                raise poe.BotError(f'CSV解析失败: {e}')
-        else:
-            ctx_parts = []
-            for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-                v = existing.get(s)
-                if v:
-                    items_list = []
-                    for k, v_ in v.items():
-                        if isinstance(v_, dict) and 'amount' in v_:
-                            items_list.append(f"{k}: {v_['amount']:,.0f}元")
-                        else:
-                            items_list.append(f'{k}: {v_}股')
-                    ctx_parts.append(f"- {s}: {', '.join(items_list)}")
-                else:
-                    ctx_parts.append(f'- {s}: 未设置')
-            prompt = f'解析仓位设置。\n\nV8.0可设置仓位（两套B目标分别核对）:\nSub-A: A股轮动 - 股票资产必须使用以下价格指数代码(不要用ETF代码)，债券避险使用全收益指数:\n  1.930955 = 中证红利 / 红利低波 / 红利低波100 / 中证红利低波100\n  0.399006 = 创业板 / 创业板指\n  1.000016 = 上证50 / 50\n  1.000852 = 中证1000 / 1000\n  1.000905 = 中证500 / 500\n  1.H11077 = 10Y国债 / 国债\nSub-A-DK: A股多空配对 - 5个价格指数, 用户会指定做多/做空两腿:\n  有效标的(用中文名作key): 中证1000, 上证50, 沪深300, 中证500, 创业板\n  输出格式: {{"做多_中文名": {{"amount": 金额}}, "做空_中文名": {{"amount": 金额}}}}\n  例: "做多817.5万创业板，做空817.5万中证500" -> {{"做多_创业板": {{"amount": 8175000}}, "做空_中证500": {{"amount": 8175000}}}}\n  例: "做多中证1000 做空上证50 各500万" -> {{"做多_中证1000": {{"amount": 5000000}}, "做空_上证50": {{"amount": 5000000}}}}\n  如果用户只给总金额不指定标的 -> {{"_total_amount": 金额}}\nB7.8: V7.8四腿综合（独立账户）\nB7.9: V7.9四腿综合（独立账户） = 官方腿25%({US_ROT_WINDOW_WEIGHT_LABEL}) + EMA腿25%(hl{SUBB_V75_EMA_HALF_LIFE}/阈值{SUBB_V75_EMA_ABS_THRESHOLD:.0%}) + Bias腿25% + LogVol腿25%；四腿分别展示，再汇总为综合执行目标；{_v78_subb_inflation_participation_note()}\nSub-C: 10ETF多资产组合；股票袖由SPY目标波动率控制，黄金袖使用30/252相对波动率，BTC/债券/CTA固定1.0x\n\n当前已设置的仓位:\n{chr(10).join(ctx_parts)}\n\n用户输入: {poe.query.text}\n\n输出```json格式:\n```json\n{{\n  "Sub-A": {{"指数代码": 股数或{{"amount": 金额数字}}}} 或 null,\n  "Sub-A-DK": {{"做多_中文名": {{"amount": 金额}}, "做空_中文名": {{"amount": 金额}}}} 或 null,\n  "B7.8": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null,\n  "B7.9": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null,\n  "Sub-C": {{"ETF代码": 股数或{{"amount": 金额数字}}}} 或 null\n}}\n```\n\n规则:\n1. 股数为整数\n2. 用户只设置部分策略 -> 未提到的填null(保持之前的设置)\n3. "股"=股数, "手"=100股(A股), "张"=合约张数\n4. 如果用户说"清空"某策略的仓位 -> 填空字典 {{}}\n5. ETF代码保持原样(区分大小写)\n6. Sub-A必须用上面列出的价格指数代码(如1.930955), 不要用ETF代码(如515100)；国债仍用1.H11077全收益指数\n7. Sub-A-DK必须用"做多_"和"做空_"前缀+中文名(如"做多_创业板"), 两腿都要列出\n8. 如果用户指定某个标的的金额(万/百万/元/人民币/美元等), 对应标的输出 {{"amount": 金额数字(转为基本单位,元或美元)}}\n   例: "中证1000持仓200万" -> "中证1000": {{"amount": 2000000}}\n   如果用户说"100股", 直接输出整数 100\n9. 关键: B策略仓位必须明确写B7.8或B7.9；不接受无法归属的合并Sub-B持仓。\n   注意: _total_amount表示策略总金额, 和具体标的的amount不同；Sub-C按美股ETF仓位解析'
-            parsed = _parse_simple_position_config(poe.query.text)
-            with _sm() as msg:
-                msg.write('⏳ 正在解析仓位设置...\n')
-            response = types.SimpleNamespace(text=json.dumps(parsed, ensure_ascii=False)) if parsed is not None else types.SimpleNamespace(text=_call_llm_text_or_raise(prompt, '仓位配置'))
-            try:
-                parsed = _parse_json_from_response(response.text, [])
-            except (json.JSONDecodeError, ValueError):
-                raise poe.BotError('无法解析仓位设置，请用更明确的语言，例如:\n- 设置仓位 B7.8: QQQM 100股 GLDM 50股；B7.9请另设\n- 设置仓位 Sub-A: 红利低波100 750万\n- 设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万\n- 或上传CSV文件(列: ETF, 数量)')
-            if parsed and parsed.get('Sub-B') is not None:
-                raise poe.BotError('V8.0仓位不能自动拆分；请分别设置B7.8和B7.9持仓。')
-            config = dict(existing)
-            cap_config = _scan_capital_config(poe.default_chat) or {}
-            cap_updated = False
-            for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-                v = parsed.get(s)
-                if v is not None and isinstance(v, dict):
-                    if '_total_amount' in v:
-                        total = float(v['_total_amount'])
-                        if total > 0:
-                            cap_config[s] = total
-                            cap_updated = True
-                    else:
-                        new_pos = {}
-                        for k, v_ in v.items():
-                            if isinstance(v_, dict) and 'amount' in v_:
-                                amt = float(v_['amount'])
-                                if amt > 0:
-                                    new_pos[k] = {'amount': amt}
-                            elif isinstance(v_, (int, float)) and v_ > 0:
-                                new_pos[k] = int(float(v_))
-                        config[s] = new_pos
-        if 'B7.8' in config and 'B7.9' in config:
-            config.pop('Sub-B', None)
-        if cap_updated:
-            cap_config = _v80_normalize_capital_config(cap_config)
-        currency_label = {'Sub-A': 'A股', 'Sub-A-DK': 'A股(多空)', 'B7.8': '美股轮动7.8', 'B7.9': '美股轮动7.9', 'Sub-C': '美股多资产'}
-        currency_symbol = {'Sub-A': '¥', 'Sub-A-DK': '¥', 'B7.8': '$', 'B7.9': '$', 'Sub-C': '$'}
-        with _sm() as msg:
-            w = msg.write
-            w('## 📊 仓位配置已更新\n\n')
-            for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-                pos = config.get(s)
-                if pos:
-                    ccy = currency_symbol.get(s, '')
-                    w(f'### {s} ({currency_label[s]})\n')
-                    if s == 'Sub-A-DK' and any((k.startswith(('做多_', '做空_')) for k in pos)):
-                        w('| 方向 | 标的 | 持仓 |\n|:-|:-|--------:|\n')
-                        for etf, val in sorted(pos.items()):
-                            if etf.startswith('做多_'):
-                                direction, name = ('📈 做多', etf[3:])
-                            elif etf.startswith('做空_'):
-                                direction, name = ('📉 做空', etf[3:])
-                            else:
-                                direction, name = ('', etf)
-                            if isinstance(val, dict) and 'amount' in val:
-                                w(f"| {direction} | {name} | {ccy}{val['amount']:,.0f} |\n")
-                            else:
-                                w(f'| {direction} | {name} | {val:,}股 |\n')
-                    else:
-                        w('| 标的 | 持仓 |\n|:-|--------:|\n')
-                        for etf, val in sorted(pos.items()):
-                            if isinstance(val, dict) and 'amount' in val:
-                                w(f"| {etf} | {ccy}{val['amount']:,.0f} |\n")
-                            else:
-                                w(f'| {etf} | {val:,}股 |\n')
-                    w('\n')
-            if cap_updated:
-                w('### 💰 资金配置（按总额设置）\n')
-                for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C']:
-                    if s in cap_config and parsed.get(s) and ('_total_amount' in parsed[s]):
-                        ccy = currency_symbol.get(s, '')
-                        w(f'- **{s}**: {ccy}{cap_config[s]:,.0f}')
-                        if s in ('B7.8', 'B7.9', 'Sub-C'):
-                            w('（持仓比例随信号变化，查询信号时自动计算各ETF目标数量）')
-                        elif s in ('Sub-A', 'Sub-A-DK'):
-                            w('（持仓标的随信号变化，查询信号时自动计算目标数量）')
-                        w('\n')
-                w('\n')
-            if not any((config.get(s) for s in ['Sub-A', 'Sub-A-DK', 'B7.8', 'B7.9', 'Sub-C'])) and (not cap_updated):
-                w('暂无仓位设置\n')
-            w('\n✅ 信号查询时将自动显示仓位调整建议\n')
-            w(_build_position_marker(config))
-            if cap_updated:
-                w(_build_capital_marker(cap_config))
-_BOT_SETTINGS = SettingsResponse(allow_attachments=True, introduction_message=f'📊 **Strategy Signal V8.0 — 策略信号查询**\n\nV8.0统一查询（Sub-B内B7.8/B7.9各50%）: Sub-A 15% + Sub-A-DK 15% + B7.8 20% + B7.9 20% + Sub-C 30%（两套B独立计算、独立扣费、独立展示）\n\n**信号查询：**\n- 发送 **"信号"** -> 收盘信号+Excel\n- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n- 发送 **"参数"** / **"信号参数"** -> 策略参数总览\n- 发送 **"实时参数"** / **"参数实时"** -> 实时参数快照\n\n**绩效分析：**\n- 发送 **"表现核心四袖 过去两年"** / **"表现核心四袖 2024至今"** / **"表现核心四袖 最近6个月"**\n- 发送 **"净值曲线核心四袖 过去两年"** / **"净值曲线核心四袖 今年"**\n\n**💰 资金管理:** "设置资金 Sub-B 5万美元" -> 自动拆为B7.8/B7.9各2.5万美元\n\n**📊 仓位管理:** 分别设置 "B7.8" 与 "B7.9"，例如 "设置仓位 B7.8: QQQM 100股 GLDM 50股" 或 "设置仓位 Sub-A-DK: 做多创业板800万 做空中证500 800万" -> 信号自动显示调整建议\n')
+_BOT_SETTINGS = SettingsResponse(allow_attachments=True, introduction_message=f'📊 **Strategy Signal V8.0 — 策略信号查询**\n\nV8.0统一查询（Sub-B内B7.8/B7.9各50%）: Sub-A 15% + Sub-A-DK 15% + B7.8 20% + B7.9 20% + Sub-C 30%（两套B独立计算、独立扣费、独立展示）\n\n**信号查询：**\n- 发送 **"信号"** -> 收盘信号+Excel\n- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n- 发送 **"参数"** / **"信号参数"** -> 策略参数总览\n- 发送 **"实时参数"** / **"参数实时"** -> 实时参数快照\n\n**绩效分析：**\n- 发送 **"表现核心四袖 过去两年"** / **"表现核心四袖 2024至今"** / **"表现核心四袖 最近6个月"**\n- 发送 **"净值曲线核心四袖 过去两年"** / **"净值曲线核心四袖 今年"**\n\n')
 poe.update_settings(_BOT_SETTINGS)
 
 class CombinedStrategyV78(CombinedStrategyBase):
@@ -12710,7 +12732,9 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     msg.write('\n```\n')
                 else:
                     msg.write(f'{_short_error(exc)}\n')
-                msg.write('请重新发送“信号”或“实时信号”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n')
+                query_compact = re.sub('\\s+', '', poe.query.text.strip())
+                retry_command = '实时参数' if '实时参数' in query_compact or '参数实时' in query_compact else '参数' if '参数' in query_compact else '实时信号' if '实时信号' in query_compact or '信号实时' in query_compact else '信号'
+                msg.write(f'请重新发送“{retry_command}”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n')
 
     def _run_impl(self):
         query = poe.query.text.strip()
@@ -12730,12 +12754,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
             self._handle_live_signal()
         elif '实时参数' in query_compact or '参数实时' in query_compact:
             self._handle_live_params()
-        elif ('设置' in query or '设定' in query or '配置' in query) and '资金' in query:
-            self._handle_set_capital()
-        elif ('设置' in query or '设定' in query or '配置' in query) and '仓位' in query:
-            self._handle_set_position()
-        elif any((a.name and a.name.lower().endswith('.csv') for a in poe.query.attachments)) and re.search('持仓|仓位', query):
-            self._handle_set_position()
         elif '参数' in query:
             self._handle_params()
         elif re.search('信号', query) and self._is_date_query(query):
@@ -12746,223 +12764,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
         else:
             self._handle_signal()
 
-    def _write_sub_c(self, msg, d, us_prod_daily):
-        current_am_raw = d['current_am_raw']
-        current_sma_raw = d['current_sma_raw']
-        last_sig_month = d['last_sig_month']
-        if PROD_USE_TIMING:
-            msg.write('### Sub-C: 美股10ETF组合 (50/50混合择时)\n')
-            msg.write(f'📅 **月度信号机制**（非周度）：每月月末发出信号，次月执行。每个资产仓位一分为二: 50%跟AbsMom-{PROD_ABS_MOM_LB}m, 50%跟SMA-{PROD_SMA_WINDOW}m。12月年度重平衡。\n\n')
-        else:
-            msg.write(f"### Sub-C: 10ETF（主组合权重{COMBINED_WEIGHTS['Sub-C']:.0%}）\n\n")
-        if last_sig_month is None:
-            msg.write('⚠️ Sub-C正式共同样本尚未形成，无法生成信号。\n')
-            return {'is_signal': False, 'signal_text': '正式样本不足', 'note': ''}
-        sig_month_period = last_sig_month.to_period('M')
-        sig_month_mask = us_prod_daily.index.to_period('M') == sig_month_period
-        sig_month_trading = us_prod_daily.index[sig_month_mask]
-        signal_issue_date = sig_month_trading[-1] if len(sig_month_trading) > 0 else last_sig_month
-        next_month_period = sig_month_period + 1
-        next_month_mask = us_prod_daily.index.to_period('M') == next_month_period
-        next_month_trading = us_prod_daily.index[next_month_mask]
-        exec_date = next_month_trading[0] if len(next_month_trading) > 0 else None
-        if not PROD_USE_TIMING:
-            _cap_config_c = _scan_capital_config(poe.default_chat)
-            _sub_c_capital = _cap_config_c.get('Sub-C') if _cap_config_c else None
-            _c_prices = {}
-            _price_date = pd.Timestamp(us_prod_daily.index[-1])
-            for name, cfg in PROD_PORTFOLIO.items():
-                if name in us_prod_daily.columns:
-                    _value = us_prod_daily.loc[_price_date, name]
-                    if pd.notna(_value) and np.isfinite(float(_value)) and (float(_value) > 0.0):
-                        _c_prices[name] = float(_value)
-            if PROD_CASH in us_prod_daily.columns:
-                _bil_value = us_prod_daily.loc[_price_date, PROD_CASH]
-                if pd.notna(_bil_value) and np.isfinite(float(_bil_value)) and (float(_bil_value) > 0.0):
-                    _c_prices[PROD_CASH] = float(_bil_value)
-            if _sub_c_capital:
-                _missing_live_prices = sorted(set(PROD_PORTFOLIO) - set(_c_prices))
-                if _missing_live_prices:
-                    raise poe.BotError('Sub-C股数计算缺少执行用实盘ETF最新价格，禁止proxy回退: ' + ', '.join(_missing_live_prices))
-            _vs = d.get('subc_vs_info', {})
-            _vs_current = _vs.get('current_scale', _vs.get('actual_scale', 1.0)) if PROD_VS_ENABLED else 1.0
-            _vs_next = _vs.get('next_scale', _vs_current) if PROD_VS_ENABLED else 1.0
-            _vs_rv = _vs.get('rv_latest_no_shift', _vs.get('realized_vol'))
-            _vs_ts = _vs.get('next_target_scale', _vs.get('target_scale', _vs_next))
-            _vs_changed = bool(_vs.get('pending_adjustment', abs(_vs_next - _vs_current) > 0.001))
-            _gold_current = _vs.get('gold_current_scale', 1.0) if PROD_VS_ENABLED else 1.0
-            _gold_next = _vs.get('gold_next_scale', _gold_current) if PROD_VS_ENABLED else 1.0
-            _gold_target = _vs.get('gold_target_scale', _gold_next)
-            _gold_changed = bool(_vs.get('gold_pending_adjustment', abs(_gold_next - _gold_current) > 0.001))
-            _equity_base = _vs.get('equity_base_exposure', 0.6)
-            _gold_base = _vs.get('gold_base_exposure', PROD_PORTFOLIO['GLDM']['w'])
-            _bil_cash_w = _vs.get('next_cash_exposure', 0.0) if PROD_VS_ENABLED else 0.0
-            _borrow_w = _vs.get('next_borrow_exposure', 0.0) if PROD_VS_ENABLED else 0.0
-            _gross_w = _vs.get('next_gross_exposure', 1.0) if PROD_VS_ENABLED else 1.0
-
-            def _subc_asset_scale(name):
-                cfg = PROD_PORTFOLIO[name]
-                if cfg['cls'] in PROD_VS_SCALE_CLASSES:
-                    return _vs_next
-                if name == 'GLDM':
-                    return _gold_next
-                return 1.0
-            if _sub_c_capital:
-                _effective_capital = _sub_c_capital * _gross_w
-                msg.write('| 资产 | 标签 | 基础权重 | 缩放后权重 | 目标数量 | 金额($) |\n|:-|:-|--------:|--------:|--------:|--------:|\n')
-                for name, cfg in PROD_PORTFOLIO.items():
-                    w_base = cfg['w']
-                    w_scaled = w_base * _subc_asset_scale(name)
-                    amt = _sub_c_capital * w_scaled
-                    price = _c_prices.get(name)
-                    if price and price > 0:
-                        qty = int(amt / price)
-                        msg.write(f"| {name} | {cfg['label']} | {w_base:.0%} | {w_scaled:.1%} | {qty:,} | {amt:,.0f} |\n")
-                    else:
-                        msg.write(f"| {name} | {cfg['label']} | {w_base:.0%} | {w_scaled:.1%} | — | — |\n")
-                if _bil_cash_w > 0.001:
-                    amt = _sub_c_capital * _bil_cash_w
-                    price = _c_prices.get(PROD_CASH)
-                    if price and price > 0:
-                        qty = int(amt / price)
-                        msg.write(f'| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} | {qty:,} | {amt:,.0f} |\n')
-                    else:
-                        msg.write(f'| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} | — | — |\n')
-                msg.write(f'\n💰 Sub-C资金: ${_sub_c_capital:,.0f} | 总毛敞口: ${_effective_capital:,.0f} ({_gross_w:.2f}x) | 价格基于最新收盘\n')
-            elif PROD_VS_ENABLED:
-                msg.write('| 资产 | 标签 | 基础权重 | 缩放后权重 |\n|:-|:-|--------:|--------:|\n')
-                for name, cfg in PROD_PORTFOLIO.items():
-                    w_scaled = cfg['w'] * _subc_asset_scale(name)
-                    msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | {w_scaled:.1%} |\n")
-                if _bil_cash_w > 0.001:
-                    msg.write(f'| {PROD_CASH} | Cash ETF | 0% | {_bil_cash_w:.1%} |\n')
-            else:
-                msg.write('| 资产 | 标签 | 目标权重 | 操作 |\n|:-|:-|--------:|:-|\n')
-                for name, cfg in PROD_PORTFOLIO.items():
-                    msg.write(f"| {name} | {cfg['label']} | {cfg['w']:.0%} | 始终持有 |\n")
-            if PROD_VS_ENABLED:
-                if _vs_changed:
-                    msg.write(f'\n🟢 **股票袖调整! {_vs_current:.2f}x → {_vs_next:.2f}x | 下一美股开盘执行**\n')
-                if _gold_changed:
-                    msg.write(f'\n🟡 **黄金袖调整! {_gold_current:.2f}x → {_gold_next:.2f}x | 下一美股开盘执行**\n')
-                msg.write(f'\n**股票袖（SPY {PROD_VS_VOL_WINDOW}日绝对波动率）:** 当前 **{_vs_current:.2f}x**')
-                if _vs_rv is not None:
-                    msg.write(f' | SPY已实现波动率: {_vs_rv:.1%}')
-                msg.write(f' | 目标: {PROD_VS_TARGET_VOL:.0%}\n')
-                msg.write(f'**黄金袖（GLD自身相对波动率）:** {_gold_current:.2f}x → {_gold_next:.2f}x | long/short={PROD_GOLD_VS_LONG_WINDOW}/{PROD_GOLD_VS_SHORT_WINDOW}\n')
-                msg.write(f'调整阈值: |Δscale|≥{PROD_VS_THRESHOLD:.2f} | 两袖均滞后1日 | 范围{PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x\n')
-                if not _vs_changed:
-                    msg.write(f'✅ 股票袖: **{_vs_current:.2f}x** (下一美股开盘维持)')
-                    if abs(_vs_ts - _vs_current) > 0.001:
-                        msg.write(f' | 理论: {_vs_ts:.2f}x (|Δ|={abs(_vs_ts - _vs_current):.4f} < {PROD_VS_THRESHOLD:.0%}阈值)')
-                    msg.write('\n')
-                msg.write(f'📊 股票基础敞口 {_equity_base:.1%} | 黄金基础敞口 {_gold_base:.1%} | ')
-                msg.write(f'总毛敞口 {_gross_w:.1%} | BIL {_bil_cash_w:.1%} | 融资 {_borrow_w:.1%}\n')
-                msg.write('BTC、VGIT、DBMF、KMLM固定1.0x，不参与波动率缩放。\n')
-            msg.write(f'\n年度再平衡: 每年{PROD_REBAL_MONTH}月\n')
-            _pos_config_c = _scan_position_config(poe.default_chat)
-            _sub_c_pos = _pos_config_c.get('Sub-C') if _pos_config_c else None
-            if _sub_c_pos and PROD_VS_ENABLED and (_vs_changed or _gold_changed):
-                msg.write('\n📊 **持仓调整**（仅股票袖/黄金袖；其他资产不动）:\n')
-                msg.write('| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n')
-                for etf_c in sorted(_sub_c_pos.keys()):
-                    if etf_c not in PROD_PORTFOLIO:
-                        continue
-                    _cfg_c = PROD_PORTFOLIO[etf_c]
-                    if _cfg_c['cls'] in PROD_VS_SCALE_CLASSES:
-                        _vs_ratio = _vs_next / _vs_current if abs(_vs_current) > 1e-12 else 1.0
-                    elif etf_c == 'GLDM':
-                        _vs_ratio = _gold_next / _gold_current if abs(_gold_current) > 1e-12 else 1.0
-                    else:
-                        continue
-                    _raw_pos_c = _sub_c_pos[etf_c]
-                    price_c = _c_prices.get(etf_c, 0)
-                    cur_shares_c = _pos_entry_shares(_raw_pos_c, price_c)
-                    if cur_shares_c == 0:
-                        continue
-                    if isinstance(_raw_pos_c, dict) and 'amount' in _raw_pos_c:
-                        target_shares_c = int(_raw_pos_c['amount'] * _vs_ratio)
-                        cur_display_c = f"${_raw_pos_c['amount']:,.0f}"
-                        target_display_c = f'${target_shares_c:,.0f}'
-                        adj_c = target_shares_c - int(_raw_pos_c['amount'])
-                        adj_str_c = f'+${adj_c:,}' if adj_c > 0 else f'${adj_c:,}' if adj_c < 0 else '—'
-                    else:
-                        target_shares_c = int(cur_shares_c * _vs_ratio)
-                        cur_display_c = f'{cur_shares_c:,}'
-                        target_display_c = f'{target_shares_c:,}'
-                        adj_c = target_shares_c - cur_shares_c
-                        adj_str_c = f'+{adj_c:,} 买入' if adj_c > 0 else f'{adj_c:,} 卖出' if adj_c < 0 else '—'
-                    msg.write(f'| {etf_c} | {cur_display_c} | {target_display_c} | {adj_str_c} |\n')
-            _note = f'年度再平衡: 每年{PROD_REBAL_MONTH}月'
-            if PROD_VS_ENABLED:
-                _note += f' | 股票{_vs_next:.2f}x | 黄金{_gold_next:.2f}x | BTC 1.00x'
-            _subc_signal_text = f'股票{_vs_next:.2f}x / 黄金{_gold_next:.2f}x / BTC 1.00x'
-            return {'is_signal': bool(_vs_changed or _gold_changed), 'signal_text': _subc_signal_text, 'note': _note}
-        else:
-            msg.write(f"信号发出: **{signal_issue_date.strftime('%Y-%m-%d')}** ({beijing_time_str(signal_issue_date, 'US')})\n")
-            if exec_date is not None:
-                msg.write(f"执行调仓: **{exec_date.strftime('%Y-%m-%d')}** ({beijing_time_str(exec_date, 'US', 'open')})\n\n")
-            else:
-                msg.write(f'执行调仓: 次月第一个交易日（待定）\n\n')
-            prev_sig_month = None
-            if len(current_am_raw) >= 2:
-                prev_sig_month = current_am_raw.index[-2]
-            msg.write(f'| 资产 | 标签 | 权重 | AbsMom | SMA | 混合操作 | 持仓% | 变动 |\n|:-|:-|-----:|:-:|:-:|:-|------:|:-:|\n')
-            total_hold, total_cash = (0, 0)
-            prev_total_cash = float('nan')
-            prod_signal_parts = []
-            changes_count = 0
-            for name, cfg in PROD_PORTFOLIO.items():
-                proxy = cfg['proxy']
-                w = cfg['w']
-                am_sv = current_am_raw.loc[last_sig_month, proxy] if proxy in current_am_raw.columns else float('nan')
-                sma_sv = current_sma_raw.loc[last_sig_month, proxy] if proxy in current_sma_raw.columns else float('nan')
-                prev_hold = float('nan')
-                curr_hold = float('nan')
-                if not pd.isna(am_sv) and (not pd.isna(sma_sv)):
-                    curr_hold = PROD_BLEND_A * am_sv + (1 - PROD_BLEND_A) * sma_sv
-                if prev_sig_month is not None:
-                    prev_am = current_am_raw.loc[prev_sig_month, proxy] if proxy in current_am_raw.columns else float('nan')
-                    prev_sma = current_sma_raw.loc[prev_sig_month, proxy] if proxy in current_sma_raw.columns else float('nan')
-                    if not pd.isna(prev_am) and (not pd.isna(prev_sma)):
-                        prev_hold = PROD_BLEND_A * prev_am + (1 - PROD_BLEND_A) * prev_sma
-                change_str = '—'
-                if not pd.isna(curr_hold) and (not pd.isna(prev_hold)) and (abs(curr_hold - prev_hold) > 0.01):
-                    change_str = '🔄'
-                    changes_count += 1
-                am_icon = '🟢' if am_sv == 1.0 else '🔴' if am_sv == 0.0 else '—'
-                sma_icon = '🟢' if sma_sv == 1.0 else '🔴' if sma_sv == 0.0 else '—'
-                if pd.isna(curr_hold):
-                    blend_act, hold_pct = ('现金(BIL)', 0.0)
-                elif curr_hold >= 0.99:
-                    blend_act, hold_pct = (f'全部持有({name})', 1.0)
-                    prod_signal_parts.append(name)
-                elif curr_hold <= 0.01:
-                    blend_act, hold_pct = ('全部现金(BIL)', 0.0)
-                else:
-                    blend_act, hold_pct = (f'50%{name}+50%BIL', curr_hold)
-                    prod_signal_parts.append(f'{name}½')
-                total_hold += w * hold_pct
-                total_cash += w * (1 - hold_pct)
-                if not pd.isna(prev_hold):
-                    prev_total_cash = (0.0 if pd.isna(prev_total_cash) else prev_total_cash) + w * (1 - prev_hold)
-                msg.write(f"| {name} | {cfg['label']} | {w:.0%} | {am_icon} | {sma_icon} | {blend_act} | {hold_pct:.0%} | {change_str} |\n")
-            _bil_change_str = '—'
-            if not pd.isna(prev_total_cash) and abs(total_cash - prev_total_cash) > 0.01:
-                _bil_change_str = '🔄'
-            msg.write(f'| {PROD_CASH} | Cash ETF | {total_cash:.0%} | — | — | 持有现金(BIL) | {total_cash:.0%} | {_bil_change_str} |\n')
-            msg.write(f'\n风险资产 {total_hold:.0%} | 现金 {total_cash:.0%}')
-            if prev_sig_month is not None:
-                msg.write(f" | 较上月({prev_sig_month.strftime('%Y-%m')})有 **{changes_count}** 项变更")
-            msg.write('\n')
-            return {'is_signal': False, 'signal_text': f"风险{total_hold:.0%}/现金{total_cash:.0%} ({','.join(prod_signal_parts[:3])}{('...' if len(prod_signal_parts) > 3 else '')})" if prod_signal_parts else '全现金', 'note': f"信号{signal_issue_date.strftime('%m-%d')}发出,{('执行' + exec_date.strftime('%m-%d') if exec_date else '待执行')}"}
-
     def _handle_signal(self):
         with _sm() as msg:
             w = msg.write
             try:
                 w('⏳ 正在获取信号数据...\n')
-                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False)
                 w('⏳ 正在计算信号...\n')
             except Exception as exc:
                 w('## 📊 操作信号（收盘确认）\n\n')
@@ -13019,416 +12826,33 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w = msg.write
             w('## 📊 操作信号（收盘确认）\n\n')
             w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
-            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='signal')
+            signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=False, dk_intraday=False, query_kind='signal'))
             signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close))
-            _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=us_signal_live)
-            w('---\n\n')
-            w('### Sub-A: V8.0共享双腿｜A策略详细依据\n')
-            cn_close_bj = beijing_time_str(cn_date, 'CN', 'close')
-            w(f'数据: 东财K线 | 收盘: {cn_close_bj}')
-            if cn_unconfirmed and cn_data_is_today:
-                w(' ⚡盘中实时')
-            w('\n')
-            w(f'阈值: R²≥{CN_R2_THRESHOLD:.2f} | {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%} | 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n')
-            _cn_intraday = cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2)
-            _cn_display_idx = -1
-            _cn_state = _suba_signal_display_state(cn_result, _cn_display_idx)
-            _cn_display_date = _cn_state['display_date']
-            _cn_display_holding = _cn_state['current_holding']
-            _cn_target_holding = _cn_state['target_holding']
-            _cn_post_holding = _cn_state['post_signal_holding']
-            _cn_display_name = _cn_state.get('current_display', CN_NAMES.get(_cn_display_holding, _cn_display_holding))
-            _cn_target_name = _cn_state.get('target_display', CN_NAMES.get(_cn_target_holding, _cn_target_holding))
-            _cn_post_name = _cn_state.get('post_display', CN_NAMES.get(_cn_post_holding, _cn_post_holding))
-            _cn_display_is_signal = bool(_cn_state['is_signal'])
-            all_display_codes = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else [])
-            last_cn_sig_date = _cn_state['last_signal_date']
-            if _cn_intraday:
-                w('⏸️ 今日盘中，今日收盘信号未确认\n')
-                w(f"当前已生效持仓: **{_cn_display_name}**（在 {_cn_display_date.strftime('%Y-%m-%d')} 交易时段生效，来源为前一收盘确认）\n")
-                w(f"上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
-                w('盘中假设信号仅在“实时信号”中显示\n\n')
-            elif _cn_display_is_signal:
-                w(f"✅ 信号日 ({_cn_display_date.strftime('%m-%d')})")
-                w(f'\n执行前持仓: **{_cn_display_name}**\n')
-                w(f'今日收盘信号: **卖出{_cn_display_name} / 买入{_cn_target_name}**（已确认，收盘价执行）\n')
-                w(f'收盘执行后状态: **{_cn_post_name}**\n\n')
-            else:
-                w(f"⏸️ 今日无换仓 | 上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
-                w(f'持仓: **{_cn_display_name}**\n')
-                w('今日收盘信号: 无变化（已确认）\n\n')
-            signal_info['Sub-A'] = {'is_signal': bool(_cn_display_is_signal), 'signal_text': f'执行前: {_cn_display_name}; 目标: {_cn_target_name}' if _cn_display_is_signal else _cn_display_name, 'note': f"{_cn_display_date.strftime('%Y-%m-%d')}收盘确认; 上次{last_cn_sig_date.strftime('%Y-%m-%d')}"}
-            _cn_pending = False
-            if 'weight' in cn_result.columns:
-                _cn_sc_rt = cn_result['weight'].iloc[_cn_display_idx]
-                if 'v78_suba_final_exposure' in cn_result.columns:
-                    _cn_display_parts = _v78_suba_display_leg_snapshot(cn_result, _cn_display_idx)
-                    w(f"**Sub-A最终敞口:** **{float(_cn_display_parts['final_exposure']):.2f}x** = {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_display_parts['v77_weight']):.2f}x) + {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_display_parts['new_weight']):.2f}x)\n")
-                else:
-                    _cn_sc_raw_rt = cn_result['scale_raw'].iloc[_cn_display_idx] if 'scale_raw' in cn_result.columns else _cn_sc_rt
-                    _cn_base_frac_rt = cn_result['base_weight'].iloc[_cn_display_idx] if 'base_weight' in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_rt, _cn_sc_raw_rt)
-                    _cn_rv_rt = cn_result['realized_vol'].iloc[_cn_display_idx] if 'realized_vol' in cn_result.columns else None
-                    _cn_next_raw, _cn_next_scale, _cn_pending = _compute_next_vol_scale(_cn_rv_rt, _cn_sc_raw_rt, CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
-                    if _cn_pending and (not _cn_intraday):
-                        w(f'\n🟢 **VolScale调仓! {float(_cn_sc_raw_rt):.2f}x → {_cn_next_scale:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n')
-                    w(f'**Sub-A最终敞口:** **{_cn_sc_rt:.2f}x** = VolScale **{float(_cn_sc_raw_rt):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt):.2f}**')
-                    if _cn_rv_rt is not None and (not np.isnan(_cn_rv_rt)):
-                        w(f' | 已实现波动率: {_cn_rv_rt:.1%}')
-                    w(f' | 目标: {CN_TARGET_VOL:.0%}\n')
-                if 'suba_same_side_overheat_on' in cn_result.columns:
-                    _cn_oh_on = bool(cn_result['suba_same_side_overheat_on'].iloc[_cn_display_idx])
-                    _cn_oh_bias = cn_result['suba_same_side_overheat_bias'].iloc[_cn_display_idx] if 'suba_same_side_overheat_bias' in cn_result.columns else np.nan
-                    _cn_oh_text = f' | 当前权益乖离: {_cn_oh_bias:.1%}' if pd.notna(_cn_oh_bias) else ''
-                    if _cn_oh_on:
-                        w(f'🛡️ **V7.7A MA60过热止盈生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n')
-                    else:
-                        w(f'🟢 **V7.7A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text}\n')
-                _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx, compact=True)
-                _write_v79_suba_execution_chain(w, cn_result, _cn_display_idx)
-                _write_v78_suba_blend_table(w, cn_result, _cn_display_idx)
-                _write_v78_suba_leg_signal_tables(w, cn_result, _cn_display_idx, bias_mom_cn, r2_cn, abs_mom_cn, all_display_codes, current_holding=cn_result['v78_suba_v77_holding'].iloc[_cn_display_idx] if 'v78_suba_v77_holding' in cn_result.columns else _cn_display_holding)
-                if 'v78_suba_final_exposure' not in cn_result.columns and (not _cn_pending):
-                    w(f'✅ 最终敞口: **{_cn_sc_rt:.2f}x** (下一交易日维持)')
-                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw - float(_cn_sc_raw_rt)) > 0.001:
-                        w(f' | 理论: {_cn_next_raw:.2f}x (|Δ|={abs(_cn_next_raw - float(_cn_sc_raw_rt)):.4f} < {CN_SCALE_THRESHOLD}阈值)')
-                    w('\n')
-            _ve, _vb, _va, _vok = fetch_volume_emotion()
-            if _vok:
-                if _ve == -1:
-                    w(f'**成交量情绪:** ❄️ **悲观** | 上证连续缩量**{_vb}天** ≥ {CN_VOL_EMOTION_BEAR}天阈值\n')
-                elif _ve == 1:
-                    w(f'**成交量情绪:** 🔥 **乐观** | 上证连续放量{_va}天 ≥ {CN_VOL_EMOTION_BULL}天阈值\n')
-                else:
-                    _streak = f'连续缩量{_vb}天' if _vb > 0 else f'连续放量{_va}天' if _va > 0 else '无明显方向'
-                    w(f'**成交量情绪:** 😐 中性 | 上证{_streak}（悲观阈值{CN_VOL_EMOTION_BEAR}天）\n')
-            _kc_data2, _kc_ok2 = check_knife_catch(cn_close, CN_STOCK_CODES, CN_NAMES)
-            if _kc_ok2:
-                _knives2 = [v for v in _kc_data2.values() if v['is_knife']]
-                if _knives2:
-                    _kn_names2 = '、'.join((f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives2))
-                    w(f'**防接刀:** 🔪 {_kn_names2} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n')
-            w('\n---\n\n### Sub-A-DK: V8.0共享双子策略｜ATK / ADK详细依据\n')
-            dk_close_bj = beijing_time_str(dk_date, 'CN', 'close')
-            w(f'数据来源: 中证指数+东财K线 | 5指数；V7.7正式{len(ADK_OFFICIAL_PAIR_ORDER)}对 + New全10对 | 收盘: {dk_close_bj}')
-            if cn_unconfirmed and dk_data_is_today:
-                w(' ⚡盘中实时')
-            w('\n')
-            _dk_r2_text = f' | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}' if CN_DK_R2_QUALITY_ENABLED else ''
-            w(f'阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n')
-            _dk_intraday = cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2)
-            _dk_close_target_rows = _v78_adk_close_target_change_rows(cn_dk_result, -1)
-            _dk_execution_summary = _v79_adk_execution_summary(cn_dk_result, -1) if 'v78_adk_final_exposure' in cn_dk_result.columns else None
-            _dk_close_target_changed = bool(_dk_execution_summary['changed']) if _dk_execution_summary is not None else any((row['changed'] for row in _dk_close_target_rows))
-            if _dk_intraday:
-                _dk_signal_current_idx = -1
-                _dk_signal_target_idx = -1
-                _dk_signal_context = '盘中假设'
-            else:
-                _dk_signal_current_idx = -1
-                _dk_signal_target_idx = -1
-                _dk_signal_context = '今日收盘已确认' if _dk_close_target_changed else '当前维持'
-            _dk_effective_issue_date = cn_dk_result.index[_dk_signal_current_idx]
-            _dk_effective_holding = cn_dk_result['holding'].iloc[_dk_signal_current_idx]
-            _dk_effective_name = _dk_pos_str(_dk_effective_holding)
-            w(f"**当前已生效双腿持仓:** **{_dk_effective_name}**（在 {_dk_effective_issue_date.strftime('%Y-%m-%d')} 交易时段生效）\n")
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                _write_v79_adk_execution_chain(w, cn_dk_result, _dk_signal_current_idx, close_label='若现在收盘' if _dk_intraday else '本日收盘确认后')
-            elif 'adk_net_asset_exposure' in cn_dk_result.columns:
-                if _adk_net_exposure_changed(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx):
-                    w('🔴 **ADK净敞口已变化：按下方“当前/目标账户级净敞口”复核执行。**\n')
-                else:
-                    w('🟢 **ADK净敞口无变化。**\n')
-            else:
-                w('⚠️ **ADK净敞口字段不可用，无法按账户级净敞口判断变化。**\n')
-            if _dk_intraday:
-                w('今日盘中，今日收盘信号未确认；盘中假设目标仅作实时参考。\n')
-            _dk_display_idx = _dk_signal_current_idx
-            _dk_target_idx = _dk_signal_target_idx
-            _dk_display_is_signal = _dk_close_target_changed if 'v78_adk_final_exposure' in cn_dk_result.columns else bool(cn_dk_result['is_signal'].iloc[_dk_target_idx]) if 'is_signal' in cn_dk_result.columns else False
-            signal_info['Sub-A-DK'] = {'is_signal': bool(_dk_display_is_signal), 'signal_text': f"ADK最终执行仓位{('变化' if _dk_close_target_changed else '不变化')}" if 'v78_adk_final_exposure' in cn_dk_result.columns else _adk_net_exposure_signal_text(cn_dk_result, _dk_signal_current_idx, _dk_signal_target_idx), 'note': 'V8.0 ADK为双腿component-net；变化判断同时比较配对、方向、VolScale和覆盖层后的最终腿内敞口'}
-            if 'weight' in cn_dk_result.columns:
-                if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                    _write_v78_adk_blend_table(w, cn_dk_result, _dk_display_idx)
-                    _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_display_idx)
-                    _write_v78_adk_leg_status_table(w, cn_dk_result, _dk_display_idx)
-                else:
-                    _dk_sc_rt = cn_dk_result['weight'].iloc[_dk_display_idx]
-                    _dk_base_w_rt = cn_dk_result['base_weight'].iloc[_dk_display_idx] if 'base_weight' in cn_dk_result.columns else _dk_sc_rt
-                    _dk_gate_scale_rt = cn_dk_result['risk_gate_scale'].iloc[_dk_display_idx] if 'risk_gate_scale' in cn_dk_result.columns else 1.0
-                    _dk_gate_on_rt = bool(cn_dk_result['risk_gate_on'].iloc[_dk_display_idx]) if 'risk_gate_on' in cn_dk_result.columns else False
-                    _dk_gate_dd_rt = cn_dk_result['risk_gate_base_dd'].iloc[_dk_display_idx] if 'risk_gate_base_dd' in cn_dk_result.columns else np.nan
-                    _dk_oh_scale_rt = cn_dk_result['same_side_overheat_scale'].iloc[_dk_display_idx] if 'same_side_overheat_scale' in cn_dk_result.columns else 1.0
-                    _dk_oh_on_rt = bool(cn_dk_result['same_side_overheat_on'].iloc[_dk_display_idx]) if 'same_side_overheat_on' in cn_dk_result.columns else False
-                    _dk_oh_abs_rt = cn_dk_result['same_side_overheat_abs_bias'].iloc[_dk_display_idx] if 'same_side_overheat_abs_bias' in cn_dk_result.columns else np.nan
-                    _dk_volume_on_rt = bool(cn_dk_result['dk_volume_clear_active'].iloc[_dk_display_idx]) if 'dk_volume_clear_active' in cn_dk_result.columns else False
-                    _dk_rv_rt = cn_dk_result['realized_vol'].iloc[_dk_display_idx] if 'realized_vol' in cn_dk_result.columns else None
-                    _dk_cur_vs = _dk_get_vol_scale(cn_dk_result, _dk_display_idx if _dk_display_idx >= 0 else len(cn_dk_result) + _dk_display_idx)
-                    _dk_next_raw, _dk_next_vs, _dk_pending = _compute_next_vol_scale(_dk_rv_rt, _dk_cur_vs, CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
-                    if _dk_pending and (not _dk_intraday):
-                        _dk_next_total = _dk_sc_rt / _dk_cur_vs * _dk_next_vs if _dk_cur_vs > 1e-10 else _dk_next_vs
-                        w(f'\n🟢 **杠杆调仓! VolScale {_dk_cur_vs:.2f}x → {_dk_next_vs:.2f}x | 实际敞口 {_dk_sc_rt:.2f}x → {_dk_next_total:.2f}x | 本日收盘确认后按收盘价执行**\n')
-                    w(f'**ADK实际敞口:** **{_dk_sc_rt:.2f}x**')
-                    w(f' | VolScale: {_dk_cur_vs:.2f}x')
-                    if 'same_side_overheat_scale' in cn_dk_result.columns:
-                        w(f' | 同向过热: {_dk_oh_scale_rt:.2f}x')
-                    if 'dk_volume_clear_scale' in cn_dk_result.columns:
-                        _dk_volume_status_rt = '触发' if _dk_volume_on_rt else '未触发'
-                        w(f' | 成交额警示: {_dk_volume_status_rt}(不改仓位)')
-                    if 'risk_gate_scale' in cn_dk_result.columns:
-                        w(f' | RiskGate: {_dk_gate_scale_rt:.2f}x')
-                    if _dk_rv_rt is not None and (not np.isnan(_dk_rv_rt)):
-                        w(f' | 已实现波动率: {_dk_rv_rt:.1%}')
-                    w(f' | 目标: {CN_DK_TARGET_VOL:.0%}\n')
-                    if 'risk_gate_scale' in cn_dk_result.columns:
-                        if _dk_gate_on_rt:
-                            _dd_text = f' | 判断DD(risk_gate_base_dd, 非最终NAV) {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}' if not np.isnan(_dk_gate_dd_rt) else ''
-                            w(f'🛡️ **风险闸门生效中:** 回撤触发后按 **{_dk_gate_scale_rt:.2f}x** 防守{_dd_text}\n')
-                        else:
-                            _dd_text = f' | 判断DD(risk_gate_base_dd, 非最终NAV) {_dk_gate_dd_rt:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}' if not np.isnan(_dk_gate_dd_rt) else ''
-                            w(f'🟢 **风险闸门关闭:** 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}{_dd_text}\n')
-                    if 'dk_volume_clear_scale' in cn_dk_result.columns and _dk_volume_on_rt:
-                        w(_dk_volume_warning_text(_dk_volume_on_rt, CN_DK_VOLUME_YELLOW_LABEL, CN_DK_VOLUME_YELLOW_MA, CN_DK_VOLUME_YELLOW_DAYS))
-                    if 'same_side_overheat_scale' in cn_dk_result.columns:
-                        _oh_text = f' | 当前同向乖离: {_dk_oh_abs_rt:.1%}' if not np.isnan(_dk_oh_abs_rt) else ''
-                        if _dk_oh_on_rt:
-                            w(f'🛡️ **同向过热防守生效:** 乖离>{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}后按 **{_dk_oh_scale_rt:.2f}x** 防守{_oh_text}\n')
-                        else:
-                            w(f'🟢 **同向过热防守关闭:** 触发阈值 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复阈值 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}{_oh_text}\n')
-                    if not _dk_pending:
-                        w(f'✅ 杠杆: **{_dk_sc_rt:.2f}x** (下一交易日维持)')
-                        if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw - _dk_cur_vs) > 0.001:
-                            w(f' | VolScale理论: {_dk_next_raw:.2f}x (|Δ|={abs(_dk_next_raw - _dk_cur_vs):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)')
-                        w('\n')
-            w('\n---\n\n')
-            _write_v78_adk_new_leg_then_summary(w, cn_dk_result, _dk_target_idx, use_shifted=False, position_context=f'{_dk_signal_context}目标')
+            signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=us_signal_live)
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=True)
-            us_close_bj = beijing_time_str(us_date, 'US', 'close')
-            _write_v80_b78_detail(w, us_rot_result, query_kind='signal')
-            w('\n---\n\n')
-            w('### B7.9详细依据（Sub-B）: V7.9四腿综合（官方/EMA/Bias/LogVol各25%）\n')
-            w(f'数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n')
-            changed = {l: c['proxy'] for l, c in US_ROT_ASSETS.items() if l != c['proxy']}
-            if changed:
-                w('实盘->proxy: ' + ', '.join((f'{k}->{v}' for k, v in changed.items())) + '\n')
-            w(f'阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n')
-            w(f'{_v78_subb_default_rule_text()}\n')
-            w('下方先展示四腿贡献，再汇总为综合执行目标。\n')
-            _vr = d.get('volreg_ratio')
-            _vr_defense = d.get('volreg_defense_today', False)
-            _vr_defense_next = d.get('volreg_defense_next', _vr_defense)
-            if US_ROT_VOLREG_ENABLED and _vr is not None:
-                if _vr > US_ROT_VOLREG_THRESHOLD:
-                    w(f'🟢 **VolReg风险过热:** SPY波动率比={_vr:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，明日{_subb_volreg_scaled_assets_text()}仓位x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额进BIL\n')
-                elif _vr_defense and _vr >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f'🟡 **VolReg风险过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n')
-                elif _vr_defense:
-                    w(f'🟢 **VolReg风险过热:** 今日已降档 | 当前SPY波动率比={_vr:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n')
-                else:
-                    w(f'🟢 **VolReg风险过热:** SPY波动率比={_vr:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD}，正常\n')
-                if _vr_defense_next and (not _vr_defense):
-                    w(f'📌 VolReg后实际执行目标: **{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n')
-            if us_signal_confirmed:
-                _last_us_sig_date = us_date
-            else:
-                _prev_us_sigs = sorted([i for i in us_signal_set if i < len(us_rot_close) - 1])
-                _last_us_sig_date = us_rot_close.index[_prev_us_sigs[-1]] if _prev_us_sigs else None
-            _us_sig_w = dict(current_us_w)
-            _us_prev_w = {'BIL': 1.0}
-            _us_rebalanced = False
-            _us_sig_scale = us_scale
-            if _last_us_sig_date and _last_us_sig_date in us_rot_result.index:
-                _us_rloc = us_rot_result.index.get_loc(_last_us_sig_date)
-                _us_sig_w = _subb_signal_display_source_weights(us_rot_result, _last_us_sig_date, rot_w_cols)
-                _us_rebalanced = _subb_model_rebalanced_value(us_rot_result.loc[_last_us_sig_date])
-                if _us_rloc > 0:
-                    _us_prev_w = {c.replace('w_', ''): us_rot_result.iloc[_us_rloc - 1][c] for c in rot_w_cols}
-                _us_sig_scale = _subb_official_scale_from_result(us_rot_result, end_loc=_us_rloc)
-            _force_volreg_cash_display = _should_force_volreg_cash_display(US_ROT_VOLREG_ENABLED, False)
-            _us_display_w, _us_all_etfs = _subb_effective_display_weights(_us_sig_w, _us_prev_w, force_cash=_force_volreg_cash_display)
-            _us_display_turnover = sum((abs(_us_display_w.get(e, 0) - _us_prev_w.get(e, 0)) for e in _us_all_etfs if e not in ('BIL', 'CASH')))
-            _us_schedule = _coerce_session_index(getattr(self, '_us_open', None))
-            if _us_schedule is None:
-                _us_schedule = _coerce_session_index(us_rot_close)
-            _us_exec_happened_for_display = False
-            if us_signal_confirmed:
-                us_exec_bj = us_exec_time_str(us_date, _us_schedule)
-                exec_happened_us = _has_execution_happened(us_date, 'US', bj_now, _us_schedule)
-                _us_exec_happened_for_display = exec_happened_us
-                w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')}) — 信号已确认\n")
-                if exec_happened_us:
-                    w(f'✅ 已执行 ({us_exec_bj})\n')
-                else:
-                    w(f'⏳ 等待执行: {us_exec_bj}\n')
-                if _us_rebalanced:
-                    w('📋 **调仓信号**\n\n')
-                else:
-                    w('📋 调仓幅度未达阈值，**维持原仓位**\n\n')
-                us_sig_text = '; '.join((f'{_ROT_PROXY_TO_LIVE.get(e, e)} {_us_display_w.get(e, 0):.0%}' for e in sorted(_us_all_etfs) if _us_display_w.get(e, 0) > 0.005))
-                signal_info['Sub-B'] = {'is_signal': True, 'signal_text': us_sig_text, 'note': us_exec_bj}
-            elif us_signal_live:
-                w(f"⏳ 信号日 (美东 {us_date.strftime('%m-%d')})，美股未收盘，信号未确认\n")
-                w('💡 美股收盘后再次查询获取确认信号\n\n')
-                if _last_us_sig_date:
-                    _prev_bj = beijing_time_str(_last_us_sig_date, 'US', 'close')
-                    w(f'上次: {_prev_bj} ✅\n')
-                    if _us_rebalanced:
-                        w('📋 **调仓信号**\n\n')
-                    else:
-                        w('📋 维持原仓位\n\n')
-                us_sig_text = '; '.join((f'{_ROT_PROXY_TO_LIVE.get(e, e)} {_us_display_w.get(e, 0):.0%}' for e in sorted(_us_all_etfs) if _us_display_w.get(e, 0) > 0.005))
-                signal_info['Sub-B'] = {'is_signal': False, 'signal_text': f'当前实际:{us_sig_text}', 'note': f"上次{beijing_time_str(_last_us_sig_date, 'US', 'close')}" if _last_us_sig_date else ''}
-            else:
-                if _last_us_sig_date:
-                    _sig_bj = beijing_time_str(_last_us_sig_date, 'US', 'close')
-                    exec_happened_us = _has_execution_happened(_last_us_sig_date, 'US', bj_now, _us_schedule)
-                    _us_exec_happened_for_display = exec_happened_us
-                    w(f'上次: {_sig_bj}')
-                    if exec_happened_us:
-                        w(' ✅ 已执行\n')
-                    else:
-                        w(f' ⏳ 等待执行: {us_exec_time_str(_last_us_sig_date, _us_schedule)}\n')
-                    if _us_rebalanced:
-                        w('📋 **调仓信号**\n\n')
-                    else:
-                        w('📋 调仓幅度未达阈值，**维持原仓位**\n\n')
-                us_sig_text = '; '.join((f'{_ROT_PROXY_TO_LIVE.get(e, e)} {_us_display_w.get(e, 0):.0%}' for e in sorted(_us_all_etfs) if _us_display_w.get(e, 0) > 0.005))
-                signal_info['Sub-B'] = {'is_signal': False, 'signal_text': f'当前实际:{us_sig_text}', 'note': f"上次{beijing_time_str(_last_us_sig_date, 'US', 'close')}" if _last_us_sig_date else ''}
-            _cap_config = _scan_capital_config(poe.default_chat)
-            _sub_b_capital = None
-            _pos_config = _scan_position_config(poe.default_chat)
-            _sub_b_pos = None
-            _us_latest_prices = {}
-            for etf in _us_all_etfs:
-                _live = _ROT_PROXY_TO_LIVE.get(etf, etf)
-                _live_price = _latest_live_etf_price(us_rot_close, etf, _live, expected_date=us_rot_close.index[-1], max_lag_days=0)
-                if _live_price is not None:
-                    _us_latest_prices[_live] = _live_price
-            if _sub_b_capital:
-                w('| ETF | 实际权重 | 目标数量 | 金额($) | 变动 |\n|:-|--------:|--------:|--------:|-----:|\n')
-            else:
-                w('| ETF | 实际权重 | 变动 |\n|:-|--------:|-----:|\n')
-            for etf in sorted(_us_all_etfs):
-                cur = _us_display_w.get(etf, 0)
-                prev = _us_prev_w.get(etf, 0)
-                if cur < 0.001 and prev < 0.001:
-                    continue
-                diff = cur - prev
-                ds = f'{diff:+.1%}' if abs(diff) > 0.001 else '—'
-                live = _ROT_PROXY_TO_LIVE.get(etf, etf)
-                if _sub_b_capital:
-                    amt = _sub_b_capital * cur
-                    price = _us_latest_prices.get(live)
-                    qty = _subb_target_shares(_sub_b_capital, cur, price)
-                    if qty == 0:
-                        w(f'| {live} | {cur:.1%} | 0 | {amt:,.0f} | {ds} |\n')
-                    elif qty is not None:
-                        w(f'| {live} | {cur:.1%} | {qty:,} | {amt:,.0f} | {ds} |\n')
-                    else:
-                        w(f'| {live} | {cur:.1%} | 价格缺失 | {amt:,.0f} | {ds} |\n')
-                else:
-                    w(f'| {live} | {cur:.1%} | {ds} |\n')
-            w(f'\n调仓幅度: **{_us_display_turnover:.1%}**')
-            w(_subb_turnover_execution_status_text(_us_display_turnover, _us_rebalanced, _us_exec_happened_for_display))
-            if _sub_b_capital:
-                w(f'\n💰 Sub-B资金: ${_sub_b_capital:,.0f} | 价格基于最新收盘\n')
-            if _sub_b_pos:
-                _all_pos_etfs = set(list(_sub_b_pos.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in _us_all_etfs])
-                _target_val, _missing_pos_prices, _target_source = _subb_position_adjustment_target_value(_sub_b_pos, _us_latest_prices, _sub_b_capital)
-                if _missing_pos_prices:
-                    if _target_source == 'capital':
-                        w('\n⚠️ 当前持仓中部分ETF价格缺失/过期，不使用部分市值估算；本次按已设置Sub-B资金计算目标数量: ' + ', '.join(_missing_pos_prices) + '\n')
-                    else:
-                        w('\n⚠️ 当前持仓中部分ETF价格缺失/过期，无法可靠计算当前持仓市值和调仓数量: ' + ', '.join(_missing_pos_prices) + '\n')
-                if _target_val and _target_val > 0:
-                    _base_label = '已设置Sub-B资金' if _target_source == 'capital' else '当前持仓市值'
-                    w(f'\n📊 **仓位调整** (基于{_base_label}${_target_val:,.0f}):\n')
-                    w('| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n')
-                    _adj_etfs = set(list(_sub_b_pos.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in _us_all_etfs if _us_display_w.get(e, 0) > 0.005])
-                    for etf_live in sorted(_adj_etfs):
-                        _raw_pos = _sub_b_pos.get(etf_live, 0)
-                        price = _us_latest_prices.get(etf_live, 0)
-                        cur_shares = _pos_entry_shares(_raw_pos, price)
-                        _proxy_key = None
-                        for _pk, _lk in _ROT_PROXY_TO_LIVE.items():
-                            if _lk == etf_live:
-                                _proxy_key = _pk
-                                break
-                        _w = _us_display_w.get(_proxy_key, 0) if _proxy_key else _us_display_w.get(etf_live, 0)
-                        target_shares = _subb_target_shares(_target_val, _w, price)
-                        adj = None if target_shares is None else target_shares - cur_shares
-                        if not _pos_entry_is_nonzero(_raw_pos) and cur_shares == 0 and (target_shares is None or target_shares == 0):
-                            continue
-                        if target_shares is None:
-                            adj_str = '价格缺失'
-                        elif _w <= 0.005 and _pos_entry_is_nonzero(_raw_pos) and isinstance(_raw_pos, dict):
-                            adj_str = '卖出全部'
-                        elif adj > 0:
-                            adj_str = f'+{adj:,} 买入'
-                        elif adj < 0:
-                            adj_str = f'{adj:,} 卖出'
-                        else:
-                            adj_str = '—'
-                        if isinstance(_raw_pos, dict) and 'amount' in _raw_pos:
-                            cur_display = f"${_raw_pos['amount']:,.0f}"
-                        else:
-                            cur_display = f'{cur_shares:,}'
-                        target_display = '价格缺失' if target_shares is None else f'{target_shares:,}'
-                        w(f'| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n')
-            if _last_us_sig_date:
-                _sig_close_idx = us_rot_close.index.get_loc(_last_us_sig_date)
-                if _sig_close_idx >= US_ROT_MAX_LB:
-                    _us_sig_prev_risky_by_lb = _us_mix_prev_risky_by_lb_from_result(us_rot_result, _last_us_sig_date, include_current=False)
-                    _us_sig_ranking_codes = _subb_active_ranking_codes(us_rot_close, _sig_close_idx)
-                    _us_sig_gate = _subb_inflation_gate_context(us_rot_close, _sig_close_idx)
-                    _us_sig_mix_ctx = _us_mix_display_context(us_rot_close, _sig_close_idx, _us_sig_ranking_codes, _us_sig_scale, prev_risky_by_lb=_us_sig_prev_risky_by_lb, threshold=US_ROT_REBALANCE_THRESHOLD, reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + '(通胀off参考)') for code in US_ROT_MACRO_POOL])
-                    _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
-                    w(f"\n**信号日官方腿结果** ({_last_us_sig_date.strftime('%m-%d')} 收盘数据；{US_ROT_WINDOW_WEIGHT_LABEL}加权混合):\n\n")
-                    w(f'| ETF | 实际排名 | {_lb0}日动量 | {_lb1}日动量 | {_lb2}日动量 | 加权动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n')
-                    w('|:-|:-|------:|------:|------:|------:|------:|------:|:-:|:-:|\n')
-                    for row in _us_sig_mix_ctx['mix_rows']:
-                        _marker = ' 🏆' if row['mix_selected'] else ''
-                        _m130 = row['per_lb_momentum'][_lb0]
-                        _m260 = row['per_lb_momentum'][_lb1]
-                        _m390 = row['per_lb_momentum'][_lb2]
-                        _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                        _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                        _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                        _avg = row['avg_momentum']
-                        _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                        _mix_selected_mark_sig = '✅' if row['mix_selected'] else ''
-                        _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                        w(f"| {row['rank']}. {row['live_name']}{_marker} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | {row['mix_weight']:.1%} | {_mix_selected_mark_sig} | ✅ |\n")
-                    for row in _us_sig_mix_ctx['reference_rows']:
-                        _m130 = row['per_lb_momentum'][_lb0]
-                        _m260 = row['per_lb_momentum'][_lb1]
-                        _m390 = row['per_lb_momentum'][_lb2]
-                        _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                        _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                        _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                        _avg = row['avg_momentum']
-                        _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                        _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                        w(f"| 参考. {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
-                    if _us_sig_mix_ctx['reference_rows']:
-                        w(f'\n注: 通胀开关off时只影响官方腿。{_v78_subb_inflation_participation_note()}\n')
-                    _write_v78_subb_component_leg_tables(w, us_rot_result, _last_us_sig_date)
-                    _write_v78_subb_blend_table(w, us_rot_result, _last_us_sig_date)
-                    w(f"\n**通胀开关:** {('🟢 ON' if _us_sig_gate['pressure_on'] else '🔴 OFF')} (DBC {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('dbc_mom', np.nan):+.2%}, TLT {INFLATION_PRESSURE_LB}日 {_us_sig_gate.get('tlt_mom', np.nan):+.2%})\n")
-                    w(_v78_subb_inflation_status_text(_us_sig_gate['pressure_on']) + '\n')
-                    w(f'\n**波动率缩放** {_us_sig_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x')
-                    if _us_sig_scale > 1.0:
-                        w(f' (>1: 仅放大US_ROT_FUTURES(QQQM/GLDM)自身权重，上限{US_ROT_MAX_LEV:.1f}x)\n')
-                    elif _us_sig_scale < 1.0:
-                        w(' (<1: 所有资产等比缩减)\n')
-                    else:
-                        w('\n')
-                    _thresh_line = _us_mix_threshold_check(_us_sig_mix_ctx['momentum_rows'], _us_sig_mix_ctx['vol_row'], _us_sig_ranking_codes, _us_sig_prev_risky_by_lb, US_ROT_REBALANCE_THRESHOLD)
-                    if _thresh_line:
-                        w(f'\n**调仓保护 ({US_ROT_REBALANCE_THRESHOLD}x, 逐窗口):** {_thresh_line}\n')
-            w('\n---\n\n')
-            signal_info['Sub-C'] = self._write_sub_c(msg, d, us_prod_daily)
-            w('\n---\n\n')
+            w('> 前段仅显示可执行目标与关键风控；A/ADK基础评分统一置于C策略之后。\n\n')
+            cutoff = cn_date - timedelta(days=60)
+            all_rebalances = []
+            all_rebalances.extend([r for r in extract_v78_suba_rebalances(cn_result, cn_close) if pd.Timestamp(r['日期']) >= cutoff])
+            all_rebalances.extend([r for r in extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close) if pd.Timestamp(r['日期']) >= cutoff])
+            compact_us_open = getattr(self, '_us_open', None)
+            subb_rebs = _v80_extract_subb_rebalances(d['us_rot_result'], us_rot_close=us_rot_close, us_open=compact_us_open, since_date=cutoff)
+            all_rebalances.extend([r for r in subb_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            prod_rebs = extract_prod_rebalances(d['prod_details'], d['prod_monthly'], us_prod_daily=us_prod_daily, us_open=compact_us_open)
+            all_rebalances.extend([r for r in prod_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            vs_rebs = extract_subc_vs_rebalances(us_prod_daily, d.get('prod_sig_a'), d.get('prod_sig_b'), us_open=compact_us_open)
+            all_rebalances.extend([r for r in vs_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            all_rebalances = _filter_confirmed_records(all_rebalances, bj_now=bj_now, us_schedule=compact_us_open)
+            all_rebalances.sort(key=lambda x: x['日期'], reverse=True)
+            excel_bytes = generate_signal_excel(now_str, signal_info, all_rebalances, cn_dk_result=cn_dk_result, adk_net_row_idx=-1, adk_net_date_label='当前已生效')
+            filename = f'signal_{now_str}.xlsx'
+            msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            w(f'📎 Excel调仓记录: **{filename}**\n')
+            if _LAST_SUBC_VS_REBALANCE_WARNING:
+                w(f'⚠️ Sub-C分袖缩放调仓记录跳过: {_LAST_SUBC_VS_REBALANCE_WARNING}\n')
+            w(f'含最近60天 {len(all_rebalances)} 条已确认调仓记录（北京时间）' if all_rebalances else '最近60天无已确认调仓记录')
+            return
         cutoff = cn_date - timedelta(days=60)
         all_rebalances = []
         cn_rebs = extract_v78_suba_rebalances(cn_result, cn_close)
@@ -13544,315 +12968,17 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal')
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=us_open and us_data_is_today)
-            w('---\n\n')
-            w('### Sub-A: V8.0共享双腿｜A策略详细依据\n')
-            cn_close_bj = beijing_time_str(cn_date, 'CN', 'close')
-            w(f'数据: 东财K线 | 收盘: {cn_close_bj}')
-            if cn_unconfirmed and cn_data_is_today:
-                w(' ⚡盘中实时')
-            w('\n')
-            w(f'阈值: R²≥{CN_R2_THRESHOLD:.2f} | {CN_ABS_MOM_DAY}日动量>{CN_ABS_MOM_THRESHOLD:.0%} | 持仓切换Buffer {CN_SWITCH_BUFFER:.2f}x | Scale调整Δ≥{CN_SCALE_THRESHOLD:.2f} | MA60过热止盈{CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}\n')
-            cn_current_name = cn_current_display or CN_NAMES.get(cn_current, cn_current)
-            cn_target_name = cn_target_display or CN_NAMES.get(cn_target, cn_target)
-            cn_post_signal_name = cn_post_display or CN_NAMES.get(cn_post_signal_holding, cn_post_signal_holding)
-            _cn_live_row = cn_result.iloc[-1] if len(cn_result) > 0 else {}
-            _cn_live_cur_exp = float(_cn_live_row.get('v78_suba_final_exposure', _cn_live_row.get('weight', 0.0)) or 0.0)
-            _cn_live_tgt_exp = float(_cn_live_row.get('v78_suba_target_exposure', _cn_live_cur_exp) or _cn_live_cur_exp)
-            needs_cn_trade = bool(is_cn_signal) and (cn_target_name != cn_current_name or abs(_cn_live_tgt_exp - _cn_live_cur_exp) > 0.0001)
-            if is_cn_signal:
-                w(f"✅ 信号日 ({cn_date.strftime('%m-%d')})")
-                w(f'\n执行前持仓: **{cn_current_name}**\n')
-                w(f'假设现在收盘目标: **{cn_target_name}**（以V8.0双腿状态表/target exposure为准）')
-                if needs_cn_trade:
-                    if cn_target_name != cn_current_name:
-                        w(' 🟢 需调整')
-                    else:
-                        w(' 🟢 权重调整 / 状态更新')
-                else:
-                    w('（无变化）')
-                w(f'\n收盘执行后状态: **{cn_post_signal_name}**')
-                w('\n\n')
-            else:
-                _past_cn_trades_live = cn_result.iloc[:-1]
-                _past_cn_trades_live = _past_cn_trades_live[_past_cn_trades_live['is_signal'] == True]
-                last_cn_sig_date = _past_cn_trades_live.index[-1] if len(_past_cn_trades_live) > 0 else cn_date
-                w(f"⏸️ 今日无换仓 | 上次换仓: {last_cn_sig_date.strftime('%Y-%m-%d')}\n")
-                w(f'持仓: **{cn_current_name}**\n')
-                w(f'假设现在收盘目标: **{cn_target_name}**（以V8.0双腿状态表/target exposure为准）\n\n')
-            _cn_pending3 = False
-            if 'weight' in cn_result.columns and len(cn_result) >= 2:
-                _cn_sc_rt3 = cn_result['weight'].iloc[-1]
-                if 'v78_suba_final_exposure' in cn_result.columns:
-                    _cn_display_parts3 = _v78_suba_display_leg_snapshot(cn_result, -1)
-                    w(f"**Sub-A最终敞口:** **{float(_cn_display_parts3['final_exposure']):.2f}x** = {V78_SUBA_V77_WEIGHT:.0%}×V7.7A({float(_cn_display_parts3['v77_weight']):.2f}x) + {V78_SUBA_NEW_TV10_WEIGHT:.0%}×NewA({float(_cn_display_parts3['new_weight']):.2f}x)\n")
-                else:
-                    _cn_sc_raw_rt3 = cn_result['scale_raw'].iloc[-1] if 'scale_raw' in cn_result.columns else _cn_sc_rt3
-                    _cn_base_frac_rt3 = cn_result['base_weight'].iloc[-1] if 'base_weight' in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_rt3, _cn_sc_raw_rt3)
-                    _cn_rv_rt3 = cn_result['realized_vol'].iloc[-1] if 'realized_vol' in cn_result.columns else None
-                    _cn_next_raw3, _cn_next_scale3, _cn_pending3 = _compute_next_vol_scale(_cn_rv_rt3, float(_cn_sc_raw_rt3), CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
-                    if _cn_pending3:
-                        w(f'\n🟢 **VolScale调仓! {float(_cn_sc_raw_rt3):.2f}x → {_cn_next_scale3:.2f}x | 最终敞口还会乘以仓位系数 | 下一交易日开盘前执行**\n')
-                    w(f'**Sub-A最终敞口:** **{_cn_sc_rt3:.2f}x** = VolScale **{float(_cn_sc_raw_rt3):.2f}x** × 仓位系数 **{float(_cn_base_frac_rt3):.2f}**')
-                    if _cn_rv_rt3 is not None and (not np.isnan(_cn_rv_rt3)):
-                        w(f' | 已实现波动率: {_cn_rv_rt3:.1%}')
-                    w(f' | 目标: {CN_TARGET_VOL:.0%}\n')
-                if 'suba_same_side_overheat_on' in cn_result.columns:
-                    _cn_oh_on3 = bool(cn_result['suba_same_side_overheat_on'].iloc[-1])
-                    _cn_oh_bias3 = cn_result['suba_same_side_overheat_bias'].iloc[-1] if 'suba_same_side_overheat_bias' in cn_result.columns else np.nan
-                    _cn_oh_text3 = f' | 当前权益乖离: {_cn_oh_bias3:.1%}' if pd.notna(_cn_oh_bias3) else ''
-                    if _cn_oh_on3:
-                        w(f'🛡️ **V7.7A MA60过热止盈生效:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n')
-                    else:
-                        w(f'🟢 **V7.7A MA60过热止盈关闭:** 触发 {CN_SA_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_SA_SAME_SIDE_OVERHEAT_EXIT:.0%}{_cn_oh_text3}\n')
-                _write_suba_volume_overlay_status(msg, cn_result, -1)
-                _write_v79_suba_execution_chain(w, cn_result, -1)
-                _write_v78_suba_blend_table(w, cn_result, -1)
-                _write_v78_suba_leg_signal_tables(w, cn_result, -1, bias_mom_cn, r2_cn, abs_mom_cn, CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in bias_mom_cn else []), current_holding=cn_result['v78_suba_v77_holding'].iloc[-1] if 'v78_suba_v77_holding' in cn_result.columns else cn_current)
-                if 'v78_suba_final_exposure' not in cn_result.columns and (not _cn_pending3):
-                    w(f'✅ 最终敞口: **{_cn_sc_rt3:.2f}x** (下一交易日维持)')
-                    if CN_SCALE_THRESHOLD > 0 and abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)) > 0.001:
-                        w(f' | 理论: {_cn_next_raw3:.2f}x (|Δ|={abs(_cn_next_raw3 - float(_cn_sc_raw_rt3)):.4f} < {CN_SCALE_THRESHOLD}阈值)')
-                    w('\n')
-                _ve2, _vb2, _va2, _vok2 = fetch_volume_emotion()
-                if _vok2:
-                    if _ve2 == -1:
-                        w(f'**成交量情绪:** ❄️ **悲观** | 上证连续缩量**{_vb2}天** ≥ {CN_VOL_EMOTION_BEAR}天阈值\n')
-                    elif _ve2 == 1:
-                        w(f'**成交量情绪:** 🔥 **乐观** | 上证连续放量{_va2}天 ≥ {CN_VOL_EMOTION_BULL}天阈值\n')
-                    else:
-                        _streak2 = f'连续缩量{_vb2}天' if _vb2 > 0 else f'连续放量{_va2}天' if _va2 > 0 else '无明显方向'
-                        w(f'**成交量情绪:** 😐 中性 | 上证{_streak2}（悲观阈值{CN_VOL_EMOTION_BEAR}天）\n')
-                _kc_data3, _kc_ok3 = check_knife_catch(cn_close, CN_STOCK_CODES, CN_NAMES)
-                if _kc_ok3:
-                    _knives3 = [v for v in _kc_data3.values() if v['is_knife']]
-                    if _knives3:
-                        _kn_names3 = '、'.join((f"**{k['name']}**({k['ret3d']:+.1%})" for k in _knives3))
-                        w(f'**防接刀:** 🔪 {_kn_names3} 近{CN_KNIFE_WINDOW}日跌超{abs(CN_KNIFE_THRESHOLD):.0%} ⚠️\n')
-            w('\n---\n\n### Sub-A-DK: V8.0共享双子策略｜ATK / ADK详细依据\n')
-            dk_close_bj3 = beijing_time_str(dk_date, 'CN', 'close')
-            w(f'数据来源: 中证指数+东财K线 | 5指数；V7.7正式{len(ADK_OFFICIAL_PAIR_ORDER)}对 + New全10对 | 收盘: {dk_close_bj3}')
-            if cn_unconfirmed and dk_data_is_today:
-                w(' ⚡盘中实时')
-            w('\n')
-            _dk_r2_text3 = f' | R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}' if CN_DK_R2_QUALITY_ENABLED else ''
-            w(f'阈值: {_dk_score_decay_status_text()} | Scale调整Δ≥{CN_DK_SCALE_THRESHOLD:.2f}{_dk_r2_text3} | 同向过热{CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%}/{CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}\n')
-            _dk_intraday3 = cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2)
-            _dk_effective_idx3 = -1
-            _dk_hypo_idx3 = -1
-            _dk_effective_issue_date3 = cn_dk_result.index[_dk_effective_idx3]
-            _dk_effective_holding3 = cn_dk_result['holding'].iloc[_dk_effective_idx3]
-            dk_current_name3 = _dk_pos_str(_dk_effective_holding3)
-            w(f"**当前已生效双腿持仓:** **{dk_current_name3}**（在 {_dk_effective_issue_date3.strftime('%Y-%m-%d')} 交易时段生效）\n")
-            _dk_close_target_rows3 = _v78_adk_close_target_change_rows(cn_dk_result, -1)
-            _dk_execution_summary3 = _v79_adk_execution_summary(cn_dk_result, -1) if 'v78_adk_final_exposure' in cn_dk_result.columns else None
-            _dk_close_target_changed3 = bool(_dk_execution_summary3['changed']) if _dk_execution_summary3 is not None else any((row['changed'] for row in _dk_close_target_rows3))
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                _write_v79_adk_execution_chain(w, cn_dk_result, _dk_effective_idx3, close_label='若现在收盘')
-            elif dk_rank_today:
-                if 'adk_net_asset_exposure' in cn_dk_result.columns:
-                    if _adk_net_exposure_changed(cn_dk_result, _dk_effective_idx3, _dk_hypo_idx3):
-                        w('🔴 **ADK净敞口将变化：若现在收盘，按下方“若现在收盘目标/账户级净敞口”执行。**\n')
-                    else:
-                        w('🟢 **ADK净敞口无变化。**\n')
-                else:
-                    w('⚠️ **ADK净敞口字段不可用，无法按账户级净敞口判断实时变化。**\n')
-                w(_dk_top_pair_whitelist_warning(dk_hypo_top_pair, '今日双腿配对'))
-            _dk_pending3 = False
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                _write_v78_adk_blend_table(w, cn_dk_result, _dk_effective_idx3)
-                _write_v78_adk_net_exposure_table(w, cn_dk_result, _dk_effective_idx3)
-                _write_v78_adk_leg_status_table(w, cn_dk_result, _dk_effective_idx3)
-                w('\n**③ ADK双腿波动率缩放:**\n\n')
-                w('ADK双腿分别执行波动率缩放；综合结果不存在单一VolScale。各腿的已实现波动率、raw/banded VolScale、overlay乘数与最终贡献见上方双腿状态表。\n')
-            elif 'weight' in cn_dk_result.columns and len(cn_dk_result) >= 2:
-                _dk_sc_rt3 = cn_dk_result['weight'].iloc[-1]
-                _dk_rv_rt3 = cn_dk_result['realized_vol'].iloc[-1] if 'realized_vol' in cn_dk_result.columns else None
-                _dk_cur_vs3 = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
-                _dk_next_raw3, _dk_next_vs3, _dk_pending3 = _compute_next_vol_scale(_dk_rv_rt3, _dk_cur_vs3, CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
-                if _dk_pending3:
-                    _dk_next_total3 = _dk_sc_rt3 / _dk_cur_vs3 * _dk_next_vs3 if _dk_cur_vs3 > 1e-10 else _dk_next_vs3
-                    w(f'\n🟢 **杠杆调仓! VolScale {_dk_cur_vs3:.2f}x → {_dk_next_vs3:.2f}x | 实际敞口 {_dk_sc_rt3:.2f}x → {_dk_next_total3:.2f}x | 本日收盘确认后按收盘价执行**\n')
-                w(f'**波动率缩放:** 当前 VolScale **{_dk_cur_vs3:.2f}x** | 实际敞口 **{_dk_sc_rt3:.2f}x**')
-                if _dk_rv_rt3 is not None and (not np.isnan(_dk_rv_rt3)):
-                    w(f' | 已实现波动率: {_dk_rv_rt3:.1%}')
-                w(f' | 目标: {CN_DK_TARGET_VOL:.0%}\n')
-                if 'same_side_overheat_scale' in cn_dk_result.columns:
-                    _dk_oh_scale_rt3 = cn_dk_result['same_side_overheat_scale'].iloc[-1]
-                    _dk_oh_on_rt3 = bool(cn_dk_result['same_side_overheat_on'].iloc[-1])
-                    _dk_oh_abs_rt3 = cn_dk_result['same_side_overheat_abs_bias'].iloc[-1]
-                    _dk_oh_text_rt3 = f' | 当前同向乖离: {_dk_oh_abs_rt3:.1%}' if not np.isnan(_dk_oh_abs_rt3) else ''
-                    if _dk_oh_on_rt3:
-                        w(f'🛡️ **ADK同向过热防守生效:** 触发 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}，当前按 **{_dk_oh_scale_rt3:.2f}x** 防守{_dk_oh_text_rt3}\n')
-                    else:
-                        w(f'🟢 **ADK同向过热防守关闭:** 触发 {CN_DK_SAME_SIDE_OVERHEAT_ENTER:.0%} / 恢复 {CN_DK_SAME_SIDE_OVERHEAT_EXIT:.0%}{_dk_oh_text_rt3}\n')
-                if 'dk_volume_clear_scale' in cn_dk_result.columns:
-                    _dk_volume_on_rt3 = bool(cn_dk_result['dk_volume_clear_active'].iloc[-1])
-                    _dk_volume_status_rt3 = '触发' if _dk_volume_on_rt3 else '未触发'
-                    w(f'**成交额警示:** {_dk_volume_status_rt3}（仅提示，不改仓位）')
-                    if _dk_volume_on_rt3:
-                        w('\n' + _dk_volume_warning_text(_dk_volume_on_rt3, CN_DK_VOLUME_YELLOW_LABEL, CN_DK_VOLUME_YELLOW_MA, CN_DK_VOLUME_YELLOW_DAYS).rstrip())
-                    w('\n')
-                if 'risk_gate_scale' in cn_dk_result.columns:
-                    _dk_gate_scale_rt3 = cn_dk_result['risk_gate_scale'].iloc[-1]
-                    _dk_gate_on_rt3 = bool(cn_dk_result['risk_gate_on'].iloc[-1])
-                    _dk_gate_dd_rt3 = cn_dk_result['risk_gate_base_dd'].iloc[-1]
-                    _dd_text3 = f' | 判断DD(risk_gate_base_dd, 非最终NAV) {_dk_gate_dd_rt3:.1%} / 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}' if not np.isnan(_dk_gate_dd_rt3) else ''
-                    if _dk_gate_on_rt3:
-                        w(f'🛡️ **RiskGate生效:** 当前按 **{_dk_gate_scale_rt3:.2f}x** 防守{_dd_text3}\n')
-                    else:
-                        w(f'🟢 **RiskGate关闭:** 触发<=-{CN_DK_RISK_GATE_ENTER:.0%} / 恢复>=-{CN_DK_RISK_GATE_EXIT:.0%}{_dd_text3}\n')
-                if not _dk_pending3:
-                    w(f'✅ 杠杆: **{_dk_sc_rt3:.2f}x** (下一交易日维持)')
-                    if CN_DK_SCALE_THRESHOLD > 0 and abs(_dk_next_raw3 - _dk_cur_vs3) > 0.001:
-                        w(f' | VolScale理论: {_dk_next_raw3:.2f}x (|Δ|={abs(_dk_next_raw3 - _dk_cur_vs3):.4f} < {CN_DK_SCALE_THRESHOLD}阈值)')
-                    w('\n')
-            w('\n---\n\n')
-            _write_v78_adk_new_leg_then_summary(w, cn_dk_result, _dk_hypo_idx3, use_shifted=False, position_context='若现在收盘目标（非当前正式持仓）')
-            _write_volume_warning_panel(msg, compact=False, cn_dk_result=cn_dk_result)
-            _write_sp500_risk_regime_note(msg, prefer_recent_csv=True, compact=False)
-            us_close_bj = beijing_time_str(us_date, 'US', 'close')
-            _write_v80_b78_detail(w, us_rot_result, query_kind='live_signal')
-            w('\n---\n\n')
-            w('### B7.9详细依据（Sub-B）: V7.9四腿综合（官方/EMA/Bias/LogVol各25%）\n')
-            w(f'数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}')
-            if us_open and us_data_is_today:
-                w(' ⚡盘中实时')
-            w('\n')
-            w(f'波动率缩放: {us_scale:.2f}x | 上次确认: {last_confirmed_us_scale:.2f}x\n')
-            w(f'杠杆放大资产: **QQQM/GLDM** (US_ROT_FUTURES)；scale>1时只放大自身权重，不承接其他ETF杠杆缺口\n')
-            changed = {l: c['proxy'] for l, c in US_ROT_ASSETS.items() if l != c['proxy']}
-            if changed:
-                w('实盘->proxy: ' + ', '.join((f'{k}->{v}' for k, v in changed.items())) + '\n')
-            w(f'阈值: 绝对动量>{US_ROT_ABS_THRESHOLD:.0%} | 调仓保护{US_ROT_REBALANCE_THRESHOLD:.2f}x | VolReg降档资产{_subb_volreg_scaled_assets_text()} 进/出{US_ROT_VOLREG_THRESHOLD:.1f}/{US_ROT_VOLREG_EXIT_THRESHOLD:.1f} scale={US_ROT_VOLREG_DEFENSE_SCALE:.2f}\n')
-            w(f'{_v78_subb_default_rule_text()}\n')
-            w('持仓表展示当前实际持有；四腿表展示假设今日调仓目标，并给出两者差异。\n')
-            _vr_detail = d.get('volreg_ratio')
-            _vr_defense_detail = d.get('volreg_defense_today', False)
-            if US_ROT_VOLREG_ENABLED and _vr_detail is not None:
-                if _vr_detail > US_ROT_VOLREG_THRESHOLD:
-                    w(f'🟢 VolReg: SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比={_vr_detail:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD} → **明日{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n')
-                elif _vr_defense_detail and _vr_detail >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f'🟡 VolReg: 今日{_subb_volreg_scaled_assets_text()}已降档 | vol比={_vr_detail:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n')
-                elif _vr_defense_detail:
-                    w(f'🟢 VolReg: 今日{_subb_volreg_scaled_assets_text()}已降档 | vol比={_vr_detail:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n')
-                else:
-                    w(f'🟢 VolReg: SPY vol比={_vr_detail:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n')
-            w('\n')
-            _us_live_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
-            _us_live_gate = _subb_inflation_gate_context(us_rot_close, -1)
-            _us_mix_live = _us_mix_display_context(us_rot_close, -1, _us_live_ranking_codes, us_scale, prev_risky_by_lb=d.get('hypo_prev_mix_risky_by_lb'), threshold=US_ROT_REBALANCE_THRESHOLD, reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + '(通胀off参考)') for code in US_ROT_MACRO_POOL])
-            w(f'说明: **{_v78_subb_default_rule_text()}**\n\n')
-            w(f"**通胀开关:** {('🟢 ON' if _us_live_gate['pressure_on'] else '🔴 OFF')} (DBC {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('dbc_mom', np.nan):+.2%}, TLT {INFLATION_PRESSURE_LB}日 {_us_live_gate.get('tlt_mom', np.nan):+.2%})\n\n")
-            w(_v78_subb_inflation_status_text(_us_live_gate['pressure_on']) + '\n\n')
-            w(f'**官方腿实时结果（{US_ROT_WINDOW_WEIGHT_LABEL}加权混合）:**\n\n')
-            _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
-            w(f'| ETF | 实际排名 | {_lb0}日动量 | {_lb1}日动量 | {_lb2}日动量 | 加权动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n')
-            w('|:-|:-|------:|------:|------:|------:|------:|------:|:-:|:-:|\n')
-            for row in _us_mix_live['mix_rows']:
-                _m130 = row['per_lb_momentum'][_lb0]
-                _m260 = row['per_lb_momentum'][_lb1]
-                _m390 = row['per_lb_momentum'][_lb2]
-                _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                _avg = row['avg_momentum']
-                _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                _mix_selected_mark = '✅' if row['mix_selected'] else ''
-                _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | {row['mix_weight']:.1%} | {_mix_selected_mark} | ✅ |\n")
-            for row in _us_mix_live['reference_rows']:
-                _m130 = row['per_lb_momentum'][_lb0]
-                _m260 = row['per_lb_momentum'][_lb1]
-                _m390 = row['per_lb_momentum'][_lb2]
-                _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                _avg = row['avg_momentum']
-                _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
-            w('\n')
-            _write_v78_subb_component_leg_tables(w, us_rot_result, -1)
-            _write_v78_subb_blend_table(w, us_rot_result, -1)
-            _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, -1, current_weights=current_us_w, target_weights=hypo_us_w)
-            if is_us_signal:
-                w(f"✅ 信号日 (美东 {us_date.strftime('%m-%d')})\n")
-                w('V7.9 Sub-B 以“四腿综合目标”表为唯一目标权重。\n')
-                w(f'调仓幅度: **{turnover_b:.1%}**')
-                if rebalanced_b:
-                    w(f' 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，**会调仓**\n')
-                else:
-                    w(f' ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**\n')
-            else:
-                sigs = sorted([i for i in us_signal_set if i < len(us_rot_close) - 1])
-                last_us_date = us_rot_close.index[sigs[-1]] if sigs else us_date
-                last_us_close_bj = beijing_time_str(last_us_date, 'US', 'close')
-                w(f'⏸️ 非信号日（上次: {last_us_close_bj}）；不生成新的 Sub-B 调仓指令。\n')
-            _thresh_line_live = _us_mix_threshold_check(_us_mix_live['momentum_rows'], _us_mix_live['vol_row'], _us_live_ranking_codes, d.get('hypo_prev_mix_risky_by_lb'), US_ROT_REBALANCE_THRESHOLD)
-            if _thresh_line_live:
-                w(f'\n**调仓保护 ({US_ROT_REBALANCE_THRESHOLD}x, 逐窗口):** {_thresh_line_live}\n')
-            _pos_config_live = _scan_position_config(poe.default_chat)
-            _sub_b_pos_live = None
-            if _sub_b_pos_live:
-                _us_live_prices = {}
-                for etf in all_a:
-                    _live = _ROT_PROXY_TO_LIVE.get(etf, etf)
-                    _live_price = _latest_live_etf_price(us_rot_close, etf, _live, expected_date=us_rot_close.index[-1], max_lag_days=0)
-                    if _live_price is not None:
-                        _us_live_prices[_live] = _live_price
-                _cap_config_live = _scan_capital_config(poe.default_chat)
-                _sub_b_cap_live = _cap_config_live.get('Sub-B') if _cap_config_live else None
-                _all_pos_etfs_live = set(list(_sub_b_pos_live.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in all_a])
-                _target_val_live, _missing_pos_prices_live, _target_source_live = _subb_position_adjustment_target_value(_sub_b_pos_live, _us_live_prices, _sub_b_cap_live)
-                if _missing_pos_prices_live:
-                    if _target_source_live == 'capital':
-                        w('\n⚠️ 当前持仓中部分ETF价格缺失/过期，不使用部分市值估算；本次按已设置Sub-B资金计算目标数量: ' + ', '.join(_missing_pos_prices_live) + '\n')
-                    else:
-                        w('\n⚠️ 当前持仓中部分ETF价格缺失/过期，无法可靠计算当前持仓市值和调仓数量: ' + ', '.join(_missing_pos_prices_live) + '\n')
-                if _target_val_live and _target_val_live > 0:
-                    _base_label_live = '已设置Sub-B资金' if _target_source_live == 'capital' else '当前持仓市值'
-                    w(f'\n📊 **仓位调整** (基于{_base_label_live}${_target_val_live:,.0f}):\n')
-                    w('| ETF | 当前持仓 | 目标数量 | 调整 |\n|:-|--------:|--------:|-----:|\n')
-                    _adj_etfs_live = set(list(_sub_b_pos_live.keys()) + [_ROT_PROXY_TO_LIVE.get(e, e) for e in all_a if hypo_us_w.get(e, 0) > 0.005])
-                    for etf_live in sorted(_adj_etfs_live):
-                        _raw_pos_live = _sub_b_pos_live.get(etf_live, 0)
-                        price = _us_live_prices.get(etf_live, 0)
-                        cur_shares = _pos_entry_shares(_raw_pos_live, price)
-                        _proxy_key = None
-                        for _pk, _lk in _ROT_PROXY_TO_LIVE.items():
-                            if _lk == etf_live:
-                                _proxy_key = _pk
-                                break
-                        _w = hypo_us_w.get(_proxy_key, 0) if _proxy_key else hypo_us_w.get(etf_live, 0)
-                        target_shares = _subb_target_shares(_target_val_live, _w, price)
-                        adj = None if target_shares is None else target_shares - cur_shares
-                        if not _pos_entry_is_nonzero(_raw_pos_live) and cur_shares == 0 and (target_shares is None or target_shares == 0):
-                            continue
-                        if target_shares is None:
-                            adj_str = '价格缺失'
-                        elif _w <= 0.005 and _pos_entry_is_nonzero(_raw_pos_live) and isinstance(_raw_pos_live, dict):
-                            adj_str = '卖出全部'
-                        elif adj > 0:
-                            adj_str = f'+{adj:,} 买入'
-                        elif adj < 0:
-                            adj_str = f'{adj:,} 卖出'
-                        else:
-                            adj_str = '—'
-                        if isinstance(_raw_pos_live, dict) and 'amount' in _raw_pos_live:
-                            cur_display = f"${_raw_pos_live['amount']:,.0f}"
-                        else:
-                            cur_display = f'{cur_shares:,}'
-                        target_display = '价格缺失' if target_shares is None else f'{target_shares:,}'
-                        w(f'| {etf_live} | {cur_display} | {target_display} | {adj_str} |\n')
-            w('\n---\n\n')
-            self._write_sub_c(msg, d, us_prod_daily)
-            w('\n---\n\n')
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
+            _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
+            w('> 实时查询前段保留当前→目标→操作→关键风控；基础评分置于末尾，盘中目标均须等收盘确认。\n')
+            return
 
     def _handle_params(self):
         cn_result_params = None
         cn_dk_result_params = None
         us_rot_result_params = None
         subc_info_params = {}
+        us_rot_close_p = None
         strategy_params_error = None
         with _sm() as msg:
             msg.write('⏳ 正在读取当前Sub-A / ADK持仓...\n')
@@ -13869,62 +12995,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params')
             _write_v80_subb_overview(w, us_rot_result_params, query_kind='params', us_intraday=False, us_rot_close=us_rot_close_p)
             _write_v80_subc_overview(w, subc_info_params, query_kind='params', us_intraday=False)
-            w('---\n\n')
-            w('### Sub-A: V8.0共享双腿｜A策略参数与计算依据\n\n')
-            _write_v78_suba_param_tables(w)
-            w('\n**当前分腿仓位因果链:**\n')
-            if cn_result_params is not None and len(cn_result_params) > 0:
-                _write_v79_suba_execution_chain(w, cn_result_params, -1)
-            else:
-                w(f"\n当前Sub-A仓位读取失败: {strategy_params_error or '未知错误'}\n")
-            w('\n**计算过程:**\n')
-            w(f'1. 乖离率: `bias = price / MA({CN_BIAS_N})`\n')
-            w(f'2. 乖离动量: 最近{CN_MOM_DAY}日bias归一化后按1.0→{CN_BIAS_MOM_WEIGHT_END:.1f}加权线性拟合斜率×10000，用于排序\n')
-            w('3. 选乖离动量最高的资产\n')
-            w(f'4. 候选资产需同时满足R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD}、近{CN_ABS_MOM_DAY}日实际收益>{CN_ABS_MOM_THRESHOLD:.0%}，否则持现金\n')
-            w(f'5. vol缩放: clip({CN_TARGET_VOL:.0%}/vol, {CN_MIN_LEV:.1f}, {CN_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_SCALE_THRESHOLD:.2f}才调整, 持现金时scale=1.0\n')
-            w('6. 无冷却期限制；近收盘信号按当日收盘手工执行，收益状态机用shift(1)避免未来函数\n')
-            w('\n**执行方式:** 收盘前看实时信号 → 收盘价执行（回测用收盘价对收盘价，shift(1)避免未来函数）\n')
-            w('\n---\n\n### Sub-A-DK: V8.0共享双子策略｜ATK / ADK参数与计算依据\n\n')
-            _write_v78_adk_param_tables(w)
-            w('\n**当前持仓状态:**\n\n')
-            if cn_dk_result_params is not None and len(cn_dk_result_params) > 0:
-                _write_v78_adk_current_holding_summary(w, cn_dk_result_params, -1)
-                if 'v78_adk_final_exposure' in cn_dk_result_params.columns:
-                    _write_v79_adk_execution_chain(w, cn_dk_result_params, -1, close_label='按最新收盘重算')
-                _write_v78_adk_new_leg_then_summary(w, cn_dk_result_params, -1, use_shifted=False, position_context='当前已生效持仓')
-            else:
-                w(f"当前ADK持仓读取失败: {strategy_params_error or '未知错误'}\n")
-            w('\n**计算过程:**\n')
-            w(f'1. 5指数→正式{len(ADK_OFFICIAL_PAIR_ORDER)}配对，每对计算乖离动量\n')
-            w(f'2. 从正式池选|乖离动量|最大的Top-1配对\n')
-            w('3. 乖离动量>0 → 做多A/做空B; <0 → 做空A/做多B\n')
-            w(f'4. vol缩放: clip({CN_DK_TARGET_VOL:.0%}/vol, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f}), shift(1), |Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整\n')
-            w('5. 无冷却期；近收盘信号按当日收盘手工执行，收益状态机用shift(1)避免未来函数\n')
-            w(f'6. 数据: csindex\n')
-            w('\n---\n\n')
-            _write_v80_b78_detail(w, us_rot_result_params, query_kind='params')
-            w('\n---\n\n### B7.9详细依据（Sub-B）: V7.9四腿综合（官方/EMA/Bias/LogVol各25%）\n\n')
-            _write_v78_subb_param_tables(w)
-            n_etfs = len(US_ROT_ASSETS)
-            w('\n**计算过程:**\n')
-            w(f"1. 每个信号日，分别计算{n_etfs}只ETF的{_subb_window_label_for_display('/')}日动量（用信号日收盘数据）\n")
-            w('2. 每个窗口各自做Top 2 + 绝对动量过滤 + 20日反波动率加权\n')
-            w(f'3. 每个窗口先生成自己的Model B目标仓位，再将三个目标仓位按{US_ROT_WINDOW_WEIGHT_LABEL}加权平均\n')
-            w(f'4. 波动率缩放(Model B): scale = {US_ROT_TARGET_VOL:.0%}/已实现波动率，scale<=1时所有风险资产等比缩减；scale>1时仅US_ROT_FUTURES按自身权重放大，不承接其他资产杠杆缺口，最高{US_ROT_MAX_LEV:.1f}x\n')
-            w('5. Sub-B 纳入 BTC/IBIT；历史段使用 BTC-USD 代理，实盘展示与下单使用 IBIT\n')
-            if US_ROT_VOLREG_ENABLED:
-                w(f'7. VolReg风险过热: {_subb_volreg_rule_text()}。T日收盘计算 → T+1日执行\n')
-                w(f'   - {US_ROT_VOLREG_BACKTEST_NOTE}\n')
-            w('\n**执行方式:** 美股因时差无法收盘价执行 -> T+1 adjusted open 执行；回测按旧仓隔夜 + 新仓日内拆分，缺少 required open 时中止。\n')
-            w('\n---\n\n')
-            _write_subc_param_summary(w)
-            w('\n---\n\n### 组合\n\n| 参数 | 值 |\n|:-|:-|\n')
-            for _cname in PERFORMANCE_COMBO_ORDER:
-                _cw = PERFORMANCE_COMBO_WEIGHTS[_cname]
-                w(f'| {_cname}权重 | **{_cw:.1%}** |\n')
-            w(f'| PV/收益查询 | B7.8/B7.9各占Sub-B的50%，独立展示；PV按A/ADK/B7.8/B7.9/C={_performance_combo_weight_label()}计算 |\n')
-            w(f'| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n')
+            _write_v80_a_adk_score_details(w, cn_result_params, cn_dk_result_params)
+            if strategy_params_error:
+                w(f'⚠️ 当前状态读取不完整：{strategy_params_error}\n\n')
+            w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；本页保留生产参数、当前风控测量与基础评分。\n')
+            return
 
     def _handle_live_params(self):
         with _sm() as msg:
@@ -13963,295 +13038,9 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
             _write_v80_subc_overview(w, _subc_live_info, query_kind='live_params', us_intraday=us_open and us_data_is_today)
-            w('---\n\n')
-            w('### Sub-A: V8.0共享双腿｜A策略实时参数与计算依据\n\n')
-            _write_v78_suba_param_tables(w)
-            w('\n')
-            cn_close_with_bond = _add_cn_bond_column(cn_close, msg, context='Sub-A参数展示')
-            all_codes_lp = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
-            bias_mom_lp = {}
-            r2_lp = {}
-            abs_mom_lp = {}
-            for code in all_codes_lp:
-                if code in cn_close_with_bond.columns:
-                    bias_mom_lp[code] = calc_bias_momentum(cn_close_with_bond[code])
-                    r2_lp[code] = calc_rolling_r2(cn_close_with_bond[code])
-                    abs_mom_lp[code] = cn_close_with_bond[code].pct_change(CN_ABS_MOM_DAY)
-            _cn_params_intraday = cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2)
-            _cn_display_idx_lp = -1
-            _cn_effective_date = cn_result.index[_cn_display_idx_lp]
-            _effective_label = _cn_effective_date.strftime('%Y-%m-%d')
-            w('**① V8.0 Sub-A双腿实时状态:**\n\n')
-            if _cn_params_intraday:
-                w(f'当前显示为 **{_effective_label} 交易时段已生效持仓**；今日收盘目标仍待确认。\n')
-            else:
-                w(f'当前快照日期 **{_effective_label}**。\n')
-            w('\n')
-            if 'weight' in cn_result.columns and len(cn_result) >= 2:
-                _write_suba_volume_overlay_status(msg, cn_result, _cn_display_idx_lp, prefix='')
-                _write_v79_suba_execution_chain(w, cn_result, _cn_display_idx_lp)
-                _write_v78_suba_blend_table(w, cn_result, _cn_display_idx_lp)
-                _write_v78_suba_leg_signal_tables(w, cn_result, _cn_display_idx_lp, bias_mom_lp, r2_lp, abs_mom_lp, all_codes_lp, current_holding=cn_result['v78_suba_v77_holding'].iloc[_cn_display_idx_lp] if 'v78_suba_v77_holding' in cn_result.columns else cn_result['holding'].iloc[_cn_display_idx_lp] if 'holding' in cn_result.columns else 'cash')
-                _cn_sc_p = cn_result['weight'].iloc[_cn_display_idx_lp]
-                if 'v78_suba_final_exposure' in cn_result.columns:
-                    _cn_display_parts_p = _v78_suba_display_leg_snapshot(cn_result, _cn_display_idx_lp)
-                    w('\n**1. V8.0 Sub-A component exposure**\n\n')
-                    w('| Metric | Value |\n')
-                    w('|:-|------:|\n')
-                    w(f"| Final exposure | **{float(_cn_display_parts_p['final_exposure']):.2f}x** |\n")
-                    w(f"| V7.7A leg exposure | {float(_cn_display_parts_p['v77_weight']):.2f}x × {V78_SUBA_V77_WEIGHT:.0%} |\n")
-                    w(f"| NewA leg exposure | {float(_cn_display_parts_p['new_weight']):.2f}x × {V78_SUBA_NEW_TV10_WEIGHT:.0%} |\n")
-                    w('| Execution basis | component-net blend; final exposure is weighted leg sum |\n')
-                else:
-                    _cn_sc_raw_p = cn_result['scale_raw'].iloc[_cn_display_idx_lp] if 'scale_raw' in cn_result.columns else _cn_sc_p
-                    _cn_base_frac_p = cn_result['base_weight'].iloc[_cn_display_idx_lp] if 'base_weight' in cn_result.columns else _base_fraction_from_weight_and_scale(_cn_sc_p, _cn_sc_raw_p)
-                    _cn_rv_p = cn_result['realized_vol'].iloc[_cn_display_idx_lp] if 'realized_vol' in cn_result.columns else None
-                    _cn_next_raw_p, _cn_next_scale_p, _cn_pending_p = _compute_next_vol_scale(_cn_rv_p, float(_cn_sc_raw_p), CN_TARGET_VOL, CN_MIN_LEV, CN_MAX_LEV, CN_SCALE_THRESHOLD)
-                    w(f'\n**1. Sub-A volatility scaling**\n\n')
-                    w(f'| Metric | Value |\n')
-                    w(f'|:-|------:|\n')
-                    w(f'| Current final exposure | **{_cn_sc_p:.2f}x** |\n')
-                    w(f'| VolScale base leverage | **{float(_cn_sc_raw_p):.2f}x** |\n')
-                    w(f'| Position coefficient | **{float(_cn_base_frac_p):.2f}** |\n')
-                    w(f"| Close-confirmed VolScale | **{_cn_next_scale_p:.2f}x** {('rebalance' if _cn_pending_p else 'hold')} |\n")
-                    if _cn_rv_p is not None and (not np.isnan(_cn_rv_p)):
-                        w(f'| Realized vol | {_cn_rv_p:.1%} |\n')
-                    w(f'| Target vol | {CN_TARGET_VOL:.0%} |\n')
-                    if CN_SCALE_THRESHOLD > 0:
-                        if abs(_cn_next_raw_p - float(_cn_sc_raw_p)) > 0.001:
-                            w(f'| Close-confirmed theoretical leverage | {_cn_next_raw_p:.2f}x (delta={abs(_cn_next_raw_p - float(_cn_sc_raw_p)):.4f}) |\n')
-                        else:
-                            w(f'| Rebalance threshold | delta >= {CN_SCALE_THRESHOLD:.2f} |\n')
-                    if _cn_pending_p:
-                        w(f'\n**VolScale rebalance: {float(_cn_sc_raw_p):.2f}x -> {_cn_next_scale_p:.2f}x; manual same-day close execution after near-close confirmation**\n')
-                    else:
-                        w(f'\n**Final exposure:** **{_cn_sc_p:.2f}x** (same-day close execution basis)\n')
-            w('\n---\n\n### Sub-A-DK: V8.0共享双子策略｜ATK / ADK实时参数与计算依据\n\n')
-            _write_v78_adk_param_tables(w)
-            w('\n')
-            _dk_params_intraday = cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2)
-            _dk_display_idx_lp = -1
-            w('**① V8.0 ADK双腿实时状态:**\n\n')
-            if _dk_params_intraday:
-                w(f"当前显示为 **{cn_dk_result.index[_dk_display_idx_lp].strftime('%Y-%m-%d')} 交易时段已生效持仓**；今日未移位目标仍待收盘确认。\n")
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                _write_v79_adk_execution_chain(w, cn_dk_result, _dk_display_idx_lp, close_label='若现在收盘')
-            _write_v78_adk_new_leg_then_summary(w, cn_dk_result, _dk_display_idx_lp, use_shifted=_dk_params_intraday, position_context='当前已生效持仓')
-            w('\n**② ADK综合风控状态:**\n\n')
-            w(f'| 指标 | 值 |\n')
-            w(f'|:-|------:|\n')
-            _is_v79_adk_blend_lp = 'v78_adk_final_exposure' in cn_dk_result.columns
-            if _is_v79_adk_blend_lp:
-                w('| 组合口径 | **V7.7/New两腿分别执行各自RiskGate/过热/overlay**；组合级不读取V7.7腿遗留的base_weight×risk_gate_scale，最终贡献见上方双腿表 |\n')
-            if not _is_v79_adk_blend_lp and 'same_side_overheat_scale' in cn_dk_result.columns:
-                _dk_oh_scale_lp = cn_dk_result['same_side_overheat_scale'].iloc[_dk_display_idx_lp]
-                _dk_oh_on_lp = bool(cn_dk_result['same_side_overheat_on'].iloc[_dk_display_idx_lp])
-                _dk_oh_abs_lp = cn_dk_result['same_side_overheat_abs_bias'].iloc[_dk_display_idx_lp]
-                _dk_oh_status_lp = '开启' if _dk_oh_on_lp else '关闭'
-                w(f'| 同向过热防守 | **{_dk_oh_status_lp}** ({_dk_oh_scale_lp:.2f}x) |\n')
-                if not np.isnan(_dk_oh_abs_lp):
-                    w(f'| 当前同向乖离 | **{_dk_oh_abs_lp:.1%}** |\n')
-            if not _is_v79_adk_blend_lp and 'dk_volume_clear_scale' in cn_dk_result.columns:
-                _dk_volume_on_lp = bool(cn_dk_result['dk_volume_clear_active'].iloc[_dk_display_idx_lp])
-                _dk_volume_status_lp = '警示触发' if _dk_volume_on_lp else '未触发'
-                w(f'| 成交额警示 | **{_dk_volume_status_lp}**（仅提示，不改仓位） |\n')
-            if not _is_v79_adk_blend_lp and 'risk_gate_scale' in cn_dk_result.columns:
-                _dk_gate_scale_lp = cn_dk_result['risk_gate_scale'].iloc[_dk_display_idx_lp]
-                _dk_gate_on_lp = bool(cn_dk_result['risk_gate_on'].iloc[_dk_display_idx_lp])
-                _dk_gate_dd_lp = cn_dk_result['risk_gate_base_dd'].iloc[_dk_display_idx_lp]
-                _dk_base_w_lp = cn_dk_result['base_weight'].iloc[_dk_display_idx_lp] if 'base_weight' in cn_dk_result.columns else cn_dk_result['weight'].iloc[_dk_display_idx_lp]
-                _dk_final_w_lp = cn_dk_result['weight'].iloc[_dk_display_idx_lp]
-                _dk_gate_status_lp = '开启' if _dk_gate_on_lp else '关闭'
-                w(f'| RiskGate状态 | **{_dk_gate_status_lp}**（乘数 {_dk_gate_scale_lp:.2f}x） |\n')
-                w(f'| 触发阈值 | **ADK原始净值DD <= -{CN_DK_RISK_GATE_ENTER:.0%}** |\n')
-                w(f'| 恢复阈值 | **ADK原始净值DD >= -{CN_DK_RISK_GATE_EXIT:.0%}** |\n')
-                w('| DD判断口径 | **risk_gate_base_dd**，基于gate前执行成本净值，不是最终NAV回撤 |\n')
-                if not np.isnan(_dk_gate_dd_lp):
-                    w(f'| 当前判断DD | **{_dk_gate_dd_lp:.1%}** |\n')
-                w(f'| RiskGate前杠杆 | **{_dk_base_w_lp:.2f}x** |\n')
-                w(f'| 最终杠杆 | **{_dk_final_w_lp:.2f}x**（= {_dk_base_w_lp:.2f}x × {_dk_gate_scale_lp:.2f}） |\n')
-            elif not _is_v79_adk_blend_lp:
-                w(f"| 最终杠杆 | **{cn_dk_result['weight'].iloc[_dk_display_idx_lp]:.2f}x** |\n")
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                w('\n**③ ADK双腿波动率缩放:**\n\n')
-                w('ADK双腿分别执行波动率缩放；综合结果不存在单一VolScale。各腿的已实现波动率、raw/banded VolScale、overlay乘数与最终贡献见上方双腿状态表。\n')
-            elif 'weight' in cn_dk_result.columns and len(cn_dk_result) >= 2:
-                _dk_sc_p = cn_dk_result['weight'].iloc[_dk_display_idx_lp]
-                _dk_rv_p = cn_dk_result['realized_vol'].iloc[_dk_display_idx_lp] if 'realized_vol' in cn_dk_result.columns else None
-                _dk_abs_idx_lp = _dk_display_idx_lp if _dk_display_idx_lp >= 0 else len(cn_dk_result) + _dk_display_idx_lp
-                _dk_cur_vs_p = _dk_get_vol_scale(cn_dk_result, _dk_abs_idx_lp)
-                _dk_next_raw_p, _dk_next_vs_p, _dk_pending_p = _compute_next_vol_scale(_dk_rv_p, _dk_cur_vs_p, CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
-                _dk_next_total_p = _dk_sc_p / _dk_cur_vs_p * _dk_next_vs_p if _dk_cur_vs_p > 1e-10 else _dk_next_vs_p
-                w(f'\n**③ ADK综合波动率缩放:**\n\n')
-                w(f'| 指标 | 值 |\n')
-                w(f'|:-|------:|\n')
-                w(f'| 当前已生效敞口 | **{_dk_sc_p:.2f}x** (VolScale {_dk_cur_vs_p:.2f}x) |\n')
-                w(f"| 本日收盘确认后敞口 | **{_dk_next_total_p:.2f}x** (VolScale {_dk_next_vs_p:.2f}x) {('🟢 需调仓' if _dk_pending_p else '✅ 维持')} |\n")
-                if _dk_rv_p is not None and (not np.isnan(_dk_rv_p)):
-                    w(f'| 已实现波动率 | {_dk_rv_p:.1%} |\n')
-                w(f'| 目标波动率 | {CN_DK_TARGET_VOL:.0%} |\n')
-                if CN_DK_SCALE_THRESHOLD > 0:
-                    if abs(_dk_next_raw_p - _dk_cur_vs_p) > 0.001:
-                        w(f"| 本日收盘理论VolScale | {_dk_next_raw_p:.2f}x (|Δ|={abs(_dk_next_raw_p - _dk_cur_vs_p):.4f} {('≥' if _dk_pending_p else '<')} {CN_DK_SCALE_THRESHOLD}阈值) |\n")
-                    else:
-                        w(f'| 调整阈值 | Δ≥{CN_DK_SCALE_THRESHOLD:.2f} |\n')
-                if _dk_pending_p:
-                    w(f'\n🟢 **杠杆调仓! VolScale {_dk_cur_vs_p:.2f}x → {_dk_next_vs_p:.2f}x | 实际敞口 {_dk_sc_p:.2f}x → {_dk_next_total_p:.2f}x | 本日收盘确认后按收盘价执行**\n')
-                else:
-                    w(f'\n✅ 杠杆: **{_dk_sc_p:.2f}x**（下一交易日维持）\n')
-            w('\n---\n\n')
-            _write_v80_b78_detail(w, us_rot_result, query_kind='live_params')
-            w('\n---\n\n### B7.9详细依据（Sub-B）: V7.9四腿综合（官方/EMA/Bias/LogVol各25%）\n\n')
-            w(f'数据来源: Yahoo Finance日K线 | 收盘: {us_close_bj}\n')
-            changed_p = {l: c['proxy'] for l, c in US_ROT_ASSETS.items() if l != c['proxy']}
-            if changed_p:
-                w('实盘->proxy: ' + ', '.join((f'{k}->{v}' for k, v in changed_p.items())) + '\n')
-            w(f'杠杆放大资产: **QQQM/GLDM** (US_ROT_FUTURES={sorted(US_ROT_FUTURES)})；scale>1时只放大自身权重，不承接其他ETF杠杆缺口\n')
-            _write_v78_subb_param_tables(w)
-            w(f'混合后波动口径: {SUBB_BLEND_VOL_NOTE}\n')
-            _vr_p = float(us_rot_result['volreg_ratio'].iloc[-1]) if 'volreg_ratio' in us_rot_result.columns else None
-            _vr_defense_p = bool(us_rot_result['volreg_defense'].iloc[-1]) if 'volreg_defense' in us_rot_result.columns else False
-            if US_ROT_VOLREG_ENABLED and _vr_p is not None:
-                if _vr_p > US_ROT_VOLREG_THRESHOLD:
-                    w(f'🟢 **VolReg风险过热:** SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d 波动率比={_vr_p:.2f} > 进入阈值{US_ROT_VOLREG_THRESHOLD}，**明日{_subb_volreg_scaled_assets_text()} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}，差额BIL**\n')
-                elif _vr_defense_p and _vr_p >= US_ROT_VOLREG_EXIT_THRESHOLD:
-                    w(f'🟡 **VolReg风险过热:** 今日{_subb_volreg_scaled_assets_text()}已降档 | 波动率比={_vr_p:.2f} ≥ 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日继续降档\n')
-                elif _vr_defense_p:
-                    w(f'🟢 **VolReg风险过热:** 今日{_subb_volreg_scaled_assets_text()}已降档 | 波动率比={_vr_p:.2f} < 退出阈值{US_ROT_VOLREG_EXIT_THRESHOLD}，明日恢复正常\n')
-                else:
-                    w(f'🟢 **VolReg风险过热:** SPY 波动率比={_vr_p:.2f} < 进入阈值{US_ROT_VOLREG_THRESHOLD} ✅\n')
-            us_start_idx_p = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
-            us_signal_set_p = _us_signal_days(us_rot_close, us_start_idx_p)
-            is_us_signal_p = len(us_rot_close) - 1 in us_signal_set_p
-            if is_us_signal_p and _should_suppress_early_week_us_signal(us_date):
-                is_us_signal_p = False
-            if is_us_signal_p:
-                w(f"✅ **今日是信号日** (美东 {us_date.strftime('%m-%d')})\n")
-            else:
-                _prev_us_sigs_p = sorted([i for i in us_signal_set_p if i < len(us_rot_close) - 1])
-                _last_us_sig_date_p = us_rot_close.index[_prev_us_sigs_p[-1]] if _prev_us_sigs_p else None
-                if _last_us_sig_date_p:
-                    _last_bj_p = beijing_time_str(_last_us_sig_date_p, 'US', 'close')
-                    w(f'⏸️ 非信号日（上次: {_last_bj_p}）\n')
-            w('\n')
-            us_scale = _subb_official_scale_from_result(us_rot_result)
-            rot_w_cols_p = [c for c in us_rot_result.columns if c.startswith('w_')]
-            current_us_w = {c.replace('w_', ''): us_rot_result.iloc[-1][c] for c in rot_w_cols_p}
-            _hypo_prev_mix_risky_by_lb_p = _us_mix_prev_risky_by_lb_from_result(us_rot_result, us_date, include_current=False)
-            _hypo_prev_ema_risky_p = _subb_v75_ema_prev_risky_from_result(us_rot_result, us_date, include_current=False)
-            _us_params_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
-            _us_params_gate = _subb_inflation_gate_context(us_rot_close, -1)
-            _us_mix_params = _us_mix_display_context(us_rot_close, -1, _us_params_ranking_codes, us_scale, prev_risky_by_lb=_hypo_prev_mix_risky_by_lb_p, threshold=US_ROT_REBALANCE_THRESHOLD, reference_assets=[(code, _ROT_PROXY_TO_LIVE.get(code, code) + '(通胀off参考)') for code in US_ROT_MACRO_POOL])
-            _model_hypo_us_w_p, _, _ = _us_mix_snapshot(us_rot_close, -1, _us_params_ranking_codes, us_scale, prev_risky_by_lb=_hypo_prev_mix_risky_by_lb_p, threshold=US_ROT_REBALANCE_THRESHOLD)
-            _ema_hypo_us_w_p, _, _ = _subb_v75_ema_snapshot(us_rot_close, -1, _subb_v75_ema_scale_from_result(us_rot_result), ranking_codes=US_ROT_POOL, prev_risky=_hypo_prev_ema_risky_p, threshold=US_ROT_REBALANCE_THRESHOLD)
-            _v77_hypo_us_w_p = _blend_subb_v75_weight_dicts(_model_hypo_us_w_p, _ema_hypo_us_w_p)
-            _bias_hypo_us_w_p = _v78_subb_new_line_hypo_weights_from_blend(us_rot_close, us_rot_result, line='bias', row_idx=-1)
-            _logvol_hypo_us_w_p = _v78_subb_new_line_hypo_weights_from_blend(us_rot_close, us_rot_result, line='logvol', row_idx=-1)
-            _blended_hypo_us_w_p = _blend_v78_subb_weight_dicts(_v77_hypo_us_w_p, _bias_hypo_us_w_p, _logvol_hypo_us_w_p)
-            _vr_defense_next_p = _volreg_next_cash_state(_vr_defense_p, _vr_p) if US_ROT_VOLREG_ENABLED else False
-            _hypo_us_w_p = dict(_blended_hypo_us_w_p)
-            if US_ROT_VOLREG_ENABLED and _vr_defense_next_p:
-                _hypo_us_w_p, _ = _apply_subb_volreg_defense_scale_to_weights(_hypo_us_w_p, True)
-            _lb0, _lb1, _lb2 = _subb_window_lbs_for_display()
-            w(f"**① 官方腿分窗口动量排名（{_subb_window_label_for_display('/')}）:**\n\n")
-            w('下表只对应官方腿；EMA/Bias/LogVol腿在后续子策略腿状态表中单独展示。\n\n')
-            w(f"**通胀开关:** {('🟢 ON' if _us_params_gate['pressure_on'] else '🔴 OFF')} (DBC {INFLATION_PRESSURE_LB}日 {_us_params_gate.get('dbc_mom', np.nan):+.2%}, TLT {INFLATION_PRESSURE_LB}日 {_us_params_gate.get('tlt_mom', np.nan):+.2%})\n\n")
-            w(_v78_subb_inflation_status_text(_us_params_gate['pressure_on']) + '\n\n')
-            for lb in (_lb0, _lb1, _lb2):
-                w(f'**{lb}日窗口:**\n\n')
-                w(f'| ETF | 动量 | 年化波动率 | Top2? | 绝对动量>{US_ROT_ABS_THRESHOLD:.0%}? | 窗口目标权重 |\n')
-                w('|:-|------:|------:|:-:|:-:|------:|\n')
-                for row in _us_mix_params['per_lb_rows'][lb]:
-                    _mom = row['momentum']
-                    _vol = row['vol']
-                    _fmt_mom = f'{_mom:+.2%}' if not np.isnan(_mom) else '—'
-                    _fmt_vol = f'{_vol:.1%}' if not np.isnan(_vol) else '—'
-                    _is_top3 = '✅' if row['top3'] else ''
-                    _abs_pass = '✅' if row['abs_pass'] else '❌'
-                    _rank_marker = ' 🏆' if row['rank'] <= US_ROT_TOP_N else ''
-                    w(f"| {row['rank']}. {row['live_name']}{_rank_marker} | {_fmt_mom} | {_fmt_vol} | {_is_top3} | {_abs_pass} | {row['window_weight']:.1%} |\n")
-                for row in _us_mix_params['reference_per_lb_rows'][lb]:
-                    _mom = row['momentum']
-                    _vol = row['vol']
-                    _fmt_mom = f'{_mom:+.2%}' if not np.isnan(_mom) else '—'
-                    _fmt_vol = f'{_vol:.1%}' if not np.isnan(_vol) else '—'
-                    _is_top3 = f"参考第{row['rank']}"
-                    _abs_pass = '✅' if row['abs_pass'] else '❌'
-                    w(f"| {row['rank']}. {row['live_name']} | {_fmt_mom} | {_fmt_vol} | {_is_top3} | {_abs_pass} | 0.0%（不参与） |\n")
-                w('\n')
-            w(f'**② 官方腿结果（{US_ROT_WINDOW_WEIGHT_LABEL}加权混合）:**\n\n')
-            w(f'| ETF | 实际排名 | {_lb0}日动量 | {_lb1}日动量 | {_lb2}日动量 | 加权动量 | 官方腿目标权重 | 官方腿入选? | 参与官方腿? |\n')
-            w('|:-|:-|------:|------:|------:|------:|------:|------:|:-:|:-:|\n')
-            for row in _us_mix_params['mix_rows']:
-                _m130 = row['per_lb_momentum'][_lb0]
-                _m260 = row['per_lb_momentum'][_lb1]
-                _m390 = row['per_lb_momentum'][_lb2]
-                _avg = row['avg_momentum']
-                _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                _mix_selected_mark = '✅' if row['mix_selected'] else ''
-                _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | {row['mix_weight']:.1%} | {_mix_selected_mark} | ✅ |\n")
-            for row in _us_mix_params['reference_rows']:
-                _m130 = row['per_lb_momentum'][_lb0]
-                _m260 = row['per_lb_momentum'][_lb1]
-                _m390 = row['per_lb_momentum'][_lb2]
-                _avg = row['avg_momentum']
-                _fmt130 = f'{_m130:+.2%}' if not np.isnan(_m130) else '—'
-                _fmt260 = f'{_m260:+.2%}' if not np.isnan(_m260) else '—'
-                _fmt390 = f'{_m390:+.2%}' if not np.isnan(_m390) else '—'
-                _fmt_avg = f'{_avg:+.2%}' if not np.isnan(_avg) else '—'
-                _rank_text = f"加权#{row['actual_rank']}" if row.get('actual_rank') else '—'
-                w(f"| {row['live_name']} | {_rank_text} | {_fmt130} | {_fmt260} | {_fmt390} | {_fmt_avg} | 0.0% | 实际排名参考 | 否 |\n")
-            _write_v78_subb_component_leg_tables(w, us_rot_result, -1)
-            _write_v78_subb_blend_table(w, us_rot_result, -1)
-            _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, -1, current_weights=current_us_w, target_weights=_hypo_us_w_p)
-            hist_us = pd.to_numeric(us_rot_result['official_return'] if 'official_return' in us_rot_result.columns else us_rot_result['return'], errors='coerce').dropna().iloc[:-1].values
-            if len(hist_us) >= US_ROT_VOL_WINDOW:
-                us_rv = np.std(hist_us[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
-                us_scale = _subb_official_scale_from_result(us_rot_result)
-            else:
-                us_rv = 0.0
-                us_scale = 1.0
-            w(f'\n**③ 波动率缩放 (Model B):** 近{US_ROT_VOL_WINDOW}日已实现波动率 = {us_rv:.1%}，scale = {US_ROT_TARGET_VOL:.0%}/{us_rv:.1%} = **{us_scale:.2f}x**')
-            if us_scale > 1.0:
-                w(f' (>1: 仅放大US_ROT_FUTURES(QQQM/GLDM)自身权重，上限{US_ROT_MAX_LEV:.1f}x)')
-            elif us_scale < 1.0:
-                w(' (<1: 所有资产等比缩减)')
-            w('\n')
-            w('\n**④ V7.9执行口径:** 上方“四腿综合目标”为假设今日调仓目标；非信号日继续沿用当前持有，不生成正式调仓指令。\n')
-            if is_us_signal_p:
-                _prev_us_w_p = {}
-                _rloc_p = len(us_rot_result) - 1
-                if _rloc_p > 0:
-                    _prev_us_w_p = {c.replace('w_', ''): us_rot_result.iloc[_rloc_p - 1][c] for c in rot_w_cols_p}
-                if not _prev_us_w_p:
-                    _prev_us_w_p = {'CASH': 1.0}
-                _all_etfs_p = set(list(_hypo_us_w_p.keys()) + list(_prev_us_w_p.keys()))
-                _turnover_p = sum((abs(_hypo_us_w_p.get(e, 0) - _prev_us_w_p.get(e, 0)) for e in _all_etfs_p if e not in ('BIL', 'CASH')))
-            else:
-                _all_etfs_p = set(list(_hypo_us_w_p.keys()) + list(current_us_w.keys()))
-                _turnover_p = sum((abs(_hypo_us_w_p.get(e, 0) - current_us_w.get(e, 0)) for e in _all_etfs_p if e not in ('BIL', 'CASH')))
-            w(f'\n**⑤ 调仓幅度:** {_turnover_p:.1%}')
-            if _subb_should_rebalance(_turnover_p, US_ROT_MIN_TURNOVER):
-                prefix = '如为信号日' if not is_us_signal_p else ''
-                w(f' 🟢 超{US_ROT_MIN_TURNOVER:.0%}阈值，{prefix}**会调仓**\n')
-            else:
-                suffix = '（非信号日不调仓）' if not is_us_signal_p else ''
-                w(f' ❌ 低于{US_ROT_MIN_TURNOVER:.0%}阈值，**不调仓**{suffix}\n')
-            _thresh_line_p = _us_mix_threshold_check(_us_mix_params['momentum_rows'], _us_mix_params['vol_row'], _us_params_ranking_codes, _hypo_prev_mix_risky_by_lb_p, US_ROT_REBALANCE_THRESHOLD)
-            if _thresh_line_p:
-                w(f'\n**⑥ 调仓保护 ({US_ROT_REBALANCE_THRESHOLD}x, 逐窗口):** {_thresh_line_p}\n')
-            w('\n---\n\n')
-            _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
-            _write_subc_param_summary(w, _subc_live_info)
-            w('\n---\n\n### 组合权重\n\n| 策略 | 权重 |\n|:-|------:|\n')
-            for name in PERFORMANCE_COMBO_ORDER:
-                cw = PERFORMANCE_COMBO_WEIGHTS[name]
-                w(f'| {name} | {cw:.0%} |\n')
-            w(f'| A股交易日历维护 | {CN_MARKET_CALENDAR_COVERAGE_NOTE} |\n')
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
+            w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；下单只看“实时信号”。\n')
+            return
 
     def _handle_signal_history(self, query):
         start_date, end_date = self._parse_date_with_llm_fallback(query)
@@ -14335,17 +13124,19 @@ class CombinedStrategyV78(CombinedStrategyBase):
             if 'v78_adk_final_exposure' in cn_dk_result.columns:
                 dk_rebs = extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=start_date)
                 dk_rebs = [r for r in dk_rebs if pd.Timestamp(r.get('日期')) <= pd.Timestamp(end_date)]
+                _dk_history_unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿'
                 if len(dk_rebs) == 0:
-                    w('该时段无分腿配对/方向变化。\n\n')
+                    w(f'该时段无{_dk_history_unit}配对/方向变化。\n\n')
                 else:
-                    w('**分腿配对/方向变化:**\n\n')
+                    w(f'**{_dk_history_unit}配对/方向变化:**\n\n')
                     w('| 日期 | 策略 | 卖出 | 买入 |\n')
                     w('|:--|:--|:--|:--|\n')
                     for rec in dk_rebs:
                         w(f"| {rec.get('日期', '')} | {rec.get('策略', 'ADK')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
-                    w(f'\n共 **{len(dk_rebs)}** 次分腿配对/方向变化\n\n')
+                    w(f'\n共 **{len(dk_rebs)}** 次{_dk_history_unit}配对/方向变化\n\n')
                 if len(dk_period) > 0:
-                    w('**区间期末 / 当前已生效双腿持仓:**\n\n')
+                    _dk_holding_label = '当前已生效持仓' if _v80_adk_is_new_only(cn_dk_result) else '当前已生效双腿持仓'
+                    w(f'**区间期末 / {_dk_holding_label}:**\n\n')
                     _write_v78_adk_current_holding_summary(w, dk_period, -1)
                     _write_v78_adk_net_exposure_table(w, cn_dk_result, dk_period.index[-1])
                     w('\n')

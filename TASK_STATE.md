@@ -2,13 +2,17 @@
 
 ## Current Production: V8.0 Unified Poe Bot
 
-- Authority: `mnt_bot V 8.0 plus.py`, generated deterministically by `tools/build_v80_unified.py` from the V7.8/V7.9 source baselines.
-- Shared strategies: Sub-A 15%, Sub-A-DK 15%, and Sub-C 30% use the synchronized V7.9 host implementation.
+- Authority: `mnt_bot V 8.0 plus.py`, maintained directly as the self-contained Poe production file. `tools/build_v80_unified.py` is a legacy bootstrap and must not overwrite this authority unless its transforms are first synchronized.
+- A is one production strategy: original Top-1 only, score > 0 and R2 >= 0.15, no second-place replacement, target volatility 20%/80 days, and VolScale 0.10x-1.25x.
+- ADK is one production strategy across all ten index pairs: score-hot enter/recover/scale 80/40/0x, target volatility 14%/40 days, VolScale 0.10x-1.50x, and scale-change deadband 0.25.
+- Portfolio weights remain A 15%, ADK 15%, Sub-C 30%, B7.8 20%, and B7.9 20%.
 - Independent B strategies: B7.8 20% and B7.9 20%; each has separate targets, execution costs, holdings, NAV, and query detail.
-- Query order: A/ATK(ADK) overview, B7.8/B7.9 overview, C overview, then detailed calculation and risk evidence.
+- Query order: A/ADK overview, B7.8/B7.9 overview, C overview, then A-asset and ADK-pair scores plus detailed risk evidence.
 - Sub-B execution remains `T close signal -> T+1 adjusted open execution -> T+1 close return`.
 - Poe artifact contract: self-contained single file, `# poe: name=Strategy-Signal-V80`, compact editor-safe output, and Python 3.11 syntax compatibility.
+- Maintenance path: `tools/prune_v80_poe.py` is the idempotent V8 pruner and syntax guard.
 - Cleanup boundary: temporary V8/adversarial test harnesses and runtime caches are disposable; existing tracked regression suites remain authoritative and are retained.
+- Cleanup verification on 2026-08-31: V8 pruner check passed at 790,554 bytes; production files compiled; tracked suite passed with 343 tests and one dependency deprecation warning.
 
 ## Active Task 2026-08-24: V7.8 / V7.9 Volatility Management And Sleeve Diversification Audit
 

@@ -5,13 +5,20 @@ This workspace contains the A-share / US momentum combo strategy family, includi
 ## Current Stage
 
 V8.0 is the current Poe-ready production bot. It shares the synchronized A,
-ATK/ADK, and C implementations, while running the V7.8 and V7.9 B strategies
+ADK, and C implementations, while running the V7.8 and V7.9 B strategies
 independently. Portfolio/PV weights are Sub-A 15%, Sub-A-DK 15%, B7.8 20%,
 B7.9 20%, and Sub-C 30%. V7.8 and V7.9 remain the source baselines used to
 build and audit the two B variants.
 
 The shared production invariants are:
 
+- Sub-A is one production strategy: MA60/20-day weighted momentum, original
+  Top-1 only, `score > 0` and 20-day R2 at least 0.15, with no second-place
+  replacement. Its target-volatility layer is 20%/80 days and is capped at
+  0.10x-1.25x; the A-share turnover overlay remains active.
+- ADK is one production strategy across all ten index pairs. Its score-hot
+  enter/recover/scale rule is 80/40/0x; target volatility is 14%/40 days,
+  leverage is 0.10x-1.50x, and the scale-change deadband is 0.25.
 - Sub-B uses `T close signal -> T+1 adjusted open execution -> T+1 close return`.
 - The final Sub-B account rebuild nets target changes once, charges transaction
   costs once, and charges BIL plus 100 bps financing on gross exposure above 1.0.
@@ -33,7 +40,8 @@ part of the current production paths.
 ## Main Files
 
 - `mnt_bot V 8.0 plus.py`: current self-contained Poe production bot; upload this file.
-- `tools/build_v80_unified.py`: deterministic builder for the compact Poe-safe V8.0 artifact.
+- `tools/prune_v80_poe.py`: idempotent production pruner; removes retired money/position-management queries and unreachable verbose query paths, then verifies Python 3.11 syntax.
+- `tools/build_v80_unified.py`: legacy V7.9-to-V8 bootstrap generator. It predates later direct V8 production changes and must not overwrite the current authority without first synchronizing its transforms.
 - `mnt_bot V 7.9 plus.py`: V7.9 shared host and B7.9 source baseline.
 - `mnt_bot V 7.8 plus.py`: B7.8 source baseline.
 - `poe_adk_16_spread_v1_0_bot.py`: Poe-native online ADK 16-leg bot.
@@ -57,8 +65,8 @@ Research-only reproducibility utilities:
 Run these commands after touching production behavior:
 
 ```powershell
-python "tools/build_v80_unified.py"
-python -m py_compile "mnt_bot V 7.8 plus.py" "mnt_bot V 7.9 plus.py" "mnt_bot V 8.0 plus.py" "tools/build_v80_unified.py" "poe_adk_16_spread_v1_0_bot.py"
+python "tools/prune_v80_poe.py" --check "mnt_bot V 8.0 plus.py"
+python -m py_compile "mnt_bot V 7.8 plus.py" "mnt_bot V 7.9 plus.py" "mnt_bot V 8.0 plus.py" "tools/prune_v80_poe.py" "poe_adk_16_spread_v1_0_bot.py"
 python -m pytest tests/test_v78_v79_adversarial_repairs.py tests/test_v78_v79_subc_sleeve_vol.py -q
 python -m pytest tests/test_poe_adk_16_spread_decay.py -q
 python -m pytest tests -q
