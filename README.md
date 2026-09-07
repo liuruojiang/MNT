@@ -20,16 +20,26 @@ The shared production invariants are:
   enter/recover/scale rule is 80/40/0x; target volatility is 14%/40 days,
   leverage is 0.10x-1.50x, and the scale-change deadband is 0.25.
 - Sub-B uses `T close signal -> T+1 adjusted open execution -> T+1 close return`.
-- The final Sub-B account rebuild nets target changes once, charges transaction
-  costs once, and charges BIL plus 100 bps financing on gross exposure above 1.0.
+- The final Sub-B account rebuild carries actual security holdings and debt.
+  Holdings drift between confirmed events; model and daily VolReg events trade
+  at the next adjusted open, paying actual net transaction costs once. Debt
+  accrues BIL plus 100 bps financing. Daily VolReg actions do not wait for the
+  weekly model signal day.
 - Formal US history is checked against XNYS sessions. Yahoo gaps are retried and
   may be repaired only with same-ticker Nasdaq history after a scale check; a
   remaining required gap fails closed and is never hidden by forward-fill.
 - Proxy/live pairs use the live ETF after listing, including BTC-USD/IBIT. A
   missing required live ETF price is not replaced by a proxy price.
+- Adjusted-open and close splices use the same combined B7.8/B7.9 asset map,
+  including the B7.8-only VEA/EFA pair, with one common price scale.
 - Sub-C scales only the equity and gold sleeves, executes scale changes at the
   next adjusted open, and uses a 0.35 scale-change deadband. BTC, bonds, and CTA
   remain unscaled.
+- Sub-C annual base-portfolio rebalancing executes at the last US trading day's
+  close (MOC), with a separate pending action and timestamped history. Its
+  existing 10 bps annual cost convention uses unscaled base-portfolio turnover.
+- CN/ADK raw prices must be finite, positive, internally complete, and current
+  through the latest required completed session, including pre-open/weekends.
 
 B7.8 uses Top-3, a 4% absolute-momentum threshold, and a 1.05x replacement
 buffer; B7.9 uses Top-2, a 0% threshold, and no replacement buffer. Each keeps
@@ -52,6 +62,10 @@ part of the current production paths.
 - `tests/test_v78_v79_adversarial_repairs.py`: consolidated cross-version execution, calendar, live-price, retry, financing, and fail-closed regressions.
 - `tests/test_v78_v79_subc_sleeve_vol.py`: cross-version Sub-C production parity and accounting tests.
 - `tests/test_poe_adk_16_spread_decay.py`: retained ADK online-rebuild and query-surface regression suite.
+- `docs/v80_adversarial_repairs_20260907.md`: V8 repairs, matched backtest impact,
+  validation evidence, and remaining accounting/data assumptions.
+- `docs/v80_external_review_20260907.md`: external-review dispositions, follow-up
+  repairs, and matched-data return parity against the preceding accepted fixes.
 
 Research-only reproducibility utilities:
 
