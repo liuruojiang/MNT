@@ -1,0 +1,350 @@
+{
+  "scope": "L4 cross-examination by US-leg auditor of A/ADK saved arms; read-only",
+  "independence": "uses frozen L1 prices and saved result columns; reconstructs price returns, pair signed turnover, costs, and common-window first differences without CN audit helpers or strategy helper calls",
+  "hashes": {
+    "formal_inputs": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "formal_results": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+    "module_arms": "5579d7c9df910938529496d54c5cadf6298034c9cc48ce7d38567585f9de65d2"
+  },
+  "A": {
+    "formal": {
+      "rows": 2189,
+      "first": "2017-09-19",
+      "last": "2026-09-24",
+      "price_to_asset_component_max_abs": 0.0,
+      "cash_accrual_max_abs": 0.0,
+      "trade_turnover_to_fee_max_abs": 0.0,
+      "net_return_max_abs": 0.0,
+      "fee_positive_days": 786,
+      "total_model_fee_fraction_sum": 0.4724630047090318
+    },
+    "arms": {
+      "A_volume_off": {
+        "comparison": {
+          "formal_rows": 2189,
+          "arm_rows": 2189,
+          "common_rows": 2189,
+          "formal_first": "2017-09-19",
+          "arm_first": "2017-09-19",
+          "first_difference": "2017-09-19",
+          "changed_common_days": 1187,
+          "max_abs_daily_return_difference": 0.07906864820232129,
+          "common_rebased_nav_before_first_difference_max_abs": 0.0
+        },
+        "account": {
+          "rows": 2189,
+          "first": "2017-09-19",
+          "last": "2026-09-24",
+          "price_to_asset_component_max_abs": 0.0,
+          "cash_accrual_max_abs": 0.0,
+          "trade_turnover_to_fee_max_abs": 0.0,
+          "net_return_max_abs": 0.0,
+          "fee_positive_days": 1186,
+          "total_model_fee_fraction_sum": 0.45144791163396925
+        },
+        "first_formal": {
+          "holding": "cash",
+          "effective_holding": "cash",
+          "suba_top_score": 18.371311747736534,
+          "suba_top_r2": 0.8977494145656799,
+          "suba_top_r2_pass": true,
+          "suba_volume_rule_on": true,
+          "scale_raw": null,
+          "weight": 0.0,
+          "asset_component": 0.0,
+          "cash_component": 0.0001211499702025165,
+          "trade_cost": 0.0,
+          "return": 0.0001211499702025165
+        },
+        "first_off": {
+          "holding": "1.000852",
+          "effective_holding": null,
+          "suba_top_score": 18.371311747736534,
+          "suba_top_r2": 0.8977494145656799,
+          "suba_top_r2_pass": true,
+          "suba_volume_rule_on": null,
+          "scale_raw": null,
+          "weight": 1.0,
+          "asset_component": 0.0,
+          "cash_component": 0.0001211499702025165,
+          "trade_cost": 0.001,
+          "return": -0.0008789711797676514
+        }
+      },
+      "A_r2_off": {
+        "comparison": {
+          "formal_rows": 2189,
+          "arm_rows": 2189,
+          "common_rows": 2189,
+          "formal_first": "2017-09-19",
+          "arm_first": "2017-09-19",
+          "first_difference": "2017-10-12",
+          "changed_common_days": 881,
+          "max_abs_daily_return_difference": 0.05939034586451919,
+          "common_rebased_nav_before_first_difference_max_abs": 0.0
+        },
+        "account": {
+          "rows": 2189,
+          "first": "2017-09-19",
+          "last": "2026-09-24",
+          "price_to_asset_component_max_abs": 0.0,
+          "cash_accrual_max_abs": 0.0,
+          "trade_turnover_to_fee_max_abs": 0.0,
+          "net_return_max_abs": 0.0,
+          "fee_positive_days": 933,
+          "total_model_fee_fraction_sum": 0.5097064000517986
+        },
+        "first_formal": {
+          "holding": "cash",
+          "effective_holding": "cash",
+          "suba_top_score": 1.3465901458856298,
+          "suba_top_r2": 0.046996914765100956,
+          "suba_top_r2_pass": false,
+          "suba_volume_rule_on": false,
+          "scale_raw": null,
+          "weight": 0.0,
+          "asset_component": -0.0007760962359332213,
+          "cash_component": 0.0,
+          "trade_cost": 0.001,
+          "return": -0.0017753201396972784
+        },
+        "first_off": {
+          "holding": "1.930955",
+          "effective_holding": "1.930955",
+          "suba_top_score": 1.3465901458856298,
+          "suba_top_r2": 0.046996914765100956,
+          "suba_top_r2_pass": false,
+          "suba_volume_rule_on": false,
+          "scale_raw": null,
+          "weight": 1.0,
+          "asset_component": -0.0007760962359332213,
+          "cash_component": 0.0,
+          "trade_cost": 0.002,
+          "return": -0.0027745440434613355
+        }
+      },
+      "A_targetvol_off": {
+        "comparison": {
+          "formal_rows": 2189,
+          "arm_rows": 2189,
+          "common_rows": 2189,
+          "formal_first": "2017-09-19",
+          "arm_first": "2017-09-19",
+          "first_difference": "2018-01-17",
+          "changed_common_days": 1407,
+          "max_abs_daily_return_difference": 0.0477487230305873,
+          "common_rebased_nav_before_first_difference_max_abs": 0.0
+        },
+        "account": {
+          "rows": 2189,
+          "first": "2017-09-19",
+          "last": "2026-09-24",
+          "price_to_asset_component_max_abs": 0.0,
+          "cash_accrual_max_abs": 0.0,
+          "trade_turnover_to_fee_max_abs": 0.0,
+          "net_return_max_abs": 0.0,
+          "fee_positive_days": 336,
+          "total_model_fee_fraction_sum": 0.40800000000000003
+        },
+        "first_formal": {
+          "holding": "1.000016",
+          "effective_holding": "1.000016",
+          "suba_top_score": 28.587667978760248,
+          "suba_top_r2": 0.8241158410214466,
+          "suba_top_r2_pass": true,
+          "suba_volume_rule_on": false,
+          "scale_raw": 1.25,
+          "weight": 1.25,
+          "asset_component": 0.005170357683103477,
+          "cash_component": 0.0,
+          "trade_cost": 0.0022500000000000003,
+          "return": 0.002908724378316574
+        },
+        "first_off": {
+          "holding": "1.000016",
+          "effective_holding": "1.000016",
+          "suba_top_score": 28.587667978760248,
+          "suba_top_r2": 0.8241158410214466,
+          "suba_top_r2_pass": true,
+          "suba_volume_rule_on": false,
+          "scale_raw": 1.0,
+          "weight": 1.0,
+          "asset_component": 0.005170357683103477,
+          "cash_component": 0.0,
+          "trade_cost": 0.002,
+          "return": 0.003160016967737267
+        }
+      }
+    }
+  },
+  "ADK": {
+    "formal": {
+      "rows": 2783,
+      "first": "2015-04-20",
+      "last": "2026-09-24",
+      "frozen_index_pair_raw_return_max_abs": 0.0,
+      "pair_gross_return_max_abs": 0.0,
+      "signed_pair_turnover_max_abs": 0.0,
+      "turnover_to_fee_max_abs": 0.0,
+      "net_return_max_abs": 0.0,
+      "fee_positive_days": 518,
+      "total_model_fee_fraction_sum": 0.5489642090271412
+    },
+    "arms": {
+      "ADK_scorehot_off": {
+        "comparison": {
+          "formal_rows": 2783,
+          "arm_rows": 2783,
+          "common_rows": 2783,
+          "formal_first": "2015-04-20",
+          "arm_first": "2015-04-20",
+          "first_difference": "2015-04-21",
+          "changed_common_days": 386,
+          "max_abs_daily_return_difference": 0.0572377988971704,
+          "common_rebased_nav_before_first_difference_max_abs": 0.0
+        },
+        "account": {
+          "rows": 2783,
+          "first": "2015-04-20",
+          "last": "2026-09-24",
+          "frozen_index_pair_raw_return_max_abs": 0.0,
+          "pair_gross_return_max_abs": 0.0,
+          "signed_pair_turnover_max_abs": 0.0,
+          "turnover_to_fee_max_abs": 0.0,
+          "net_return_max_abs": 0.0,
+          "fee_positive_days": 526,
+          "total_model_fee_fraction_sum": 0.5528383581579028
+        },
+        "first_formal": {
+          "top_pair": "SZ50/CYB",
+          "holding": "none_0",
+          "direction": 0,
+          "long_leg": null,
+          "short_leg": null,
+          "weight": 0.0,
+          "final_exposure": 0.0,
+          "adk_net_asset_exposure": {},
+          "scale_raw": 0.3435026021466664,
+          "v78_score_overheat_on": true,
+          "return_before_dk_execution_cost": 0.0,
+          "dk_execution_turnover": 0.0,
+          "dk_execution_cost": 0.0,
+          "return": 0.0
+        },
+        "first_off": {
+          "top_pair": "SZ50/CYB",
+          "holding": "SZ50/CYB_1",
+          "direction": 1,
+          "long_leg": "SZ50",
+          "short_leg": "CYB",
+          "weight": 0.3433224018885375,
+          "final_exposure": 0.3433224018885375,
+          "adk_net_asset_exposure": {
+            "CYB": -0.3433224018885375,
+            "SZ50": 0.3433224018885375
+          },
+          "scale_raw": 0.3435026021466664,
+          "v78_score_overheat_on": null,
+          "return_before_dk_execution_cost": -0.014583772892013295,
+          "dk_execution_turnover": 0.686644803777075,
+          "dk_execution_cost": 0.00034332240188853755,
+          "return": -0.014922088357963936
+        }
+      },
+      "ADK_targetvol_off": {
+        "comparison": {
+          "formal_rows": 2783,
+          "arm_rows": 2823,
+          "common_rows": 2783,
+          "formal_first": "2015-04-20",
+          "arm_first": "2015-02-13",
+          "first_difference": "2015-08-28",
+          "changed_common_days": 2432,
+          "max_abs_daily_return_difference": 0.054795869443998946,
+          "common_rebased_nav_before_first_difference_max_abs": 0.0
+        },
+        "account": {
+          "rows": 2823,
+          "first": "2015-02-13",
+          "last": "2026-09-24",
+          "frozen_index_pair_raw_return_max_abs": 0.0,
+          "pair_gross_return_max_abs": 0.0,
+          "signed_pair_turnover_max_abs": 0.0,
+          "turnover_to_fee_max_abs": 0.0,
+          "net_return_max_abs": 0.0,
+          "fee_positive_days": 487,
+          "total_model_fee_fraction_sum": 0.516
+        },
+        "first_formal": {
+          "top_pair": "ZZ1000/CYB",
+          "holding": "ZZ1000/CYB_1",
+          "direction": 1,
+          "long_leg": "ZZ1000",
+          "short_leg": "CYB",
+          "weight": 0.709147583873647,
+          "final_exposure": 0.709147583873647,
+          "adk_net_asset_exposure": {
+            "CYB": -0.709147583873647,
+            "ZZ1000": 0.709147583873647
+          },
+          "scale_raw": 0.6661701584172923,
+          "v78_score_overheat_on": false,
+          "return_before_dk_execution_cost": -0.0009389456654079397,
+          "dk_execution_turnover": 1.418295167747294,
+          "dk_execution_cost": 0.000709147583873647,
+          "return": -0.001647427398231649
+        },
+        "first_off": {
+          "top_pair": "ZZ1000/CYB",
+          "holding": "ZZ1000/CYB_1",
+          "direction": 1,
+          "long_leg": "ZZ1000",
+          "short_leg": "CYB",
+          "weight": 1.0,
+          "final_exposure": 1.0,
+          "adk_net_asset_exposure": {
+            "CYB": -1.0,
+            "ZZ1000": 1.0
+          },
+          "scale_raw": 1.0,
+          "v78_score_overheat_on": false,
+          "return_before_dk_execution_cost": -0.001324048317670412,
+          "dk_execution_turnover": 2.0,
+          "dk_execution_cost": 0.001,
+          "return": -0.0023227242693527606
+        }
+      }
+    }
+  },
+  "counterexamples": {
+    "adk_empty_with_nominal_scale": {
+      "date": "2015-04-20",
+      "holding": "none_0",
+      "top_pair": "none",
+      "direction": 0,
+      "long_leg": null,
+      "short_leg": null,
+      "nominal_final_exposure": 1.0,
+      "net_asset_exposure": {},
+      "return": 0.0,
+      "execution_turnover": 0.0,
+      "interpretation": "final_exposure=1 is nominal scale, while no pair/legs and zero net asset exposure means no active position"
+    },
+    "adk_targetvol_off_earlier_warmup": {
+      "formal_start": "2015-04-20",
+      "off_start": "2015-02-13",
+      "common_start": "2015-04-20",
+      "common_rows": 2783,
+      "first_common_return_difference": "2015-08-28",
+      "equal_return_days_before_first_difference": 92,
+      "max_abs_return_difference_before_first": 0.0,
+      "max_abs_rebased_nav_difference_before_first": 0.0,
+      "warning": "raw full-history NAVs have different warmup starts; compare same-window daily returns and NAV rebased to common start"
+    }
+  },
+  "verdict": {
+    "account_math": "PASS",
+    "max_arm_return_error": 0.0,
+    "limit": "A/ADK fixed-target paper returns still do not establish lot/cash self-financing or executable same-close ADK fills"
+  }
+}

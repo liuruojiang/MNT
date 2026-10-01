@@ -1,0 +1,22 @@
+{
+  "label": "formula-derived frozen paper C scaling only; not a securities account",
+  "groups": {
+    "equity": {
+      "negative_rate_borrow_days": 74,
+      "stable_scale_credit_days": 72,
+      "first_stable_scale_credit": "2020-12-14",
+      "stable_scale_credit_sum_return_fraction": 0.001060927520489829,
+      "max_single_day_credit_return_fraction": 5.6050614165922316e-05
+    },
+    "gold": {
+      "negative_rate_borrow_days": 98,
+      "stable_scale_credit_days": 97,
+      "first_stable_scale_credit": "2020-12-07",
+      "stable_scale_credit_sum_return_fraction": 0.00028414850483022153,
+      "max_single_day_credit_return_fraction": 7.226314440244685e-06
+    }
+  },
+  "stable_scale_union_days": 105,
+  "stable_scale_combined_credit_sum_return_fraction": 0.0013450760253200507,
+  "note": "Only unchanged-scale dates use the simple daily formula. Execution days require the open-transition account and are excluded from credit sums."
+}

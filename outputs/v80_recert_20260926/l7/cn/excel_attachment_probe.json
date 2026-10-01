@@ -1,0 +1,45 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "attachment_scope": "in-memory bytes, no Poe upload",
+  "signal_60d": {
+    "sheet_names": [
+      "信号概览",
+      "ADK净敞口",
+      "调仓记录"
+    ],
+    "total": 19,
+    "A": 14,
+    "ADK": 5,
+    "first_row": [
+      "2026-09-23",
+      "2026-09-23 15:00 北京时间",
+      "Sub-A",
+      "创业板",
+      3379.61,
+      "Cash",
+      null
+    ]
+  },
+  "performance_full": {
+    "sheet_names": [
+      "绩效概览",
+      "调仓记录",
+      "数据与指标口径"
+    ],
+    "total": 1304,
+    "A": 786,
+    "ADK": 518,
+    "first_row": [
+      "2026-09-23",
+      "2026-09-23 15:00 北京时间",
+      "Sub-A",
+      "创业板",
+      3379.61,
+      "Cash",
+      null
+    ]
+  },
+  "signal_bytes": 8429,
+  "performance_bytes": 70610,
+  "performance_metric_cells": "N/A in this serialization-only probe; formal metrics are L2 artifact"
+}

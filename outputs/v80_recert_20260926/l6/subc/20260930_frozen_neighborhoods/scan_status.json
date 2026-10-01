@@ -1,0 +1,30 @@
+{
+  "stage": "complete",
+  "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "formal_snapshot_sha256": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a",
+  "baseline_max_abs_daily_diff": 0.0,
+  "candidate_count": 68,
+  "groups": [
+    "equity_target_vol",
+    "equity_vol_window",
+    "gold_short_window",
+    "gold_long_window",
+    "deadband",
+    "min_lev",
+    "max_lev",
+    "asset_weight_VTI",
+    "asset_weight_QQQM",
+    "asset_weight_AVUV",
+    "asset_weight_VEA",
+    "asset_weight_AVDV",
+    "asset_weight_VGIT",
+    "asset_weight_DBMF",
+    "asset_weight_KMLM",
+    "asset_weight_GLDM",
+    "asset_weight_IBIT"
+  ],
+  "scan_summary_sha256": "6aaf3744e9dd34f990b8f62e1ac46a0916f0add5cc48338578ab88c9df7d8199",
+  "window_metrics_sha256": "c5c2d2e03145bbe2bb10b2762c0e8b7da44e125f68588fed7aa017861154016a",
+  "event_summary_sha256": "f39797cf5f9004efc82b7f59b72dc153b83151ae69e44adfdfa2f1f33aadf2db"
+}

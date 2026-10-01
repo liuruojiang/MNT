@@ -1,0 +1,101 @@
+{
+  "status": "FAIL_strict_unified_resource_certification",
+  "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "l2_hashes": {
+    "daily": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+    "results": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+    "subc": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a"
+  },
+  "source_function": "_performance_combined_daily_returns",
+  "code_facts": [
+    "Per-sleeve returns reindexed on union calendar; missing return filled 0",
+    "Each sleeve NAV compounded independently",
+    "PV NAV equals fixed initial weight times sleeve NAV summed",
+    "No common cash, financing, margin, FX conversion, inter-sleeve transfer or execution ledger in function"
+  ],
+  "pv_rows": 1509,
+  "start": "2020-12-03",
+  "end": "2026-09-25",
+  "pv_reconstruction_max_abs_daily_error": 0.0,
+  "calendar_end_extension": {
+    "Sub-A": {
+      "last_return_date": "2026-09-24",
+      "aligned_last_date_return": 0.0
+    },
+    "Sub-A-DK": {
+      "last_return_date": "2026-09-24",
+      "aligned_last_date_return": 0.0
+    },
+    "B7.8": {
+      "last_return_date": "2026-09-25",
+      "aligned_last_date_return": -0.0006877072508183479
+    },
+    "B7.9": {
+      "last_return_date": "2026-09-25",
+      "aligned_last_date_return": -0.0018496981340181406
+    },
+    "Sub-C": {
+      "last_return_date": "2026-09-25",
+      "aligned_last_date_return": 0.005681622553290409
+    }
+  },
+  "single_day_counterexample": {
+    "date": "2024-01-18",
+    "portfolio_nav_before": 1.5332543995168313,
+    "sleeve_capital_before_in_initial_PV_units": {
+      "Sub-A": 0.18894929384900913,
+      "Sub-A-DK": 0.2540091271531124,
+      "B7.8": 0.3162275722460578,
+      "B7.9": 0.3742317868055848,
+      "Sub-C": 0.3998366194630671
+    },
+    "A": {
+      "holding": "1.930955",
+      "model_weight": 1.25,
+      "indicated_local_leverage_need_in_initial_PV_units": 0.04723732346225228
+    },
+    "ADK": {
+      "pair": "SZ50/ZZ1000",
+      "long_leg": "SZ50",
+      "short_leg": "ZZ1000",
+      "model_per_leg_weight": 1.1662765119634648,
+      "gross_long_plus_short_in_initial_PV_units": 0.5924897576460323,
+      "short_instrument_borrow_in_initial_PV_units": 0.29624487882301614,
+      "collateral_or_margin_recorded": false
+    },
+    "B": {
+      "B7.8": {
+        "local_nav": 3.8352423314250537,
+        "asset_over_nav": 1.1393797824746283,
+        "borrow_over_nav": 0.13937978247462832,
+        "reported_gross_exposure": 1.1393797824746283,
+        "scaled_borrow_in_initial_PV_units": 0.04407573023213535
+      },
+      "B7.9": {
+        "local_nav": 6.547297020522276,
+        "asset_over_nav": 1.1958214368940057,
+        "borrow_over_nav": 0.19582143689400566,
+        "reported_gross_exposure": 1.1958214368940057,
+        "scaled_borrow_in_initial_PV_units": 0.07328260622368081
+      }
+    },
+    "C": {
+      "equity_scale": 1.5,
+      "gold_scale": 0.8938947949388826,
+      "model_risky_asset_weight_sum": 1.282312649259892,
+      "scaled_risky_exposure_in_initial_PV_units": 0.5127155547748048,
+      "physical_quantity_cash_currency_ledger": false
+    },
+    "conservative_A_ADK_B_gross_exposure_in_initial_PV_units": 1.6364940704647526,
+    "A_model_indicated_plus_B_reported_debt_in_initial_PV_units": 0.16459565991806846,
+    "ADK_short_instrument_borrow_excluded_from_debt_sum": true
+  },
+  "certification_boundary": "Paper buy-and-hold sum of five independent NAV series only. B7.8 and B7.9 have independent USD-like self-financing ledgers; A/ADK target-weight returns lack strict quantity/cash/debt and ADK collateral. C component weights and scaling account are local, not global. Shared capital, cross-currency funding and margin cannot be inferred from PV NAV arithmetic.",
+  "minimum_rules_needed": [
+    "Define initial and ongoing capital per sleeve, the base currency and dated FX conversion source/clock",
+    "Define timestamped cash transfer and borrowing between sleeves; no implicit use of another sleeve's idle cash",
+    "Build A and ADK actual quantities, trade cash, fees, debt, short borrow and collateral/margin accounts with execution prices and clocks",
+    "Link B7.8, B7.9 and C local account values to the shared cash book without double-counting BIL or financed exposures",
+    "On CN/US holiday mismatch and sequential closes, apply explicit mark and transfer timing, then reconcile global assets minus liabilities to NAV every timestamp"
+  ]
+}

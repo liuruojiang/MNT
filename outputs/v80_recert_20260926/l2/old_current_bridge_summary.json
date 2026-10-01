@@ -1,0 +1,158 @@
+{
+  "Sub-A": {
+    "common_full": {
+      "start": "2017-09-19",
+      "end": "2026-09-24",
+      "rows": 2189,
+      "different_days": 575,
+      "first_different_date": "2017-09-25",
+      "first_different_old_return": -0.0011290014672602489,
+      "first_different_new_return": -0.0008789711797676514,
+      "max_abs_return_difference": 0.048316190838274986,
+      "old_end_nav": 7.441115327385559,
+      "new_end_nav": 5.412120592047965
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-24",
+      "rows": 655,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 2.220446049250313e-16,
+      "old_end_nav": 2.8868639578173965,
+      "new_end_nav": 2.8868639578173974
+    }
+  },
+  "Sub-A-DK": {
+    "common_full": {
+      "start": "2015-04-20",
+      "end": "2026-09-24",
+      "rows": 2783,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 0.0,
+      "old_end_nav": 6.293746355379679,
+      "new_end_nav": 6.293746355379679
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-24",
+      "rows": 655,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 0.0,
+      "old_end_nav": 1.810273312103351,
+      "new_end_nav": 1.810273312103351
+    }
+  },
+  "B7.8": {
+    "common_full": {
+      "start": "2008-12-15",
+      "end": "2026-09-25",
+      "rows": 4472,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 6.661338147750939e-16,
+      "old_end_nav": 8.513897465192168,
+      "new_end_nav": 8.513897465192155
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-25",
+      "rows": 678,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 4.440892098500626e-16,
+      "old_end_nav": 2.182785058851954,
+      "new_end_nav": 2.1827850588519477
+    }
+  },
+  "B7.9": {
+    "common_full": {
+      "start": "2008-12-15",
+      "end": "2026-09-25",
+      "rows": 4472,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 4.440892098500626e-16,
+      "old_end_nav": 17.05856866730727,
+      "new_end_nav": 17.058568667307267
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-25",
+      "rows": 678,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 4.440892098500626e-16,
+      "old_end_nav": 2.5618895809264592,
+      "new_end_nav": 2.56188958092646
+    }
+  },
+  "Sub-C": {
+    "common_full": {
+      "start": "2020-12-03",
+      "end": "2026-09-25",
+      "rows": 1459,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 0.0,
+      "old_end_nav": 2.3377085241956324,
+      "new_end_nav": 2.3377085241956324
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-25",
+      "rows": 678,
+      "different_days": 0,
+      "first_different_date": null,
+      "first_different_old_return": null,
+      "first_different_new_return": null,
+      "max_abs_return_difference": 0.0,
+      "old_end_nav": 1.7161030093455265,
+      "new_end_nav": 1.7161030093455265
+    }
+  },
+  "Combined": {
+    "common_full": {
+      "start": "2020-12-03",
+      "end": "2026-09-25",
+      "rows": 1509,
+      "different_days": 1509,
+      "first_different_date": "2020-12-03",
+      "first_different_old_return": 0.0026938071768587424,
+      "first_different_new_return": 0.0009674355793409806,
+      "max_abs_return_difference": 0.006175978646442815,
+      "old_end_nav": 3.551989689181187,
+      "new_end_nav": 3.3831943051658118
+    },
+    "all_etf": {
+      "start": "2024-01-12",
+      "end": "2026-09-25",
+      "rows": 702,
+      "different_days": 702,
+      "first_different_date": "2024-01-12",
+      "first_different_old_return": -0.0035347282892620457,
+      "first_different_new_return": -0.0036724463075636926,
+      "max_abs_return_difference": 0.006175978646442815,
+      "old_end_nav": 2.205347863167454,
+      "new_end_nav": 2.179674949756602
+    }
+  }
+}

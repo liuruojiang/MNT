@@ -1,0 +1,271 @@
+{
+  "stage": "complete",
+  "diagnostic_only": true,
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "single_source_expression_replaced": {
+    "old": "financing = debt * (cash_return + daily_spread * spread_fraction)",
+    "new": "financing = debt * max(cash_return + daily_spread * spread_fraction, 0.0)"
+  },
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "daily_path_sha256": "e2726be14442c344b22a84b1974f302f5ab264f6dda6212f5af114e3bb0ec1c0",
+  "audit": {
+    "B7.8": {
+      "formal_negative_financing_days": 790,
+      "first_negative_financing": "2009-02-03",
+      "min_financing_account_units": -0.0001782496839876,
+      "negative_financing_account_units_sum": -0.02104840046567779,
+      "negative_funding_rate_days_without_trade": 584,
+      "independent_no_trade_BIL_formula_rows": 3312,
+      "independent_no_trade_BIL_max_abs_error": 9.973304734151034e-17,
+      "target_weight_max_abs_error": 2.220446049250313e-16,
+      "commission_identity_max_abs_error": 1.734723475976807e-18,
+      "model_event_count": 928,
+      "volreg_event_count": 36,
+      "old_fee_account_units": 0.5795599559147452,
+      "floor_fee_account_units": 0.5714276428789636,
+      "old_funding_account_units": 0.21167725349874605,
+      "floor_funding_account_units": 0.23796004568393653,
+      "max_abs_sleeve_daily_return_diff": 0.00014844453860412936,
+      "old_metrics": {
+        "Full": {
+          "annual": 12.797180910863926,
+          "max_dd": -12.224822113231316,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 18.444262820867195,
+          "max_dd": -12.224822113231347,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 23.657401285497937,
+          "max_dd": -12.022695054816074,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.765798655612066,
+          "max_dd": -12.02269505481611,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 29.095414887632298,
+          "max_dd": -12.022695054816028,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 12.687992606624166,
+          "max_dd": -12.230575492230063,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 18.377285721299288,
+          "max_dd": -12.230575492230065,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 23.625000018182284,
+          "max_dd": -12.023336420589164,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.73237643397034,
+          "max_dd": -12.023336420589207,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 29.071463482209438,
+          "max_dd": -12.02333642058917,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    },
+    "B7.9": {
+      "formal_negative_financing_days": 700,
+      "first_negative_financing": "2009-04-17",
+      "min_financing_account_units": -0.0001220399392221,
+      "negative_financing_account_units_sum": -0.020129735415027983,
+      "negative_funding_rate_days_without_trade": 519,
+      "independent_no_trade_BIL_formula_rows": 3096,
+      "independent_no_trade_BIL_max_abs_error": 9.963817965141786e-17,
+      "target_weight_max_abs_error": 2.220446049250313e-16,
+      "commission_identity_max_abs_error": 3.469446951953614e-18,
+      "model_event_count": 928,
+      "volreg_event_count": 36,
+      "old_fee_account_units": 0.8096920526229642,
+      "floor_fee_account_units": 0.800073036856209,
+      "old_funding_account_units": 0.22684632336430502,
+      "floor_funding_account_units": 0.2519476212496513,
+      "max_abs_sleeve_daily_return_diff": 9.898164891998344e-05,
+      "old_metrics": {
+        "Full": {
+          "annual": 17.291981614131192,
+          "max_dd": -16.741418846247193,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 25.309110095580813,
+          "max_dd": -15.529551080717239,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 32.390170227738025,
+          "max_dd": -15.529551080717239,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 47.29659543837934,
+          "max_dd": -13.501081587161012,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 34.64745868867429,
+          "max_dd": -13.501081587161018,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 17.20217267014421,
+          "max_dd": -16.775396970249883,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 25.247716680417987,
+          "max_dd": -15.529551080717244,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 32.37104558135619,
+          "max_dd": -15.529551080717201,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 47.277467138896576,
+          "max_dd": -13.501317996253778,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 34.63613936176442,
+          "max_dd": -13.501317996253745,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    },
+    "Combined": {
+      "old_metrics": {
+        "Full": {
+          "annual": 23.329698802457678,
+          "max_dd": -7.776784248703679,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 22.89384325360071,
+          "max_dd": -7.776784248703669,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.93160026669213,
+          "max_dd": -7.776784248703658,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 22.758711899443227,
+          "max_dd": -7.623008778757119,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 23.313390682960346,
+          "max_dd": -7.775936730961935,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 22.88074340021451,
+          "max_dd": -7.775936730961934,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.91704487232812,
+          "max_dd": -7.775936730961967,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 22.745114599156736,
+          "max_dd": -7.621720162144219,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "max_abs_daily_return_diff": 2.2326392902893843e-05,
+      "changed_days": 1509
+    }
+  }
+}

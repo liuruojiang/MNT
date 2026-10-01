@@ -1,0 +1,18 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "observed_within_each_request": [
+    [
+      1,
+      1
+    ],
+    [
+      2,
+      2
+    ]
+  ],
+  "fetch_calls": [
+    1,
+    2
+  ],
+  "fresh_second_request": true
+}

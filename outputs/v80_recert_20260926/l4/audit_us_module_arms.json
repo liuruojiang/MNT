@@ -1,0 +1,829 @@
+{
+  "C": {
+    "source_sha256": "5579d7c9df910938529496d54c5cadf6298034c9cc48ce7d38567585f9de65d2",
+    "independence": "read C off-arm snapshots and formal L2 snapshot; recompute scales, ten contributions, annual fees, and additive group costs without strategy helpers",
+    "arms": {
+      "C_equity_vol_off": {
+        "disabled_scale_max_abs_from_one": 0.0,
+        "other_scale_vs_formal_max_abs": 0.0,
+        "raw_return_vs_formal_max_abs": 0.0,
+        "base_return_vs_formal_max_abs": 0.0,
+        "annual_rebalance_dates": [
+          "2020-12-31",
+          "2021-12-31",
+          "2022-12-30",
+          "2023-12-29",
+          "2024-12-31",
+          "2025-12-31"
+        ],
+        "annual_fee_vs_formal_max_abs": 0.0,
+        "all_ten_base_contributions_vs_formal_max_abs": 0.0
+      },
+      "C_gold_vol_off": {
+        "disabled_scale_max_abs_from_one": 0.0,
+        "other_scale_vs_formal_max_abs": 0.0,
+        "raw_return_vs_formal_max_abs": 0.0,
+        "base_return_vs_formal_max_abs": 0.0,
+        "annual_rebalance_dates": [
+          "2020-12-31",
+          "2021-12-31",
+          "2022-12-30",
+          "2023-12-29",
+          "2024-12-31",
+          "2025-12-31"
+        ],
+        "annual_fee_vs_formal_max_abs": 0.0,
+        "all_ten_base_contributions_vs_formal_max_abs": 0.0
+      },
+      "joint_cost_decomposition_max_abs": 0.0,
+      "joint_scaled_return_decomposition_max_abs": 6.938893903907228e-18
+    }
+  },
+  "B": {
+    "status_sha256": "41eaab525fe727a65aceaaac3a658e1712a75310de68ccac9782fb2956fa8ca1",
+    "builder_summary_sha256": "aa2504349eae418219d87053f86e26a70958d7cf2e7d976ad13f59f4dcb4769d",
+    "independence": "read saved B arms; recompute off-leg identities, account conservation, fees, metrics directly; do not invoke builder or strategy helpers",
+    "arms": {
+      "B7.8": {
+        "formal_zero_turnover_model_execution_days": 0,
+        "formal_zero_turnover_model_execution_first_dates": [],
+        "off_arms": {
+          "official_off": {
+            "sha256": "cb60a17df47b299d40718e3b8802be24e12c319ded5a323e696e1dca41ad7df3",
+            "first_difference": "2008-12-15",
+            "changed_days": 4456,
+            "actual_trade_days_positive_turnover": 948,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 1.734723475976807e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "composite_v77_signal_count_from_surviving_leg": 928,
+            "composite_v77_rebalanced_count_from_surviving_leg": 664,
+            "disabled_leg_event_column_available_after_blend": false,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 7.105427357601002e-15
+              },
+              "1Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "ema_off": {
+            "sha256": "524b1104aa227812979689ad46a7a8dc12bd24ad72026d213dc5ce8f7ed5f938",
+            "first_difference": "2008-12-15",
+            "changed_days": 4456,
+            "actual_trade_days_positive_turnover": 953,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 1.734723475976807e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": null,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "composite_v77_signal_count_from_surviving_leg": 928,
+            "composite_v77_rebalanced_count_from_surviving_leg": 904,
+            "disabled_leg_event_column_available_after_blend": false,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "bias_off": {
+            "sha256": "5a903dbdfba31dfbf812d3767fbbdd4aaadb652cf6b87989cdfd7882e21fa9d4",
+            "first_difference": "2008-12-15",
+            "changed_days": 4456,
+            "actual_trade_days_positive_turnover": 953,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 1.734723475976807e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 1.1102230246251565e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "disabled_leg_is_signal_count": 0,
+            "disabled_leg_rebalanced_count": 0,
+            "disabled_leg_event_column_available_after_blend": true,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              }
+            }
+          },
+          "logvol_off": {
+            "sha256": "fd6f02f889a2b1be3052e6ba4c26363220a13e8cc63cfbb64421e9a369028ce7",
+            "first_difference": "2008-12-15",
+            "changed_days": 4456,
+            "actual_trade_days_positive_turnover": 953,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 1.734723475976807e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "disabled_leg_is_signal_count": 0,
+            "disabled_leg_rebalanced_count": 0,
+            "disabled_leg_event_column_available_after_blend": true,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 7.105427357601002e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "volreg_off": {
+            "sha256": "1373170b8fec15db4145bb60043eaec2382b2ab5776408529e85ee784d8ba368",
+            "first_difference": "2010-05-11",
+            "changed_days": 326,
+            "actual_trade_days_positive_turnover": 928,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 8.673617379884035e-19,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "risk_executions": 0,
+            "volreg_defense_days": 0,
+            "underlying_four_leg_return_max_abs_from_formal": 2.220446049250313e-16,
+            "model_target_vs_formal_max_abs": 2.220446049250313e-16,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "inflation_gate_off": {
+            "sha256": "55f30967132647f6ab9d96c104772151beea617763f0f688aea755560c85ec13",
+            "first_difference": "2008-12-19",
+            "changed_days": 1929,
+            "actual_trade_days_positive_turnover": 953,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 8.673617379884035e-19,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "signal_days_missing_macro_candidates": 0,
+            "v78_subb_bias_unchanged_return_max_abs": 0.0,
+            "v78_subb_logvol_unchanged_return_max_abs": 1.1102230246251565e-16,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "10Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 7.105427357601002e-15
+              }
+            }
+          },
+          "target_vol_off": {
+            "sha256": "acba666da21d3a1560c9d3ccab9f91b822d827171d8d540622a77b63de9cb724",
+            "first_difference": "2008-12-15",
+            "changed_days": 4319,
+            "actual_trade_days_positive_turnover": 953,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 8.673617379884035e-19,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "official_scale_max_abs_from_one": 0.0,
+            "ema_scale_max_abs_from_one": 0.0,
+            "bias_scale_max_abs_from_one": 0.0,
+            "logvol_scale_max_abs_from_one": 0.0,
+            "volreg_ratio_vs_formal_max_abs": 0.0,
+            "volreg_defense_state_disagreements": 0,
+            "volreg_transition_state_disagreements": 0,
+            "volreg_execution_count": 36,
+            "gate_state_disagreements": 0,
+            "official_candidate_pool_disagreements": 0,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 7.105427357601002e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              }
+            }
+          }
+        }
+      },
+      "B7.9": {
+        "formal_zero_turnover_model_execution_days": 8,
+        "formal_zero_turnover_model_execution_first_dates": [
+          "2014-10-17",
+          "2014-10-24",
+          "2014-12-26",
+          "2015-01-02",
+          "2015-08-28"
+        ],
+        "off_arms": {
+          "official_off": {
+            "sha256": "28c766386799ab98e5d616847d13ec55f0abe8d86ea38bacbe31f1c3b8da4cc3",
+            "first_difference": "2008-12-15",
+            "changed_days": 4440,
+            "actual_trade_days_positive_turnover": 932,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 14,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 3.3306690738754696e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "composite_v77_signal_count_from_surviving_leg": 928,
+            "composite_v77_rebalanced_count_from_surviving_leg": 611,
+            "disabled_leg_event_column_available_after_blend": false,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "10Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "5Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "ema_off": {
+            "sha256": "47a8bd5f9d239b1f955ae78552de814a3a38aef89c281ab0750506f6f90d8599",
+            "first_difference": "2008-12-15",
+            "changed_days": 4440,
+            "actual_trade_days_positive_turnover": 942,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 8,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": null,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "composite_v77_signal_count_from_surviving_leg": 928,
+            "composite_v77_rebalanced_count_from_surviving_leg": 881,
+            "disabled_leg_event_column_available_after_blend": false,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 8.881784197001252e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          },
+          "bias_off": {
+            "sha256": "2815e074c682537a469df9016c6274131c40428b3b344700545dc9e1fbb8ee2d",
+            "first_difference": "2008-12-15",
+            "changed_days": 4440,
+            "actual_trade_days_positive_turnover": 942,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 8,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "disabled_leg_is_signal_count": 0,
+            "disabled_leg_rebalanced_count": 0,
+            "disabled_leg_event_column_available_after_blend": true,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "3Y": {
+                "annual_error": 7.105427357601002e-15,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              }
+            }
+          },
+          "logvol_off": {
+            "sha256": "bc81ef1c0051b7400cd65d6eb0b4c10af7df68e589eb22b590adb6f141e79404",
+            "first_difference": "2008-12-15",
+            "changed_days": 4440,
+            "actual_trade_days_positive_turnover": 942,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 5.204170427930421e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 8,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "three_surviving_legs_model_target_max_abs_error": 2.220446049250313e-16,
+            "disabled_leg_weight_max_abs": 0.0,
+            "disabled_leg_return_max_abs": 0.0,
+            "disabled_leg_fee_max_abs": 0.0,
+            "disabled_final_weight_contribution_max_abs": 0.0,
+            "disabled_leg_is_signal_count": 0,
+            "disabled_leg_rebalanced_count": 0,
+            "disabled_leg_event_column_available_after_blend": true,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 7.105427357601002e-15,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "1Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 0.0
+              }
+            }
+          },
+          "volreg_off": {
+            "sha256": "f9fa78d613b1bd11dec30200e1c5480aee18763a26ad7ab2291c09fb19a338d9",
+            "first_difference": "2010-05-11",
+            "changed_days": 267,
+            "actual_trade_days_positive_turnover": 928,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 0,
+            "zero_turnover_model_execution_first_dates": [],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "risk_executions": 0,
+            "volreg_defense_days": 0,
+            "underlying_four_leg_return_max_abs_from_formal": 0.0,
+            "model_target_vs_formal_max_abs": 0.0,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "5Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 0.0
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "1Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 0.0
+              }
+            }
+          },
+          "inflation_gate_off": {
+            "sha256": "87c4d0c5f9a55148f25e090c5e7582e54b32fdec80741c05e8adcf1e7526bc0b",
+            "first_difference": "2020-02-14",
+            "changed_days": 503,
+            "actual_trade_days_positive_turnover": 942,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 8,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "signal_days_missing_macro_candidates": 0,
+            "v78_subb_bias_unchanged_return_max_abs": 0.0,
+            "v78_subb_logvol_unchanged_return_max_abs": 0.0,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "10Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              },
+              "5Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 5.329070518200751e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 0.0
+              }
+            }
+          },
+          "target_vol_off": {
+            "sha256": "88a951c3e3db89e6f442bd0761e725a283705de5a609ef3d4cc674eae7fa1295",
+            "first_difference": "2008-12-15",
+            "changed_days": 4255,
+            "actual_trade_days_positive_turnover": 942,
+            "max_asset_minus_borrow_minus_equity": 0.0,
+            "max_return_vs_account_nav": 0.0,
+            "max_fee_vs_turnover": 3.469446951953614e-18,
+            "fees_on_zero_traded_weight_days": 0,
+            "model_execution_without_prior_model_signal": 0,
+            "zero_turnover_model_execution_days": 8,
+            "zero_turnover_model_execution_first_dates": [
+              "2014-10-17",
+              "2014-10-24",
+              "2014-12-26",
+              "2015-01-02",
+              "2015-08-28"
+            ],
+            "first_difference_matches_builder": true,
+            "changed_days_matches_builder": true,
+            "official_scale_max_abs_from_one": 0.0,
+            "ema_scale_max_abs_from_one": 0.0,
+            "bias_scale_max_abs_from_one": 0.0,
+            "logvol_scale_max_abs_from_one": 0.0,
+            "volreg_ratio_vs_formal_max_abs": 0.0,
+            "volreg_defense_state_disagreements": 0,
+            "volreg_transition_state_disagreements": 0,
+            "volreg_execution_count": 36,
+            "gate_state_disagreements": 0,
+            "official_candidate_pool_disagreements": 0,
+            "independent_metric_errors": {
+              "Full": {
+                "annual_error": 0.0,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "10Y": {
+                "annual_error": 3.552713678800501e-15,
+                "drawdown_error": 1.7763568394002505e-15
+              },
+              "5Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "3Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              },
+              "1Y": {
+                "annual_error": 0.0,
+                "drawdown_error": 3.552713678800501e-15
+              }
+            }
+          }
+        }
+      }
+    },
+    "event_csv": {
+      "sha256": "e5ac9c0cad4a68ce7456fe8a57e2e587a1f5fdba31f5cb9dbab0b9663eb42180",
+      "rows": 15106,
+      "positive_turnover_actual_trade_rows": 15106,
+      "state_sha256": "efb34dbb5892a2f05356cd0638055aa57969dc375c2292608b478080374c17a5",
+      "zero_turnover_state_event_rows": 120,
+      "zero_turnover_by_arm": {
+        "B7.8/bias_off": 2,
+        "B7.8/ema_off": 2,
+        "B7.8/formal": 2,
+        "B7.8/inflation_gate_off": 2,
+        "B7.8/logvol_off": 2,
+        "B7.8/official_off": 7,
+        "B7.8/target_vol_off": 2,
+        "B7.9/bias_off": 13,
+        "B7.9/ema_off": 13,
+        "B7.9/formal": 13,
+        "B7.9/inflation_gate_off": 13,
+        "B7.9/logvol_off": 13,
+        "B7.9/official_off": 23,
+        "B7.9/target_vol_off": 13
+      },
+      "zero_turnover_first_rows": [
+        {
+          "date": "2022-06-27",
+          "sleeve": "B7.8",
+          "arm": "formal",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-07-05",
+          "sleeve": "B7.8",
+          "arm": "formal",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2011-08-09",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2011-09-14",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2018-12-27",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-03-28",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-05-02",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-06-27",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-07-05",
+          "sleeve": "B7.8",
+          "arm": "official_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-06-27",
+          "sleeve": "B7.8",
+          "arm": "ema_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-07-05",
+          "sleeve": "B7.8",
+          "arm": "ema_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        },
+        {
+          "date": "2022-06-27",
+          "sleeve": "B7.8",
+          "arm": "bias_off",
+          "subb_model_execution": false,
+          "subb_volreg_execution": true
+        }
+      ],
+      "interpretation": "execution CSV contains only positive-turnover model trades; state CSV retains zero-trade signal and risk events"
+    }
+  }
+}

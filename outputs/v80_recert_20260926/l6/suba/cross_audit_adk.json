@@ -1,0 +1,51 @@
+{
+  "stage": "complete",
+  "input_files_verified_by_sha256": 6,
+  "candidate_count": 18,
+  "window_rows_checked": 90,
+  "daily_rows_checked": 49914,
+  "max_independent_metric_error": 7.851497230149107e-13,
+  "max_fee_identity_error": 9.996344030316351e-17,
+  "l2_daily_parity": 9.974659986866641e-17,
+  "l4_off_daily_parity": 9.974659986866641e-17,
+  "independent_previous_close_rank": {
+    "formal": {
+      "rows": 2773,
+      "previous_close_pair_mismatch": 0,
+      "same_day_pair_mismatch": 483
+    },
+    "ma50_mom20": {
+      "rows": 2773,
+      "previous_close_pair_mismatch": 0,
+      "same_day_pair_mismatch": 507
+    },
+    "ma70_mom20": {
+      "rows": 2773,
+      "previous_close_pair_mismatch": 0,
+      "same_day_pair_mismatch": 495
+    },
+    "ma60_mom15": {
+      "rows": 2773,
+      "previous_close_pair_mismatch": 0,
+      "same_day_pair_mismatch": 660
+    },
+    "ma60_mom25": {
+      "rows": 2773,
+      "previous_close_pair_mismatch": 0,
+      "same_day_pair_mismatch": 399
+    }
+  },
+  "faults_rejected": {
+    "positive_turnover_missing_fee": true,
+    "same_day_instead_of_previous_close_rank": true
+  },
+  "common_sample": [
+    "2015-05-05",
+    "2026-09-24"
+  ],
+  "first_anchor": "2015-05-04",
+  "limits": [
+    "This checks the frozen paper event ledger, not physical self-financing or same-close fill availability",
+    "All candidate comparisons remain in-sample and use the common 2015-05-05 start"
+  ]
+}

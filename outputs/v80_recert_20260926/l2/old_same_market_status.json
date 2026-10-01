@@ -1,0 +1,21 @@
+{
+  "stage": "complete",
+  "source_sha256": "c6fd72968284825c982f0eacf025acd5db2685629a64aa89dc1463abe1960eef",
+  "old_cn_input_sha256": "2de16c63d0a16abc1188fa2180d5890044582d40c7b6b6a5c556805f48e00ac0",
+  "old_amount_sha256": "c3ee4892f0aa0c057c02a3f08b8698fb873361fb37a3aa3033a6e69bb75460dd",
+  "common_us_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "common_us_raw_sha256": "01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50",
+  "clock_beijing": "2026-09-26 19:40:51.800117",
+  "network_allowed": false,
+  "bridge_scope": "old source/CN/volume/open versus current source/CN/volume/open on same final US close frames",
+  "elapsed_seconds": 104.21,
+  "daily_sha256": "5024ace36a738125ca60cc689094de82ab3788b245cdd3b3970c17b29cc99bdc",
+  "rows": {
+    "Sub-A": 2826,
+    "Sub-A-DK": 2783,
+    "B7.8": 4472,
+    "B7.9": 4472,
+    "Sub-C": 1459,
+    "Combined": 1509
+  }
+}

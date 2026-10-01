@@ -1,0 +1,257 @@
+{
+  "stage": "complete",
+  "max_independent_annual_or_nav_error": 8.526512829121202e-14,
+  "max_independent_drawdown_error": 3.3306690738754696e-15,
+  "injected_faults_rejected": {
+    "missing_or_wrong_fee": true,
+    "future_row": true,
+    "metric_tamper": true
+  },
+  "daily_sha256": "399c4062eae08f1f007e544eb02717077785a7c6f8cd1836fc99018c0229a89e",
+  "groups": {
+    "rank_ma": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "ma50": {
+        "changed_return_days": 761,
+        "changed_holding_days": 174
+      },
+      "ma60_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "ma70": {
+        "changed_return_days": 748,
+        "changed_holding_days": 134
+      },
+      "rank_ma_off": {
+        "changed_return_days": 1458,
+        "changed_holding_days": 1326
+      }
+    },
+    "rank_momentum": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "mom15": {
+        "changed_return_days": 975,
+        "changed_holding_days": 378
+      },
+      "mom20_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "mom25": {
+        "changed_return_days": 912,
+        "changed_holding_days": 310
+      },
+      "rank_momentum_off": {
+        "changed_return_days": 1463,
+        "changed_holding_days": 1331
+      }
+    },
+    "rank_slope_weight": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "slope2": {
+        "changed_return_days": 680,
+        "changed_holding_days": 61
+      },
+      "slope3_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "slope4": {
+        "changed_return_days": 421,
+        "changed_holding_days": 33
+      },
+      "rank_slope_weight_off": {
+        "changed_return_days": 1464,
+        "changed_holding_days": 1332
+      }
+    },
+    "r2_threshold": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "r2_010": {
+        "changed_return_days": 525,
+        "changed_holding_days": 45
+      },
+      "r2_015_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "r2_020_old": {
+        "changed_return_days": 510,
+        "changed_holding_days": 40
+      },
+      "r2_025_old": {
+        "changed_return_days": 626,
+        "changed_holding_days": 76
+      },
+      "r2_030_old": {
+        "changed_return_days": 683,
+        "changed_holding_days": 109
+      },
+      "r2_threshold_off": {
+        "changed_return_days": 881,
+        "changed_holding_days": 226
+      }
+    },
+    "r2_window": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "r2win15": {
+        "changed_return_days": 925,
+        "changed_holding_days": 263
+      },
+      "r2win20_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "r2win30": {
+        "changed_return_days": 978,
+        "changed_holding_days": 405
+      },
+      "r2_window_off": {
+        "changed_return_days": 881,
+        "changed_holding_days": 226
+      }
+    },
+    "amount_zz_days": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "zzdays2": {
+        "changed_return_days": 206,
+        "changed_holding_days": 24
+      },
+      "zzdays3_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "zzdays4": {
+        "changed_return_days": 162,
+        "changed_holding_days": 10
+      },
+      "amount_zz_days_off": {
+        "changed_return_days": 1187,
+        "changed_holding_days": 339
+      }
+    },
+    "amount_cyb_days": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "cybdays3": {
+        "changed_return_days": 538,
+        "changed_holding_days": 61
+      },
+      "cybdays4_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "cybdays5": {
+        "changed_return_days": 493,
+        "changed_holding_days": 42
+      },
+      "cybma15d5_old": {
+        "changed_return_days": 598,
+        "changed_holding_days": 103
+      },
+      "amount_cyb_days_off": {
+        "changed_return_days": 1187,
+        "changed_holding_days": 339
+      }
+    },
+    "target_vol": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "tv015": {
+        "changed_return_days": 1133,
+        "changed_holding_days": 0
+      },
+      "tv020_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "tv025": {
+        "changed_return_days": 592,
+        "changed_holding_days": 0
+      },
+      "tv030_old": {
+        "changed_return_days": 592,
+        "changed_holding_days": 0
+      },
+      "target_vol_off": {
+        "changed_return_days": 1407,
+        "changed_holding_days": 0
+      }
+    },
+    "vol_window": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "volwin60": {
+        "changed_return_days": 665,
+        "changed_holding_days": 0
+      },
+      "volwin80_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "volwin120_old": {
+        "changed_return_days": 803,
+        "changed_holding_days": 0
+      },
+      "vol_window_off": {
+        "changed_return_days": 1407,
+        "changed_holding_days": 0
+      }
+    },
+    "max_leverage": {
+      "formal_all_on": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "lev100": {
+        "changed_return_days": 1165,
+        "changed_holding_days": 0
+      },
+      "lev125_formal": {
+        "changed_return_days": 0,
+        "changed_holding_days": 0
+      },
+      "lev150_old": {
+        "changed_return_days": 831,
+        "changed_holding_days": 0
+      },
+      "max_leverage_off": {
+        "changed_return_days": 1407,
+        "changed_holding_days": 0
+      }
+    }
+  },
+  "daily_rows": 100694,
+  "checked_window_rows": 216,
+  "rank_core_off_cash": {
+    "all_cash_rows": 2189,
+    "fee_total": 0.0,
+    "per_day_cash_return": 0.0001211499702025165
+  },
+  "label": "paper-model daily-ledger audit; not independent physical self-financing proof"
+}

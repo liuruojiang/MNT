@@ -1,0 +1,111 @@
+{
+  "status": "DIAGNOSTIC_ONLY",
+  "source_inputs": {
+    "formal_inputs": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_final\\formal_inputs.pkl",
+    "sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "formal_subc_snapshot": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l2\\formal_subc_snapshot.pkl",
+    "snapshot_sha256": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a"
+  },
+  "date_start": "2020-12-03",
+  "date_end": "2026-09-25",
+  "sessions": 1459,
+  "first_period_anchor": "2020-12-02",
+  "events": {
+    "original_rows": 338,
+    "floor_rows": 338,
+    "open_event_days": 70,
+    "annual_event_days": 6,
+    "open_turnover_total_initial_units": 22.308295029713825,
+    "annual_turnover_total_initial_units": 1.184527961768804,
+    "open_fee_total_initial_units": 0.013384977017828294,
+    "annual_fee_total_initial_units": 0.0011845279617688042
+  },
+  "account_checks": {
+    "max_identity_error_original": 0.0,
+    "max_identity_error_floor": 0.0,
+    "all_nav_positive_original": true,
+    "all_nav_positive_floor": true
+  },
+  "paper_comparison": {
+    "daily_return_max_abs_diff": 0.0010553538272904742,
+    "days_abs_diff_gt_1e-8": 1455,
+    "first_day_diff": 1.5191004017339749e-06,
+    "max_diff_day": "2025-04-09"
+  },
+  "funding_sensitivity": {
+    "daily_return_max_abs_diff": 6.479667471248618e-05,
+    "days_abs_diff_gt_1e-12": 1401
+  },
+  "windows": [
+    {
+      "window": "Full",
+      "status": "diagnostic",
+      "start": "2020-12-03",
+      "first_period_anchor": "2020-12-02",
+      "end": "2026-09-25",
+      "sessions": 1459,
+      "original_proxy_annual_pct": 15.75917960257125,
+      "original_proxy_max_dd_pct": -20.59343076207688,
+      "zero_floor_annual_pct": 15.642923793733775,
+      "zero_floor_max_dd_pct": -20.634228064371328,
+      "frozen_paper_annual_pct": 15.730617642881484,
+      "frozen_paper_max_dd_pct": -20.566164277038734
+    },
+    {
+      "window": "10Y",
+      "status": "N/A",
+      "reason": "valid C history shorter than window"
+    },
+    {
+      "window": "5Y",
+      "status": "diagnostic",
+      "start": "2021-09-27",
+      "first_period_anchor": "2021-09-24",
+      "end": "2026-09-25",
+      "sessions": 1255,
+      "original_proxy_annual_pct": 14.085581664258996,
+      "original_proxy_max_dd_pct": -20.593430762076814,
+      "zero_floor_annual_pct": 13.987471182322754,
+      "zero_floor_max_dd_pct": -20.634228064371097,
+      "frozen_paper_annual_pct": 14.081013355309047,
+      "frozen_paper_max_dd_pct": -20.566164277038745
+    },
+    {
+      "window": "3Y",
+      "status": "diagnostic",
+      "start": "2023-09-25",
+      "first_period_anchor": "2023-09-22",
+      "end": "2026-09-25",
+      "sessions": 754,
+      "original_proxy_annual_pct": 24.936886905209498,
+      "original_proxy_max_dd_pct": -9.732030473832987,
+      "zero_floor_annual_pct": 24.822160425173312,
+      "zero_floor_max_dd_pct": -9.741136711505193,
+      "frozen_paper_annual_pct": 24.910462158856905,
+      "frozen_paper_max_dd_pct": -9.772796212774049
+    },
+    {
+      "window": "1Y",
+      "status": "diagnostic",
+      "start": "2025-09-25",
+      "first_period_anchor": "2025-09-24",
+      "end": "2026-09-25",
+      "sessions": 252,
+      "original_proxy_annual_pct": 17.849591329861635,
+      "original_proxy_max_dd_pct": -8.085129735861262,
+      "zero_floor_annual_pct": 17.753446050558686,
+      "zero_floor_max_dd_pct": -8.09150255376423,
+      "frozen_paper_annual_pct": 17.761024319095363,
+      "frozen_paper_max_dd_pct": -8.14060774443931
+    }
+  ],
+  "assumptions": [
+    "The opening position on 2020-12-02 is the frozen 2020-12-03 target with no initial fee; this is a diagnostic initialization.",
+    "Proxy adjusted prices are treated as continuously tradable units; QQQ/GLD/BTC-USD proxy substitution and BTC UTC clock prevent executable certification.",
+    "Only scale/signal changes trade at next US session open; annual base rebalance trades at that session close. Otherwise quantities drift naturally.",
+    "On an open event, only changed group legs target frozen base exposure times current scale; unchanged legs retain quantities. Actual traded notional is charged 6bp. Annual full reset charges 10bp.",
+    "Any future signal change is charged 6bp as a diagnostic assumption because the frozen source has no separate signal-change fee; no signal changes occur in this snapshot.",
+    "Positive cash receives BIL adjusted price return. Negative cash uses BIL adjusted price return plus 100bp/252, split over overnight and intraday elapsed-time fractions. The zero-floor variant clamps each borrowing segment to at least zero.",
+    "No broker financing quote, short constraints, slippage, market impact, margin, or FX is represented. This account must not replace formal paper or production results."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "stage": "complete",
+  "close_last_date": "2026-09-24",
+  "close_rows": 2269,
+  "formal_signal_first": "2017-09-19",
+  "attack": "multiply last-date first equity close by 10",
+  "earlier_paper_return_max_abs_diff": 0.0,
+  "earlier_raw_selection_diff_days": 0,
+  "zz2000_publication": "2023-08-11",
+  "zz2000_prepublication_valid_amount": 0,
+  "zz2000_prepublication_trigger": 0,
+  "zz2000_postpublication_valid_amount": 758,
+  "limitations": [
+    "L1 documents 930955 tail ETF proxy and 10Y bond proxy; this test cannot turn those prices into an original vendor record",
+    "Original A model uses same-date close scores and close-price return path; this is a data-future probe, not proof of executable fills"
+  ]
+}

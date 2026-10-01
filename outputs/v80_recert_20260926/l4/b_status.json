@@ -1,0 +1,24 @@
+{
+  "stage": "complete",
+  "source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "formal_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "formal_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "strict_next_adjusted_open": true,
+  "arms": [
+    "formal",
+    "official_off",
+    "ema_off",
+    "bias_off",
+    "logvol_off",
+    "volreg_off",
+    "inflation_gate_off",
+    "target_vol_off"
+  ],
+  "inflation_gate_off_definition": "official full ranking pool always eligible",
+  "target_vol_off_definition": "all four component volatility scale values forced to 1.0 in memory",
+  "B7.8_formal_max_abs_daily_difference": 6.661338147750939e-16,
+  "B7.9_formal_max_abs_daily_difference": 2.220446049250313e-16,
+  "elapsed_seconds": 512.21,
+  "arm_summary_sha256": "aa2504349eae418219d87053f86e26a70958d7cf2e7d976ad13f59f4dcb4769d",
+  "window_metrics_sha256": "c366c599ba9bd4719ea350feddde58c4c596e389fa0fd081dcba01b92ce0227f"
+}

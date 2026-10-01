@@ -1,0 +1,123 @@
+{
+  "stage": "fetch_complete",
+  "source_path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+  "source_sha256": "4ddbe2095c12a62756b128561349714a5ac2694409e102a2ae31cc200810fc42",
+  "started_beijing": "2026-09-26 19:35:25.685181",
+  "entrypoint": "CombinedStrategyV80._fetch_data",
+  "include_cn_live_snapshot": false,
+  "include_us_live_snapshot": false,
+  "allow_last_confirmed_cn_close": false,
+  "strategy_calculation_run": false,
+  "frames": {
+    "cn_close": {
+      "rows": 2269,
+      "columns": [
+        "1.930955",
+        "0.399006",
+        "1.000016",
+        "1.000852",
+        "1.000905",
+        "1.H11077"
+      ],
+      "start": "2017-05-26 00:00:00",
+      "end": "2026-09-24 00:00:00"
+    },
+    "cn_dk_close": {
+      "rows": 2906,
+      "columns": [
+        "DK_ZZ1000",
+        "DK_SZ50",
+        "DK_HS300",
+        "DK_ZZ500",
+        "DK_CYB"
+      ],
+      "start": "2014-10-17 00:00:00",
+      "end": "2026-09-24 00:00:00"
+    },
+    "us_rot_close": {
+      "rows": 4863,
+      "columns": [
+        "QQQ",
+        "GLD",
+        "DBC",
+        "EFA",
+        "AGG",
+        "UUP",
+        "BIL",
+        "TLT",
+        "EMXC",
+        "DBMF",
+        "BTC-USD",
+        "KMLM",
+        "SPY",
+        "PDBC",
+        "VTI",
+        "VGIT",
+        "VEA",
+        "AVDV",
+        "QQQM",
+        "AVUV",
+        "IBIT",
+        "GLDM"
+      ],
+      "start": "2007-05-30 00:00:00",
+      "end": "2026-09-25 00:00:00"
+    },
+    "us_prod_daily": {
+      "rows": 5971,
+      "columns": [
+        "VTI",
+        "QQQ",
+        "AVUV",
+        "VEA",
+        "AVDV",
+        "VGIT",
+        "DBMF",
+        "KMLM",
+        "GLD",
+        "BTC-USD",
+        "BIL",
+        "SPY",
+        "QQQM",
+        "GLDM",
+        "IBIT",
+        "PDBC",
+        "EMXC",
+        "UUP",
+        "AGG"
+      ],
+      "start": "2003-01-02 00:00:00",
+      "end": "2026-09-25 00:00:00"
+    }
+  },
+  "us_sources": {
+    "AGG": "Yahoo",
+    "AVDV": "Yahoo",
+    "AVUV": "Yahoo",
+    "BIL": "Yahoo",
+    "BTC-USD": "Yahoo",
+    "DBC": "Yahoo",
+    "DBMF": "Yahoo",
+    "EEM": "Yahoo",
+    "EFA": "Yahoo",
+    "EMXC": "Yahoo",
+    "GLD": "Yahoo",
+    "GLDM": "Yahoo",
+    "IBIT": "Yahoo",
+    "KMLM": "Yahoo",
+    "PDBC": "Yahoo",
+    "QQQ": "Yahoo",
+    "QQQM": "Yahoo",
+    "SPY": "Yahoo",
+    "TLT": "Yahoo",
+    "UUP": "Yahoo",
+    "VEA": "Yahoo",
+    "VGIT": "Yahoo",
+    "VTI": "Yahoo"
+  },
+  "us_raw_ohlc_path": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_repair\\us_raw_ohlc.pkl",
+  "us_raw_ohlc_sha256": "3c0456d22e64a855faac573d9962611ea7440325c2a3bd1312af998eaf5264f0",
+  "input_path": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_repair\\formal_inputs.pkl",
+  "input_sha256": "33b4f517d165693563e9db07b0dc670c86b60681e0f284a97f1193f0d2933a64",
+  "elapsed_seconds": 78.79
+}

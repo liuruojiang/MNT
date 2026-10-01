@@ -1,0 +1,731 @@
+{
+  "run_id": "20260930_frozen_neighborhoods",
+  "created_at": "2026-09-30T19:45:39+08:00",
+  "phase": "complete",
+  "project": "A股美股动量组合策略",
+  "strategy": "V8.0 L6",
+  "subsystem": "Sub-C",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "mnt_bot V 8.0 plus.py::_compute_subc_production_snapshot",
+  "git_branch": "main",
+  "git_commit": "a7353eebc17c94e0d3566404d72fb395776fc54f",
+  "git_status_before": "M \"mnt_bot V 8.0 plus.py\"\n M tests/test_v78_cn_live_freshness.py\n?? docs/v80_recert_l0_20260926.md\n?? docs/v80_recert_l1_20260926.md\n?? docs/v80_recert_l2_20260926.md\n?? docs/v80_recert_l3_20260926.md\n?? docs/v80_recert_l4_20260926.md\n?? docs/v80_recert_l5_20260930.md\n?? research_v80_subb_correlation_allocation.py\n?? research_v80_subb_rebalance_period.py\n?? research_v80_subc_joint_risk.py\n?? tests/test_v80_l1_input_boundaries.py\n?? tests/test_v80_l2_annualization_period.py",
+  "git_status_after": "M \"mnt_bot V 8.0 plus.py\"\n M tests/test_v78_cn_live_freshness.py\n?? docs/v80_recert_l0_20260926.md\n?? docs/v80_recert_l1_20260926.md\n?? docs/v80_recert_l2_20260926.md\n?? docs/v80_recert_l3_20260926.md\n?? docs/v80_recert_l4_20260926.md\n?? docs/v80_recert_l5_20260930.md\n?? research_v80_subb_correlation_allocation.py\n?? research_v80_subb_rebalance_period.py\n?? research_v80_subc_joint_risk.py\n?? tests/test_v80_l1_input_boundaries.py\n?? tests/test_v80_l2_annualization_period.py",
+  "scan_type": "candidate_bundle",
+  "parameter_group": "scales_and_10_asset_weights",
+  "baseline": {
+    "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+    "full_on_l2_max_abs_daily_diff": 0.0
+  },
+  "candidate_grid": [
+    {
+      "candidate": "equity_target_vol__formal",
+      "group": "equity_target_vol",
+      "kind": "formal",
+      "parameter": "PROD_VS_TARGET_VOL",
+      "value": 0.15
+    },
+    {
+      "candidate": "equity_target_vol__off",
+      "group": "equity_target_vol",
+      "kind": "module_off",
+      "parameter": "PROD_VS_TARGET_VOL",
+      "value": "off"
+    },
+    {
+      "candidate": "equity_target_vol__0p12",
+      "group": "equity_target_vol",
+      "kind": "candidate",
+      "parameter": "PROD_VS_TARGET_VOL",
+      "value": 0.12
+    },
+    {
+      "candidate": "equity_target_vol__0p18",
+      "group": "equity_target_vol",
+      "kind": "candidate",
+      "parameter": "PROD_VS_TARGET_VOL",
+      "value": 0.18
+    },
+    {
+      "candidate": "equity_vol_window__formal",
+      "group": "equity_vol_window",
+      "kind": "formal",
+      "parameter": "PROD_VS_VOL_WINDOW",
+      "value": 15
+    },
+    {
+      "candidate": "equity_vol_window__off",
+      "group": "equity_vol_window",
+      "kind": "module_off",
+      "parameter": "PROD_VS_VOL_WINDOW",
+      "value": "off"
+    },
+    {
+      "candidate": "equity_vol_window__10",
+      "group": "equity_vol_window",
+      "kind": "candidate",
+      "parameter": "PROD_VS_VOL_WINDOW",
+      "value": 10
+    },
+    {
+      "candidate": "equity_vol_window__20",
+      "group": "equity_vol_window",
+      "kind": "candidate",
+      "parameter": "PROD_VS_VOL_WINDOW",
+      "value": 20
+    },
+    {
+      "candidate": "gold_short_window__formal",
+      "group": "gold_short_window",
+      "kind": "formal",
+      "parameter": "PROD_GOLD_VS_SHORT_WINDOW",
+      "value": 30
+    },
+    {
+      "candidate": "gold_short_window__off",
+      "group": "gold_short_window",
+      "kind": "module_off",
+      "parameter": "PROD_GOLD_VS_SHORT_WINDOW",
+      "value": "off"
+    },
+    {
+      "candidate": "gold_short_window__20",
+      "group": "gold_short_window",
+      "kind": "candidate",
+      "parameter": "PROD_GOLD_VS_SHORT_WINDOW",
+      "value": 20
+    },
+    {
+      "candidate": "gold_short_window__40",
+      "group": "gold_short_window",
+      "kind": "candidate",
+      "parameter": "PROD_GOLD_VS_SHORT_WINDOW",
+      "value": 40
+    },
+    {
+      "candidate": "gold_long_window__formal",
+      "group": "gold_long_window",
+      "kind": "formal",
+      "parameter": "PROD_GOLD_VS_LONG_WINDOW",
+      "value": 252
+    },
+    {
+      "candidate": "gold_long_window__off",
+      "group": "gold_long_window",
+      "kind": "module_off",
+      "parameter": "PROD_GOLD_VS_LONG_WINDOW",
+      "value": "off"
+    },
+    {
+      "candidate": "gold_long_window__189",
+      "group": "gold_long_window",
+      "kind": "candidate",
+      "parameter": "PROD_GOLD_VS_LONG_WINDOW",
+      "value": 189
+    },
+    {
+      "candidate": "gold_long_window__378",
+      "group": "gold_long_window",
+      "kind": "candidate",
+      "parameter": "PROD_GOLD_VS_LONG_WINDOW",
+      "value": 378
+    },
+    {
+      "candidate": "deadband__formal",
+      "group": "deadband",
+      "kind": "formal",
+      "parameter": "PROD_VS_THRESHOLD",
+      "value": 0.35
+    },
+    {
+      "candidate": "deadband__off",
+      "group": "deadband",
+      "kind": "module_off",
+      "parameter": "PROD_VS_THRESHOLD",
+      "value": "off"
+    },
+    {
+      "candidate": "deadband__0p25",
+      "group": "deadband",
+      "kind": "candidate",
+      "parameter": "PROD_VS_THRESHOLD",
+      "value": 0.25
+    },
+    {
+      "candidate": "deadband__0p45",
+      "group": "deadband",
+      "kind": "candidate",
+      "parameter": "PROD_VS_THRESHOLD",
+      "value": 0.45
+    },
+    {
+      "candidate": "min_lev__formal",
+      "group": "min_lev",
+      "kind": "formal",
+      "parameter": "PROD_VS_MIN_LEV",
+      "value": 0.5
+    },
+    {
+      "candidate": "min_lev__off",
+      "group": "min_lev",
+      "kind": "module_off",
+      "parameter": "PROD_VS_MIN_LEV",
+      "value": "off"
+    },
+    {
+      "candidate": "min_lev__0p4",
+      "group": "min_lev",
+      "kind": "candidate",
+      "parameter": "PROD_VS_MIN_LEV",
+      "value": 0.4
+    },
+    {
+      "candidate": "min_lev__0p6",
+      "group": "min_lev",
+      "kind": "candidate",
+      "parameter": "PROD_VS_MIN_LEV",
+      "value": 0.6
+    },
+    {
+      "candidate": "max_lev__formal",
+      "group": "max_lev",
+      "kind": "formal",
+      "parameter": "PROD_VS_MAX_LEV",
+      "value": 1.5
+    },
+    {
+      "candidate": "max_lev__off",
+      "group": "max_lev",
+      "kind": "module_off",
+      "parameter": "PROD_VS_MAX_LEV",
+      "value": "off"
+    },
+    {
+      "candidate": "max_lev__1p25",
+      "group": "max_lev",
+      "kind": "candidate",
+      "parameter": "PROD_VS_MAX_LEV",
+      "value": 1.25
+    },
+    {
+      "candidate": "max_lev__1p75",
+      "group": "max_lev",
+      "kind": "candidate",
+      "parameter": "PROD_VS_MAX_LEV",
+      "value": 1.75
+    },
+    {
+      "candidate": "asset_weight_VTI__formal",
+      "group": "asset_weight_VTI",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[VTI].w",
+      "value": 0.2
+    },
+    {
+      "candidate": "asset_weight_VTI__off",
+      "group": "asset_weight_VTI",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[VTI].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_VTI__0p8x",
+      "group": "asset_weight_VTI",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VTI].w",
+      "value": 0.16000000000000003
+    },
+    {
+      "candidate": "asset_weight_VTI__1p2x",
+      "group": "asset_weight_VTI",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VTI].w",
+      "value": 0.24
+    },
+    {
+      "candidate": "asset_weight_QQQM__formal",
+      "group": "asset_weight_QQQM",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[QQQM].w",
+      "value": 0.1
+    },
+    {
+      "candidate": "asset_weight_QQQM__off",
+      "group": "asset_weight_QQQM",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[QQQM].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_QQQM__0p8x",
+      "group": "asset_weight_QQQM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[QQQM].w",
+      "value": 0.08000000000000002
+    },
+    {
+      "candidate": "asset_weight_QQQM__1p2x",
+      "group": "asset_weight_QQQM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[QQQM].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_AVUV__formal",
+      "group": "asset_weight_AVUV",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[AVUV].w",
+      "value": 0.1
+    },
+    {
+      "candidate": "asset_weight_AVUV__off",
+      "group": "asset_weight_AVUV",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[AVUV].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_AVUV__0p8x",
+      "group": "asset_weight_AVUV",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[AVUV].w",
+      "value": 0.08000000000000002
+    },
+    {
+      "candidate": "asset_weight_AVUV__1p2x",
+      "group": "asset_weight_AVUV",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[AVUV].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_VEA__formal",
+      "group": "asset_weight_VEA",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[VEA].w",
+      "value": 0.1
+    },
+    {
+      "candidate": "asset_weight_VEA__off",
+      "group": "asset_weight_VEA",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[VEA].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_VEA__0p8x",
+      "group": "asset_weight_VEA",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VEA].w",
+      "value": 0.08000000000000002
+    },
+    {
+      "candidate": "asset_weight_VEA__1p2x",
+      "group": "asset_weight_VEA",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VEA].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_AVDV__formal",
+      "group": "asset_weight_AVDV",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[AVDV].w",
+      "value": 0.1
+    },
+    {
+      "candidate": "asset_weight_AVDV__off",
+      "group": "asset_weight_AVDV",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[AVDV].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_AVDV__0p8x",
+      "group": "asset_weight_AVDV",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[AVDV].w",
+      "value": 0.08000000000000002
+    },
+    {
+      "candidate": "asset_weight_AVDV__1p2x",
+      "group": "asset_weight_AVDV",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[AVDV].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_VGIT__formal",
+      "group": "asset_weight_VGIT",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[VGIT].w",
+      "value": 0.15
+    },
+    {
+      "candidate": "asset_weight_VGIT__off",
+      "group": "asset_weight_VGIT",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[VGIT].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_VGIT__0p8x",
+      "group": "asset_weight_VGIT",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VGIT].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_VGIT__1p2x",
+      "group": "asset_weight_VGIT",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[VGIT].w",
+      "value": 0.18
+    },
+    {
+      "candidate": "asset_weight_DBMF__formal",
+      "group": "asset_weight_DBMF",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[DBMF].w",
+      "value": 0.025
+    },
+    {
+      "candidate": "asset_weight_DBMF__off",
+      "group": "asset_weight_DBMF",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[DBMF].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_DBMF__0p8x",
+      "group": "asset_weight_DBMF",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[DBMF].w",
+      "value": 0.020000000000000004
+    },
+    {
+      "candidate": "asset_weight_DBMF__1p2x",
+      "group": "asset_weight_DBMF",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[DBMF].w",
+      "value": 0.03
+    },
+    {
+      "candidate": "asset_weight_KMLM__formal",
+      "group": "asset_weight_KMLM",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[KMLM].w",
+      "value": 0.025
+    },
+    {
+      "candidate": "asset_weight_KMLM__off",
+      "group": "asset_weight_KMLM",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[KMLM].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_KMLM__0p8x",
+      "group": "asset_weight_KMLM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[KMLM].w",
+      "value": 0.020000000000000004
+    },
+    {
+      "candidate": "asset_weight_KMLM__1p2x",
+      "group": "asset_weight_KMLM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[KMLM].w",
+      "value": 0.03
+    },
+    {
+      "candidate": "asset_weight_GLDM__formal",
+      "group": "asset_weight_GLDM",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[GLDM].w",
+      "value": 0.15
+    },
+    {
+      "candidate": "asset_weight_GLDM__off",
+      "group": "asset_weight_GLDM",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[GLDM].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_GLDM__0p8x",
+      "group": "asset_weight_GLDM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[GLDM].w",
+      "value": 0.12
+    },
+    {
+      "candidate": "asset_weight_GLDM__1p2x",
+      "group": "asset_weight_GLDM",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[GLDM].w",
+      "value": 0.18
+    },
+    {
+      "candidate": "asset_weight_IBIT__formal",
+      "group": "asset_weight_IBIT",
+      "kind": "formal",
+      "parameter": "PROD_PORTFOLIO[IBIT].w",
+      "value": 0.05
+    },
+    {
+      "candidate": "asset_weight_IBIT__off",
+      "group": "asset_weight_IBIT",
+      "kind": "module_off",
+      "parameter": "PROD_PORTFOLIO[IBIT].w",
+      "value": 0.0
+    },
+    {
+      "candidate": "asset_weight_IBIT__0p8x",
+      "group": "asset_weight_IBIT",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[IBIT].w",
+      "value": 0.04000000000000001
+    },
+    {
+      "candidate": "asset_weight_IBIT__1p2x",
+      "group": "asset_weight_IBIT",
+      "kind": "candidate",
+      "parameter": "PROD_PORTFOLIO[IBIT].w",
+      "value": 0.06
+    }
+  ],
+  "data_snapshot": {
+    "input_path": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_final\\formal_inputs.pkl",
+    "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "result_start": "2020-12-03",
+    "result_end": "2026-09-25",
+    "us_calendar": "frozen US session index",
+    "label": "frozen real prices, paper model; BTC proxy before IBIT listing"
+  },
+  "cost_model": {
+    "base_annual_rebalance_bps": 10,
+    "scale_change_bps": 6,
+    "financing": "BIL plus 100bp for exposure above 1x",
+    "execution": "T signal, T+1 adjusted open for scale change; annual base rebalance at year-end close"
+  },
+  "outputs": {
+    "record": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\record.md",
+    "scan_summary": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\scan_summary.csv",
+    "window_metrics": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\window_metrics.csv",
+    "scan_meta": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\scan_meta.json",
+    "command_log": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\command_log.txt"
+  },
+  "decision": "keep_default",
+  "stability_label": "data_sensitive",
+  "unavailable_segments": {
+    "equity_target_vol__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_target_vol__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_target_vol__0p12": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_target_vol__0p18": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_vol_window__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_vol_window__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_vol_window__10": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "equity_vol_window__20": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_short_window__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_short_window__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_short_window__20": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_short_window__40": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_long_window__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_long_window__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_long_window__189": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "gold_long_window__378": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "deadband__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "deadband__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "deadband__0p25": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "deadband__0p45": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "min_lev__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "min_lev__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "min_lev__0p4": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "min_lev__0p6": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "max_lev__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "max_lev__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "max_lev__1p25": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "max_lev__1p75": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VTI__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VTI__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VTI__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VTI__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_QQQM__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_QQQM__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_QQQM__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_QQQM__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVUV__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVUV__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVUV__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVUV__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VEA__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VEA__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VEA__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VEA__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVDV__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVDV__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVDV__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_AVDV__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VGIT__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VGIT__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VGIT__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_VGIT__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_DBMF__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_DBMF__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_DBMF__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_DBMF__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_KMLM__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_KMLM__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_KMLM__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_KMLM__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_GLDM__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_GLDM__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_GLDM__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_GLDM__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_IBIT__formal": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_IBIT__off": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_IBIT__0p8x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    },
+    "asset_weight_IBIT__1p2x": {
+      "last_10y": "C begins 2020-12-03; less than ten years of frozen returns"
+    }
+  },
+  "source_change_rule": "research_only_no_source_change",
+  "status_artifact": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\scan_status.json",
+  "daily_artifact_directory": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\daily_outputs",
+  "finalized_at": "2026-09-30T20:03:56+08:00"
+}

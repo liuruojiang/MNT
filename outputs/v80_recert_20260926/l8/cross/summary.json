@@ -1,0 +1,180 @@
+{
+  "classification": "frozen paper buy-and-hold PV; not physical unified account",
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "l2_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "formal_initial_weights": {
+    "Sub-A": 0.15,
+    "Sub-A-DK": 0.15,
+    "B7.8": 0.2,
+    "B7.9": 0.2,
+    "Sub-C": 0.3
+  },
+  "formal_parity_max_abs_daily": 4.440892098500626e-16,
+  "l6_formal_parity": {
+    "Sub-A": {
+      "common_rows": 2189,
+      "max_abs": 9.978725745013461e-17,
+      "l6_extra_rows": 0,
+      "l6_missing_rows": 0,
+      "joint_window_missing_rows": 0
+    },
+    "Sub-A-DK": {
+      "common_rows": 2773,
+      "max_abs": 9.974659986866641e-17,
+      "l6_extra_rows": 0,
+      "l6_missing_rows": 10,
+      "joint_window_missing_rows": 0
+    },
+    "B7.8": {
+      "common_rows": 4472,
+      "max_abs": 7.799750428860719e-16,
+      "l6_extra_rows": 0,
+      "l6_missing_rows": 0,
+      "joint_window_missing_rows": 0
+    },
+    "B7.9": {
+      "common_rows": 4472,
+      "max_abs": 4.891920202254596e-16,
+      "l6_extra_rows": 0,
+      "l6_missing_rows": 0,
+      "joint_window_missing_rows": 0
+    },
+    "Sub-C": {
+      "common_rows": 1459,
+      "max_abs": 9.974659986866641e-17,
+      "l6_extra_rows": 0,
+      "l6_missing_rows": 0,
+      "joint_window_missing_rows": 0
+    }
+  },
+  "formal_windows": {
+    "Full": {
+      "window": "Full",
+      "reason": null,
+      "rows": 1509,
+      "start": "2020-12-03",
+      "end": "2026-09-25",
+      "annual_pct": 23.329698802457454,
+      "ann_vol_daily252_pct": 10.711808179760073,
+      "sharpe_daily252_rf0": 1.9544780419727648,
+      "max_dd_pct": -7.776784248703672,
+      "peak": "2024-07-16",
+      "trough": "2024-08-05",
+      "end_nav": 3.3831943051658078
+    },
+    "10Y": {
+      "window": "10Y",
+      "reason": "insufficient post-start history"
+    },
+    "5Y": {
+      "window": "5Y",
+      "reason": null,
+      "rows": 1299,
+      "start": "2021-09-27",
+      "end": "2026-09-25",
+      "annual_pct": 22.893843253600664,
+      "ann_vol_daily252_pct": 10.761685963614495,
+      "sharpe_daily252_rf0": 1.913387256591003,
+      "max_dd_pct": -7.776784248703672,
+      "peak": "2024-07-16",
+      "trough": "2024-08-05",
+      "end_nav": 2.804364563465849
+    },
+    "3Y": {
+      "window": "3Y",
+      "reason": null,
+      "rows": 780,
+      "start": "2023-09-25",
+      "end": "2026-09-25",
+      "annual_pct": 34.9316002666922,
+      "ann_vol_daily252_pct": 12.172069637611493,
+      "sharpe_daily252_rf0": 2.454890434266284,
+      "max_dd_pct": -7.776784248703694,
+      "peak": "2024-07-16",
+      "trough": "2024-08-05",
+      "end_nav": 2.463194842521988
+    },
+    "1Y": {
+      "window": "1Y",
+      "reason": null,
+      "rows": 259,
+      "start": "2025-09-25",
+      "end": "2026-09-25",
+      "annual_pct": 22.758711899443185,
+      "ann_vol_daily252_pct": 12.880451802154896,
+      "sharpe_daily252_rf0": 1.6170689985632782,
+      "max_dd_pct": -7.623008778757234,
+      "peak": "2026-01-28",
+      "trough": "2026-03-26",
+      "end_nav": 1.228104101366165
+    }
+  },
+  "formal_start": "2020-12-03",
+  "formal_end": "2026-09-25",
+  "formal_rows": 1509,
+  "calendar_zero_fill": {
+    "Sub-A": {
+      "count": 98,
+      "last": "2026-09-25"
+    },
+    "Sub-A-DK": {
+      "count": 98,
+      "last": "2026-09-25"
+    },
+    "B7.8": {
+      "count": 50,
+      "last": "2026-09-07"
+    },
+    "B7.9": {
+      "count": 50,
+      "last": "2026-09-07"
+    },
+    "Sub-C": {
+      "count": 50,
+      "last": "2026-09-07"
+    }
+  },
+  "scenario_count": 188,
+  "pair_count": 5,
+  "annual_vol_sharpe_definition": "Daily return std(ddof=1)*sqrt(252), and mean/std*sqrt(252) with risk-free rate 0; this is a uniform L8 diagnostic, not mixed L6 sleeve sharpe_repo.",
+  "adversarial": {
+    "daily_fixed_weight_wrong": {
+      "max_abs_return_delta": 0.0061728537962795,
+      "first_mismatch": "2020-12-04",
+      "wrong_metrics": {
+        "rows": 1509,
+        "start": "2020-12-03",
+        "end": "2026-09-25",
+        "annual_pct": 23.47612092030136,
+        "ann_vol_daily252_pct": 10.407576857146585,
+        "sharpe_daily252_rf0": 2.0195690454975437,
+        "max_dd_pct": -7.444752307748514,
+        "peak": "2026-01-28",
+        "trough": "2026-03-26",
+        "end_nav": 3.4066078140535976
+      }
+    },
+    "first_return_omitted_wrong": {
+      "first_day_abs_delta": 0.0009674355793409806,
+      "wrong_full_annual_pct": 23.30918322049964
+    },
+    "B78_fee_omitted_wrong": {
+      "positive_fee_days": 312,
+      "max_abs_pv_daily_delta": 0.0003722822905178891,
+      "first_mismatch": "2020-12-04"
+    },
+    "A_calendar_compression_wrong": {
+      "dropped_union_dates": 98,
+      "first_dropped": "2021-02-11",
+      "common_date_max_abs_delta": 0.003421050856416974
+    }
+  },
+  "resource_limit": "No dated FX, shared cash/margin/short collateral or physical A/ADK/C ledger. Risk notionals cannot be aggregated as broker resource usage.",
+  "inputs": {
+    "A": "outputs\\v80_recert_20260926\\l6\\suba\\daily_paths.csv.gz",
+    "ADK": "outputs\\v80_recert_20260926\\l6\\adk\\daily_audit.csv",
+    "B7.8": "quant_param_scan_runs\\20260930_v80_b78_l6\\daily_outputs\\formal.csv.gz",
+    "B7.9": "quant_param_scan_runs\\20260930_v80_b79_l6\\daily_outputs\\formal.csv.gz",
+    "C": "outputs\\v80_recert_20260926\\l6\\subc\\20260930_frozen_neighborhoods\\daily_outputs\\equity_target_vol__formal.csv.gz"
+  }
+}

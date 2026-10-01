@@ -1,0 +1,79 @@
+{
+  "stage": "complete",
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "formal_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "baseline_max_abs_l2": 0.0,
+  "baseline_max_abs_independent_nav": 0.0,
+  "current_B78_official_off_max_abs_l6": 7.147060721024445e-16,
+  "current_C_formal_max_abs_l2": 0.0,
+  "current_C_equity_off_max_abs_l6": 9.93129189996722e-17,
+  "B_path_counts": {
+    "B7.8": 28,
+    "B7.9": 28
+  },
+  "C_path_count": 68,
+  "case_count": 130,
+  "interaction_count": 5,
+  "full_on_metrics": {
+    "Full": {
+      "annual_pct": 23.329698802457678,
+      "max_dd_pct": -7.776784248703679,
+      "reason": null,
+      "start": "2020-12-03",
+      "end": "2026-09-25"
+    },
+    "10Y": {
+      "annual_pct": null,
+      "max_dd_pct": null,
+      "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25",
+      "start": null,
+      "end": null
+    },
+    "5Y": {
+      "annual_pct": 22.89384325360071,
+      "max_dd_pct": -7.776784248703669,
+      "reason": null,
+      "start": "2021-09-27",
+      "end": "2026-09-25"
+    },
+    "3Y": {
+      "annual_pct": 34.93160026669213,
+      "max_dd_pct": -7.776784248703658,
+      "reason": null,
+      "start": "2023-09-25",
+      "end": "2026-09-25"
+    },
+    "1Y": {
+      "annual_pct": 22.758711899443227,
+      "max_dd_pct": -7.623008778757119,
+      "reason": null,
+      "start": "2025-09-25",
+      "end": "2026-09-25"
+    }
+  },
+  "combo_rows": 1509,
+  "CN_2026_09_25_missing_zero_filled": true,
+  "shift_one_session_max_combo_daily_diff": 0.014929538214143334,
+  "omit_B78_fee_max_combo_daily_diff": 0.00037228229051833317,
+  "C_two_overlay_off_max_abs_vs_equity_only": 0.003411571983440498,
+  "C_VGIT_IBIT_off_max_abs_vs_VGIT_only": 0.014739999894182914,
+  "case_summary_sha256": "8cb34d37bde16bdd7c34a0e7643dd75f437157d17da9a542766152ae83bd9e56",
+  "window_metrics_sha256": "3bcf121d99c621a7761de245bae1f8ace59003df6456ecf6a6165f3789204a73",
+  "daily_combo_paths_sha256": "b7d795a676cd13b35637b45094b9abce419c6bd9da65353366ccbb40aa655e88",
+  "model_boundary": "paper separate sleeve subaccounts mapped to weighted component NAV; no shared executable account",
+  "financing_diagnostic": {
+    "status": "complete_diagnostic_only",
+    "json_path": "funding_floor_status.json",
+    "json_sha256": "95bca482b5085b0286b61fa3e60f982efc84939d7d098ebab6b1ea9c781bf1af",
+    "window_table_path": "funding_floor_window_metrics.csv",
+    "window_table_sha256": "dd54f98b1a9be0b3584b9264fc6d95c9c1d6ac6567cf543c95cd72859fc28455",
+    "daily_path": "funding_floor_daily.csv.gz",
+    "daily_sha256": "e2726be14442c344b22a84b1974f302f5ab264f6dda6212f5af114e3bb0ec1c0",
+    "negative_financing_days": {
+      "B7.8": 790,
+      "B7.9": 700
+    },
+    "funding_execution_accuracy": "unverified; model permits negative borrowing cost"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "status": "not_certifiable_from_frozen_inputs",
+  "formal_initial_capital_weights": {
+    "Sub-A": 0.15,
+    "Sub-A-DK": 0.15,
+    "B7.8": 0.2,
+    "B7.9": 0.2,
+    "Sub-C": 0.3
+  },
+  "observed_cutoffs": {
+    "China_sleeves": "2026-09-24",
+    "US_sleeves": "2026-09-25"
+  },
+  "required_conventions_before_unified_account": [
+    "Choose base currency and dated USD/CNY conversion marks at every cash movement, fill and NAV mark; no FX series is present in the frozen L1 input frames.",
+    "Order A-share and US trading events on actual Asia/Shanghai instants, retaining separate exchange calendars and US daylight-saving changes.",
+    "Define each sleeve's capital allocation and capital-transfer policy after returns drift; record cash, borrowing, short-sale proceeds, collateral and margin separately.",
+    "Define whether overlapping US ETF positions across B7.8, B7.9 and C remain separate broker subaccounts or net into one account; if netted, recalculate quantity, spread, fees and financing on the net executed orders.",
+    "Resolve A and ADK strict quantity/cash/short self-financing gaps and C continuous scaled-lot gap before reporting a physical unified NAV.",
+    "Mark US 2026-09-25 without treating the last China close from 2026-09-24 as a contemporaneous China trading event."
+  ],
+  "minimum_independent_checks": [
+    "Per event, independently sum post-fill security values plus currency cash and collateral minus debt and short liabilities to equity.",
+    "For each market session, carry previous quantities to the next eligible execution time and reprice with that market's validated adjusted/raw price convention; no fills on closed-market dates.",
+    "Reconcile costs to positive executed turnover, loan charges to actual outstanding debt and borrow/margin limits to aggregate rather than sleeve-local capital.",
+    "Bridge every sleeve's final account return to portfolio equity changes after FX, transfers, costs and overlapping-order netting; a weighted average of sleeve net returns is insufficient."
+  ],
+  "performance_windows": "N/A for physical unified account until FX, collateral, shared borrowing and C/A/ADK continuous ledgers are defined and recomputed",
+  "evidence": [
+    "outputs/v80_recert_20260926/l1_final/formal_inputs.pkl",
+    "outputs/v80_recert_20260926/l2/formal_status.json",
+    "outputs/v80_recert_20260926/l5/audit_us_account_independent.json",
+    "outputs/v80_recert_20260926/l5/audit_b_pair_interactions.json"
+  ]
+}

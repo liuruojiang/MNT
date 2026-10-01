@@ -1,0 +1,120 @@
+{
+  "status": "PASS_WITH_L5_ACCOUNT_LIMIT",
+  "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "C_status_sha256": "1751eeb70cca11721f471add857c73ad8080c59bb0182bcdea313507e7baffda",
+  "equity_scale_max_abs_error": 4.440892098500626e-16,
+  "gold_scale_max_abs_error": 4.440892098500626e-16,
+  "first_equity_scale_change": "2020-12-08",
+  "first_gold_scale_change": "2022-03-09",
+  "scale_transition_days": 70,
+  "charged_transition_days": 70,
+  "fee_missing_fault_date": "2020-12-08",
+  "fee_missing_fault_detected": true,
+  "module_off_L3_L4_max_abs_return_errors": {
+    "equity": 9.93129189996722e-17,
+    "gold": 9.952975943416931e-17,
+    "both": 1.0061396160665481e-16
+  },
+  "ten_leg_weight_candidates_checked": 40,
+  "ten_leg_off_rerun": {
+    "VTI": {
+      "max_abs_return_diff": 2.8015784137025435e-16,
+      "max_abs_overlay_fee_diff": 9.906897351086297e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "QQQM": {
+      "max_abs_return_diff": 9.974659986866641e-17,
+      "max_abs_overlay_fee_diff": 9.52336083256955e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "AVUV": {
+      "max_abs_return_diff": 9.990923019453923e-17,
+      "max_abs_overlay_fee_diff": 9.225205235136036e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "VEA": {
+      "max_abs_return_diff": 9.996344030316351e-17,
+      "max_abs_overlay_fee_diff": 9.652109840552203e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "AVDV": {
+      "max_abs_return_diff": 9.974659986866641e-17,
+      "max_abs_overlay_fee_diff": 9.858108253324449e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "VGIT": {
+      "max_abs_return_diff": 9.963817965141786e-17,
+      "max_abs_overlay_fee_diff": 9.597899731927928e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "DBMF": {
+      "max_abs_return_diff": 2.662800535624399e-16,
+      "max_abs_overlay_fee_diff": 9.912318361948724e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "KMLM": {
+      "max_abs_return_diff": 2.951198313505543e-16,
+      "max_abs_overlay_fee_diff": 9.738846014351044e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "GLDM": {
+      "max_abs_return_diff": 9.974659986866641e-17,
+      "max_abs_overlay_fee_diff": 9.896055329361442e-17,
+      "max_removed_leg_exposure": 0.0
+    },
+    "IBIT": {
+      "max_abs_return_diff": 3.8163916471489756e-16,
+      "max_abs_overlay_fee_diff": 9.939423416260862e-17,
+      "max_removed_leg_exposure": 0.0
+    }
+  },
+  "open_price_faults": {
+    "equity": {
+      "execution_date": "2020-12-08",
+      "ticker": "VTI",
+      "open_shock": "+10%",
+      "prior_returns_max_abs_diff": 8.326672684688674e-17,
+      "execution_day_abs_return_diff": 0.007174819112126122,
+      "scale_max_abs_diff": 4.440892098500626e-16,
+      "execution_day_fee_abs_diff": 2.0699084390087203e-06
+    },
+    "gold": {
+      "execution_date": "2022-03-09",
+      "ticker": "GLD",
+      "open_shock": "+10%",
+      "prior_returns_max_abs_diff": 9.71445146547012e-17,
+      "execution_day_abs_return_diff": 0.0073719627365231855,
+      "scale_max_abs_diff": 4.440892098500626e-16,
+      "execution_day_fee_abs_diff": 2.4016890708480966e-06
+    }
+  },
+  "resource_rows": 22,
+  "resource_leg_rows": 220,
+  "formal_resources": [
+    {
+      "arm": "formal",
+      "period": "return_period",
+      "max_actual_risk_gross": 1.362702713312724,
+      "max_risk_gross_date": "2025-12-26",
+      "max_cash": 0.2686081616579719,
+      "max_cash_date": "2026-04-20",
+      "max_borrow": 0.3627027133127239,
+      "max_borrow_date": "2025-12-26",
+      "max_identity_error": 5.551115123125783e-16,
+      "max_base_sum_error": 4.440892098500626e-16
+    },
+    {
+      "arm": "formal",
+      "period": "post_close_target",
+      "max_actual_risk_gross": 1.362702713312724,
+      "max_risk_gross_date": "2025-12-24",
+      "max_cash": 0.2686081616579719,
+      "max_cash_date": "2026-04-17",
+      "max_borrow": 0.3627027133127239,
+      "max_borrow_date": "2025-12-24",
+      "max_identity_error": 5.551115123125783e-16,
+      "max_base_sum_error": 4.440892098500626e-16
+    }
+  ],
+  "funding_limit": "C continuous-ten-security positions and financing remain unclosed per L5; this audits paper-model paths only"
+}

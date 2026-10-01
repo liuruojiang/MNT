@@ -1,0 +1,259 @@
+{
+  "ADK": {
+    "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+    "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "old_formal_sha256": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+    "rows": 2783,
+    "first_day": "2015-04-20",
+    "first_day_old_weight": 1.0,
+    "first_day_new_weight": 0.0,
+    "zero_display_fields": true,
+    "zero_net_legs": true,
+    "query_text_zero": true,
+    "query_excerpt": "**ADK当前已生效持仓:** **空仓**（对应 2015-04-20 收盘确认）\n- New ADK all10 score-hot: 空仓\n- 当前已生效总敞口: **0.00x**\n\n**V8.0 ADK 单策略状态**\n\n| 策略 | 配对范围 | 分腿Top-1配对/方向 | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 最终敞口 | 实际贡献 |\n|:-|:-|:-|------:|:-|------:|------:|------:|------:|------:|------:|------:|\n| ADK策略 | 全10配对 + score-hot | none | `NA` | R²不启用 | NA | 1.00x | 0.00x | 0.00x (score-hot关闭) | 0.00x | 0.00x |\n",
+    "protected_columns_checked": [
+      "return",
+      "nav",
+      "top_pair",
+      "direction",
+      "holding",
+      "long_leg",
+      "short_leg",
+      "pair_changed",
+      "direction_changed",
+      "is_signal",
+      "return_before_dk_execution_cost",
+      "dk_execution_cost",
+      "v78_score_overheat_cost_indicative",
+      "dk_overlay_execution_cost",
+      "cost_basis_note"
+    ],
+    "protected_changed": {},
+    "unexpected_changed": {},
+    "empty_leg_days": 370,
+    "weight_changed_days": 1,
+    "active_weight_changed_days": 0,
+    "all_common_columns_changed": {
+      "weight": 1.0,
+      "base_weight_before_v78_score_hot": 1.4810920391123654,
+      "v78_adk_new_weight": 1.0,
+      "v78_adk_final_exposure": 1.0,
+      "final_exposure": 1.0,
+      "final_long_short_legs": null
+    },
+    "pass": true
+  },
+  "B": {
+    "manifest": {
+      "status": "complete",
+      "source_arm_summary_sha256": "aa2504349eae418219d87053f86e26a70958d7cf2e7d976ad13f59f4dcb4769d",
+      "daily_rows": 71552,
+      "execution_event_rows": 15106,
+      "state_event_rows": 120,
+      "daily_sha256": "ea53161c7b9f208b0cccb43b0533c012713d1c83eee031c784c07ad3168fc500",
+      "events_sha256": "e5ac9c0cad4a68ce7456fe8a57e2e587a1f5fdba31f5cb9dbab0b9663eb42180",
+      "state_events_sha256": "efb34dbb5892a2f05356cd0638055aa57969dc375c2292608b478080374c17a5"
+    },
+    "csv_hashes_pass": true,
+    "daily_rows": 71552,
+    "trade_rows": 15106,
+    "state_rows": 120,
+    "marked_rows": 15226,
+    "partition_ok": true,
+    "keys_unique": true,
+    "trade_turnover_min": 2.541540090940646e-05,
+    "trade_zero_fee_rows": 0,
+    "state_positive_turnover_rows": 0,
+    "state_positive_fee_rows": 0,
+    "by_sleeve_arm": [
+      {
+        "sleeve": "B7.8",
+        "arm": "bias_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "ema_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "formal",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "inflation_gate_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "logvol_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "official_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 948,
+        "state_rows": 7,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "target_vol_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 953,
+        "state_rows": 2,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.8",
+        "arm": "volreg_off",
+        "daily_rows": 4472,
+        "marked_rows": 928,
+        "trade_rows": 928,
+        "state_rows": 0,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "bias_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "ema_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "formal",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "inflation_gate_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "logvol_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "official_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 932,
+        "state_rows": 23,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "target_vol_off",
+        "daily_rows": 4472,
+        "marked_rows": 955,
+        "trade_rows": 942,
+        "state_rows": 13,
+        "conserved": true
+      },
+      {
+        "sleeve": "B7.9",
+        "arm": "volreg_off",
+        "daily_rows": 4472,
+        "marked_rows": 928,
+        "trade_rows": 928,
+        "state_rows": 0,
+        "conserved": true
+      }
+    ],
+    "pass": true
+  },
+  "B_injections": {
+    "source_sha256": "f25aec8404ad269566f7d0e6878f4c4635a5778ca36040da7287fb137d6be5ac",
+    "cases": {
+      "trade_missing_fee_flagged": {
+        "rejected": true,
+        "reason": "B event fee does not match 10bp of open traded value",
+        "injection": [
+          {
+            "sleeve": "B7.8",
+            "arm": "formal",
+            "date": "2008-12-19 00:00:00"
+          }
+        ],
+        "temp_csv_written": false
+      },
+      "trade_missing_fee_unflagged": {
+        "rejected": true,
+        "reason": "B event fee does not match 10bp of open traded value",
+        "injection": [
+          {
+            "sleeve": "B7.8",
+            "arm": "formal",
+            "date": "2008-12-19 00:00:00"
+          }
+        ],
+        "temp_csv_written": false
+      },
+      "zero_turnover_with_fee": {
+        "rejected": true,
+        "reason": "B event fee does not match 10bp of open traded value",
+        "injection": [
+          {
+            "sleeve": "B7.8",
+            "arm": "formal",
+            "date": "2022-06-27 00:00:00"
+          }
+        ],
+        "temp_csv_written": false
+      }
+    },
+    "original_artifacts_unchanged": true,
+    "pass": true
+  }
+}

@@ -1,0 +1,346 @@
+{
+  "scope": "read frozen B7.8/B7.9 formal and seven off arms each, C two off arms and formal snapshot; no B builder or US audit helper",
+  "frozen_arms_source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "current_display_fix_source_sha256": "c9b7609353464aba423740d2a128952327d413a34ef241a75c647377feaf3dd7",
+  "B": {
+    "B7.8": {
+      "formal": {
+        "rows": 4472,
+        "asset_minus_borrow_minus_nav_max_abs": 0.0,
+        "return_nav_identity_max_abs": 0.0,
+        "start_previous_nav_max_abs": 0.0,
+        "fee_10bp_open_nav_turnover_max_abs": 8.673617379884035e-19,
+        "zero_turnover_fee_positive_days": 0,
+        "positive_fee_zero_turnover_days": 0,
+        "positive_turnover_days": 953,
+        "positive_fee_days": 953
+      },
+      "arms": {
+        "official_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 948,
+          "positive_fee_days": 948,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4456,
+          "max_abs_return_difference": 0.009044935737733795,
+          "disabled_component_max_abs": {
+            "official_return": 0.0,
+            "subb_blend_official_weight": 0.0
+          }
+        },
+        "ema_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 8.673617379884035e-19,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 953,
+          "positive_fee_days": 953,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4456,
+          "max_abs_return_difference": 0.0063929399524642605,
+          "disabled_component_max_abs": {
+            "ema_return": 0.0,
+            "subb_blend_ema_weight": 0.0
+          }
+        },
+        "bias_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 8.673617379884035e-19,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 953,
+          "positive_fee_days": 953,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4456,
+          "max_abs_return_difference": 0.005008759425159992,
+          "disabled_component_max_abs": {
+            "v78_subb_bias_return": 0.0
+          }
+        },
+        "logvol_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 953,
+          "positive_fee_days": 953,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4456,
+          "max_abs_return_difference": 0.005231268801242472,
+          "disabled_component_max_abs": {
+            "v78_subb_logvol_return": 0.0
+          }
+        },
+        "volreg_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 8.673617379884035e-19,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 928,
+          "positive_fee_days": 928,
+          "first_difference": "2010-05-11",
+          "different_return_days": 326,
+          "max_abs_return_difference": 0.03704397884568811,
+          "volreg_fields_absent": true
+        },
+        "inflation_gate_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 953,
+          "positive_fee_days": 953,
+          "first_difference": "2008-12-19",
+          "different_return_days": 1927,
+          "max_abs_return_difference": 0.00884108555458396,
+          "ranking_code_different_days": 651
+        },
+        "target_vol_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 8.673617379884035e-19,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 953,
+          "positive_fee_days": 953,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4319,
+          "max_abs_return_difference": 0.010032195634739671,
+          "official_ema_main_scale_max_abs_from_1": {
+            "official_scale": 0.0,
+            "ema_scale": 0.0,
+            "scale": 0.0
+          }
+        }
+      }
+    },
+    "B7.9": {
+      "formal": {
+        "rows": 4472,
+        "asset_minus_borrow_minus_nav_max_abs": 0.0,
+        "return_nav_identity_max_abs": 0.0,
+        "start_previous_nav_max_abs": 0.0,
+        "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+        "zero_turnover_fee_positive_days": 0,
+        "positive_fee_zero_turnover_days": 0,
+        "positive_turnover_days": 942,
+        "positive_fee_days": 942
+      },
+      "arms": {
+        "official_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 932,
+          "positive_fee_days": 932,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4440,
+          "max_abs_return_difference": 0.01204296487763623,
+          "disabled_component_max_abs": {
+            "official_return": 0.0,
+            "subb_blend_official_weight": 0.0
+          }
+        },
+        "ema_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 942,
+          "positive_fee_days": 942,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4440,
+          "max_abs_return_difference": 0.008214456470329479,
+          "disabled_component_max_abs": {
+            "ema_return": 0.0,
+            "subb_blend_ema_weight": 0.0
+          }
+        },
+        "bias_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 942,
+          "positive_fee_days": 942,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4440,
+          "max_abs_return_difference": 0.009595791028471967,
+          "disabled_component_max_abs": {
+            "v78_subb_bias_return": 0.0
+          }
+        },
+        "logvol_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 3.469446951953614e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 942,
+          "positive_fee_days": 942,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4440,
+          "max_abs_return_difference": 0.00832242301240449,
+          "disabled_component_max_abs": {
+            "v78_subb_logvol_return": 0.0
+          }
+        },
+        "volreg_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 3.469446951953614e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 928,
+          "positive_fee_days": 928,
+          "first_difference": "2010-05-11",
+          "different_return_days": 264,
+          "max_abs_return_difference": 0.04129894475266371,
+          "volreg_fields_absent": true
+        },
+        "inflation_gate_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 942,
+          "positive_fee_days": 942,
+          "first_difference": "2020-02-14",
+          "different_return_days": 451,
+          "max_abs_return_difference": 0.011413232939722073,
+          "ranking_code_different_days": 651
+        },
+        "target_vol_off": {
+          "rows": 4472,
+          "asset_minus_borrow_minus_nav_max_abs": 0.0,
+          "return_nav_identity_max_abs": 0.0,
+          "start_previous_nav_max_abs": 0.0,
+          "fee_10bp_open_nav_turnover_max_abs": 1.734723475976807e-18,
+          "zero_turnover_fee_positive_days": 0,
+          "positive_fee_zero_turnover_days": 0,
+          "positive_turnover_days": 942,
+          "positive_fee_days": 942,
+          "first_difference": "2008-12-15",
+          "different_return_days": 4255,
+          "max_abs_return_difference": 0.011475604983703258,
+          "official_ema_main_scale_max_abs_from_1": {
+            "official_scale": 0.0,
+            "ema_scale": 0.0,
+            "scale": 0.0
+          }
+        }
+      }
+    }
+  },
+  "C": {
+    "C_equity_vol_off": {
+      "assets_checked": [
+        "VTI",
+        "QQQM",
+        "AVUV",
+        "VEA",
+        "AVDV",
+        "VGIT",
+        "DBMF",
+        "KMLM",
+        "GLDM",
+        "IBIT"
+      ],
+      "rows": 1459,
+      "all_10_exposure_signal_contribution_vs_formal_max_abs": 0.0,
+      "disabled_scale_max_abs_from_1": 0.0,
+      "remaining_scale_vs_formal_max_abs": 0.0,
+      "remaining_scale_nonunit_days": 1459,
+      "annual_base_fee_vs_formal_max_abs": 0.0,
+      "raw_return_vs_formal_max_abs": 0.0,
+      "first_scaled_return_difference": "2020-12-03",
+      "different_scaled_return_days": 1459
+    },
+    "C_gold_vol_off": {
+      "assets_checked": [
+        "VTI",
+        "QQQM",
+        "AVUV",
+        "VEA",
+        "AVDV",
+        "VGIT",
+        "DBMF",
+        "KMLM",
+        "GLDM",
+        "IBIT"
+      ],
+      "rows": 1459,
+      "all_10_exposure_signal_contribution_vs_formal_max_abs": 0.0,
+      "disabled_scale_max_abs_from_1": 0.0,
+      "remaining_scale_vs_formal_max_abs": 0.0,
+      "remaining_scale_nonunit_days": 1459,
+      "annual_base_fee_vs_formal_max_abs": 0.0,
+      "raw_return_vs_formal_max_abs": 0.0,
+      "first_scaled_return_difference": "2020-12-03",
+      "different_scaled_return_days": 1457
+    }
+  },
+  "counterexamples": [
+    {
+      "case": "B7.9 1Y inflation gate produces no return difference despite active pressure",
+      "rows": 252,
+      "formal_pressure_on_days": 129,
+      "ranking_code_different_days": 26,
+      "return_difference_days_gt_1e_10": 0,
+      "max_abs_daily_return_difference": 6.661338147750939e-16,
+      "conclusion": "No 1Y return identification for this gate; do not call this a proven benefit or defect."
+    },
+    {
+      "case": "B event export separates 120 zero-turnover markers from 15106 trades",
+      "rows": 120,
+      "zero_fee_rows": 120,
+      "model_execution_true_rows": 62,
+      "volreg_execution_true_rows": 58,
+      "conclusion": "State markers stay in b_state_events.csv; b_execution_events.csv counts only positive-turnover model trades."
+    }
+  ],
+  "limitations": [
+    "All results are frozen paper execution; vendor/proxy and L2 self-financing limitations remain."
+  ],
+  "verdict": "PASS for tested frozen boundaries and paper-account arithmetic; no live-fill or source-data recertification"
+}

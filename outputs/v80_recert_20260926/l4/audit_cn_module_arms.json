@@ -1,0 +1,718 @@
+{
+  "basis": "L1 frozen prices, L2 formal, L4 isolated arms; paper account only",
+  "hashes": {
+    "source": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+    "input": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "formal": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+    "arms": "5579d7c9df910938529496d54c5cadf6298034c9cc48ce7d38567585f9de65d2"
+  },
+  "arms": {
+    "A_volume_off": {
+      "off_rows": 2189,
+      "formal_rows": 2189,
+      "common_rows": 2189,
+      "off_first": "2017-09-19",
+      "formal_first": "2017-09-19",
+      "off_last": "2026-09-24",
+      "formal_last": "2026-09-24",
+      "first_return_difference": "2017-09-19",
+      "changed_return_days": 1187,
+      "max_return_difference": 0.07906864820232129,
+      "price_position_cost_rebuild_max_errors": {
+        "return": 2.220446049250313e-16,
+        "cost": 0.0,
+        "turnover": 1.1102230246251565e-16,
+        "gross": 0.0
+      },
+      "off_total_fee_fraction": 0.45144791163396925,
+      "independent_window_metrics": [
+        {
+          "window": "Full",
+          "arm": "formal",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 20.598801028720803,
+          "max_dd_pct": -21.22026414759677,
+          "end_nav": 5.412120592047965
+        },
+        {
+          "window": "Full",
+          "arm": "module_off",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 15.769741731405308,
+          "max_dd_pct": -28.675342600310895,
+          "end_nav": 3.744180130356372
+        },
+        {
+          "window": "10Y",
+          "arm": "formal",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "10Y",
+          "arm": "module_off",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "5Y",
+          "arm": "formal",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 24.571603665086283,
+          "max_dd_pct": -18.646347279329067,
+          "end_nav": 2.999369465848689
+        },
+        {
+          "window": "5Y",
+          "arm": "module_off",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 19.25805101167044,
+          "max_dd_pct": -23.662035872263644,
+          "end_nav": 2.4120493260691744
+        },
+        {
+          "window": "3Y",
+          "arm": "formal",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 43.42845167960987,
+          "max_dd_pct": -16.242816755180367,
+          "end_nav": 2.9571328096995306
+        },
+        {
+          "window": "3Y",
+          "arm": "module_off",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 36.24087907069074,
+          "max_dd_pct": -14.113179124811115,
+          "end_nav": 2.533667772695175
+        },
+        {
+          "window": "1Y",
+          "arm": "formal",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 13.845193971168834,
+          "max_dd_pct": -16.2428167551804,
+          "end_nav": 1.1383509021894844
+        },
+        {
+          "window": "1Y",
+          "arm": "module_off",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 3.4734475948424492,
+          "max_dd_pct": -14.113179124810937,
+          "end_nav": 1.0347102935805916
+        }
+      ],
+      "module_metrics_csv_max_abs_errors": {
+        "annual_pct": 4.440892098500626e-16,
+        "max_dd_pct": 3.552713678800501e-15,
+        "end_nav": 4.440892098500626e-16
+      },
+      "volume_fields_absent": true,
+      "r2_top_same_days": 2189,
+      "nonunit_weight_days": 1605,
+      "formal_volume_signal_on_first_difference": true
+    },
+    "A_r2_off": {
+      "off_rows": 2189,
+      "formal_rows": 2189,
+      "common_rows": 2189,
+      "off_first": "2017-09-19",
+      "formal_first": "2017-09-19",
+      "off_last": "2026-09-24",
+      "formal_last": "2026-09-24",
+      "first_return_difference": "2017-10-12",
+      "changed_return_days": 881,
+      "max_return_difference": 0.05939034586451919,
+      "price_position_cost_rebuild_max_errors": {
+        "return": 2.220446049250313e-16,
+        "cost": 0.0,
+        "turnover": 2.220446049250313e-16,
+        "gross": 0.0
+      },
+      "off_total_fee_fraction": 0.5097064000517986,
+      "independent_window_metrics": [
+        {
+          "window": "Full",
+          "arm": "formal",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 20.598801028720803,
+          "max_dd_pct": -21.22026414759677,
+          "end_nav": 5.412120592047965
+        },
+        {
+          "window": "Full",
+          "arm": "module_off",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 12.837331675165565,
+          "max_dd_pct": -37.995636169160754,
+          "end_nav": 2.9709887976699014
+        },
+        {
+          "window": "10Y",
+          "arm": "formal",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "10Y",
+          "arm": "module_off",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "5Y",
+          "arm": "formal",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 24.571603665086283,
+          "max_dd_pct": -18.646347279329067,
+          "end_nav": 2.999369465848689
+        },
+        {
+          "window": "5Y",
+          "arm": "module_off",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 13.576616082471382,
+          "max_dd_pct": -37.99563616916064,
+          "end_nav": 1.8897605664426136
+        },
+        {
+          "window": "3Y",
+          "arm": "formal",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 43.42845167960987,
+          "max_dd_pct": -16.242816755180367,
+          "end_nav": 2.9571328096995306
+        },
+        {
+          "window": "3Y",
+          "arm": "module_off",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 32.02542885484727,
+          "max_dd_pct": -19.189348937660068,
+          "end_nav": 2.305239386466206
+        },
+        {
+          "window": "1Y",
+          "arm": "formal",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 13.845193971168834,
+          "max_dd_pct": -16.2428167551804,
+          "end_nav": 1.1383509021894844
+        },
+        {
+          "window": "1Y",
+          "arm": "module_off",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 12.939512958072541,
+          "max_dd_pct": -16.782483543866157,
+          "end_nav": 1.1293010696437944
+        }
+      ],
+      "module_metrics_csv_max_abs_errors": {
+        "annual_pct": 1.7763568394002505e-15,
+        "max_dd_pct": 0.0,
+        "end_nav": 4.440892098500626e-16
+      },
+      "formal_score_top_same_days": 2189,
+      "formal_volume_rule_same_days": 2189,
+      "formal_r2_fail_at_first_difference": true
+    },
+    "A_targetvol_off": {
+      "off_rows": 2189,
+      "formal_rows": 2189,
+      "common_rows": 2189,
+      "off_first": "2017-09-19",
+      "formal_first": "2017-09-19",
+      "off_last": "2026-09-24",
+      "formal_last": "2026-09-24",
+      "first_return_difference": "2018-01-17",
+      "changed_return_days": 1407,
+      "max_return_difference": 0.0477487230305873,
+      "price_position_cost_rebuild_max_errors": {
+        "return": 0.0,
+        "cost": 0.0,
+        "turnover": 0.0,
+        "gross": 0.0
+      },
+      "off_total_fee_fraction": 0.40800000000000003,
+      "independent_window_metrics": [
+        {
+          "window": "Full",
+          "arm": "formal",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 20.598801028720803,
+          "max_dd_pct": -21.22026414759677,
+          "end_nav": 5.412120592047965
+        },
+        {
+          "window": "Full",
+          "arm": "module_off",
+          "start": "2017-09-19",
+          "end": "2026-09-24",
+          "prior_close": "2017-09-18",
+          "rows": 2189,
+          "annual_pct": 17.893483306616552,
+          "max_dd_pct": -20.26415964389736,
+          "end_nav": 4.410965237594672
+        },
+        {
+          "window": "10Y",
+          "arm": "formal",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "10Y",
+          "arm": "module_off",
+          "reason": "insufficient common history"
+        },
+        {
+          "window": "5Y",
+          "arm": "formal",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 24.571603665086283,
+          "max_dd_pct": -18.646347279329067,
+          "end_nav": 2.999369465848689
+        },
+        {
+          "window": "5Y",
+          "arm": "module_off",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 20.865223969827397,
+          "max_dd_pct": -20.264159643897372,
+          "end_nav": 2.5789948420573228
+        },
+        {
+          "window": "3Y",
+          "arm": "formal",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 43.42845167960987,
+          "max_dd_pct": -16.242816755180367,
+          "end_nav": 2.9571328096995306
+        },
+        {
+          "window": "3Y",
+          "arm": "module_off",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 35.69686571752937,
+          "max_dd_pct": -20.264159643897372,
+          "end_nav": 2.5033760996130545
+        },
+        {
+          "window": "1Y",
+          "arm": "formal",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 13.845193971168834,
+          "max_dd_pct": -16.2428167551804,
+          "end_nav": 1.1383509021894844
+        },
+        {
+          "window": "1Y",
+          "arm": "module_off",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 10.53183021816495,
+          "max_dd_pct": -14.308840090817288,
+          "end_nav": 1.105242548977408
+        }
+      ],
+      "module_metrics_csv_max_abs_errors": {
+        "annual_pct": 3.552713678800501e-15,
+        "max_dd_pct": 3.552713678800501e-15,
+        "end_nav": 4.440892098500626e-16
+      },
+      "positive_nonunit_weight_days": 0,
+      "formal_volume_rule_same_days": 2189,
+      "formal_r2_top_same_days": 2189
+    },
+    "ADK_scorehot_off": {
+      "off_rows": 2783,
+      "formal_rows": 2783,
+      "common_rows": 2783,
+      "off_first": "2015-04-20",
+      "formal_first": "2015-04-20",
+      "off_last": "2026-09-24",
+      "formal_last": "2026-09-24",
+      "first_return_difference": "2015-04-21",
+      "changed_return_days": 386,
+      "max_return_difference": 0.0572377988971704,
+      "price_position_cost_rebuild_max_errors": {
+        "return": 0.0,
+        "cost": 0.0,
+        "turnover": 0.0,
+        "gross": 0.0
+      },
+      "off_total_fee_fraction": 0.5528383581579028,
+      "independent_window_metrics": [
+        {
+          "window": "Full",
+          "arm": "formal",
+          "start": "2015-04-20",
+          "end": "2026-09-24",
+          "prior_close": "2015-04-17",
+          "rows": 2783,
+          "annual_pct": 17.447131002595494,
+          "max_dd_pct": -16.686776583319418,
+          "end_nav": 6.293746355379679
+        },
+        {
+          "window": "Full",
+          "arm": "module_off",
+          "start": "2015-04-20",
+          "end": "2026-09-24",
+          "prior_close": "2015-04-17",
+          "rows": 2783,
+          "annual_pct": 16.290616986444807,
+          "max_dd_pct": -20.208211297103297,
+          "end_nav": 5.620158074418947
+        },
+        {
+          "window": "10Y",
+          "arm": "formal",
+          "start": "2016-09-26",
+          "end": "2026-09-24",
+          "prior_close": "2016-09-23",
+          "rows": 2429,
+          "annual_pct": 20.67914527585344,
+          "max_dd_pct": -16.68677658331945,
+          "end_nav": 6.552906995987424
+        },
+        {
+          "window": "10Y",
+          "arm": "module_off",
+          "start": "2016-09-26",
+          "end": "2026-09-24",
+          "prior_close": "2016-09-23",
+          "rows": 2429,
+          "annual_pct": 18.942724613805638,
+          "max_dd_pct": -18.1075987012536,
+          "end_nav": 5.6686802187451235
+        },
+        {
+          "window": "5Y",
+          "arm": "formal",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 20.542337559156067,
+          "max_dd_pct": -16.175706551614542,
+          "end_nav": 2.544734678774423
+        },
+        {
+          "window": "5Y",
+          "arm": "module_off",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 19.448493002863398,
+          "max_dd_pct": -18.107598701253526,
+          "end_nav": 2.4313671650811792
+        },
+        {
+          "window": "3Y",
+          "arm": "formal",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 23.820053353148694,
+          "max_dd_pct": -16.17570655161453,
+          "end_nav": 1.9008356483553401
+        },
+        {
+          "window": "3Y",
+          "arm": "module_off",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 21.55156610511868,
+          "max_dd_pct": -18.107598701253536,
+          "end_nav": 1.7980584912909043
+        },
+        {
+          "window": "1Y",
+          "arm": "formal",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 10.769620340593168,
+          "max_dd_pct": -16.17570655161452,
+          "end_nav": 1.1076186580104694
+        },
+        {
+          "window": "1Y",
+          "arm": "module_off",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 3.3915942524749054,
+          "max_dd_pct": -18.107598701253636,
+          "end_nav": 1.0338923393075379
+        }
+      ],
+      "module_metrics_csv_max_abs_errors": {
+        "annual_pct": 3.552713678800501e-15,
+        "max_dd_pct": 3.552713678800501e-15,
+        "end_nav": 8.881784197001252e-16
+      },
+      "formal_score_hot_days": 369,
+      "score_hot_columns_absent": true,
+      "selected_pair_same_days": 2783,
+      "return_difference_on_hot_days": 369,
+      "return_difference_after_hot_recovery_days": 17,
+      "off_hot_difference_all_on_recovery": true,
+      "off_hot_cost_difference_days": 17
+    },
+    "ADK_targetvol_off": {
+      "off_rows": 2823,
+      "formal_rows": 2783,
+      "common_rows": 2783,
+      "off_first": "2015-02-13",
+      "formal_first": "2015-04-20",
+      "off_last": "2026-09-24",
+      "formal_last": "2026-09-24",
+      "first_return_difference": "2015-08-28",
+      "changed_return_days": 2432,
+      "max_return_difference": 0.054795869443998946,
+      "price_position_cost_rebuild_max_errors": {
+        "return": 0.0,
+        "cost": 0.0,
+        "turnover": 0.0,
+        "gross": 0.0
+      },
+      "off_total_fee_fraction": 0.516,
+      "independent_window_metrics": [
+        {
+          "window": "Full",
+          "arm": "formal",
+          "start": "2015-04-20",
+          "end": "2026-09-24",
+          "prior_close": "2015-04-17",
+          "rows": 2783,
+          "annual_pct": 17.447131002595494,
+          "max_dd_pct": -16.686776583319418,
+          "end_nav": 6.293746355379679
+        },
+        {
+          "window": "Full",
+          "arm": "module_off",
+          "start": "2015-04-20",
+          "end": "2026-09-24",
+          "prior_close": "2015-04-17",
+          "rows": 2783,
+          "annual_pct": 17.90038122641637,
+          "max_dd_pct": -19.08181233023285,
+          "end_nav": 6.577243616938285
+        },
+        {
+          "window": "10Y",
+          "arm": "formal",
+          "start": "2016-09-26",
+          "end": "2026-09-24",
+          "prior_close": "2016-09-23",
+          "rows": 2429,
+          "annual_pct": 20.67914527585344,
+          "max_dd_pct": -16.68677658331945,
+          "end_nav": 6.552906995987424
+        },
+        {
+          "window": "10Y",
+          "arm": "module_off",
+          "start": "2016-09-26",
+          "end": "2026-09-24",
+          "prior_close": "2016-09-23",
+          "rows": 2429,
+          "annual_pct": 21.06007621287118,
+          "max_dd_pct": -19.081812330232818,
+          "end_nav": 6.762745622470253
+        },
+        {
+          "window": "5Y",
+          "arm": "formal",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 20.542337559156067,
+          "max_dd_pct": -16.175706551614542,
+          "end_nav": 2.544734678774423
+        },
+        {
+          "window": "5Y",
+          "arm": "module_off",
+          "start": "2021-09-27",
+          "end": "2026-09-24",
+          "prior_close": "2021-09-24",
+          "rows": 1212,
+          "annual_pct": 20.866903742824626,
+          "max_dd_pct": -15.959002353333307,
+          "end_nav": 2.5791740355878194
+        },
+        {
+          "window": "3Y",
+          "arm": "formal",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 23.820053353148694,
+          "max_dd_pct": -16.17570655161453,
+          "end_nav": 1.9008356483553401
+        },
+        {
+          "window": "3Y",
+          "arm": "module_off",
+          "start": "2023-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2023-09-22",
+          "rows": 727,
+          "annual_pct": 21.34835141529374,
+          "max_dd_pct": -15.95900235333325,
+          "end_nav": 1.7890369246512596
+        },
+        {
+          "window": "1Y",
+          "arm": "formal",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 10.769620340593168,
+          "max_dd_pct": -16.17570655161452,
+          "end_nav": 1.1076186580104694
+        },
+        {
+          "window": "1Y",
+          "arm": "module_off",
+          "start": "2025-09-25",
+          "end": "2026-09-24",
+          "prior_close": "2025-09-24",
+          "rows": 242,
+          "annual_pct": 2.8571452619625015,
+          "max_dd_pct": -15.89600690020162,
+          "end_nav": 1.0285516199676479
+        }
+      ],
+      "module_metrics_csv_max_abs_errors": {
+        "annual_pct": 3.552713678800501e-15,
+        "max_dd_pct": 3.552713678800501e-15,
+        "end_nav": 2.220446049250313e-16
+      },
+      "extra_early_rows": 40,
+      "extra_early_nonzero_fee_days": 6,
+      "extra_early_nonzero_return_days": 19,
+      "extra_early_score_hot_days": 21,
+      "pre_score_hot_weight_nonunit_days": 0,
+      "score_hot_days": 391,
+      "common_first_formal_actual_gross_exposure": 0.0,
+      "common_first_off_actual_gross_exposure": 0.0,
+      "common_first_formal_display_final_exposure": 1.0,
+      "common_first_off_display_final_exposure": 0.0,
+      "common_first_formal_fee": 0.0,
+      "common_first_off_fee": 0.0,
+      "pair_disagreement_after_first_common_day": 0,
+      "hot_disagreement_after_first_common_day": 0,
+      "state_before_first_return_difference": {
+        "rows": 92,
+        "pair_disagreement_days": 1,
+        "hot_disagreement_days": 1,
+        "direction_disagreement_days": 0,
+        "exposure_disagreement_days": 0,
+        "fee_disagreement_days": 0,
+        "return_disagreement_days": 0,
+        "first_state_disagreement": "2015-04-20",
+        "first_state_disagreement_effective_exposure": 0.0
+      },
+      "reset_common_history_experiment": {
+        "max_return_difference_vs_full_history_arm": 0.0,
+        "max_cost_difference_vs_full_history_arm": 0.0,
+        "hot_state_difference_days_vs_full_history_arm": 0,
+        "first_day_restarted_hot": true,
+        "first_day_restarted_weight": 0.0
+      }
+    }
+  },
+  "adk_empty_leg_display_case": {
+    "affected_date": "2015-04-20",
+    "affected_rows": 1,
+    "top_pair": "none",
+    "actual_position": "none",
+    "net_asset_exposure": {},
+    "actual_gross_exposure": 0.0,
+    "reported_weight_and_final_exposure": 1.0,
+    "return": 0.0,
+    "cost": 0.0,
+    "query_summary_excerpt": "**ADK当前已生效持仓:** **空仓**（对应 2015-04-20 收盘确认）\n- New ADK all10 score-hot: 空仓\n- 当前已生效总敞口: **1.00x**",
+    "downstream_effect": "The ADK return and two-sided fees were calculated before V8 added final_exposure; portfolio/performance consume ADK return. The current holding query summary reads weight and prints 1.00x for this empty-leg first day. Net exposure table uses adk_net_asset_exposure and stays empty.",
+    "severity": "display_accuracy_only_for_this_frozen_run; no observed NAV or cost effect"
+  }
+}

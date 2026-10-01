@@ -1,0 +1,661 @@
+{
+  "cn_a_model_events": {
+    "rows": 2189,
+    "start": "2017-09-19",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2017-09-25",
+    "first_numeric_gap_bp": 0.009991220280003432,
+    "first_ge_0_01bp": "2017-10-18",
+    "days_over_0_01bp": 793,
+    "max_daily_abs_gap_bp": 59.14528411214537,
+    "first_no_model_fee_gap": "2018-01-19",
+    "first_no_model_fee_counterexample": {
+      "date": "2018-01-19",
+      "model_return": 0.00450408051416562,
+      "shadow_return": 0.00449352543984749,
+      "gap_bp": -0.10555074318130409,
+      "model_cost_rate": 0.0,
+      "actual_fee": 0.0,
+      "target": {
+        "1.000016": 1.25
+      }
+    },
+    "no_model_fee_gap_days": 390,
+    "daily_rebalance_without_model_fee_days": 0,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.0,
+    "max_gross_exposure": 1.2756828513445364,
+    "max_cash_debt": 1.5531459220008959,
+    "max_stock_borrow": 0.0,
+    "trade_days": 786,
+    "fee_sum": 0.9550120970456744,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2189,
+        "start": "2017-09-19",
+        "end": "2026-09-24",
+        "model_cagr": 0.20598801028720803,
+        "model_mdd": -0.21220264147596768,
+        "model_terminal": 5.412120592047965,
+        "shadow_cagr": 0.2049247191526964,
+        "shadow_mdd": -0.2116283605700231,
+        "shadow_terminal": 5.36925152971357,
+        "cagr_gap_pp": -0.10632911345116458
+      },
+      {
+        "window": "10Y",
+        "status": "N/A",
+        "reason": "可用收益起点晚于窗口要求",
+        "rows": 2189
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.24571603665086283,
+        "model_mdd": -0.18646347279329067,
+        "model_terminal": 2.999369465848689,
+        "shadow_cagr": 0.24387994594721008,
+        "shadow_mdd": -0.18598575312356103,
+        "shadow_terminal": 2.977333323138989,
+        "cagr_gap_pp": -0.18360907036527596
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.4342845167960987,
+        "model_mdd": -0.16242816755180367,
+        "model_terminal": 2.9571328096995306,
+        "shadow_cagr": 0.4306621335960108,
+        "shadow_mdd": -0.16179869282735104,
+        "shadow_terminal": 2.934738310968261,
+        "cagr_gap_pp": -0.36223832000878975
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.13845193971168834,
+        "model_mdd": -0.162428167551804,
+        "model_terminal": 1.1383509021894844,
+        "shadow_cagr": 0.1384030162606158,
+        "shadow_mdd": -0.16179869282735104,
+        "shadow_terminal": 1.1383020165629507,
+        "cagr_gap_pp": -0.00489234510725467
+      }
+    ]
+  },
+  "cn_a_daily_rebalance": {
+    "rows": 2189,
+    "start": "2017-09-19",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2017-09-25",
+    "first_numeric_gap_bp": 0.009991220280003432,
+    "first_ge_0_01bp": "2017-10-18",
+    "days_over_0_01bp": 753,
+    "max_daily_abs_gap_bp": 0.477483575558324,
+    "first_no_model_fee_gap": "2018-01-18",
+    "first_no_model_fee_counterexample": {
+      "date": "2018-01-18",
+      "model_return": 0.012310497285463073,
+      "shadow_return": 0.01230745375305009,
+      "gap_bp": -0.03043532412982941,
+      "model_cost_rate": 0.0,
+      "actual_fee": 3.0339984387981466e-06,
+      "target": {
+        "1.000016": 1.25
+      }
+    },
+    "no_model_fee_gap_days": 369,
+    "daily_rebalance_without_model_fee_days": 638,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.003605759821081329,
+    "max_gross_exposure": 1.2500000000000002,
+    "max_cash_debt": 1.6131011865023321,
+    "max_stock_borrow": 0.0,
+    "trade_days": 2189,
+    "fee_sum": 0.9612707552718218,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2189,
+        "start": "2017-09-19",
+        "end": "2026-09-24",
+        "model_cagr": 0.20598801028720803,
+        "model_mdd": -0.21220264147596768,
+        "model_terminal": 5.412120592047965,
+        "shadow_cagr": 0.20580820147915713,
+        "shadow_mdd": -0.2122825375006614,
+        "shadow_terminal": 5.404849871733497,
+        "cagr_gap_pp": -0.01798088080509075
+      },
+      {
+        "window": "10Y",
+        "status": "N/A",
+        "reason": "可用收益起点晚于窗口要求",
+        "rows": 2189
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.24571603665086283,
+        "model_mdd": -0.18646347279329067,
+        "model_terminal": 2.999369465848689,
+        "shadow_cagr": 0.24550804984038987,
+        "shadow_mdd": -0.18653520591801753,
+        "shadow_terminal": 2.9968667458848848,
+        "cagr_gap_pp": -0.020798681047295986
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.4342845167960987,
+        "model_mdd": -0.16242816755180367,
+        "model_terminal": 2.9571328096995306,
+        "shadow_cagr": 0.43409486181786106,
+        "shadow_mdd": -0.16245254809937149,
+        "shadow_terminal": 2.9559574947037297,
+        "cagr_gap_pp": -0.01896549782376411
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.13845193971168834,
+        "model_mdd": -0.162428167551804,
+        "model_terminal": 1.1383509021894844,
+        "shadow_cagr": 0.13831267595666286,
+        "shadow_mdd": -0.16245254809937182,
+        "shadow_terminal": 1.1382117461006662,
+        "cagr_gap_pp": -0.013926375502548716
+      }
+    ]
+  },
+  "cn_adk_model_events": {
+    "rows": 2783,
+    "start": "2015-04-20",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2015-08-28",
+    "first_numeric_gap_bp": 9.387823482831514,
+    "first_ge_0_01bp": "2015-08-28",
+    "days_over_0_01bp": 2042,
+    "max_daily_abs_gap_bp": 683.4873026188415,
+    "first_no_model_fee_gap": "2015-11-04",
+    "first_no_model_fee_counterexample": {
+      "date": "2015-11-04",
+      "model_return": 0.006972862515777001,
+      "shadow_return": 0.0069970597969315484,
+      "gap_bp": 0.24197281154547667,
+      "model_cost_rate": 0.0,
+      "actual_fee": 0.0,
+      "target": {
+        "CYB": 0.3433224018885375,
+        "SZ50": -0.3433224018885375
+      }
+    },
+    "no_model_fee_gap_days": 1524,
+    "daily_rebalance_without_model_fee_days": 0,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.0,
+    "max_gross_exposure": 3.156667952299308,
+    "max_cash_debt": 0.0,
+    "max_stock_borrow": 5.64063509989266,
+    "trade_days": 518,
+    "fee_sum": 1.0355873242787288,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2783,
+        "start": "2015-04-20",
+        "end": "2026-09-24",
+        "model_cagr": 0.17447131002595495,
+        "model_mdd": -0.16686776583319418,
+        "model_terminal": 6.293746355379679,
+        "shadow_cagr": 0.12207554342385118,
+        "shadow_mdd": -0.18826746738328481,
+        "shadow_terminal": 3.734133043618934,
+        "cagr_gap_pp": -5.239576660210377
+      },
+      {
+        "window": "10Y",
+        "status": "diagnostic",
+        "rows": 2429,
+        "start": "2016-09-26",
+        "end": "2026-09-24",
+        "model_cagr": 0.2067914527585344,
+        "model_mdd": -0.16686776583319451,
+        "model_terminal": 6.552906995987424,
+        "shadow_cagr": 0.15079913924562116,
+        "shadow_mdd": -0.18826746738328426,
+        "shadow_terminal": 4.074541894905084,
+        "cagr_gap_pp": -5.599231351291323
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.20542337559156065,
+        "model_mdd": -0.16175706551614544,
+        "model_terminal": 2.544734678774423,
+        "shadow_cagr": 0.15061276803391355,
+        "shadow_mdd": -0.16952560441479747,
+        "shadow_terminal": 2.016527927487531,
+        "cagr_gap_pp": -5.481060755764711
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.23820053353148696,
+        "model_mdd": -0.16175706551614533,
+        "model_terminal": 1.9008356483553401,
+        "shadow_cagr": 0.16073915809332662,
+        "shadow_mdd": -0.16952560441479736,
+        "shadow_terminal": 1.565318375267514,
+        "cagr_gap_pp": -7.746137543816034
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.10769620340593167,
+        "model_mdd": -0.16175706551614522,
+        "model_terminal": 1.1076186580104694,
+        "shadow_cagr": 0.02875676286110762,
+        "shadow_mdd": -0.15095116012772558,
+        "shadow_terminal": 1.0287367997891068,
+        "cagr_gap_pp": -7.893944054482405
+      }
+    ]
+  },
+  "cn_adk_daily_rebalance": {
+    "rows": 2783,
+    "start": "2015-04-20",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2015-08-28",
+    "first_numeric_gap_bp": 9.387823482831514,
+    "first_ge_0_01bp": "2015-08-28",
+    "days_over_0_01bp": 2372,
+    "max_daily_abs_gap_bp": 677.1005717806511,
+    "first_no_model_fee_gap": "2015-08-31",
+    "first_no_model_fee_counterexample": {
+      "date": "2015-08-31",
+      "model_return": 0.0015587408471640085,
+      "shadow_return": 0.0015293974103431918,
+      "gap_bp": -0.2934343682081675,
+      "model_cost_rate": 0.0,
+      "actual_fee": 2.9322642740004735e-05,
+      "target": {
+        "ZZ1000": 0.709147583873647,
+        "CYB": -0.709147583873647
+      }
+    },
+    "no_model_fee_gap_days": 1855,
+    "daily_rebalance_without_model_fee_days": 1914,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.03725970049323136,
+    "max_gross_exposure": 3.0000000000000004,
+    "max_cash_debt": 0.0,
+    "max_stock_borrow": 5.829142291442001,
+    "trade_days": 2783,
+    "fee_sum": 1.0658797787071097,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2783,
+        "start": "2015-04-20",
+        "end": "2026-09-24",
+        "model_cagr": 0.17447131002595495,
+        "model_mdd": -0.16686776583319418,
+        "model_terminal": 6.293746355379679,
+        "shadow_cagr": 0.12099707619459843,
+        "shadow_mdd": -0.18897629780544334,
+        "shadow_terminal": 3.693284617241205,
+        "cagr_gap_pp": -5.347423383135652
+      },
+      {
+        "window": "10Y",
+        "status": "diagnostic",
+        "rows": 2429,
+        "start": "2016-09-26",
+        "end": "2026-09-24",
+        "model_cagr": 0.2067914527585344,
+        "model_mdd": -0.16686776583319451,
+        "model_terminal": 6.552906995987424,
+        "shadow_cagr": 0.14950238933389626,
+        "shadow_mdd": -0.18897629780544323,
+        "shadow_terminal": 4.028854809692248,
+        "cagr_gap_pp": -5.728906342463813
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.20542337559156065,
+        "model_mdd": -0.16175706551614544,
+        "model_terminal": 2.544734678774423,
+        "shadow_cagr": 0.14961973546901475,
+        "shadow_mdd": -0.17142276858028405,
+        "shadow_terminal": 2.007842332246108,
+        "cagr_gap_pp": -5.5803640122545906
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.23820053353148696,
+        "model_mdd": -0.16175706551614533,
+        "model_terminal": 1.9008356483553401,
+        "shadow_cagr": 0.16028352661642997,
+        "shadow_mdd": -0.1714227685802837,
+        "shadow_terminal": 1.5634719876875023,
+        "cagr_gap_pp": -7.7917006915056986
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.10769620340593167,
+        "model_mdd": -0.16175706551614522,
+        "model_terminal": 1.1076186580104694,
+        "shadow_cagr": 0.035586577239785866,
+        "shadow_mdd": -0.14988821424063092,
+        "shadow_terminal": 1.0355617915000064,
+        "cagr_gap_pp": -7.21096261661458
+      }
+    ]
+  },
+  "cn_adk_prior_close_model_events": {
+    "rows": 2783,
+    "start": "2015-04-20",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2015-08-28",
+    "first_numeric_gap_bp": 0.005020620731377434,
+    "first_ge_0_01bp": "2015-08-31",
+    "days_over_0_01bp": 2357,
+    "max_daily_abs_gap_bp": 101.75538517039895,
+    "first_no_model_fee_gap": "2015-08-31",
+    "first_no_model_fee_counterexample": {
+      "date": "2015-08-31",
+      "model_return": 0.0015587408471640085,
+      "shadow_return": 0.0016942657262282168,
+      "gap_bp": 1.355248790642083,
+      "model_cost_rate": 0.0,
+      "actual_fee": 0.0,
+      "target": {
+        "ZZ1000": 0.709147583873647,
+        "CYB": -0.709147583873647
+      }
+    },
+    "no_model_fee_gap_days": 1896,
+    "daily_rebalance_without_model_fee_days": 0,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.0,
+    "max_gross_exposure": 3.136874636507431,
+    "max_cash_debt": 0.0,
+    "max_stock_borrow": 9.209760449515189,
+    "trade_days": 518,
+    "fee_sum": 1.4701345800185226,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2783,
+        "start": "2015-04-20",
+        "end": "2026-09-24",
+        "model_cagr": 0.17447131002595495,
+        "model_mdd": -0.16686776583319418,
+        "model_terminal": 6.293746355379679,
+        "shadow_cagr": 0.1720563359558296,
+        "shadow_mdd": -0.1697744659900603,
+        "shadow_terminal": 6.147292187889008,
+        "cagr_gap_pp": -0.2414974070125364
+      },
+      {
+        "window": "10Y",
+        "status": "diagnostic",
+        "rows": 2429,
+        "start": "2016-09-26",
+        "end": "2026-09-24",
+        "model_cagr": 0.2067914527585344,
+        "model_mdd": -0.16686776583319451,
+        "model_terminal": 6.552906995987424,
+        "shadow_cagr": 0.20363609180253395,
+        "shadow_mdd": -0.16977446599006063,
+        "shadow_terminal": 6.383549208511127,
+        "cagr_gap_pp": -0.31553609560004414
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.20542337559156065,
+        "model_mdd": -0.16175706551614544,
+        "model_terminal": 2.544734678774423,
+        "shadow_cagr": 0.19677979740828877,
+        "shadow_mdd": -0.162655677585671,
+        "shadow_terminal": 2.454809802840793,
+        "cagr_gap_pp": -0.8643578183271883
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.23820053353148696,
+        "model_mdd": -0.16175706551614533,
+        "model_terminal": 1.9008356483553401,
+        "shadow_cagr": 0.22788317063326802,
+        "shadow_mdd": -0.162655677585671,
+        "shadow_terminal": 1.853618532785576,
+        "cagr_gap_pp": -1.031736289821894
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.10769620340593167,
+        "model_mdd": -0.16175706551614522,
+        "model_terminal": 1.1076186580104694,
+        "shadow_cagr": 0.10008444703081909,
+        "shadow_mdd": -0.16265567758567112,
+        "shadow_terminal": 1.1000126261743541,
+        "cagr_gap_pp": -0.7611756375112577
+      }
+    ]
+  },
+  "cn_adk_prior_close_daily_rebalance": {
+    "rows": 2783,
+    "start": "2015-04-20",
+    "end": "2026-09-24",
+    "first_numeric_difference": "2015-08-28",
+    "first_numeric_gap_bp": 0.005020620731377434,
+    "first_ge_0_01bp": "2015-08-31",
+    "days_over_0_01bp": 2293,
+    "max_daily_abs_gap_bp": 1.1718845117703047,
+    "first_no_model_fee_gap": "2015-08-31",
+    "first_no_model_fee_counterexample": {
+      "date": "2015-08-31",
+      "model_return": 0.0015587408471640085,
+      "shadow_return": 0.0015140210964124101,
+      "gap_bp": -0.44719750751598397,
+      "model_cost_rate": 0.0,
+      "actual_fee": 4.457661726713119e-05,
+      "target": {
+        "ZZ1000": 0.709147583873647,
+        "CYB": -0.709147583873647
+      }
+    },
+    "no_model_fee_gap_days": 1858,
+    "daily_rebalance_without_model_fee_days": 1914,
+    "daily_rebalance_without_model_fee_absolute_cost": 0.05140998353755867,
+    "max_gross_exposure": 3.1051039545716375,
+    "max_cash_debt": 0.0,
+    "max_stock_borrow": 9.63382771739434,
+    "trade_days": 2783,
+    "fee_sum": 1.5153122691638883,
+    "windows": [
+      {
+        "window": "Full",
+        "status": "diagnostic",
+        "rows": 2783,
+        "start": "2015-04-20",
+        "end": "2026-09-24",
+        "model_cagr": 0.17447131002595495,
+        "model_mdd": -0.16686776583319418,
+        "model_terminal": 6.293746355379679,
+        "shadow_cagr": 0.1725040635215047,
+        "shadow_mdd": -0.1670854102853644,
+        "shadow_terminal": 6.174207132568163,
+        "cagr_gap_pp": -0.19672465044502374
+      },
+      {
+        "window": "10Y",
+        "status": "diagnostic",
+        "rows": 2429,
+        "start": "2016-09-26",
+        "end": "2026-09-24",
+        "model_cagr": 0.2067914527585344,
+        "model_mdd": -0.16686776583319451,
+        "model_terminal": 6.552906995987424,
+        "shadow_cagr": 0.20462513820762473,
+        "shadow_mdd": -0.1670854102853644,
+        "shadow_terminal": 6.436205445305953,
+        "cagr_gap_pp": -0.21663145509096537
+      },
+      {
+        "window": "5Y",
+        "status": "diagnostic",
+        "rows": 1212,
+        "start": "2021-09-27",
+        "end": "2026-09-24",
+        "model_cagr": 0.20542337559156065,
+        "model_mdd": -0.16175706551614544,
+        "model_terminal": 2.544734678774423,
+        "shadow_cagr": 0.20324864493863704,
+        "shadow_mdd": -0.16196751575222146,
+        "shadow_terminal": 2.5218654166567647,
+        "cagr_gap_pp": -0.21747306529236177
+      },
+      {
+        "window": "3Y",
+        "status": "diagnostic",
+        "rows": 727,
+        "start": "2023-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.23820053353148696,
+        "model_mdd": -0.16175706551614533,
+        "model_terminal": 1.9008356483553401,
+        "shadow_cagr": 0.2362843108235797,
+        "shadow_mdd": -0.16196751575222113,
+        "shadow_terminal": 1.8920061236234529,
+        "cagr_gap_pp": -0.19162227079072558
+      },
+      {
+        "window": "1Y",
+        "status": "diagnostic",
+        "rows": 242,
+        "start": "2025-09-25",
+        "end": "2026-09-24",
+        "model_cagr": 0.10769620340593167,
+        "model_mdd": -0.16175706551614522,
+        "model_terminal": 1.1076186580104694,
+        "shadow_cagr": 0.10621359372944594,
+        "shadow_mdd": -0.1619675157522209,
+        "shadow_terminal": 1.1061371661666322,
+        "cagr_gap_pp": -0.14826096764857244
+      }
+    ]
+  },
+  "interaction_evidence": {
+    "A_R2_positive_score_rejected": {
+      "days": 358,
+      "first": "2017-10-12"
+    },
+    "A_volume_blocks_equity": {
+      "days": 339,
+      "first": "2017-09-19"
+    },
+    "A_target_vol_live": {
+      "days": 1282,
+      "first": "2018-01-17"
+    },
+    "ADK_scorehot_zero_exposure": {
+      "days": 369,
+      "first": "2015-04-21"
+    },
+    "ADK_target_vol_live": {
+      "days": 2413,
+      "first": "2015-08-28"
+    },
+    "A_volume_and_target_vol": {
+      "days": 323,
+      "first": "2018-05-03"
+    },
+    "ADK_scorehot_and_nonunit_vol_scale": {
+      "days": 369,
+      "first": "2015-04-21"
+    }
+  },
+  "leg_evidence": {
+    "A_holding_days": {
+      "cash": 857,
+      "0.399006": 406,
+      "1.H11077": 336,
+      "1.000852": 246,
+      "1.000016": 155,
+      "1.930955": 129,
+      "1.000905": 60
+    },
+    "ADK_active_pair_days": {
+      "SZ50/CYB": 784,
+      "SZ50/ZZ1000": 695,
+      "ZZ1000/CYB": 271,
+      "ZZ500/CYB": 248,
+      "SZ50/ZZ500": 145,
+      "HS300/CYB": 101,
+      "HS300/ZZ1000": 74,
+      "HS300/ZZ500": 62,
+      "ZZ500/ZZ1000": 29,
+      "SZ50/HS300": 4
+    },
+    "ADK_active_pair_count": 10,
+    "ADK_max_gross_target_exposure": 3.0
+  },
+  "frozen_price_replay": {
+    "A_max_abs_daily_residual": 2.220446049250313e-16,
+    "ADK_max_abs_daily_residual": 0.0
+  }
+}

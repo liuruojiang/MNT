@@ -1,0 +1,136 @@
+{
+  "stage": "complete",
+  "scope": "A L6 r2_window independent cross-audit",
+  "source": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l6\\suba\\daily_paths.csv.gz",
+  "frozen_market": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_final\\formal_inputs.pkl",
+  "cases": [
+    {
+      "candidate": "formal_all_on",
+      "rows": 2189,
+      "account_return_max_abs": 9.978725745013461e-17,
+      "10bp_fee_max_abs": 9.996344030316351e-17,
+      "trade_days": 786,
+      "holding_legs_including_cash": 7,
+      "cash_holding_days": 857
+    },
+    {
+      "candidate": "r2win15",
+      "rows": 2189,
+      "account_return_max_abs": 9.974659986866641e-17,
+      "10bp_fee_max_abs": 9.82287168271867e-17,
+      "trade_days": 810,
+      "holding_legs_including_cash": 7,
+      "cash_holding_days": 818
+    },
+    {
+      "candidate": "r2win20_formal",
+      "rows": 2189,
+      "account_return_max_abs": 9.978725745013461e-17,
+      "10bp_fee_max_abs": 9.996344030316351e-17,
+      "trade_days": 786,
+      "holding_legs_including_cash": 7,
+      "cash_holding_days": 857
+    },
+    {
+      "candidate": "r2win30",
+      "rows": 2189,
+      "account_return_max_abs": 2.949029909160572e-16,
+      "10bp_fee_max_abs": 9.93129189996722e-17,
+      "trade_days": 694,
+      "holding_legs_including_cash": 7,
+      "cash_holding_days": 938
+    },
+    {
+      "candidate": "r2_window_off",
+      "rows": 2189,
+      "account_return_max_abs": 2.0816681711721685e-16,
+      "10bp_fee_max_abs": 9.898765834792655e-17,
+      "trade_days": 933,
+      "holding_legs_including_cash": 7,
+      "cash_holding_days": 631
+    }
+  ],
+  "first_differences": [
+    {
+      "candidate": "formal_all_on",
+      "holding_diff_days": 0,
+      "return_diff_days": 0,
+      "first_holding_diff": null,
+      "first_return_diff": null
+    },
+    {
+      "candidate": "r2win15",
+      "holding_diff_days": 263,
+      "return_diff_days": 925,
+      "first_holding_diff": "2017-10-11",
+      "first_return_diff": "2017-10-11"
+    },
+    {
+      "candidate": "r2win20_formal",
+      "holding_diff_days": 0,
+      "return_diff_days": 0,
+      "first_holding_diff": null,
+      "first_return_diff": null
+    },
+    {
+      "candidate": "r2win30",
+      "holding_diff_days": 405,
+      "return_diff_days": 978,
+      "first_holding_diff": "2017-10-16",
+      "first_return_diff": "2017-10-16"
+    },
+    {
+      "candidate": "r2_window_off",
+      "holding_diff_days": 226,
+      "return_diff_days": 881,
+      "first_holding_diff": "2017-10-12",
+      "first_return_diff": "2017-10-12"
+    }
+  ],
+  "boundary_r2": [
+    {
+      "candidate": "r2win15",
+      "date": "2017-10-11",
+      "raw_top": "1.H11077",
+      "score": 0.9594453717604035,
+      "r2_window": 15,
+      "r2": 0.13851694523963726,
+      "r2_pass": false,
+      "raw_selected": "cash",
+      "end_holding": "cash",
+      "trade_cost": 0.001,
+      "return": -0.0015424294135898
+    },
+    {
+      "candidate": "r2win20_formal",
+      "date": "2017-10-11",
+      "raw_top": "1.H11077",
+      "score": 0.9594453717604035,
+      "r2_window": 20,
+      "r2": 0.546932726912653,
+      "r2_pass": true,
+      "raw_selected": "1.H11077",
+      "end_holding": "1.H11077",
+      "trade_cost": 0.0,
+      "return": -0.0005429723859757
+    },
+    {
+      "candidate": "r2win30",
+      "date": "2017-10-16",
+      "raw_top": "1.930955",
+      "score": 3.79081278182595,
+      "r2_window": 30,
+      "r2": 0.0050199791654100545,
+      "r2_pass": false,
+      "raw_selected": "cash",
+      "end_holding": "cash",
+      "trade_cost": 0.0,
+      "return": 0.0001211499702025
+    }
+  ],
+  "metrics_rebuilt_rows": 20,
+  "missing_fee_injection_rejected": true,
+  "future_R2_T_plus_1_injection_rejected": true,
+  "timing": "T close R2 selection and same-close model fee; T asset return uses previous close holding; physical same-close feasibility remains unproven",
+  "leg_cost_semantics": "leg_counts cost is grouped by end-of-day holding label, so cash rows can contain entry/exit turnover fee; not per-security trade attribution"
+}

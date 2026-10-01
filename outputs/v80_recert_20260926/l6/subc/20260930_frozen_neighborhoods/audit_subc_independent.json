@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "checked_candidates": 68,
+  "groups": 17,
+  "daily_rows": 99212,
+  "metric_rows": 340,
+  "baseline_parity_max_abs_daily_diff": 0.0,
+  "cost_fault_injection": "rejected",
+  "metric_tolerance": "1e-10",
+  "diagnostics_rows": 68,
+  "post_ibit_listing_rows": 68,
+  "runner_sha256": "b54fdf3d0e4d83e0ac7171cc6272923536cbc3ce896d19e06b29b28739c76f36"
+}

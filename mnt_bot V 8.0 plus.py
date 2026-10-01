@@ -153,6 +153,7 @@ CN_SA_VOLUME_RULE_MODE = 'or'
 CN_SA_VOLUME_SCALE = 0.0
 CN_SA_VOLUME_HISTORY_BEG = '20000101'
 CN_SA_VOLUME_ZZ2000_SECID = '2.932000'
+CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE = pd.Timestamp('2023-08-11')
 CN_SA_VOLUME_ZZ2000_MA = 20
 CN_SA_VOLUME_ZZ2000_DAYS = 3
 CN_SA_VOLUME_CYB_SECID = '0.399006'
@@ -178,6 +179,7 @@ CN_KNIFE_THRESHOLD = -0.05
 CN_EQUITY_CODES = ['1.930955', '0.399006', '1.000016', '1.000852', '1.000905']
 CN_ALL_CODES = CN_EQUITY_CODES + [CN_BOND_CODE]
 CN_STOCK_CODES = CN_EQUITY_CODES
+CN_STOCK_FORMAL_START = pd.Timestamp('2017-05-26')
 CN_NAMES = {'1.930955': '中证红利低波100', '0.399006': '创业板', '1.000016': '上证50', '1.000852': '中证1000', '1.000905': '中证500', '1.H00300': '沪深300', '1.H11077': '10Y国债', 'cash': 'Cash'}
 CN_ZZHL_INDEX_SECID = '1.930955'
 CN_CSINDEX_PRICE_INDEX_CODES = {'1.930955': '930955'}
@@ -380,6 +382,7 @@ PROD_REBAL_MONTH = 12
 PROD_CASH = 'BIL'
 PROD_PORTFOLIO = {'VTI': {'w': 0.2, 'label': 'US Total Market', 'proxy': 'VTI', 'cls': 'equity'}, 'QQQM': {'w': 0.1, 'label': 'US Nasdaq 100', 'proxy': 'QQQ', 'cls': 'equity'}, 'AVUV': {'w': 0.1, 'label': 'US Small Cap Value', 'proxy': 'AVUV', 'cls': 'equity'}, 'VEA': {'w': 0.1, 'label': 'Intl Developed', 'proxy': 'VEA', 'cls': 'equity'}, 'AVDV': {'w': 0.1, 'label': 'Intl Small Cap Value', 'proxy': 'AVDV', 'cls': 'equity'}, 'VGIT': {'w': 0.15, 'label': 'US Interm Treasury', 'proxy': 'VGIT', 'cls': 'bond'}, 'DBMF': {'w': 0.025, 'label': 'Managed Futures (DBMF)', 'proxy': 'DBMF', 'cls': 'alt'}, 'KMLM': {'w': 0.025, 'label': 'Managed Futures (KMLM)', 'proxy': 'KMLM', 'cls': 'alt'}, 'GLDM': {'w': 0.15, 'label': 'Gold', 'proxy': 'GLD', 'cls': 'commodity'}, 'IBIT': {'w': 0.05, 'label': 'Bitcoin', 'proxy': 'BTC-USD', 'cls': 'crypto'}}
 SUBC_FORMAL_START = pd.Timestamp('2020-12-03')
+SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE = pd.Timestamp('2024-01-12')
 PROD_VS_ENABLED = True
 PROD_VS_SIGNAL_TICKER = 'SPY'
 PROD_VS_SCALE_CLASSES = frozenset({'equity'})
@@ -1982,7 +1985,7 @@ def _assert_cn_raw_prices_fresh(raw_dict, columns, expected_date, label):
 
 def _build_cn_stock_close_frame(cn_raw):
     frames = [_price_column_frame(cn_raw[secid], 'close', secid) for secid in CN_STOCK_CODES]
-    return _merge_cn_price_frames(frames, CN_STOCK_CODES, 'Sub-A')
+    return _merge_cn_price_frames(frames, CN_STOCK_CODES, 'Sub-A', formal_start=CN_STOCK_FORMAL_START)
 
 def _build_cn_dk_close_frame(dk_dfs):
     frames = [_price_column_frame(dk_dfs[col], col, col) for col in CN_DK_COLS]
@@ -2003,13 +2006,13 @@ def _fetch_cn_dk_price_index(idx_code, secid):
             time.sleep(0.2)
     raise ValueError(f"DK price index source failed for {secid}/{idx_code}: {'; '.join(attempts)}")
 
-def fetch_cn_kline(secid):
+def fetch_cn_kline(secid, required_date=None):
     code = secid.split('.')[1] if '.' in secid else secid
     last_err = None
     attempts = []
     if secid in CN_CSINDEX_PRICE_INDEX_CODES:
         index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
-        required_date = _latest_cn_data_required_date()
+        required_date = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
         try:
             df = _load_recent_cn_official_cache(secid)
             cache_date = df.index[-1].strftime('%Y-%m-%d')
@@ -2251,7 +2254,12 @@ def _load_suba_volume_signal(expected_date=None):
     for name, label, secid, ma, days in [('zz2000', 'ZZ2000', CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS), ('cyb', 'CYB', CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)]:
         try:
             df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date)
-            specs[name] = {'amount': df['amount'], 'ma': ma, 'days': days}
+            if expected_date is not None:
+                df = _drop_cn_rows_after(df, expected_date)
+            amount = df['amount']
+            if name == 'zz2000':
+                amount = amount.loc[amount.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
+            specs[name] = {'amount': amount, 'ma': ma, 'days': days}
             sources[name] = source
         except _DATA_FETCH_ERRORS as exc:
             errors[name] = str(exc)
@@ -2267,11 +2275,15 @@ def _load_suba_volume_signal(expected_date=None):
             numerator = specs.get('zz2000', {}).get('amount')
             if numerator is None:
                 numerator_df, numerator_source = _fetch_cn_amount_with_fallback(CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID, CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000)
-                numerator = numerator_df['amount']
+                if expected_date is not None:
+                    numerator_df = _drop_cn_rows_after(numerator_df, expected_date)
+                numerator = numerator_df['amount'].loc[numerator_df.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
                 severe_sources['numerator'] = numerator_source
             else:
                 severe_sources['numerator'] = sources.get('zz2000', 'unknown')
             denominator_df, denominator_source = _fetch_cn_amount_with_fallback(CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID, CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000)
+            if expected_date is not None:
+                denominator_df = _drop_cn_rows_after(denominator_df, expected_date)
             severe_sources['denominator'] = denominator_source
             severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(numerator, denominator_df['amount'], CN_SA_VOLUME_CLEAR_RATIO_MA, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
         except _DATA_FETCH_ERRORS as exc:
@@ -3074,7 +3086,7 @@ def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=Non
     if abs(live_close_base) < 1e-12:
         return proxy
     scale_factor = float(overlap.loc[switch_date, 'proxy_close']) / live_close_base
-    switch_mask = proxy.index >= switch_date
+    switch_mask = proxy.index > switch_date
     proxy.loc[switch_mask] = live_open.loc[switch_mask] * scale_factor
     return proxy
 
@@ -4779,6 +4791,11 @@ def _v78_adk_aggregate_asset_weights(row):
 def run_v80_adk_new_only(cn_close, cn_dk_close):
     """Run the single V8.0 production ADK strategy: all10 with score-hot."""
     component = run_v78_adk_new_primary(cn_close, cn_dk_close)
+    component = component.copy(deep=True)
+    active_legs = component['top_pair'].fillna('none').astype(str).ne('none') & component['direction'].fillna(0).ne(0) & component['long_leg'].notna() & component['short_leg'].notna()
+    component['weight'] = pd.to_numeric(component['weight'], errors='coerce').fillna(0.0).where(active_legs, 0.0)
+    if 'base_weight_before_v78_score_hot' in component:
+        component['base_weight_before_v78_score_hot'] = pd.to_numeric(component['base_weight_before_v78_score_hot'], errors='coerce').fillna(0.0).where(active_legs, 0.0)
     out = component.copy(deep=True)
     idx = out.index
     holdings = out.get('holding', pd.Series('none_0', index=idx)).fillna('none_0').astype(str)
@@ -6592,7 +6609,7 @@ def _v78_adk_leg_status_rows(cn_dk_result, idx):
         vol_scale_raw = float(raw_value) if pd.notna(raw_value) else np.nan
         realized_vol = float(realized_value) if pd.notna(realized_value) else np.nan
         overlay_multiplier = weight / vol_scale if abs(vol_scale) > 1e-12 else 0.0
-        rows.append({'leg': label, 'scope': scope, 'blend_weight': float(blend_weight), 'pair': pair, 'direction': direction, 'position_text': _dk_pos_str(f'{pair}_{direction}') if pair != 'none' else 'none', 'score': _v78_adk_pair_score(result_df, row, date), 'score_hot_on': score_hot_on, 'score_hot_scale': score_hot_scale, 'realized_vol': realized_vol, 'vol_scale_raw': vol_scale_raw, 'vol_scale': vol_scale, 'overlay_multiplier': overlay_multiplier, 'leg_weight': weight, 'leg_contribution': float(blend_weight) * weight})
+        rows.append({'leg': label, 'scope': scope, 'is_new': is_new, 'blend_weight': float(blend_weight), 'pair': pair, 'direction': direction, 'position_text': _dk_pos_str(f'{pair}_{direction}') if pair != 'none' else 'none', 'score': _v78_adk_pair_score(result_df, row, date), 'score_hot_on': score_hot_on, 'score_hot_scale': score_hot_scale, 'realized_vol': realized_vol, 'vol_scale_raw': vol_scale_raw, 'vol_scale': vol_scale, 'overlay_multiplier': overlay_multiplier, 'leg_weight': weight, 'leg_contribution': float(blend_weight) * weight})
     return rows
 
 def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label='分腿Top-1配对/方向'):
@@ -6607,14 +6624,14 @@ def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label='�
     for row in rows:
         score = row['score']
         score_text = f'`{score:.2f}`' if not np.isnan(score) else '`NA`'
-        if row['leg'] == V78_ADK_NEW_LABEL:
+        if row['is_new']:
             quality_text = 'R²不启用'
         else:
             quality_text = f'R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}' if CN_DK_R2_QUALITY_ENABLED else 'R²质控关闭'
         realized_text = f"{row['realized_vol']:.1%}" if pd.notna(row['realized_vol']) else 'NA'
         raw_scale_text = f"{row['vol_scale_raw']:.2f}x" if pd.notna(row['vol_scale_raw']) else 'NA'
         overlay_text = f"{row['overlay_multiplier']:.2f}x"
-        if row['leg'] == V78_ADK_NEW_LABEL:
+        if row['is_new']:
             overlay_text += ' (score-hot开启)' if row['score_hot_on'] else ' (score-hot关闭)'
         w(f"| {row['leg']} | {row['scope']} | {row['position_text']} | {score_text} | {quality_text} | {realized_text} | {raw_scale_text} | {row['vol_scale']:.2f}x | {overlay_text} | {_fmt_v78_x(row['leg_weight'])} | {_fmt_v78_x(row['leg_contribution'])} |\n")
 
@@ -7016,6 +7033,7 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
     adk_mark = '🔴' if adk_available and adk['changed'] else '🟢' if adk_available else '⚠️'
     adk_status = '需要调整' if adk_available and adk['changed'] else '维持' if adk_available else '状态不可判定'
     w(f'### ADK策略（Sub-A-DK）｜{adk_mark} {adk_status}\n\n')
+    w('选拔口径：全10配对按绝对乖离动量固定 Top-1；R²仅供诊断展示，正式路径不以 R² 过滤配对。\n\n')
     if cn_dk_result is not None and len(cn_dk_result) > 0:
         w(f"数据日期：**{pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if dk_intraday else '最近已确认收盘')}）\n\n")
     if query_kind in {'params', 'live_params'}:
@@ -8008,7 +8026,7 @@ def _v80_b78_us_open_row(date, assets, us_open, close_df, *, strict=False, conte
     if missing:
         dt = pd.Timestamp(date).date().isoformat()
         assets_text = ', '.join(sorted(missing))
-        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal Sub-B execution requires T+1 adjusted open; refusing close fallback.')
+        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal model execution requires T+1 adjusted open; refusing close fallback.')
     row = pd.Series(prices)
     if fallback_assets:
         row.attrs['open_price_close_fallback_assets'] = tuple(sorted(fallback_assets))
@@ -9031,6 +9049,8 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
 
 def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False):
     w('## 🌐 C策略总览｜总组合30%\n\n')
+    if query_kind in {'params', 'live_params'}:
+        w(f'> 历史样本：{SUBC_FORMAL_START.date().isoformat()}起含BTC日线代理；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段不能按统一美股收盘/次日开盘口径认证。\n\n')
     info = info or {}
     if not info:
         w('⚠️ C策略当前状态不可用；本次不生成正式调整指令。\n\n')
@@ -9853,7 +9873,7 @@ def _us_open_row(date, assets, us_open, close_df, *, strict=False, context='US o
     if missing:
         dt = pd.Timestamp(date).date().isoformat()
         assets_text = ', '.join(sorted(missing))
-        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal Sub-B execution requires T+1 adjusted open; refusing close fallback.')
+        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal model execution requires T+1 adjusted open; refusing close fallback.')
     row = pd.Series(prices)
     if fallback_assets:
         row.attrs['open_price_close_fallback_assets'] = tuple(sorted(fallback_assets))
@@ -10019,7 +10039,7 @@ def _subb_volreg_rule_text():
     return f'SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比 >{US_ROT_VOLREG_THRESHOLD:.1f} -> {proxy_assets}{live_note} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}, 差额进BIL；低于{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}恢复'
 
 def _subb_history_disclosure_text():
-    return f'Sub-B历史为phased/proxy口径：EMXC在{US_ROT_EMXC_BT_START.date().isoformat()}前使用{US_ROT_EMXC_BT_PROXY}收益代理、之后切换实盘EMXC；BTC在{US_ROT_BTC_START.date().isoformat()}前禁用，之后先用BTC-USD，IBIT上市后用IBIT调整收盘/开盘拼接；DBMF/KMLM仅从各自真实有效行情起参与。早期窗口不是当前全池同质正式样本。'
+    return f'Sub-B历史为phased/proxy口径：EMXC在{US_ROT_EMXC_BT_START.date().isoformat()}前使用{US_ROT_EMXC_BT_PROXY}收益代理、之后切换实盘EMXC；BTC在{US_ROT_BTC_START.date().isoformat()}前禁用，之后先用BTC-USD UTC日线代理，日K时钟不等于美股16:00收盘/次日09:30开盘；IBIT上市日保留BTC代理开盘，下一交易日起用IBIT调整开盘，收盘按首日重叠价拼接；DBMF/KMLM仅从各自真实有效行情起参与。代理段不能按统一美股开收盘口径认证，早期窗口不是当前全池同质样本。'
 
 def _should_force_volreg_cash_display(volreg_enabled, volreg_cash_next):
     return False
@@ -10602,11 +10622,26 @@ def _max_drawdown_pct_from_nav(nav):
 def _nav_from_period_returns(returns):
     return (1.0 + pd.to_numeric(returns, errors='coerce').fillna(0.0)).cumprod()
 
-def calc_daily_metrics(ret_series, rf_daily, td):
-    nav = (1 + ret_series).cumprod()
-    years = (ret_series.index[-1] - ret_series.index[0]).days / 365.25
-    if years < 0.25 or len(ret_series) < 20:
+def calc_daily_metrics(ret_series, rf_daily, td, *, history_returns=None, first_period_start=None):
+    ret_series = _performance_clean_daily_returns(ret_series, name='legacy daily metrics')
+    if len(ret_series) < 20:
         return None
+    preceding = pd.DatetimeIndex([])
+    if history_returns is not None:
+        history = _performance_clean_daily_returns(history_returns, name='legacy daily metrics history')
+        preceding = history.index[history.index < ret_series.index[0]]
+    if len(preceding):
+        period_start = pd.Timestamp(preceding[-1])
+    elif first_period_start is not None:
+        period_start = pd.Timestamp(first_period_start).normalize()
+    else:
+        raise ValueError('legacy daily metrics: preceding source close is required for first dated return')
+    if period_start >= ret_series.index[0]:
+        raise ValueError('legacy daily metrics: preceding source close must be before first dated return')
+    years = (ret_series.index[-1] - period_start).days / 365.25
+    if years < 0.25:
+        return None
+    nav = (1 + ret_series).cumprod()
     annual = (nav.iloc[-1] ** (1 / years) - 1) * 100
     excess = ret_series - rf_daily
     sharpe = excess.mean() / excess.std() * np.sqrt(td) if excess.std() > 0 else 0
@@ -10681,6 +10716,52 @@ def _performance_clean_daily_returns(ret_series, *, name='series'):
         raise ValueError(f'{name}: return must be greater than -100% at {bad_date.date()}')
     return values.astype(float)
 
+def _performance_annualized_pct(period_returns, history_returns, name, first_period_start=None):
+    period = _performance_clean_daily_returns(period_returns, name=name)
+    if len(period) < 2:
+        raise ValueError(f'{name}: insufficient dated returns for annualization')
+    preceding = pd.DatetimeIndex([])
+    if history_returns is not None:
+        history = _performance_clean_daily_returns(history_returns, name=name)
+        preceding = history.index[history.index < period.index[0]]
+    if len(preceding):
+        start = pd.Timestamp(preceding[-1])
+    elif first_period_start is not None:
+        start = pd.Timestamp(first_period_start).normalize()
+    else:
+        raise ValueError(f'{name}: preceding source close is required for first dated return')
+    if start >= period.index[0]:
+        raise ValueError(f'{name}: preceding source close must be before first dated return')
+    years = (period.index[-1] - start).days / 365.25
+    if years <= 0:
+        raise ValueError(f'{name}: nonpositive return-period calendar span')
+    nav = float((1.0 + period).prod())
+    return (nav ** (1.0 / years) - 1.0) * 100.0
+
+def _performance_initial_period_anchors(daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+    source = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close, 'B7.8': us_rot_close, 'B7.9': us_rot_close, 'Sub-C': us_prod_daily}
+    anchors = {}
+    for name, frame in source.items():
+        returns = _performance_clean_daily_returns(daily_returns.get(name), name=name)
+        if returns.empty:
+            continue
+        earlier = pd.DatetimeIndex(frame.index)[pd.DatetimeIndex(frame.index) < returns.index[0]]
+        if len(earlier) == 0:
+            raise ValueError(f'{name}: source close before first return unavailable')
+        anchors[name] = pd.Timestamp(earlier[-1]).normalize()
+    combined = _performance_clean_daily_returns(daily_returns.get('Combined'), name='Combined')
+    if not combined.empty:
+        candidates = []
+        for frame in source.values():
+            index = pd.DatetimeIndex(frame.index)
+            earlier = index[index < combined.index[0]]
+            if len(earlier):
+                candidates.append(pd.Timestamp(earlier[-1]).normalize())
+        if not candidates:
+            raise ValueError('Combined: source close before first return unavailable')
+        anchors['Combined'] = max(candidates)
+    return anchors
+
 def _performance_combined_daily_returns(daily_returns):
     series_map = {}
     for name in PERFORMANCE_COMBO_ORDER:
@@ -10715,7 +10796,7 @@ def _performance_combined_daily_returns(daily_returns):
     combined.iloc[0] = combined_nav.iloc[0] - 1.0
     return combined.astype(float)
 
-def _performance_daily_window_metric(ret_series, requested_start, end_date):
+def _performance_daily_window_metric(ret_series, requested_start, end_date, name='Combined', first_period_start=None):
     try:
         s = _performance_clean_daily_returns(ret_series, name='performance window')
     except ValueError as exc:
@@ -10736,14 +10817,14 @@ def _performance_daily_window_metric(ret_series, requested_start, end_date):
         s = s[s.index >= requested_start]
     if len(s) < PERFORMANCE_STANDARD_MIN_DAILY_ROWS:
         return {'annual': None, 'max_dd': None, 'reason': f'insufficient post-start history: {len(s)} daily rows'}
-    years = (s.index[-1] - s.index[0]).days / 365.25
-    if years <= 0:
-        return {'annual': None, 'max_dd': None, 'reason': 'insufficient post-start history: zero date span'}
     nav = (1.0 + s).cumprod()
-    annual = (nav.iloc[-1] ** (1.0 / years) - 1.0) * 100.0
+    try:
+        annual = _performance_annualized_pct(s, ret_series, name, first_period_start=first_period_start)
+    except ValueError as exc:
+        return {'annual': None, 'max_dd': None, 'reason': str(exc)}
     return {'annual': float(annual), 'max_dd': float(_max_drawdown_pct_from_nav(nav)), 'reason': None, 'start': s.index[0], 'end': s.index[-1]}
 
-def _performance_standard_window_rows(daily_returns, end_date=None, columns=None):
+def _performance_standard_window_rows(daily_returns, end_date=None, columns=None, first_period_starts=None):
     if columns is None:
         columns = PERFORMANCE_COLUMNS
     cleaned = {}
@@ -10762,7 +10843,7 @@ def _performance_standard_window_rows(daily_returns, end_date=None, columns=None
         requested_start = None if offset is None else end_ts - offset
         row = {'window': label, 'start': requested_start, 'end': end_ts, 'metrics': {}}
         for col in columns:
-            row['metrics'][col] = _performance_daily_window_metric(cleaned.get(col, pd.Series(dtype=float)), requested_start, end_ts)
+            row['metrics'][col] = _performance_daily_window_metric(cleaned.get(col, pd.Series(dtype=float)), requested_start, end_ts, name=col, first_period_start=(first_period_starts or {}).get(col))
         rows.append(row)
     return rows
 
@@ -10774,10 +10855,10 @@ def _format_performance_standard_window_cell(metric):
 
 def _performance_basis_notes():
     weights = _performance_combo_weight_label()
-    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普使用月收益年化，夏普无风险基准为0。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A中证2000成交额2023-08-11前为发布前回填代理研究；含该时期的Sub-A及PV窗口不能全段称为正式样本。', '国债代理': '国债列目标为H11077（10年期国债）；源缺失或尾部补齐时可使用000012全期限国债收益拼接，该部分为代理研究，不能视为同久期10Y原指数；本次具体来源见行情获取输出。'}
+    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普使用月收益年化，夏普无风险基准为0。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格和国债代理另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债代理': '国债列目标为H11077（10年期国债）；源缺失或尾部补齐时可使用000012全期限国债收益拼接，该部分为代理研究，不能视为同久期10Y原指数；本次具体来源见行情获取输出。'}
 
-def _write_performance_standard_window_table(w, daily_returns, end_date=None):
-    rows = _performance_standard_window_rows(daily_returns, end_date=end_date)
+def _write_performance_standard_window_table(w, daily_returns, end_date=None, first_period_starts=None):
+    rows = _performance_standard_window_rows(daily_returns, end_date=end_date, first_period_starts=first_period_starts)
     w('\n### 标准窗口指标（年化收益 / 最大回撤）\n\n')
     w(f'| Window | Sub-A | A-DK | B7.8 | B7.9 | Sub-C | PV组合({_performance_combo_weight_label()}) |\n')
     w('|:-|------:|------:|------:|------:|------:|------:|\n')
@@ -10788,10 +10869,9 @@ def _write_performance_standard_window_table(w, daily_returns, end_date=None):
         w(f"| {row['window']} | " + ' | '.join(cells) + ' |\n')
     w('\n')
     notes = _performance_basis_notes()
-    for key in ('标准窗口PV组合', 'Sub-A样本', '国债代理'):
+    for key in ('标准窗口PV组合', 'Sub-A样本', 'Sub-C样本', '国债代理'):
         w(f'> {notes[key]}\n\n')
     w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
-    w(f'> Sub-C正式样本不早于{SUBC_FORMAL_START.date().isoformat()}；更早代理价历史仅作研究，不与当前实盘ETF口径混为正式结论。\n\n')
 
 def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
     period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
@@ -10904,6 +10984,13 @@ def _drop_cn_unconfirmed_today(df):
     today = bj_now.date()
     keep = [pd.Timestamp(idx).date() != today for idx in df.index]
     return df.loc[keep]
+
+def _drop_cn_rows_after(df, cutoff_date):
+    if df is None or len(df) == 0:
+        return df
+    dates = pd.DatetimeIndex(pd.to_datetime(df.index, errors='coerce')).normalize()
+    cutoff = pd.Timestamp(cutoff_date).normalize()
+    return df.loc[dates <= cutoff].copy()
 
 def _latest_confirmed_cn_rule_date(index, bj_now=None):
     """Return the latest confirmed CN close for close-only daily overlays."""
@@ -11322,7 +11409,7 @@ def _lookup_open_on_date(ticker, date, us_open):
 def _rebalance_price_text(price, label):
     return f'${price:.2f}{label}' if price is not None and (not pd.isna(price)) else ''
 
-def extract_cn_rebalances(cn_result, cn_close, strategy_name='Sub-A', names=None):
+def extract_cn_rebalances(cn_result, cn_close, strategy_name='Sub-A', names=None, scale_threshold=0.001):
     if names is None:
         names = CN_NAMES
     records = []
@@ -11337,7 +11424,7 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name='Sub-A', names=None
             price_sell = cn_close.loc[date, prev_holding] if prev_holding != 'cash' and prev_holding in cn_close.columns else None
             price_buy = cn_close.loc[date, holding] if holding != 'cash' and holding in cn_close.columns else None
             records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN'), 'strategy_family': 'Sub-A', 'record_kind': 'position', '策略': strategy_name, '卖出': names.get(prev_holding, prev_holding), '卖出价格': price_sell, '买入': names.get(holding, holding), '买入价格': price_buy})
-        elif has_weight and prev_weight is not None and (weight is not None) and (abs(weight - prev_weight) > 0.001):
+        elif has_weight and prev_weight is not None and (weight is not None) and (abs(weight - prev_weight) > scale_threshold):
             h_name = names.get(holding, holding)
             records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN', 'close'), 'strategy_family': 'Sub-A', 'record_kind': 'scale', '策略': strategy_name, '卖出': f'杠杆 {prev_weight:.4f}x', '卖出价格': None, '买入': f'杠杆 {weight:.4f}x ({h_name})', '买入价格': None})
         prev_holding = holding
@@ -11374,6 +11461,12 @@ def extract_v78_newa_rebalances(new_result, cn_close=None, since_date=None):
 def extract_v78_suba_rebalances(v78_suba_result, cn_close=None, since_date=None):
     records = []
     v77_component = v78_suba_result.attrs.get('v78_suba_v77')
+    new_component = v78_suba_result.attrs.get('v78_suba_new')
+    if v78_suba_result.attrs.get('suba_production_mode') == 'old_a_only_simplified' and v77_component is None and (new_component is None):
+        records = extract_cn_rebalances(v78_suba_result, cn_close, strategy_name='Sub-A', scale_threshold=1e-12)
+        if since_date is not None:
+            records = [record for record in records if pd.Timestamp(record['日期']) >= pd.Timestamp(since_date)]
+        return records
     if v77_component is not None and len(v77_component) > 0:
         component_records = extract_cn_rebalances(v77_component, cn_close, strategy_name=f'V7.7A ({V78_SUBA_V77_WEIGHT:.0%})')
         for record in component_records:
@@ -11385,7 +11478,7 @@ def extract_v78_suba_rebalances(v78_suba_result, cn_close=None, since_date=None)
                 except Exception:
                     pass
             records.append(record)
-    records.extend(extract_v78_newa_rebalances(v78_suba_result.attrs.get('v78_suba_new'), cn_close=cn_close, since_date=since_date))
+    records.extend(extract_v78_newa_rebalances(new_component, cn_close=cn_close, since_date=since_date))
     records.sort(key=lambda item: item.get('日期', ''))
     return records
 
@@ -12527,7 +12620,7 @@ def _write_subc_param_summary(write, info=None):
             rule = '固定1.0x（不缩放）'
         write(f"| {name} | {cfg['w']:.1%} | {cfg['cls']} | {rule} |\n")
     write(f'\n共同规则: lag=1交易日；scale范围{PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x；调整死区|Δscale|≥{PROD_VS_THRESHOLD:.2f}；调仓成本{PROD_VS_REBAL_COST_BPS}bp；融资=BIL+{PROD_VS_SPREAD_BPS}bp。\n')
-    write(f'正式ETF共同样本起点: **{SUBC_FORMAL_START.date().isoformat()}**；更早结果仅属代理研究。\n')
+    write(f'含BTC代理的分阶段样本起点: **{SUBC_FORMAL_START.date().isoformat()}**；十只ETF均已上市后首个完整收益日: **{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}**。代理段仅作研究。\n')
     if info:
         _eq_cur = info.get('current_scale', 1.0)
         _eq_raw = info.get('next_target_scale', _eq_cur)
@@ -12685,26 +12778,43 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
 
 class CombinedStrategyBase:
 
-    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False):
+    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False):
         msg.write('⏳ 正在获取A股数据...\n')
+        _cn_clock = beijing_now()
+        _cn_requested_close = _latest_cn_data_required_date(_cn_clock)
+        _cn_fallback_close = _latest_cn_required_close_date(_cn_clock.date())
+        _cn_fetch_required_close = _cn_fallback_close if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_cn_clock.date()).normalize() else _cn_requested_close
         cn_raw, cn_sources = ({}, {})
         for secid in CN_STOCK_CODES:
-            df, source = fetch_cn_kline(secid)
+            if allow_last_confirmed_cn_close:
+                df, source = fetch_cn_kline(secid, required_date=_cn_fetch_required_close)
+            else:
+                df, source = fetch_cn_kline(secid)
             df, source = _ensure_cn_history_frame(secid, df, source, min_rows=CN_MIN_HISTORY_ROWS, write=msg.write)
             cn_raw[secid] = df
             cn_sources[secid] = source
             time.sleep(0.2)
-        _bj_today_cn = beijing_now().date()
+        _bj_today_cn = _cn_clock.date()
         if include_cn_live_snapshot:
             for secid in CN_STOCK_CODES:
                 cn_raw[secid] = _supplement_today_close(cn_raw[secid], secid, _bj_today_cn, msg)
         else:
             for secid in CN_STOCK_CODES:
                 cn_raw[secid] = _drop_cn_unconfirmed_today(cn_raw[secid])
+        _cn_input_cutoff = pd.Timestamp(_bj_today_cn).normalize() if include_cn_live_snapshot else _cn_requested_close
+        for secid in CN_STOCK_CODES:
+            cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_input_cutoff)
         _cn_open_now, _bj_now_check = is_cn_market_open()
         _is_cn_trading_day = _is_cn_required_close_day(_bj_today_cn)
         _cn_after_close = _is_cn_trading_day and (not _cn_open_now) and (_bj_now_check.hour >= 15)
-        _cn_required_close = _latest_cn_data_required_date(_bj_now_check)
+        _cn_required_close = _cn_requested_close
+        _cn_latest_dates = [_latest_valid_close_date(cn_raw.get(secid)) for secid in CN_STOCK_CODES]
+        _cn_latest_common = min(_cn_latest_dates) if all((value is not None for value in _cn_latest_dates)) else None
+        if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_bj_today_cn).normalize() and (_cn_latest_common is not None) and (_cn_latest_common < _cn_requested_close) and (_cn_latest_common >= _cn_fallback_close):
+            _cn_required_close = _cn_fallback_close
+            msg.write(f'  ⚠️ A股当日最终收盘源尚未完整发布；本次绩效/净值查询按最近共同确认收盘 {_cn_required_close.date().isoformat()} 计算，不生成正式信号。\n')
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_required_close)
         _assert_cn_raw_prices_fresh(cn_raw, CN_STOCK_CODES, _cn_required_close, 'Sub-A')
         try:
             zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID) if CN_ZZHL_INDEX_SECID == '1.H20955' else None
@@ -12865,6 +12975,7 @@ class CombinedStrategyBase:
                     idx_df = _supplement_today_close(idx_df, secid, _bj_today, msg)
                 else:
                     idx_df = _drop_cn_unconfirmed_today(idx_df)
+                idx_df = _drop_cn_rows_after(idx_df, pd.Timestamp(_bj_today).normalize() if include_cn_live_snapshot else _cn_required_close)
                 dk_dfs[col_name] = idx_df.rename(columns={'close': col_name})
                 msg.write(f"  {CN_DK_NAMES[col_name]}: {idx_df.index[0].strftime('%Y-%m-%d')}~{idx_df.index[-1].strftime('%Y-%m-%d')} [{src}]\n")
                 time.sleep(0.2)
@@ -12878,14 +12989,14 @@ class CombinedStrategyBase:
             raise poe.BotError(f'A-DK多空数据获取失败: {e}') from e
         return (cn_close, cn_dk_close, us_rot_close, us_prod_daily)
 
-    def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False):
+    def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False):
         cache = getattr(self, '_request_data_cache', None)
         if cache is None:
             cache = {}
             self._request_data_cache = cache
-        key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot))
+        key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot), bool(allow_last_confirmed_cn_close))
         if key not in cache:
-            cache[key] = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot)
+            cache[key] = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close)
         else:
             _debug_write(msg, '  DEBUG: reuse fetched market data for this request\n')
         return cache[key]
@@ -13077,6 +13188,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         return bool(re.search('\\d{4}[-年/.]?\\d{0,2}[-月]?\\s*[到至—\\-~]|\\d{1,2}月\\d{1,2}[日号]\\s*[到至—\\-~]|至今|今年|去年|前年|(?:最近|过去|近)\\s*[一二两三四五六七八九十\\d半]+\\s*个?\\s*[年月]|\\d{4}\\s*年', query))
 
     def run(self):
+        self._request_data_cache = {}
+        self._request_strategy_cache = {}
         try:
             self._run_impl()
         except Exception as exc:
@@ -13090,7 +13203,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     msg.write(f'{_short_error(exc)}\n')
                 query_compact = re.sub('\\s+', '', poe.query.text.strip())
-                retry_command = '实时参数' if '实时参数' in query_compact or '参数实时' in query_compact else '参数' if '参数' in query_compact else '实时信号' if '实时信号' in query_compact or '信号实时' in query_compact else '信号'
+                retry_command = '净值曲线' if '净值曲线' in query_compact or '收益曲线' in query_compact or '走势' in query_compact else '表现' if re.search('表现|收益(?!曲线)|回撤|年化|夏普|回报', query_compact) else '实时参数' if '实时参数' in query_compact or '参数实时' in query_compact else '参数' if '参数' in query_compact else '实时信号' if '实时信号' in query_compact or '信号实时' in query_compact else '信号'
                 msg.write(f'请重新发送“{retry_command}”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n')
 
     def _run_impl(self):
@@ -13522,7 +13635,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 净值曲线核心四袖 今年 / 去年\n- 净值曲线核心四袖 过去两年 / 最近6个月\n- 净值曲线核心四袖 2024-01到2025-01\n- 净值曲线核心四袖 2024至今\n- 净值曲线核心四袖 2024年\n- 净值曲线核心四袖 2024年3月15日到2025年1月20日')
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
             w('⏳ 正在计算策略净值...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_daily_ret = cn_result['return']
@@ -13566,6 +13679,13 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w = msg.write
             w(f'## 📈 净值曲线: {period_label}\n\n')
             _write_suba_volume_query_warning(msg, cn_result)
+            notes = _performance_basis_notes()
+            if 'Sub-A' in nav_series or 'Combined' in nav_series:
+                w(f"> {notes['Sub-A样本']}\n\n")
+            if 'Sub-C' in nav_series or 'Combined' in nav_series:
+                w(f"> {notes['Sub-C样本']}\n\n")
+            if 'B7.8' in nav_series or 'B7.9' in nav_series or 'Combined' in nav_series:
+                w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
             if not chart_only:
                 w('| 策略 | 期末净值 | 区间收益 | 最大回撤 |\n|:-|--------:|---------:|---------:|\n')
                 for name in PERFORMANCE_COLUMNS:
@@ -13587,7 +13707,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
             raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 表现 今年 / 去年\n- 表现 过去两年 / 最近6个月\n- 表现 2024-01到2025-01\n- 表现 2024至今\n- 表现 2024年\n- 表现 2024年3月15日到2025年1月20日')
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False)
+            requested_end_date = pd.Timestamp(end_date).normalize()
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
+            available_end_dates = [pd.Timestamp(frame.index[-1]).normalize() for frame in (cn_close, cn_dk_close, us_rot_close, us_prod_daily) if frame is not None and len(frame) > 0]
+            if available_end_dates:
+                available_end_date = min(available_end_dates)
+                if requested_end_date > available_end_date:
+                    end_date = available_end_date
+                    w(f'⚠️ 请求区间原定截至 {requested_end_date.date().isoformat()}；正式可用数据共同截至 {end_date.date().isoformat()}，本次绩效按实际确认收盘计算。\n')
             w('⏳ 正在计算策略...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         b78_result, _ = _v80_subb_results(us_rot_result)
@@ -13597,6 +13724,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         us_daily_period = us_rot_result['return'][(us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
         subc_daily_all = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
         subc_daily_period = subc_daily_all[(subc_daily_all.index >= start_date) & (subc_daily_all.index <= end_date)]
+        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all)
+        first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period})
         cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date)
         dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result['return'], start_date, end_date)
@@ -13639,27 +13768,23 @@ class CombinedStrategyV78(CombinedStrategyBase):
         if 'Combined' in metrics and len(comb_daily) > 1:
             nav_comb = (1.0 + comb_daily).cumprod()
             metrics['Combined']['max_dd'] = _max_drawdown_pct_from_nav(nav_comb)
-        for _sname, _dret in [('Sub-A', cn_daily_period), ('Sub-A-DK', dk_daily_period), ('B7.8', b78_daily_period), ('B7.9', us_daily_period), ('Sub-C', subc_daily_period)]:
+        for _sname, _dret, _history in [('Sub-A', cn_daily_period, cn_result['return']), ('Sub-A-DK', dk_daily_period, cn_dk_result['return']), ('B7.8', b78_daily_period, b78_result['return']), ('B7.9', us_daily_period, us_rot_result['return']), ('Sub-C', subc_daily_period, subc_daily_all)]:
             if _sname in metrics and len(_dret) > 1:
                 _nav_d = (1 + _dret).cumprod()
                 _total = (_nav_d.iloc[-1] - 1) * 100
                 metrics[_sname]['total_return'] = _total
-                _ndays = (_dret.index[-1] - _dret.index[0]).days
-                if _ndays > 0:
-                    _ann = (_nav_d.iloc[-1] ** (365.25 / _ndays) - 1) * 100
-                    metrics[_sname]['annual'] = _ann
-                    _mdd = metrics[_sname]['max_dd']
-                    metrics[_sname]['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
+                _ann = _performance_annualized_pct(_dret, _history, _sname, first_period_start=first_period_starts.get(_sname))
+                metrics[_sname]['annual'] = _ann
+                _mdd = metrics[_sname]['max_dd']
+                metrics[_sname]['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
         if 'Combined' in metrics and comb_daily is not None and (len(comb_daily) > 1):
             _nav_d = (1 + comb_daily).cumprod()
             _total = (_nav_d.iloc[-1] - 1) * 100
             metrics['Combined']['total_return'] = _total
-            _ndays = (comb_daily.index[-1] - comb_daily.index[0]).days
-            if _ndays > 0:
-                _ann = (_nav_d.iloc[-1] ** (365.25 / _ndays) - 1) * 100
-                metrics['Combined']['annual'] = _ann
-                _mdd = metrics['Combined']['max_dd']
-                metrics['Combined']['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
+            _ann = _performance_annualized_pct(comb_daily, standard_daily_returns['Combined'], 'Combined', first_period_start=first_period_starts.get('Combined'))
+            metrics['Combined']['annual'] = _ann
+            _mdd = metrics['Combined']['max_dd']
+            metrics['Combined']['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
         excel_monthly = pd.DataFrame({'Sub-A': cn_monthly_period, 'Sub-A-DK': dk_monthly_period, 'B7.8': b78_monthly_period, 'B7.9': us_monthly_period, 'Sub-C': subc_monthly_period}).sort_index()
         if len(combined_monthly_period) > 0:
             excel_monthly['Combined'] = combined_monthly_period.reindex(excel_monthly.index)
@@ -13703,7 +13828,6 @@ class CombinedStrategyV78(CombinedStrategyBase):
         all_rebalances.extend([r for r in subc_vs_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
         all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x['日期'])
-        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all)
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         nav_series = {}
@@ -13753,7 +13877,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         w(f'- {name}: {s} ~ {e}\n')
                 w('\n')
             w(f'说明: Sub-B资金由B7.8/B7.9各占50%；两列独立展示，PV按A/ADK/B7.8/B7.9/C={_performance_combo_weight_label()}计算。\n\n')
-            _write_performance_standard_window_table(w, standard_daily_returns, end_date=end_date)
+            _write_performance_standard_window_table(w, standard_daily_returns, end_date=end_date, first_period_starts=first_period_starts)
             w('\n### 查询区间指标\n\n')
             basis_notes = _performance_basis_notes()
             for key in ('查询区间PV组合', '指标频率'):

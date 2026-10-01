@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "day": "2024-01-30",
+      "previous": "2024-01-29",
+      "equity_group": -0.0022677908686464807,
+      "gold_group": -0.00025853641776554977,
+      "fixed_assets": 0.0001744259204258087,
+      "annual_cost_return": 0.0,
+      "independent_scaled_return": -0.002351901365986222,
+      "formal_scaled_return": -0.0023519013659862222,
+      "scaled_return_error": 4.336808689942018e-19,
+      "independent_scale_fee": 3.8917599910488514e-05,
+      "formal_scale_fee": 3.8917599910488534e-05,
+      "scale_fee_error": -2.0328790734103208e-20,
+      "annual_rebalance": null,
+      "gold_open_transition": {
+        "group_return_contribution": -0.00025853641776554977,
+        "portfolio_fee_fraction": 3.8917599910488514e-05,
+        "group_open_equity": 1.0064408805359268,
+        "group_post_trade_gold": 1.342645826345014,
+        "group_post_trade_cash": -0.3364703388340191,
+        "group_close_equity": 0.9982369477531081
+      }
+    },
+    {
+      "day": "2024-12-31",
+      "previous": "2024-12-30",
+      "equity_group": -0.0009138480132426002,
+      "gold_group": 0.0010160266177479712,
+      "fixed_assets": -0.0007123714580000589,
+      "annual_cost_return": -0.00012433447343617154,
+      "independent_scaled_return": -0.0007345273269308596,
+      "formal_scaled_return": -0.0007345273269308596,
+      "scaled_return_error": 0.0,
+      "independent_scale_fee": 0.0,
+      "formal_scale_fee": 0.0,
+      "scale_fee_error": 0.0,
+      "annual_rebalance": {
+        "asset_turnover": 0.12439949254619709,
+        "asset_cost_fraction": 0.00012439949254619708,
+        "asset_cost_return": -0.00012433447343617154,
+        "base_gross_return": -0.000522663788209532,
+        "base_net_return": -0.0006469982616457036,
+        "pre_weights_max_abs_error": 2.7755575615628914e-17
+      },
+      "gold_open_transition": null
+    },
+    {
+      "day": "2025-12-31",
+      "previous": "2025-12-30",
+      "equity_group": -0.006206069403593935,
+      "gold_group": -0.0016734497500622595,
+      "fixed_assets": -0.00044801100489074764,
+      "annual_cost_return": -0.00014589396830785238,
+      "independent_scaled_return": -0.008473424126854794,
+      "formal_scaled_return": -0.008473424126854794,
+      "scaled_return_error": 0.0,
+      "independent_scale_fee": 0.0,
+      "formal_scale_fee": 0.0,
+      "scale_fee_error": 0.0,
+      "annual_rebalance": {
+        "asset_turnover": 0.14674669766052437,
+        "asset_cost_fraction": 0.00014674669766052436,
+        "asset_cost_return": -0.00014589396830785238,
+        "base_gross_return": -0.005810892962270664,
+        "base_net_return": -0.0059567869305785165,
+        "pre_weights_max_abs_error": 2.7755575615628914e-17
+      },
+      "gold_open_transition": null
+    }
+  ],
+  "interpretation": "These are selected-date independent price and cash reconstructions; no source bookkeeping helper is called."
+}

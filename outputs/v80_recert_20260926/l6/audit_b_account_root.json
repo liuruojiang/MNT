@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "independent_B_account_replays": [
+    {
+      "sleeve": "B7.8",
+      "candidates": 33,
+      "daily_rows_checked": 147576,
+      "window_rows_checked": 165,
+      "max_annual_error": 8.668621376273222e-13,
+      "max_drawdown_error": 1.5862866575844237e-12,
+      "max_asset_borrow_equity_error": 3.552713678800501e-15,
+      "max_nav_recurrence_error": 5.329070518200751e-15,
+      "max_open_fee_error": 1.0018028073766061e-16,
+      "max_first_diff_error": 1.0148132334464322e-16,
+      "missing_fee_injection": "rejected"
+    },
+    {
+      "sleeve": "B7.9",
+      "candidates": 33,
+      "daily_rows_checked": 147576,
+      "window_rows_checked": 165,
+      "max_annual_error": 9.521272659185342e-13,
+      "max_drawdown_error": 4.600764214046649e-13,
+      "max_asset_borrow_equity_error": 7.105427357601002e-15,
+      "max_nav_recurrence_error": 7.105427357601002e-15,
+      "max_open_fee_error": 1.0234868508263162e-16,
+      "max_first_diff_error": 1.1796119636642288e-16,
+      "missing_fee_injection": "rejected"
+    }
+  ]
+}

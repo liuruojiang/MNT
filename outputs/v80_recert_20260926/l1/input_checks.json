@@ -1,0 +1,18 @@
+{
+  "cn_last": "2026-09-24",
+  "adk_last": "2026-09-24",
+  "subb_last": "2026-09-25",
+  "subc_last": "2026-09-25",
+  "cn_after_expected_2026_09_24": 0,
+  "adk_after_expected_2026_09_24": 0,
+  "cn_930955_prepublication_rows": 637,
+  "amount_932000_prepublication_valid_rows_from_cn_start": 2148,
+  "amount_932000_prepublication_true_rows_from_cn_start": 724,
+  "amount_combined_prepublication_true_rows_from_cn_start": 974,
+  "amount_end": "2026-09-24",
+  "amount_latest_unresolved": false,
+  "subc_stated_start": "2020-12-03",
+  "subc_btc_on_stated_start": 19445.3984375,
+  "subc_ibit_on_stated_start_missing": true,
+  "subc_ibit_first_valid": "2024-01-11"
+}

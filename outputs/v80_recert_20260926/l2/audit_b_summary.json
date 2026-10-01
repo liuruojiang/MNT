@@ -1,0 +1,200 @@
+{
+  "formal_status_sha256": "526e9e76af8bd8d5f429ab0c4f8aac1bd470799bad47093f05b4d32f37f68ad5",
+  "source_sha256": "ebf646b4a1c35f08118cb575c1bb120d524ab9e38be84e2e6363b1e319841150",
+  "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "five_sleeve_buy_and_hold": {
+    "common_start": "2020-12-03",
+    "last": "2026-09-25",
+    "rows": 1509,
+    "sleeve_starts": {
+      "Sub-A": "2017-09-19",
+      "Sub-A-DK": "2015-04-20",
+      "B7.8": "2008-12-15",
+      "B7.9": "2008-12-15",
+      "Sub-C": "2020-12-03"
+    },
+    "sleeve_ends": {
+      "Sub-A": "2026-09-24",
+      "Sub-A-DK": "2026-09-24",
+      "B7.8": "2026-09-25",
+      "B7.9": "2026-09-25",
+      "Sub-C": "2026-09-25"
+    },
+    "combined_return_comparison": {
+      "max_abs": 6.661338147750939e-16,
+      "date": "2022-08-09",
+      "count_gt_1e_10": 0
+    },
+    "first_row": {
+      "capital_before::Sub-A": 0.15,
+      "daily_return::Sub-A": -0.01138799401324786,
+      "capital_after::Sub-A": 0.1482918008980128,
+      "capital_before::Sub-A-DK": 0.15,
+      "daily_return::Sub-A-DK": -0.007949170968604702,
+      "capital_after::Sub-A-DK": 0.1488076243547093,
+      "capital_before::B7.8": 0.2,
+      "daily_return::B7.8": 0.005608043743753122,
+      "capital_after::B7.8": 0.20112160874875062,
+      "capital_before::B7.9": 0.2,
+      "daily_return::B7.9": 0.006152593484656466,
+      "capital_after::B7.9": 0.20123051869693132,
+      "capital_before::Sub-C": 0.3,
+      "daily_return::Sub-C": 0.005052942936456931,
+      "capital_after::Sub-C": 0.30151588288093706,
+      "portfolio_before": 1.0,
+      "portfolio_after": 1.0009674355793412,
+      "portfolio_return": 0.0009674355793412026
+    },
+    "last_row": {
+      "capital_before::Sub-A": 0.5452066511726807,
+      "daily_return::Sub-A": 0.0,
+      "capital_after::Sub-A": 0.5452066511726807,
+      "capital_before::Sub-A-DK": 0.44831311350071523,
+      "daily_return::Sub-A-DK": 0.0,
+      "capital_after::Sub-A-DK": 0.44831311350071523,
+      "capital_before::B7.8": 0.7078198942933523,
+      "daily_return::B7.8": -0.00068770725081857,
+      "capital_after::B7.8": 0.7073331214197732,
+      "capital_before::B7.9": 0.9828468317647235,
+      "daily_return::B7.9": -0.0018496981340183627,
+      "capital_after::B7.9": 0.9810288618139825,
+      "capital_before::Sub-C": 0.697350475071973,
+      "daily_return::Sub-C": 0.005681622553290409,
+      "capital_after::Sub-C": 0.7013125572586897,
+      "portfolio_before": 3.381536965803445,
+      "portfolio_after": 3.3831943051658415,
+      "portfolio_return": 0.0004901142229574162
+    }
+  },
+  "suba_target_weight_account": {
+    "return": {
+      "max_abs": 0.0,
+      "date": "2017-09-19",
+      "count_gt_1e_10": 0
+    },
+    "turnover": {
+      "max_abs": 1.1102230246251565e-16,
+      "date": "2020-08-27",
+      "count_gt_1e_10": 0
+    },
+    "fee": {
+      "max_abs": 0.0,
+      "date": "2017-09-19",
+      "count_gt_1e_10": 0
+    },
+    "asset_component": {
+      "max_abs": 0.0,
+      "date": "2017-09-19",
+      "count_gt_1e_10": 0
+    },
+    "cash_component": {
+      "max_abs": 0.0,
+      "date": "2017-09-19",
+      "count_gt_1e_10": 0
+    }
+  },
+  "adk_target_weight_account": {
+    "return": {
+      "max_abs": 0.0,
+      "date": "2015-04-20",
+      "count_gt_1e_10": 0
+    },
+    "return_before_dk_execution_cost": {
+      "max_abs": 0.0,
+      "date": "2015-04-20",
+      "count_gt_1e_10": 0
+    },
+    "dk_execution_turnover": {
+      "max_abs": 0.0,
+      "date": "2015-04-20",
+      "count_gt_1e_10": 0
+    },
+    "dk_execution_cost": {
+      "max_abs": 0.0,
+      "date": "2015-04-20",
+      "count_gt_1e_10": 0
+    }
+  },
+  "b78_self_financing_invariants": {
+    "equity": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "return": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "start_equals_prior_close": {
+      "max_abs": 0.0,
+      "date": "2008-12-16",
+      "count_gt_1e_10": 0
+    },
+    "fee_equals_rate_times_traded": {
+      "max_abs": 1.734723475976807e-18,
+      "date": "2026-03-06",
+      "count_gt_1e_10": 0
+    },
+    "normalized_fee": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "min_cash_or_borrow": 0.0,
+    "rows_with_fee": 953,
+    "total_fee_value": 0.5795599559147855,
+    "total_financing_value": 0.21167725349877448
+  },
+  "b79_self_financing_invariants": {
+    "equity": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "return": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "start_equals_prior_close": {
+      "max_abs": 0.0,
+      "date": "2008-12-16",
+      "count_gt_1e_10": 0
+    },
+    "fee_equals_rate_times_traded": {
+      "max_abs": 1.734723475976807e-18,
+      "date": "2024-11-15",
+      "count_gt_1e_10": 0
+    },
+    "normalized_fee": {
+      "max_abs": 0.0,
+      "date": "2008-12-15",
+      "count_gt_1e_10": 0
+    },
+    "min_cash_or_borrow": 0.0,
+    "rows_with_fee": 942,
+    "total_fee_value": 0.8096920526230018,
+    "total_financing_value": 0.22684632336433624
+  },
+  "subc_component_rows": 1459,
+  "subc_scaled_return_match": {
+    "max_abs": 0.0,
+    "date": "2020-12-03",
+    "count_gt_1e_10": 0
+  },
+  "standard_window_comparison": {
+    "annual_pct": {
+      "max_abs": 3.552713678800501e-15,
+      "different_na": 0,
+      "rows_gt_1e_8": 0
+    },
+    "max_dd_pct": {
+      "max_abs": 7.105427357601002e-15,
+      "different_na": 0,
+      "rows_gt_1e_8": 0
+    }
+  },
+  "metric_caveat": "CAGR includes first dated return while denominator uses last date minus first date; source dates do not identify prior close of first return.",
+  "scope_caveat": "Target-weight A/ADK replay and Sub-C contribution ledger do not establish security-lot self financing."
+}

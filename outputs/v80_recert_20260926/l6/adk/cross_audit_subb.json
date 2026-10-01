@@ -1,0 +1,386 @@
+{
+  "status": "PASS",
+  "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "saved_unique_paths_checked": 56,
+  "identical_off_reference_aliases": 10,
+  "summary_path_labels_total": 66,
+  "clocks_with_different_targets": 54,
+  "post_start_first_differences_next_row": 22,
+  "initial_seed_differences": 32,
+  "unexplained_same_day_differences": 0,
+  "representative_legs": [
+    {
+      "version": "b78",
+      "leg": "official",
+      "candidate": "official_first_lb_130_old_value",
+      "own_leg_first_difference": "2008-12-18",
+      "target_T": "2008-12-18",
+      "first_return": "2008-12-19",
+      "timing": "T signal -> next-session return"
+    },
+    {
+      "version": "b78",
+      "leg": "EMA",
+      "candidate": "ema_half_life_80",
+      "own_leg_first_difference": "2008-12-15",
+      "target_T": "2008-12-15",
+      "first_return": "2008-12-15",
+      "timing": "initial holding carried from pre-window close"
+    },
+    {
+      "version": "b78",
+      "leg": "Bias",
+      "candidate": "bias_score_4_2_1",
+      "own_leg_first_difference": "2009-05-01",
+      "target_T": "2009-04-30",
+      "first_return": "2009-05-01",
+      "timing": "T signal -> next-session return"
+    },
+    {
+      "version": "b78",
+      "leg": "LogVol",
+      "candidate": "logvol_score_5_3_2",
+      "own_leg_first_difference": "2009-05-08",
+      "target_T": "2009-05-07",
+      "first_return": "2009-05-08",
+      "timing": "T signal -> next-session return"
+    },
+    {
+      "version": "b79",
+      "leg": "official",
+      "candidate": "official_first_lb_130_old_value",
+      "own_leg_first_difference": "2008-12-31",
+      "target_T": "2008-12-31",
+      "first_return": "2009-01-02",
+      "timing": "T signal -> next-session return"
+    },
+    {
+      "version": "b79",
+      "leg": "EMA",
+      "candidate": "ema_half_life_80",
+      "own_leg_first_difference": "2008-12-15",
+      "target_T": "2008-12-15",
+      "first_return": "2008-12-15",
+      "timing": "initial holding carried from pre-window close"
+    },
+    {
+      "version": "b79",
+      "leg": "Bias",
+      "candidate": "bias_score_4_2_1",
+      "own_leg_first_difference": "2009-05-01",
+      "target_T": "2009-04-30",
+      "first_return": "2009-05-01",
+      "timing": "T signal -> next-session return"
+    },
+    {
+      "version": "b79",
+      "leg": "LogVol",
+      "candidate": "logvol_score_5_3_2",
+      "own_leg_first_difference": "2009-11-20",
+      "target_T": "2009-11-19",
+      "first_return": "2009-11-20",
+      "timing": "T signal -> next-session return"
+    }
+  ],
+  "open_marks": {
+    "b78": {
+      "formal": {
+        "zero_debt_execution_days_checked": 58,
+        "max_abs": 2.220446049250313e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0028261017948013,
+            "saved_open_equity": 1.0028261017948017,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0101623725721556,
+            "saved_open_equity": 1.010162372572156,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0148719430644404,
+            "saved_open_equity": 1.0148719430644406,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "official_first_lb_130_old_value": {
+        "zero_debt_execution_days_checked": 58,
+        "max_abs": 1.3322676295501878e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0028261017948013,
+            "saved_open_equity": 1.0028261017948017,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.011189890790499,
+            "saved_open_equity": 1.0111898907904993,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0159397112943218,
+            "saved_open_equity": 1.015939711294322,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "ema_half_life_80": {
+        "zero_debt_execution_days_checked": 58,
+        "max_abs": 1.3322676295501878e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0029222953953203,
+            "saved_open_equity": 1.0029222953953203,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0102987102532808,
+            "saved_open_equity": 1.0102987102532808,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0150846013374946,
+            "saved_open_equity": 1.0150846013374948,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "bias_score_4_2_1": {
+        "zero_debt_execution_days_checked": 57,
+        "max_abs": 1.7763568394002505e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0028261017948013,
+            "saved_open_equity": 1.0028261017948017,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0101623725721556,
+            "saved_open_equity": 1.010162372572156,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0148719430644404,
+            "saved_open_equity": 1.0148719430644406,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "logvol_score_5_3_2": {
+        "zero_debt_execution_days_checked": 55,
+        "max_abs": 1.3322676295501878e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0028261017948013,
+            "saved_open_equity": 1.0028261017948017,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0101623725721556,
+            "saved_open_equity": 1.010162372572156,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0148719430644404,
+            "saved_open_equity": 1.0148719430644406,
+            "prev_borrow": 0.0
+          }
+        ]
+      }
+    },
+    "b79": {
+      "formal": {
+        "zero_debt_execution_days_checked": 118,
+        "max_abs": 3.552713678800501e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0040248301042105,
+            "saved_open_equity": 1.0040248301042105,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0072641351304898,
+            "saved_open_equity": 1.0072641351304896,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0132930328664491,
+            "saved_open_equity": 1.0132930328664491,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "official_first_lb_130_old_value": {
+        "zero_debt_execution_days_checked": 116,
+        "max_abs": 3.552713678800501e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0040248301042105,
+            "saved_open_equity": 1.0040248301042105,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0072641351304898,
+            "saved_open_equity": 1.0072641351304896,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0132930328664491,
+            "saved_open_equity": 1.0132930328664491,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "ema_half_life_80": {
+        "zero_debt_execution_days_checked": 120,
+        "max_abs": 1.7763568394002505e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.004448596547562,
+            "saved_open_equity": 1.004448596547562,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0078916217085214,
+            "saved_open_equity": 1.0078916217085214,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0144582840626726,
+            "saved_open_equity": 1.0144582840626726,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "bias_score_4_2_1": {
+        "zero_debt_execution_days_checked": 118,
+        "max_abs": 3.552713678800501e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0040248301042105,
+            "saved_open_equity": 1.0040248301042105,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0072641351304898,
+            "saved_open_equity": 1.0072641351304896,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0132930328664491,
+            "saved_open_equity": 1.0132930328664491,
+            "prev_borrow": 0.0
+          }
+        ]
+      },
+      "logvol_score_5_3_2": {
+        "zero_debt_execution_days_checked": 118,
+        "max_abs": 3.552713678800501e-15,
+        "examples": [
+          {
+            "execution_date": "2008-12-19",
+            "signal_close_date": "2008-12-18",
+            "revalued_open_equity": 1.0040248301042105,
+            "saved_open_equity": 1.0040248301042105,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2008-12-26",
+            "signal_close_date": "2008-12-24",
+            "revalued_open_equity": 1.0072641351304898,
+            "saved_open_equity": 1.0072641351304896,
+            "prev_borrow": 0.0
+          },
+          {
+            "execution_date": "2009-01-02",
+            "signal_close_date": "2008-12-31",
+            "revalued_open_equity": 1.0132930328664491,
+            "saved_open_equity": 1.0132930328664491,
+            "prev_borrow": 0.0
+          }
+        ]
+      }
+    }
+  },
+  "max_account_error": {
+    "assets_minus_debt_equity": 7.105427357601002e-15,
+    "return_from_equity": 7.22078646875346e-16,
+    "prior_equity_to_start": 0.0,
+    "ten_bp_open_turnover_fee": 1.0234868508263162e-16,
+    "nav_cumulative_return": 2.071232074740692e-12,
+    "actual_weight_to_asset_value": 1.1102230246251565e-15
+  },
+  "fault_injections": [
+    {
+      "version": "b78",
+      "date": "2008-12-19",
+      "missing_fee_rejected": true,
+      "debt_misstatement_rejected": true,
+      "same_day_return_rejected": true
+    },
+    {
+      "version": "b79",
+      "date": "2008-12-19",
+      "missing_fee_rejected": true,
+      "debt_misstatement_rejected": true,
+      "same_day_return_rejected": true
+    }
+  ],
+  "limits": "Saved-path audit; frozen L1 adjusted-open data, no independent broker fills or borrow availability."
+}

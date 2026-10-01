@@ -1,0 +1,23 @@
+init_quant_param_scan_run.py
+run_id=20260930_v80_l8_final_combo
+project=A股美股动量组合策略
+strategy=V8.0
+subsystem=five-sleeve-final-combination
+parameter_group=L8 official group-off local-neighborhood pair-interactions
+repo=D:\动量策略\A股美股动量组合策略
+
+cwd=D:\动量策略\A股美股动量组合策略
+python -X utf8 outputs/v80_recert_20260926/l8/root/audit_formal_combined.py
+python -X utf8 outputs/v80_recert_20260926/l8/cn/run_cn_l8.py
+python -X utf8 outputs/v80_recert_20260926/l8/cn/audit_cn_l8_independent.py
+python -X utf8 outputs/v80_recert_20260926/l8/us/audit_us_combo.py
+python -X utf8 outputs/v80_recert_20260926/l8/us/audit_financing_floor.py
+python -X utf8 outputs/v80_recert_20260926/l8/cross/audit_l8_cross.py
+python -X utf8 outputs/v80_recert_20260926/l8/root/normalize_combo_scan.py
+Additional cross-check: outputs/v80_recert_20260926/l8/cross/audit_b_negative_financing.py
+All paths use frozen L1/L2/L6 and the final local source SHA recorded in scan_meta.json.
+
+finalize_quant_param_scan_run.py
+finalized_at=2026-09-30T22:56:24+08:00
+decision=keep_formal_research_only
+stability_label=fragile_A_R2_ADK_momentum_executable_account_unverified

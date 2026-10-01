@@ -1,0 +1,152 @@
+{
+  "status": "complete",
+  "frozen_repaired_source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "formal_five_window_metric_max_abs_error_percentage_points": 1.4921397450962104e-13,
+  "sleeves": {
+    "B7.8": {
+      "volreg_off_target_vol_off": {
+        "arm": "volreg_off_target_vol_off",
+        "rows": 4472,
+        "daily_nonadditive_days": 306,
+        "first_nonadditive_day": "2010-05-11",
+        "max_abs_daily_interaction_return": 0.00588260323492229,
+        "double_minus_second_single_max_abs": 0.031161375610765818,
+        "account": {
+          "rows": 4472,
+          "first": "2008-12-15",
+          "last": "2026-09-25",
+          "asset_minus_borrow_minus_equity_max_abs": 0.0,
+          "security_values_minus_reported_assets_max_abs": 8.881784197001252e-16,
+          "nav_chain_max_abs": 0.0,
+          "return_from_nav_max_abs": 0.0,
+          "fee_vs_open_turnover_max_abs": 8.673617379884035e-19,
+          "fee_on_zero_turnover_days": 0,
+          "trade_days_positive_turnover": 928,
+          "max_gross_security_assets_over_nav": 1.0000000000000002,
+          "max_borrow_over_nav": 2.275040966576426e-16,
+          "passive_hold_days": 3543,
+          "passive_security_quantity_residual_max_abs": 8.881784197001252e-16,
+          "passive_borrow_financing_residual_max_abs": 0.0,
+          "component_model_target_weight_error_max_abs": 0.0,
+          "four_leg_target_column_prefix": "target_w_",
+          "component_weights": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.0012484992933070455,
+          "diagnostic_leg_net_mean_vs_final_return_diff_days": 4472
+        }
+      },
+      "inflation_gate_off_official_off": {
+        "arm": "inflation_gate_off_official_off",
+        "rows": 4472,
+        "daily_nonadditive_days": 1929,
+        "first_nonadditive_day": "2008-12-19",
+        "max_abs_daily_interaction_return": 0.008841085554584072,
+        "double_minus_second_single_max_abs": 6.661338147750939e-16,
+        "account": {
+          "rows": 4472,
+          "first": "2008-12-15",
+          "last": "2026-09-25",
+          "asset_minus_borrow_minus_equity_max_abs": 0.0,
+          "security_values_minus_reported_assets_max_abs": 1.7763568394002505e-15,
+          "nav_chain_max_abs": 0.0,
+          "return_from_nav_max_abs": 0.0,
+          "fee_vs_open_turnover_max_abs": 1.734723475976807e-18,
+          "fee_on_zero_turnover_days": 0,
+          "trade_days_positive_turnover": 948,
+          "max_gross_security_assets_over_nav": 1.3748688559316757,
+          "max_borrow_over_nav": 0.3748688559316759,
+          "passive_hold_days": 3516,
+          "passive_security_quantity_residual_max_abs": 1.7763568394002505e-15,
+          "passive_borrow_financing_residual_max_abs": 2.1911725905932045e-16,
+          "component_model_target_weight_error_max_abs": 0.0,
+          "four_leg_target_column_prefix": "model_target_w_",
+          "component_weights": [
+            0,
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.03838675633307493,
+          "diagnostic_leg_net_mean_vs_final_return_diff_days": 4472
+        }
+      }
+    },
+    "B7.9": {
+      "volreg_off_target_vol_off": {
+        "arm": "volreg_off_target_vol_off",
+        "rows": 4472,
+        "daily_nonadditive_days": 248,
+        "first_nonadditive_day": "2010-05-11",
+        "max_abs_daily_interaction_return": 0.0085968499284097,
+        "double_minus_second_single_max_abs": 0.04057897116040465,
+        "account": {
+          "rows": 4472,
+          "first": "2008-12-15",
+          "last": "2026-09-25",
+          "asset_minus_borrow_minus_equity_max_abs": 0.0,
+          "security_values_minus_reported_assets_max_abs": 1.7763568394002505e-15,
+          "nav_chain_max_abs": 0.0,
+          "return_from_nav_max_abs": 0.0,
+          "fee_vs_open_turnover_max_abs": 1.734723475976807e-18,
+          "fee_on_zero_turnover_days": 0,
+          "trade_days_positive_turnover": 928,
+          "max_gross_security_assets_over_nav": 1.0000000000000002,
+          "max_borrow_over_nav": 2.3058407802217854e-16,
+          "passive_hold_days": 3543,
+          "passive_security_quantity_residual_max_abs": 1.7763568394002505e-15,
+          "passive_borrow_financing_residual_max_abs": 0.0,
+          "component_model_target_weight_error_max_abs": 0.0,
+          "four_leg_target_column_prefix": "target_w_",
+          "component_weights": [
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.0019280189611002412,
+          "diagnostic_leg_net_mean_vs_final_return_diff_days": 4472
+        }
+      },
+      "inflation_gate_off_official_off": {
+        "arm": "inflation_gate_off_official_off",
+        "rows": 4472,
+        "daily_nonadditive_days": 503,
+        "first_nonadditive_day": "2020-02-14",
+        "max_abs_daily_interaction_return": 0.011413232939722073,
+        "double_minus_second_single_max_abs": 0.0,
+        "account": {
+          "rows": 4472,
+          "first": "2008-12-15",
+          "last": "2026-09-25",
+          "asset_minus_borrow_minus_equity_max_abs": 0.0,
+          "security_values_minus_reported_assets_max_abs": 1.7763568394002505e-15,
+          "nav_chain_max_abs": 0.0,
+          "return_from_nav_max_abs": 0.0,
+          "fee_vs_open_turnover_max_abs": 3.469446951953614e-18,
+          "fee_on_zero_turnover_days": 0,
+          "trade_days_positive_turnover": 932,
+          "max_gross_security_assets_over_nav": 1.1777107423707964,
+          "max_borrow_over_nav": 0.1777107423707964,
+          "passive_hold_days": 3516,
+          "passive_security_quantity_residual_max_abs": 1.7763568394002505e-15,
+          "passive_borrow_financing_residual_max_abs": 1.1075125191939428e-16,
+          "component_model_target_weight_error_max_abs": 0.0,
+          "four_leg_target_column_prefix": "model_target_w_",
+          "component_weights": [
+            0,
+            0.3333333333333333,
+            0.3333333333333333,
+            0.3333333333333333
+          ],
+          "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.046682554373865544,
+          "diagnostic_leg_net_mean_vs_final_return_diff_days": 4437
+        }
+      }
+    }
+  },
+  "interaction_definition": "joint-off return minus first-single-off minus second-single-off plus formal return; daily net account return, not a sum of diagnostic leg net returns"
+}

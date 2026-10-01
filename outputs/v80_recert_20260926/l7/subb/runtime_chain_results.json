@@ -1,0 +1,144 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "prior_snapshot_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "changed_nodes_since_snapshot": [
+    "('ClassDef', 'CombinedStrategyV78')",
+    "('FunctionDef', '_us_open_row')",
+    "('FunctionDef', '_v80_b78_us_open_row')",
+    "('FunctionDef', 'extract_cn_rebalances')",
+    "('FunctionDef', 'extract_v78_suba_rebalances')"
+  ],
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "cutoff": "2026-09-24",
+  "full_end": "2026-09-25",
+  "replay_end": "2026-09-24",
+  "elapsed_seconds": 89.354,
+  "comparisons": {
+    "B7.8": {
+      "rows": 4471,
+      "columns": 153,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.8_official": {
+      "rows": 4471,
+      "columns": 109,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.8_bias": {
+      "rows": 4471,
+      "columns": 35,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.8_logvol": {
+      "rows": 4541,
+      "columns": 35,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.9": {
+      "rows": 4471,
+      "columns": 120,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.9_official": {
+      "rows": 4471,
+      "columns": 82,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.9_bias": {
+      "rows": 4471,
+      "columns": 26,
+      "differences": [],
+      "columns_with_differences": 0
+    },
+    "B7.9_logvol": {
+      "rows": 4541,
+      "columns": 26,
+      "differences": [],
+      "columns_with_differences": 0
+    }
+  },
+  "display": {
+    "signal": {
+      "B7.8_in_text": true,
+      "B7.9_in_text": true,
+      "four_leg_labels": true,
+      "T_plus_1_open_in_text": true,
+      "signal_info": {
+        "B7.8": {
+          "is_signal": true,
+          "signal_text": "QQQM 49.1%, PDBC 34.4%, EMXC 26.5%, DBMF 3.5%, GLDM 0.0%, KMLM 0.0%",
+          "note": "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        },
+        "B7.9": {
+          "is_signal": true,
+          "signal_text": "PDBC 56.5%, EMXC 43.5%",
+          "note": "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        }
+      },
+      "text_sha256": "a4ced1fc2bd3098f5ff1eaab8d0dcee705bfece09caa2005023d7cf53fd96369"
+    },
+    "live_signal": {
+      "B7.8_in_text": true,
+      "B7.9_in_text": true,
+      "four_leg_labels": true,
+      "T_plus_1_open_in_text": true,
+      "signal_info": {
+        "B7.8": {
+          "is_signal": false,
+          "signal_text": "QQQM 49.1%, PDBC 34.4%, EMXC 26.5%, DBMF 3.5%, GLDM 0.0%, KMLM 0.0%",
+          "note": "独立账户；周度信号日盘中假设，等待收盘确认"
+        },
+        "B7.9": {
+          "is_signal": false,
+          "signal_text": "PDBC 56.5%, EMXC 43.5%",
+          "note": "独立账户；周度信号日盘中假设，等待收盘确认"
+        }
+      },
+      "text_sha256": "a5840904b3f8d974dcca0e297e46b34a7f5288f7ec08ebb52f64ef2d622576a7"
+    },
+    "params": {
+      "B7.8_in_text": true,
+      "B7.9_in_text": true,
+      "four_leg_labels": true,
+      "T_plus_1_open_in_text": true,
+      "signal_info": {
+        "B7.8": {
+          "is_signal": true,
+          "signal_text": "QQQM 49.1%, PDBC 34.4%, EMXC 26.5%, DBMF 3.5%, GLDM 0.0%, KMLM 0.0%",
+          "note": "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        },
+        "B7.9": {
+          "is_signal": true,
+          "signal_text": "PDBC 56.5%, EMXC 43.5%",
+          "note": "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        }
+      },
+      "text_sha256": "9478c968916f5900f76d14440c4857bb09f31e635fff78e4639ea0ef5fad697e"
+    },
+    "live_params": {
+      "B7.8_in_text": true,
+      "B7.9_in_text": true,
+      "four_leg_labels": true,
+      "T_plus_1_open_in_text": true,
+      "signal_info": {
+        "B7.8": {
+          "is_signal": false,
+          "signal_text": "QQQM 49.1%, PDBC 34.4%, EMXC 26.5%, DBMF 3.5%, GLDM 0.0%, KMLM 0.0%",
+          "note": "独立账户；周度信号日盘中假设，等待收盘确认"
+        },
+        "B7.9": {
+          "is_signal": false,
+          "signal_text": "PDBC 56.5%, EMXC 43.5%",
+          "note": "独立账户；周度信号日盘中假设，等待收盘确认"
+        }
+      },
+      "text_sha256": "9478c968916f5900f76d14440c4857bb09f31e635fff78e4639ea0ef5fad697e"
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "stage": "complete",
+  "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "old_formal_source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "all_on_max_abs_return_difference": {
+    "Sub-A": 0.0,
+    "Sub-A-DK": 0.0,
+    "Sub-C": 0.0
+  },
+  "pairs": {
+    "A_r2_volume_off": {
+      "sleeve": "Sub-A",
+      "common_rows": 2189,
+      "first_interaction_date": "2017-12-19",
+      "nonadditive_days": 1459,
+      "max_abs_daily_interaction": 0.0703699223201848,
+      "first_return_difference": "2017-09-19",
+      "double_off_first_return": "2017-09-19"
+    },
+    "A_volume_targetvol_off": {
+      "sleeve": "Sub-A",
+      "common_rows": 2189,
+      "first_interaction_date": "2018-03-27",
+      "nonadditive_days": 1166,
+      "max_abs_daily_interaction": 0.01578252422822768,
+      "first_return_difference": "2017-09-19",
+      "double_off_first_return": "2017-09-19"
+    },
+    "A_r2_targetvol_off": {
+      "sleeve": "Sub-A",
+      "common_rows": 2189,
+      "first_interaction_date": "2018-03-01",
+      "nonadditive_days": 869,
+      "max_abs_daily_interaction": 0.017258766958837657,
+      "first_return_difference": "2017-10-12",
+      "double_off_first_return": "2017-09-19"
+    },
+    "ADK_scorehot_targetvol_off": {
+      "sleeve": "Sub-A-DK",
+      "common_rows": 2783,
+      "first_interaction_date": "2015-04-20",
+      "nonadditive_days": 387,
+      "max_abs_daily_interaction": 0.06446747948292875,
+      "first_return_difference": "2015-04-20",
+      "double_off_first_return": "2015-02-13"
+    },
+    "C_equity_gold_vol_off": {
+      "sleeve": "Sub-C",
+      "common_rows": 1459,
+      "first_interaction_date": null,
+      "nonadditive_days": 0,
+      "max_abs_daily_interaction": 6.938893903907228e-18,
+      "first_return_difference": "2020-12-03",
+      "double_off_first_return": "2020-12-03"
+    }
+  },
+  "arms_sha256": "145d8fc9577ff61966edbfeb4db365a2cf7ccdef5e58cba44a2ec0f6e5237d1a",
+  "metrics_sha256": "e2a47c291bb3805538ecfa1b857f21bd327b21a8604177ef67d6e49e0f35e71e"
+}

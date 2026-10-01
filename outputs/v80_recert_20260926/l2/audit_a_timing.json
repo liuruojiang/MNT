@@ -1,0 +1,72 @@
+{
+  "audit": "L2 independent timing and execution-cost audit A",
+  "scope": "Frozen V8.0 formal replay; no L3, no parameter search, no production changes",
+  "source_sha256": "ebf646b4a1c35f08118cb575c1bb120d524ab9e38be84e2e6363b1e319841150",
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "formal_results_sha256": "038875ea6eb6277d8a680ecb1fed79c148c289c0e65014ef9d4d5472fc9d24e8",
+  "findings": {
+    "adk_first_trade": {
+      "signal_close_date": "2015-08-27",
+      "highest_pair_rank_score": {"pair": "ZZ1000/CYB", "score": 39.00204345357111},
+      "reported_execution": "2015-08-27 CN close, per extract_dk_rebalances, using the previous result row's date and index close",
+      "first_return_interval": "2015-08-27 close to 2015-08-28 close",
+      "return_row_date": "2015-08-28",
+      "long_short_scale": 0.709147583873647,
+      "independent_index_spread_return": -0.001324048317670412,
+      "independent_gross_return": -0.0009389456654079397,
+      "trade_turnover": 1.418295167747294,
+      "fee_rate_per_leg": 0.0005,
+      "fee_on_return_row": 0.000709147583873647,
+      "net_return_on_return_row": -0.001647427398231649,
+      "fee_on_signal_close_row": 0.0,
+      "assessment": "The fee is attached to the first holding return interval ending 2015-08-28. This is an interval-end daily-return convention; it does not by itself prove final NAV is numerically wrong. The model assumes a signal computed from the 2015-08-27 final close can trade at that same close, which requires a separate executable-price validation."
+    },
+    "adk_first_pair_change": {
+      "signal_close_date": "2015-08-31",
+      "selected_pair": "SZ50/CYB",
+      "score": 52.330298,
+      "effective_return_date": "2015-09-01",
+      "effective_scale": 0.3433224018885375,
+      "gross_return": 0.021547678913843165,
+      "fee_on_effective_return_row": 0.000709147583873647,
+      "fee_on_signal_close_row": 0.0
+    },
+    "subb_first_account_trade": {
+      "B7.8": {"signal_close": "2008-12-18", "execution_open": "2008-12-19", "fee_value": 0.0003163885629229832, "turnover_at_open": 0.31549693646458626},
+      "B7.9": {"signal_close": "2008-12-18", "execution_open": "2008-12-19", "fee_value": 0.00017371678953903653, "turnover_at_open": 0.17302041177707325},
+      "assessment": "Both account ledgers mark the Thursday signal pending and charge the next session opening trade. No same-day signal-to-open execution was found in these first events."
+    },
+    "subb_first_all_etf_execution": {
+      "signal_close": "2024-01-11",
+      "execution_open": "2024-01-12",
+      "B7.8": {"fee_value": 0.00031458029692653074, "btc_model_target_weight_at_signal": 0.13697567935462912},
+      "B7.9": {"fee_value": 0.00009692650595650892, "btc_model_target_weight_at_signal": 0.20560464399286948},
+      "caveat": "The ETF execution price is post-listing, but the BTC signal's 160/260/390-session lookback still includes pre-IBIT UTC daily proxy observations."
+    },
+    "subb_proxy_lookback_boundary": {
+      "ibit_first_close": "2024-01-11",
+      "first_160_session_endpoint_with_only_post_switch_price_comparison": "2024-08-30",
+      "first_260_session_endpoint_with_only_post_switch_price_comparison": "2025-01-27",
+      "first_390_session_endpoint_with_only_post_switch_price_comparison": "2025-08-04",
+      "ema_memory": "The 100-session EMA score is recursive and retains a decaying pre-IBIT proxy contribution beyond 2025-08-04 unless restarted with an explicit post-listing warmup.",
+      "interpretation": "2024-01-12 is the first all-listed ETF full return day, not the first proxy-free B decision day."
+    },
+    "subc_post_listing_scale_events": {
+      "gold": {"signal_close": "2024-01-29", "execution_open": "2024-01-30", "independently_computed_30d_vol": 0.006171743842583166, "independently_computed_252d_vol": 0.00823560722197027, "old_scale": 0.8938947949388826, "new_scale": 1.33440522355236, "gold_open_gap": 0.007192483078430456, "bil_open_gap": 0.00010892349178504013, "base_exposure": 0.14664138185429748, "independent_6bp_open_trade_cost": 0.000038917599910488514, "recorded_cost": 0.000038917599910488534},
+      "equity": {"signal_close": "2024-02-14", "execution_open": "2024-02-15", "independently_computed_spy_15d_annualized_vol": 0.1335238482228457, "old_scale": 1.5, "new_scale": 1.1233948241939267, "recorded_cost": 0.00013571032981467946},
+      "timing_assessment": "Both decisions use prior-close volatility; the gold opening trade cost independently reconciles exactly to frozen open and close prices."
+    },
+    "subc_annual_base_rebalance": {
+      "source_policy": "Annual close fee is explicitly calculated on base account weight turnover, at 0.1% of base turnover. The separate scale-transition fee is zero on both dates below; there is no same-day scale transition to double charge.",
+      "2024-12-31": {"base_turnover": 0.12439949254619709, "reported_base_fee_fraction": 0.0001243994925461971, "scale_weighted_risky_turnover_scenario": 0.12695798428360433, "scenario_fee_fraction": 0.00012695798428360433, "scenario_fee_minus_reported": 0.0000025584917374072426, "scale_transition_fee": 0.0},
+      "2025-12-31": {"base_turnover": 0.14674669766052434, "reported_base_fee_fraction": 0.00014674669766052433, "scale_weighted_risky_turnover_scenario": 0.1921507121156546, "scenario_fee_fraction": 0.0001921507121156546, "scenario_fee_minus_reported": 0.00004540401445513026, "scale_transition_fee": 0.0},
+      "scenario_formula": "sum(abs(close_base_weight - pre_close_base_weight) * current_scale_by_asset) * 0.001, with equity assets using equity_scale, GLDM using gold_scale, others using 1",
+      "assessment": "The base-ledger cost arithmetic passes its documented rule. A single-account execution claim at the scaled gross exposures requires a separately specified and reconciled trading-cost model; the scenario differences are not automatically a bug in the stated paper model."
+    },
+    "subc_timing_switch": {
+      "production_value": false,
+      "assessment": "PROD_USE_TIMING is false, so all monthly asset signals are one. Missing monthly timing-switch commissions are not an active V8.0 issue."
+    }
+  },
+  "overall": "Conditional L2 timing evidence: B T-close to T+1 adjusted-open and C scale transition examples pass; ADK assumes same-close signal and execution, with fee booked in the following close-to-close return row; proxy-free signal dates and full-scaled account costs remain outside current certification."
+}

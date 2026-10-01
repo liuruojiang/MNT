@@ -1,0 +1,153 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "l1_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "l2_snapshot_sha256": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a",
+  "formal_rows": 1459,
+  "formal_start": "2020-12-03",
+  "formal_end": "2026-09-25",
+  "baseline_deltas": {
+    "raw_return": 0.0,
+    "scaled_return": 0.0,
+    "equity_scale": 0.0,
+    "gold_scale": 0.0,
+    "costs": 0.0,
+    "all_10_asset_component_columns_max": 0.0
+  },
+  "prefix_cutoff": "2024-12-30",
+  "prefix_rows": 1024,
+  "prefix_deltas": {
+    "raw_return": 0.0,
+    "scaled_return": 0.0,
+    "equity_scale": 0.0,
+    "gold_scale": 0.0,
+    "costs": 0.0,
+    "all_10_asset_component_columns_max": 0.0
+  },
+  "annual_due_on_prefix": true,
+  "annual_execution_at": "2025-01-01 05:00:00+08:00",
+  "current_target_identity": 1.0000000000000002,
+  "next_target_identity": 1.0000000000000002,
+  "assets": [
+    {
+      "asset": "VTI",
+      "base": 0.2072697230067655,
+      "signal": 1.0,
+      "current": 0.22046872509074775,
+      "next": 0.22046872509074775
+    },
+    {
+      "asset": "QQQM",
+      "base": 0.10573889188940674,
+      "signal": 1.0,
+      "current": 0.11247237825760485,
+      "next": 0.11247237825760485
+    },
+    {
+      "asset": "AVUV",
+      "base": 0.0908100153621525,
+      "signal": 1.0,
+      "current": 0.09659282611050472,
+      "next": 0.09659282611050472
+    },
+    {
+      "asset": "VEA",
+      "base": 0.08602313376235143,
+      "signal": 1.0,
+      "current": 0.09150111436332373,
+      "next": 0.09150111436332373
+    },
+    {
+      "asset": "AVDV",
+      "base": 0.09024209025005793,
+      "signal": 1.0,
+      "current": 0.09598873534609326,
+      "next": 0.09598873534609326
+    },
+    {
+      "asset": "VGIT",
+      "base": 0.12690498772462325,
+      "signal": 1.0,
+      "current": 0.12690498772462325,
+      "next": 0.12690498772462325
+    },
+    {
+      "asset": "DBMF",
+      "base": 0.02223545757188987,
+      "signal": 1.0,
+      "current": 0.02223545757188987,
+      "next": 0.02223545757188987
+    },
+    {
+      "asset": "KMLM",
+      "base": 0.020434277193843553,
+      "signal": 1.0,
+      "current": 0.020434277193843553,
+      "next": 0.020434277193843553
+    },
+    {
+      "asset": "GLDM",
+      "base": 0.1579685095634715,
+      "signal": 1.0,
+      "current": 0.15422182738887139,
+      "next": 0.15422182738887139
+    },
+    {
+      "asset": "IBIT",
+      "base": 0.09237291367543785,
+      "signal": 1.0,
+      "current": 0.09237291367543785,
+      "next": 0.09237291367543785
+    }
+  ],
+  "annual_component_dates": [
+    "2020-12-31",
+    "2021-12-31",
+    "2022-12-30",
+    "2023-12-29",
+    "2024-12-31",
+    "2025-12-31"
+  ],
+  "annual_record_dates": [
+    "2020-12-31",
+    "2021-12-31",
+    "2022-12-30",
+    "2023-12-29",
+    "2024-12-31",
+    "2025-12-31"
+  ],
+  "scale_event_count": 70,
+  "equity_scale_event_count": 52,
+  "gold_scale_event_count": 18,
+  "open_counterexample": {
+    "execution_date": "2024-01-30",
+    "original_group_return": -0.00025853641776554977,
+    "perturbed_group_return": -0.006547729970495485,
+    "missing_open_rejected": true,
+    "missing_open_error": "Sub-C sleeve GLDM execution: missing T+1 adjusted open price on 2024-01-30 for GLD. Formal model execution requires T+1 adjusted open; refusing close fallback."
+  },
+  "four_query_kinds": {
+    "signal": {
+      "is_signal": true,
+      "signal_text": "股票袖 1.06x；黄金袖 0.98x；年度MOC目标：VTI 21.27%, QQQM 10.64%, AVUV 10.64%, VEA 10.64%, AVDV 10.64%, VGIT 15.00%, DBMF 2.50%, KMLM 2.50%, GLDM 14.64%, IBIT 5.00%",
+      "note": "年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘"
+    },
+    "live_signal": {
+      "is_signal": true,
+      "signal_text": "股票袖 1.06x；黄金袖 0.98x；年度MOC目标：VTI 21.27%, QQQM 10.64%, AVUV 10.64%, VEA 10.64%, AVDV 10.64%, VGIT 15.00%, DBMF 2.50%, KMLM 2.50%, GLDM 14.64%, IBIT 5.00%",
+      "note": "年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘"
+    },
+    "params": {
+      "is_signal": true,
+      "signal_text": "股票袖 1.06x；黄金袖 0.98x；年度MOC目标：VTI 21.27%, QQQM 10.64%, AVUV 10.64%, VEA 10.64%, AVDV 10.64%, VGIT 15.00%, DBMF 2.50%, KMLM 2.50%, GLDM 14.64%, IBIT 5.00%",
+      "note": "年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘"
+    },
+    "live_params": {
+      "is_signal": true,
+      "signal_text": "股票袖 1.06x；黄金袖 0.98x；年度MOC目标：VTI 21.27%, QQQM 10.64%, AVUV 10.64%, VEA 10.64%, AVDV 10.64%, VGIT 15.00%, DBMF 2.50%, KMLM 2.50%, GLDM 14.64%, IBIT 5.00%",
+      "note": "年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘"
+    }
+  },
+  "timing_enabled": false,
+  "batch_replay": "PASS",
+  "prefix_replay": "PASS"
+}

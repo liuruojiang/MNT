@@ -1,0 +1,46 @@
+{
+  "rows": 2783,
+  "pairs": {
+    "SZ50/CYB": 896,
+    "SZ50/ZZ1000": 853,
+    "ZZ1000/CYB": 306,
+    "ZZ500/CYB": 280,
+    "SZ50/ZZ500": 171,
+    "HS300/CYB": 107,
+    "HS300/ZZ1000": 74,
+    "HS300/ZZ500": 62,
+    "ZZ500/ZZ1000": 29,
+    "SZ50/HS300": 4,
+    "none": 1
+  },
+  "records": 518,
+  "position_records": 481,
+  "scale_records": 37,
+  "position_date_missing": [],
+  "position_date_extra": [],
+  "recent_records": 5,
+  "first_record": {
+    "日期": "2015-08-27",
+    "北京时间": "2015-08-27 15:00 北京时间",
+    "strategy_family": "Sub-A-DK",
+    "record_kind": "position",
+    "策略": "ADK策略 (100%)",
+    "卖出": "现金 / 零敞口",
+    "卖出价格": null,
+    "买入": "做多中证1000/做空创业板",
+    "买入价格": "ZZ1000 7793.54; CYB 1959.49"
+  },
+  "last_record": {
+    "日期": "2026-09-18",
+    "北京时间": "2026-09-18 15:00 北京时间",
+    "strategy_family": "Sub-A-DK",
+    "record_kind": "position",
+    "策略": "ADK策略 (100%)",
+    "卖出": "平多中证1000/平空上证50",
+    "卖出价格": "SZ50 2860.78; ZZ1000 7687.59",
+    "买入": "做多创业板/做空上证50",
+    "买入价格": "SZ50 2860.78; CYB 3372.68"
+  },
+  "zero_exposure_days": 369,
+  "record_time_off_15h": 0
+}

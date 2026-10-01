@@ -1,0 +1,104 @@
+{
+  "run_id": "20260910_momentum_v80_subb_correlation_allocation",
+  "created_at": "2026-09-10T11:04:50+08:00",
+  "phase": "complete",
+  "project": "momentum",
+  "strategy": "v80",
+  "subsystem": "subb",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "mnt_bot V 8.0 plus.py",
+  "git_branch": "main",
+  "git_commit": "a7353eebc17c94e0d3566404d72fb395776fc54f",
+  "git_status_before": "?? research_v80_subb_rebalance_period.py",
+  "git_status_after": "?? research_v80_subb_correlation_allocation.py\n?? research_v80_subb_rebalance_period.py",
+  "scan_type": "parameter_scan",
+  "parameter_group": "correlation_allocation",
+  "baseline": {},
+  "candidate_grid": [
+    "inverse_vol",
+    "diagonal_minvar",
+    "corr63",
+    "corr42",
+    "corr126"
+  ],
+  "data_snapshot": {
+    "path": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_external_review_20260907\\new_replay_inputs.pkl",
+    "sha256": "fb3142242e599fc56ac9eb02414931099c03445cdf88d628513710501e2208ef",
+    "start": "2007-05-30 00:00:00",
+    "end": "2026-09-04 00:00:00",
+    "rows": 4849,
+    "basis": "Frozen accepted production phased/proxy history; not all-live-ETF history"
+  },
+  "cost_model": {
+    "execution": "T close -> T+1 adjusted open; production net account, financing and daily VolReg retained",
+    "commission": 0.001
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\command_log.txt"
+  },
+  "decision": "retain_inverse_vol_no_promotion",
+  "stability_label": "tested_windows_consistently_fail_replacement",
+  "source_hashes": {
+    "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py": "3b85ea1a7e029035c7da773744c9a99d6763825bf295aa4b4170ce547783a745"
+  },
+  "parity_check": {
+    "B78": 8.881784197001252e-16,
+    "B79": 3.3306690738754696e-16
+  },
+  "candidates": [
+    [
+      "inverse_vol",
+      63,
+      null
+    ],
+    [
+      "diagonal_minvar",
+      63,
+      1.0
+    ],
+    [
+      "corr63",
+      63,
+      0.5
+    ],
+    [
+      "corr42",
+      42,
+      0.5
+    ],
+    [
+      "corr126",
+      126,
+      0.5
+    ]
+  ],
+  "warnings": [
+    "Frozen through 2026-09-04; not latest market performance",
+    "Long history retains original proxy/phased availability",
+    "Vol scaling rules unchanged but endogenous scales may change with candidate return history",
+    "Initial equal B account capital, drift thereafter; no daily cross-account rebalance",
+    "2026-09-30: annualization corrected from saved daily returns; original BIL-based financing and candidate decisions are not re-certified"
+  ],
+  "cache_write_risk": "Research artifacts only",
+  "source_change_rule": "Never modify production source",
+  "finalized_at": "2026-09-10T11:14:46+08:00",
+  "annualization_repair": {
+    "date": "2026-09-30",
+    "scope": "annual_return and return_delta_pp only; window_metrics annual columns refreshed",
+    "basis": "saved frozen daily_returns.csv; no account, return, fee, signal or position rerun",
+    "unchanged_financing": "original BIL adjusted-price-return plus 100 bp debt proxy; negative debt-charge days remain in the saved daily path",
+    "first_return_anchor": "2008-12-12",
+    "affected_rows": 75,
+    "max_abs_annualization_change_pp": 0.1970372858144387,
+    "old_formula_baseline_parity": "all valid rows matched old first-to-last dated-return denominator within 1e-10 absolute return",
+    "corrected_formula": "compound all included returns over calendar span from preceding source close to final return date",
+    "daily_returns_sha256": "0b50fdb9d0ffe9b6b0de878859af28b607d96bb5aa3edf3bd6e82d2d0b7cceb7",
+    "frozen_input_sha256": "fb3142242e599fc56ac9eb02414931099c03445cdf88d628513710501e2208ef",
+    "metric_source_sha256_at_repair": "01b177bf63b30e7a3816a20fbd5e20b68f663a7edda4d66765b2230c49cc74a8",
+    "backup": "quant_param_scan_runs\\20260910_momentum_v80_subb_correlation_allocation\\annualization_backup_20260930"
+  }
+}

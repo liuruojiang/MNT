@@ -1,0 +1,16 @@
+{
+  "friday_warning": true,
+  "new_signal_false": true,
+  "signal_info": {
+    "B7.8": {
+      "is_signal": false,
+      "signal_text": "QQQM 49.1%, PDBC 34.3%, EMXC 26.5%, DBMF 3.5%",
+      "note": "独立账户；非周度信号日，仅供参考，不执行"
+    },
+    "B7.9": {
+      "is_signal": false,
+      "signal_text": "PDBC 56.4%, EMXC 43.6%",
+      "note": "独立账户；非周度信号日，仅供参考，不执行"
+    }
+  }
+}

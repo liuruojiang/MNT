@@ -1,0 +1,13 @@
+{
+  "source": "independent numpy component-NAV and log-return metrics",
+  "scenario_count": 76,
+  "combo_window_rows": 1509,
+  "audited_combo_window_metrics": 304,
+  "formal_adk_pair_direction_cells": 20,
+  "max_abs_daily_combo_diff": 8.040443311152501e-16,
+  "max_abs_metric_diff": 4.618527782440651e-13,
+  "formal_a_cost_identity_diff": 0.0,
+  "formal_adk_cost_identity_diff": 0.0,
+  "omitted_a_fee_detection_diff": 0.002576244104220804,
+  "shifted_adk_fee_detection_diff": 0.0029187943332529276
+}

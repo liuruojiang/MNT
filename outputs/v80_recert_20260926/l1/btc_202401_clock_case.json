@@ -1,0 +1,30 @@
+{
+  "url": "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?period1=1704240000&period2=1704499200&interval=1d",
+  "exchangeTimezoneName": "UTC",
+  "rows": [
+    {
+      "utc_bar_start": "2024-01-03T00:00:00+00:00",
+      "new_york_bar_start": "2024-01-02T19:00:00-05:00",
+      "open": 44961.6015625,
+      "close": 42848.17578125
+    },
+    {
+      "utc_bar_start": "2024-01-04T00:00:00+00:00",
+      "new_york_bar_start": "2024-01-03T19:00:00-05:00",
+      "open": 42855.81640625,
+      "close": 44179.921875
+    },
+    {
+      "utc_bar_start": "2024-01-05T00:00:00+00:00",
+      "new_york_bar_start": "2024-01-04T19:00:00-05:00",
+      "open": 44192.98046875,
+      "close": 44162.69140625
+    },
+    {
+      "utc_bar_start": "2024-01-06T00:00:00+00:00",
+      "new_york_bar_start": "2024-01-05T19:00:00-05:00",
+      "open": 44178.953125,
+      "close": 43989.1953125
+    }
+  ]
+}

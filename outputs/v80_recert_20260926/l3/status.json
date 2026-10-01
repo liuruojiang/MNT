@@ -1,0 +1,38 @@
+{
+  "stage": "complete",
+  "source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "formal_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "amount_sha256": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6",
+  "formal_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "clock_beijing": "2026-09-26 19:40:51.800117",
+  "strict_open": true,
+  "model": "real market prices, frozen paper execution and accounts",
+  "elapsed_seconds": 124.58,
+  "formal_max_abs_daily_difference": {
+    "Sub-A": 0.0,
+    "Sub-A-DK": 0.0,
+    "B7.8": 6.661338147750939e-16,
+    "B7.9": 4.440892098500626e-16,
+    "Sub-C": 0.0,
+    "Combined": 4.440892098500626e-16
+  },
+  "core_results_sha256": "99a1497b85561ff02b2ee4b52d376e41002661a87b6b0f6033526a714ea83f20",
+  "core_daily_sha256": "657fec91b6f409c0961bd96990107565e66264f30eb1e3af0155f6b47ae27ef3",
+  "core_subc_sha256": "0363f52bfc465b882b34ffe7c556d798e50bff17bd1790f043175d703a275e8b",
+  "core_rows": {
+    "Sub-A": 2189,
+    "Sub-A-DK": 2823,
+    "B7.8": 4472,
+    "B7.9": 4472,
+    "Sub-C": 1459,
+    "Combined": 1509
+  },
+  "core_first_period_starts": {
+    "Sub-A": "2017-09-18",
+    "Sub-A-DK": "2015-02-12",
+    "B7.8": "2008-12-12",
+    "B7.9": "2008-12-12",
+    "Sub-C": "2020-12-02",
+    "Combined": "2020-12-02"
+  }
+}

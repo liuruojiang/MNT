@@ -1,0 +1,328 @@
+{
+  "status": "diagnostic_only",
+  "floor_rule": "max(BIL adjusted-price period return + 100bp prorated spread, 0) on borrow debt only",
+  "source_sha256": "01b177bf63b30e7a3816a20fbd5e20b68f663a7edda4d66765b2230c49cc74a8",
+  "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "daily_sha256": "45056a82bbfabff59f7cfb33c864a78952083520d231230b5edd2a9fc61e6b0a",
+  "replacements": {
+    "financing = debt * (cash_return + daily_spread * spread_fraction)": "financing = debt * max(cash_return + daily_spread * spread_fraction, 0.0)",
+    "open_cash = old_cash * (1.0 + cash_gap) - max(-old_cash, 0.0) * daily_spread * gap_spread": "open_cash = max(old_cash, 0.0) * (1.0 + cash_gap) - max(-old_cash, 0.0) * (1.0 + max(cash_gap + daily_spread * gap_spread, 0.0))",
+    "close_nav = sum((value * (1.0 + risk_day[name]) for name, value in target_values.items())) + cash_value * (1.0 + cash_day)": "close_nav = sum((value * (1.0 + risk_day[name]) for name, value in target_values.items())) + max(cash_value, 0.0) * (1.0 + cash_day) - max(-cash_value, 0.0) * (1.0 + max(cash_day + daily_spread * day_spread, 0.0))",
+    "close_nav -= max(-cash_value, 0.0) * daily_spread * day_spread": "close_nav -= 0.0  # spread included in floored borrowing leg above",
+    "financing_return.loc[~reduced] = -delta_exposure.loc[~reduced] * (bil.loc[~reduced] + daily_spread)": "financing_return.loc[~reduced] = -delta_exposure.loc[~reduced] * np.maximum(bil.loc[~reduced] + daily_spread, 0.0)"
+  },
+  "audit": {
+    "B7.8": {
+      "rows": 4472,
+      "negative_borrow_days_before": 790,
+      "negative_borrow_days_after": 0,
+      "changed_return_days": 2559,
+      "old_metrics": {
+        "Full": {
+          "annual": 12.797180910863414,
+          "max_dd": -12.224822113231378,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 18.444262820866598,
+          "max_dd": -12.22482211323135,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 23.657401285497272,
+          "max_dd": -12.022695054816154,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.76579865561138,
+          "max_dd": -12.022695054816174,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 29.095414887631897,
+          "max_dd": -12.022695054816143,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 12.68799260662421,
+          "max_dd": -12.230575492230077,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 18.377285721299288,
+          "max_dd": -12.230575492230054,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 23.62500001818233,
+          "max_dd": -12.023336420589185,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.73237643397042,
+          "max_dd": -12.0233364205892,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 29.07146348220966,
+          "max_dd": -12.02333642058918,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    },
+    "B7.9": {
+      "rows": 4472,
+      "negative_borrow_days_before": 700,
+      "negative_borrow_days_after": 0,
+      "changed_return_days": 2324,
+      "old_metrics": {
+        "Full": {
+          "annual": 17.291981614130634,
+          "max_dd": -16.741418846247473,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 25.309110095580213,
+          "max_dd": -15.529551080717308,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 32.39017022773729,
+          "max_dd": -15.529551080717244,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 47.296595438378716,
+          "max_dd": -13.501081587161048,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 34.64745868867365,
+          "max_dd": -13.501081587161051,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 17.202172670144233,
+          "max_dd": -16.775396970249883,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": 25.24771668041801,
+          "max_dd": -15.52955108071723,
+          "reason": null,
+          "start": "2016-09-26 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "5Y": {
+          "annual": 32.37104558135621,
+          "max_dd": -15.529551080717201,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 47.277467138896625,
+          "max_dd": -13.501317996253778,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 34.63613936176444,
+          "max_dd": -13.501317996253745,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    },
+    "Sub-C": {
+      "rows": 1459,
+      "baseline_parity_max_abs": 0.0,
+      "changed_return_days": 117,
+      "max_daily_return_decrease": 6.146291860601762e-05,
+      "sum_daily_return_changes": -0.0015321183282351253,
+      "max_abs_fee_change_from_equity_path": 5.952032880072403e-09,
+      "old_metrics": {
+        "Full": {
+          "annual": 15.730617642881484,
+          "max_dd": -20.566164277038737,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 14.081013355309047,
+          "max_dd": -20.56616427703874,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 24.910462158856905,
+          "max_dd": -9.772796212774045,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 17.761024319095363,
+          "max_dd": -8.14060774443931,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 15.700096747348645,
+          "max_dd": -20.58875974024083,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 14.0646311558821,
+          "max_dd": -20.588759740240718,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 24.902798996520282,
+          "max_dd": -9.773128650471682,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 17.752705574783366,
+          "max_dd": -8.140721985625158,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    },
+    "Combined": {
+      "rows": 1509,
+      "changed_return_days": 1509,
+      "old_metrics": {
+        "Full": {
+          "annual": 23.329698802457678,
+          "max_dd": -7.776784248703679,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 22.89384325360071,
+          "max_dd": -7.776784248703669,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.93160026669213,
+          "max_dd": -7.776784248703658,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 22.758711899443227,
+          "max_dd": -7.623008778757119,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      },
+      "floor_metrics": {
+        "Full": {
+          "annual": 23.30664758782781,
+          "max_dd": -7.7757493087813625,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "10Y": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25"
+        },
+        "5Y": {
+          "annual": 22.87895465283367,
+          "max_dd": -7.775749308781372,
+          "reason": null,
+          "start": "2021-09-27 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "3Y": {
+          "annual": 34.918601930515656,
+          "max_dd": -7.775749308781345,
+          "reason": null,
+          "start": "2023-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        },
+        "1Y": {
+          "annual": 22.744893239483165,
+          "max_dd": -7.621778150612404,
+          "reason": null,
+          "start": "2025-09-25 00:00:00",
+          "end": "2026-09-25 00:00:00"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,384 @@
+{
+  "source_sha256": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+  "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "amount_sha256": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6",
+  "l2_sha256": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+  "l4_arms_sha256": "5579d7c9df910938529496d54c5cadf6298034c9cc48ce7d38567585f9de65d2",
+  "all_on_l2_max_abs_daily_return_difference": 0.0,
+  "rebuilt_amount_max_abs_daily_return_difference": 0.0,
+  "groups": {
+    "rank_ma": {
+      "common_start": "2017-10-10",
+      "common_end": "2026-09-24",
+      "common_rows": 2179,
+      "control": "rank_core_off_cash",
+      "candidates": [
+        "ma50",
+        "ma60_formal",
+        "ma70"
+      ]
+    },
+    "rank_momentum": {
+      "common_start": "2017-09-26",
+      "common_end": "2026-09-24",
+      "common_rows": 2184,
+      "control": "rank_core_off_cash",
+      "candidates": [
+        "mom15",
+        "mom20_formal",
+        "mom25"
+      ]
+    },
+    "rank_slope_weight": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "rank_core_off_cash",
+      "candidates": [
+        "slope2",
+        "slope3_formal",
+        "slope4"
+      ]
+    },
+    "r2_threshold": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_r2_off",
+      "candidates": [
+        "r2_010",
+        "r2_015_formal",
+        "r2_020_old",
+        "r2_025_old",
+        "r2_030_old"
+      ]
+    },
+    "r2_window": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_r2_off",
+      "candidates": [
+        "r2win15",
+        "r2win20_formal",
+        "r2win30"
+      ]
+    },
+    "amount_zz_days": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_volume_off",
+      "candidates": [
+        "zzdays2",
+        "zzdays3_formal",
+        "zzdays4"
+      ]
+    },
+    "amount_cyb_days": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_volume_off",
+      "candidates": [
+        "cybdays3",
+        "cybdays4_formal",
+        "cybdays5",
+        "cybma15d5_old"
+      ]
+    },
+    "target_vol": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_targetvol_off",
+      "candidates": [
+        "tv015",
+        "tv020_formal",
+        "tv025",
+        "tv030_old"
+      ]
+    },
+    "vol_window": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_targetvol_off",
+      "candidates": [
+        "volwin60",
+        "volwin80_formal",
+        "volwin120_old"
+      ]
+    },
+    "max_leverage": {
+      "common_start": "2017-09-19",
+      "common_end": "2026-09-24",
+      "common_rows": 2189,
+      "control": "A_targetvol_off",
+      "candidates": [
+        "lev100",
+        "lev125_formal",
+        "lev150_old"
+      ]
+    }
+  },
+  "definitions": {
+    "ma50": {
+      "group": "rank_ma",
+      "changes": {
+        "CN_BIAS_N": 50
+      },
+      "volume": null
+    },
+    "ma60_formal": {
+      "group": "rank_ma",
+      "changes": {},
+      "volume": null
+    },
+    "ma70": {
+      "group": "rank_ma",
+      "changes": {
+        "CN_BIAS_N": 70
+      },
+      "volume": null
+    },
+    "mom15": {
+      "group": "rank_momentum",
+      "changes": {
+        "CN_MOM_DAY": 15
+      },
+      "volume": null
+    },
+    "mom20_formal": {
+      "group": "rank_momentum",
+      "changes": {},
+      "volume": null
+    },
+    "mom25": {
+      "group": "rank_momentum",
+      "changes": {
+        "CN_MOM_DAY": 25
+      },
+      "volume": null
+    },
+    "slope2": {
+      "group": "rank_slope_weight",
+      "changes": {
+        "CN_BIAS_MOM_WEIGHT_END": 2.0
+      },
+      "volume": null
+    },
+    "slope3_formal": {
+      "group": "rank_slope_weight",
+      "changes": {},
+      "volume": null
+    },
+    "slope4": {
+      "group": "rank_slope_weight",
+      "changes": {
+        "CN_BIAS_MOM_WEIGHT_END": 4.0
+      },
+      "volume": null
+    },
+    "r2_010": {
+      "group": "r2_threshold",
+      "changes": {
+        "CN_R2_THRESHOLD": 0.1
+      },
+      "volume": null
+    },
+    "r2_015_formal": {
+      "group": "r2_threshold",
+      "changes": {},
+      "volume": null
+    },
+    "r2_020_old": {
+      "group": "r2_threshold",
+      "changes": {
+        "CN_R2_THRESHOLD": 0.2
+      },
+      "volume": null
+    },
+    "r2_025_old": {
+      "group": "r2_threshold",
+      "changes": {
+        "CN_R2_THRESHOLD": 0.25
+      },
+      "volume": null
+    },
+    "r2_030_old": {
+      "group": "r2_threshold",
+      "changes": {
+        "CN_R2_THRESHOLD": 0.3
+      },
+      "volume": null
+    },
+    "r2win15": {
+      "group": "r2_window",
+      "changes": {
+        "CN_R2_WINDOW": 15
+      },
+      "volume": null
+    },
+    "r2win20_formal": {
+      "group": "r2_window",
+      "changes": {},
+      "volume": null
+    },
+    "r2win30": {
+      "group": "r2_window",
+      "changes": {
+        "CN_R2_WINDOW": 30
+      },
+      "volume": null
+    },
+    "zzdays2": {
+      "group": "amount_zz_days",
+      "changes": {},
+      "volume": [
+        20,
+        2,
+        20,
+        4
+      ]
+    },
+    "zzdays3_formal": {
+      "group": "amount_zz_days",
+      "changes": {},
+      "volume": [
+        20,
+        3,
+        20,
+        4
+      ]
+    },
+    "zzdays4": {
+      "group": "amount_zz_days",
+      "changes": {},
+      "volume": [
+        20,
+        4,
+        20,
+        4
+      ]
+    },
+    "cybdays3": {
+      "group": "amount_cyb_days",
+      "changes": {},
+      "volume": [
+        20,
+        3,
+        20,
+        3
+      ]
+    },
+    "cybdays4_formal": {
+      "group": "amount_cyb_days",
+      "changes": {},
+      "volume": [
+        20,
+        3,
+        20,
+        4
+      ]
+    },
+    "cybdays5": {
+      "group": "amount_cyb_days",
+      "changes": {},
+      "volume": [
+        20,
+        3,
+        20,
+        5
+      ]
+    },
+    "cybma15d5_old": {
+      "group": "amount_cyb_days",
+      "changes": {},
+      "volume": [
+        20,
+        3,
+        15,
+        5
+      ]
+    },
+    "tv015": {
+      "group": "target_vol",
+      "changes": {
+        "CN_TARGET_VOL": 0.15
+      },
+      "volume": null
+    },
+    "tv020_formal": {
+      "group": "target_vol",
+      "changes": {},
+      "volume": null
+    },
+    "tv025": {
+      "group": "target_vol",
+      "changes": {
+        "CN_TARGET_VOL": 0.25
+      },
+      "volume": null
+    },
+    "tv030_old": {
+      "group": "target_vol",
+      "changes": {
+        "CN_TARGET_VOL": 0.3
+      },
+      "volume": null
+    },
+    "volwin60": {
+      "group": "vol_window",
+      "changes": {
+        "CN_VOL_WINDOW": 60
+      },
+      "volume": null
+    },
+    "volwin80_formal": {
+      "group": "vol_window",
+      "changes": {},
+      "volume": null
+    },
+    "volwin120_old": {
+      "group": "vol_window",
+      "changes": {
+        "CN_VOL_WINDOW": 120
+      },
+      "volume": null
+    },
+    "lev100": {
+      "group": "max_leverage",
+      "changes": {
+        "CN_MAX_LEV": 1.0
+      },
+      "volume": null
+    },
+    "lev125_formal": {
+      "group": "max_leverage",
+      "changes": {},
+      "volume": null
+    },
+    "lev150_old": {
+      "group": "max_leverage",
+      "changes": {
+        "CN_MAX_LEV": 1.5
+      },
+      "volume": null
+    }
+  },
+  "rows": 270,
+  "daily_rows": 100694,
+  "label": "frozen-real-input paper-model diagnostic; not executable or production promotion",
+  "rank_core_off_cash": {
+    "mechanism": "set all score series to zero in official run_cn_strategy and replay amount overlay",
+    "interpretation": "whole core ranking off, no trades; not a single rank-parameter economic effect",
+    "all_cash_rows": 2189,
+    "fee_total": 0.0
+  },
+  "output_sha256": {
+    "scan_summary.csv": "b6124ebe3461aae667034021bf47de86291e12c6ba800ed1468d246aa3c7c247",
+    "window_metrics.csv": "b6124ebe3461aae667034021bf47de86291e12c6ba800ed1468d246aa3c7c247",
+    "daily_paths.csv.gz": "399c4062eae08f1f007e544eb02717077785a7c6f8cd1836fc99018c0229a89e"
+  }
+}

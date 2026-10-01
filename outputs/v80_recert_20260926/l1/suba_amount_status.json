@@ -1,0 +1,32 @@
+{
+  "stage": "fetch_complete",
+  "source_sha256": "c6fd72968284825c982f0eacf025acd5db2685629a64aa89dc1463abe1960eef",
+  "expected_date": "2026-09-24 00:00:00",
+  "signal_rows": 3964,
+  "feature_rows": 3964,
+  "feature_columns": [
+    "zz2000_amount",
+    "zz2000_streak",
+    "zz2000_signal",
+    "cyb_amount",
+    "cyb_streak",
+    "cyb_signal",
+    "combined_signal",
+    "old_combined_signal",
+    "severe_ratio_signal",
+    "combined_scale",
+    "clear_signal",
+    "clear_ratio_rule",
+    "clear_ratio_enabled",
+    "clear_ratio_unavailable",
+    "combined_unresolved",
+    "zz2000_source",
+    "cyb_source",
+    "partial_unavailable"
+  ],
+  "start": "2000-01-01 00:00:00",
+  "end": "2026-09-24 00:00:00",
+  "feature_attrs": {},
+  "unresolved": false,
+  "input_sha256": "c3ee4892f0aa0c057c02a3f08b8698fb873361fb37a3aa3033a6e69bb75460dd"
+}

@@ -1,0 +1,61 @@
+{
+  "suba": {
+    "seed_close": "2024-01-22",
+    "security": "1.H11077",
+    "initial_equity": 1.0,
+    "initial_asset_value": 1.25,
+    "initial_financing_liability": 0.25,
+    "conditional": true,
+    "rows": [
+      {
+        "date": "2024-01-23",
+        "model_return": -0.00025177470535553415,
+        "fixed_quantity_return": -0.00025177470535564517,
+        "fixed_quantity_minus_model": -1.1102230246251565e-16,
+        "reported_fee_fraction": 0.0,
+        "physical_exit_fee_fraction": 0.0,
+        "pretrade_asset_weight": 1.250093254648051
+      },
+      {
+        "date": "2024-01-24",
+        "model_return": -0.00128024963318496,
+        "fixed_quantity_return": -0.0012803920449965256,
+        "fixed_quantity_minus_model": -1.4241181156560145e-07,
+        "reported_fee_fraction": 0.00125,
+        "physical_exit_fee_fraction": 0.001250131132109131,
+        "pretrade_asset_weight": 1.250131132109131
+      }
+    ]
+  },
+  "adk": {
+    "seed_close": "2024-01-12",
+    "long": "DK_SZ50",
+    "short": "DK_ZZ1000",
+    "initial_equity": 1.0,
+    "initial_long_value": 1.1662765119634648,
+    "initial_short_liability": 1.1662765119634648,
+    "initial_cash": 1.0,
+    "conditional": true,
+    "rows": [
+      {
+        "date": "2024-01-15",
+        "model_return": 0.0038383441272555885,
+        "fixed_quantity_return": 0.0038383441272558105,
+        "fixed_quantity_minus_model": 2.220446049250313e-16,
+        "reported_trade_cost": 0.0,
+        "physical_long_weight": 1.1624900916244656,
+        "physical_short_weight": 1.158666424049192
+      },
+      {
+        "date": "2024-01-16",
+        "model_return": 0.009631140107779768,
+        "fixed_quantity_return": 0.009586183414956873,
+        "fixed_quantity_minus_model": -4.495669282289505e-05,
+        "reported_trade_cost": 0.0,
+        "physical_long_weight": 1.1568386992691,
+        "physical_short_weight": 1.1435561769738052
+      }
+    ]
+  },
+  "interpretation": "Conditional account initialized from a reported close position; a fixed-security-quantity alternative, not the formal model or proof about prior financing."
+}

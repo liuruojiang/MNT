@@ -1,0 +1,199 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "frozen_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "labels": {
+    "data": "L1 frozen mixed real/proxy market prices",
+    "execution": "paper model, no broker fills"
+  },
+  "full": {
+    "Sub-A": {
+      "rows": 2189,
+      "start": "2017-09-19",
+      "end": "2026-09-24",
+      "return": {
+        "index_match": true,
+        "max_abs": 0.0,
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "nav": {
+        "index_match": true,
+        "max_abs": 0.0,
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "holding": {
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "is_signal": {
+        "bad_count": 0,
+        "first_bad": null
+      }
+    },
+    "Sub-A-DK": {
+      "rows": 2783,
+      "start": "2015-04-20",
+      "end": "2026-09-24",
+      "return": {
+        "index_match": true,
+        "max_abs": 0.0,
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "nav": {
+        "index_match": true,
+        "max_abs": 0.0,
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "holding": {
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "top_pair": {
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "long_leg": {
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "short_leg": {
+        "bad_count": 0,
+        "first_bad": null
+      },
+      "is_signal": {
+        "bad_count": 0,
+        "first_bad": null
+      }
+    }
+  },
+  "prefix": [
+    {
+      "cutoff": "2020-03-18",
+      "Sub-A": {
+        "rows": 605,
+        "last": "2020-03-18",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      },
+      "Sub-A-DK": {
+        "rows": 1199,
+        "last": "2020-03-18",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      }
+    },
+    {
+      "cutoff": "2024-01-12",
+      "Sub-A": {
+        "rows": 1535,
+        "last": "2024-01-12",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      },
+      "Sub-A-DK": {
+        "rows": 2129,
+        "last": "2024-01-12",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      }
+    },
+    {
+      "cutoff": "2026-09-24",
+      "Sub-A": {
+        "rows": 2189,
+        "last": "2026-09-24",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      },
+      "Sub-A-DK": {
+        "rows": 2783,
+        "last": "2026-09-24",
+        "return_max_abs": 0.0,
+        "nav_max_abs": 0.0,
+        "holding_bad": 0
+      }
+    }
+  ],
+  "queries": {
+    "signal": {
+      "A_target": "A策略 Cash / 0.0000x",
+      "ADK_target": "ADK策略 做多 创业板 / 做空 上证50 / 0.53x",
+      "A_signal": false,
+      "ADK_signal": false,
+      "has_a_rule": null,
+      "has_adk_rule": null,
+      "has_score_hot": true,
+      "has_adk_r2_diagnostic_label": true,
+      "has_adjustment_table": true
+    },
+    "live_signal": {
+      "A_target": "A策略 Cash / 0.0000x",
+      "ADK_target": "ADK策略 做多 创业板 / 做空 上证50 / 0.53x",
+      "A_signal": false,
+      "ADK_signal": false,
+      "has_a_rule": null,
+      "has_adk_rule": null,
+      "has_score_hot": true,
+      "has_adk_r2_diagnostic_label": true,
+      "has_adjustment_table": true
+    },
+    "params": {
+      "A_target": "A策略 Cash / 0.0000x",
+      "ADK_target": "ADK策略 做多 创业板 / 做空 上证50 / 0.53x",
+      "A_signal": false,
+      "ADK_signal": false,
+      "has_a_rule": true,
+      "has_adk_rule": true,
+      "has_score_hot": true,
+      "has_adk_r2_diagnostic_label": true,
+      "has_adjustment_table": true
+    },
+    "live_params": {
+      "A_target": "A策略 Cash / 0.0000x",
+      "ADK_target": "ADK策略 做多 创业板 / 做空 上证50 / 0.53x",
+      "A_signal": false,
+      "ADK_signal": false,
+      "has_a_rule": true,
+      "has_adk_rule": true,
+      "has_score_hot": true,
+      "has_adk_r2_diagnostic_label": true,
+      "has_adjustment_table": true
+    }
+  },
+  "events": {
+    "adk_pairs": {
+      "SZ50/CYB": 896,
+      "SZ50/ZZ1000": 853,
+      "ZZ1000/CYB": 306,
+      "ZZ500/CYB": 280,
+      "SZ50/ZZ500": 171,
+      "HS300/CYB": 107,
+      "HS300/ZZ1000": 74,
+      "HS300/ZZ500": 62,
+      "ZZ500/ZZ1000": 29,
+      "SZ50/HS300": 4,
+      "none": 1
+    },
+    "adk_zero_exposure_days": 370,
+    "adk_pair_switch_days": 481,
+    "adk_score_hot_days": 369,
+    "suba_holdings": {
+      "cash": 857,
+      "0.399006": 406,
+      "1.H11077": 336,
+      "1.000852": 246,
+      "1.000016": 155,
+      "1.930955": 129,
+      "1.000905": 60
+    },
+    "suba_volume_scale_days": 742
+  }
+}

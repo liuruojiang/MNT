@@ -3,6 +3,7 @@ import inspect
 from pathlib import Path
 
 import pandas as pd
+import pytest
 def load_v78_module():
     root = Path(__file__).resolve().parents[1]
     path = root / "mnt_bot V 7.8 plus.py"
@@ -226,6 +227,51 @@ def test_price_index_recent_official_cache_short_circuits_slow_vendors(monkeypat
     assert result is cache
     assert source == f"csindex-cache:{cache.index[-1].strftime('%Y-%m-%d')}"
     assert calls == []
+
+
+def test_performance_fetch_uses_previous_common_cn_close_without_relaxing_signal_gate(monkeypatch):
+    module = load_v80_module()
+    now = module.datetime(2026, 9, 11, 15, 6, 0)
+    monkeypatch.setattr(module, "beijing_now", lambda: now)
+    monkeypatch.setattr(module.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "is_cn_market_open", lambda: (False, now))
+    monkeypatch.setattr(module, "_add_cn_bond_column", lambda frame, *_args, **_kwargs: frame)
+    monkeypatch.setattr(module, "_ensure_cn_history_frame", lambda _secid, frame, source, **_kwargs: (frame, source))
+
+    def cn_frame(end_date):
+        index = pd.bdate_range(end=end_date, periods=220)
+        return pd.DataFrame({"close": range(100, 100 + len(index))}, index=index)
+
+    def fetch_cn(secid, **_kwargs):
+        return cn_frame("2026-09-11" if secid == module.CN_ZZHL_INDEX_SECID else "2026-09-10"), "fixture-cn"
+
+    monkeypatch.setattr(module, "fetch_cn_kline", fetch_cn)
+    monkeypatch.setattr(module, "_fetch_cn_dk_price_index", lambda _idx, _secid: (cn_frame("2026-09-10"), "fixture-dk"))
+    monkeypatch.setattr(module, "fetch_yahoo", lambda _ticker: (cn_frame("2026-09-10").rename(columns={"close": "close"}).assign(open=lambda x: x["close"]), "fixture-us"))
+
+    class Sink:
+        def __init__(self, chunks):
+            self.chunks = chunks
+
+        def write(self, value):
+            self.chunks.append(value)
+
+    formal_bot = module.CombinedStrategyV80()
+    with pytest.raises(module.poe.BotError, match="Sub-A 原始收盘价格过期/缺失"):
+        formal_bot._fetch_data(Sink([]), include_cn_live_snapshot=False, include_us_live_snapshot=False)
+
+    performance_bot = module.CombinedStrategyV80()
+    chunks = []
+    cn_close, cn_dk_close, _us_rot_close, _us_prod_daily = performance_bot._fetch_data(
+        Sink(chunks),
+        include_cn_live_snapshot=False,
+        include_us_live_snapshot=False,
+        allow_last_confirmed_cn_close=True,
+    )
+
+    assert cn_close.index[-1] == pd.Timestamp("2026-09-10")
+    assert cn_dk_close.index[-1] == pd.Timestamp("2026-09-10")
+    assert "最近共同确认收盘 2026-09-10" in "".join(chunks)
 
 
 def test_short_cn_online_history_uses_local_strategy_csv_fallback(monkeypatch):

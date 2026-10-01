@@ -1,0 +1,26 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "frozen_l2_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "label": "frozen paper model; no shared cash/debt/security quantity account",
+  "start": "2020-12-03",
+  "end": "2026-09-25",
+  "return_days": 1509,
+  "weights": {
+    "Sub-A": 0.15,
+    "Sub-A-DK": 0.15,
+    "B7.8": 0.2,
+    "B7.9": 0.2,
+    "Sub-C": 0.3
+  },
+  "max_daily_return_abs_error": 0.0,
+  "ending_nav": 3.3831943051658326,
+  "annual_pct": 23.32969880245761,
+  "max_drawdown_pct": -7.776784248703683,
+  "max_drawdown_peak": "2024-07-16",
+  "max_drawdown_trough": "2024-08-05",
+  "last_day_a_return_filled_zero": 0.0,
+  "last_day_adk_return_filled_zero": 0.0,
+  "wrong_daily_rebalanced_mismatch_days": 1508,
+  "wrong_daily_rebalanced_max_abs_return_error": 0.0061728537962795,
+  "omitted_first_return_ending_nav_error": 0.0032698591645612396
+}

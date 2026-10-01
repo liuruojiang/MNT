@@ -1,0 +1,75 @@
+{
+  "source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "core_daily_sha256": "657fec91b6f409c0961bd96990107565e66264f30eb1e3af0155f6b47ae27ef3",
+  "same_window_metrics_sha256": "e8ecea9fd9664af58c83f0e59790581c04bbba0139ab2f0a500492c21b4d155c",
+  "account_basis": "Frozen real prices and paper target-weight A/ADK; security-value and borrowing ledger B; static/annual-rebalanced C; independently accumulated five-sleeve capital.",
+  "suba": {
+    "rows": 2189,
+    "max_return_residual": 0.0,
+    "max_fee_residual": 0.0,
+    "max_turnover_residual": 0.0
+  },
+  "adk": {
+    "rows": 2823,
+    "max_return_residual": 0.0,
+    "max_fee_residual": 0.0,
+    "max_turnover_residual": 0.0
+  },
+  "b78": {
+    "rows": 4472,
+    "max_asset_minus_borrow_minus_equity": 0.0,
+    "max_start_minus_previous_close": 0.0,
+    "max_return_residual": 0.0,
+    "max_fee_value_residual": 8.673617379884035e-19,
+    "signal_rows": 892,
+    "execution_rows": 892,
+    "fee_days": 892,
+    "execution_shift_mismatches": 0,
+    "first_signal": "2008-12-18",
+    "first_execution": "2008-12-19",
+    "first_signal_fee_value": 0.0,
+    "first_execution_fee_value": 0.0002667120296829924,
+    "first_execution_turnover": 0.2665955745134631
+  },
+  "b79": {
+    "rows": 4472,
+    "max_asset_minus_borrow_minus_equity": 0.0,
+    "max_start_minus_previous_close": 0.0,
+    "max_return_residual": 0.0,
+    "max_fee_value_residual": 3.469446951953614e-18,
+    "signal_rows": 875,
+    "execution_rows": 875,
+    "fee_days": 875,
+    "execution_shift_mismatches": 0,
+    "first_signal": "2008-12-18",
+    "first_execution": "2008-12-19",
+    "first_signal_fee_value": 0.0,
+    "first_execution_fee_value": 0.0002000473551971415,
+    "first_execution_turnover": 0.19996000799840033
+  },
+  "subc": {
+    "rows": 1459,
+    "max_price_to_return_residual": 0.0,
+    "max_annual_fee_fraction_residual": 2.710505431213761e-20,
+    "annual_rebalance_days": 6,
+    "nonunit_signal_entries": 0,
+    "max_scaled_minus_raw": 0.0,
+    "max_equity_scale_minus_one": 0.0,
+    "max_gold_scale_minus_one": 0.0,
+    "max_overlay_fee": 0.0
+  },
+  "combined": {
+    "rows": 1509,
+    "max_daily_residual": 4.440892098500626e-16,
+    "last_capital": 3.012031840980347,
+    "last_date": "2026-09-25"
+  },
+  "same_window_metrics": {
+    "valid_rows": 54,
+    "max_annual_pct_point_residual": 7.105427357601002e-15,
+    "max_drawdown_pct_point_residual": 3.552713678800501e-15
+  },
+  "first_common_adk_date": "2015-04-20",
+  "core_adk_earlier_rows": 40,
+  "scope_limit": "A and ADK match target-weight paper returns, but L2 fixed-quantity counterexamples still prevent strict self-financing or execution certification."
+}

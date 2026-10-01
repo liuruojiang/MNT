@@ -1,0 +1,843 @@
+{
+  "run_id": "20260930_v80_l8_final_combo",
+  "created_at": "2026-09-30T22:24:51+08:00",
+  "phase": "complete",
+  "project": "A股美股动量组合策略",
+  "strategy": "V8.0",
+  "subsystem": "five-sleeve-final-combination",
+  "repo_root": "D:\\动量策略\\A股美股动量组合策略",
+  "entrypoint": "mnt_bot V 8.0 plus.py",
+  "git_branch": "main",
+  "git_commit": "a7353eebc17c94e0d3566404d72fb395776fc54f",
+  "git_status_before": "M \"mnt_bot V 8.0 plus.py\"\n M tests/test_v78_cn_live_freshness.py\n?? docs/v80_recert_l0_20260926.md\n?? docs/v80_recert_l1_20260926.md\n?? docs/v80_recert_l2_20260926.md\n?? docs/v80_recert_l3_20260926.md\n?? docs/v80_recert_l4_20260926.md\n?? docs/v80_recert_l5_20260930.md\n?? docs/v80_recert_l6_20260930.md\n?? docs/v80_recert_l7_20260930.md\n?? research_v80_subb_correlation_allocation.py\n?? research_v80_subb_rebalance_period.py\n?? research_v80_subc_joint_risk.py\n?? tests/test_v80_l1_input_boundaries.py\n?? tests/test_v80_l2_annualization_period.py",
+  "git_status_after": "M \"mnt_bot V 8.0 plus.py\"\n M tests/test_v78_cn_live_freshness.py\n?? docs/v80_recert_l0_20260926.md\n?? docs/v80_recert_l1_20260926.md\n?? docs/v80_recert_l2_20260926.md\n?? docs/v80_recert_l3_20260926.md\n?? docs/v80_recert_l4_20260926.md\n?? docs/v80_recert_l5_20260930.md\n?? docs/v80_recert_l6_20260930.md\n?? docs/v80_recert_l7_20260930.md\n?? docs/v80_recert_l8_20260930.md\n?? research_v80_subb_correlation_allocation.py\n?? research_v80_subb_rebalance_period.py\n?? research_v80_subc_joint_risk.py\n?? tests/test_v80_l1_input_boundaries.py\n?? tests/test_v80_l2_annualization_period.py",
+  "scan_type": "measured L8 artifact normalization; fixed official portfolio weights",
+  "parameter_group": "L8 official group-off local-neighborhood pair-interactions",
+  "baseline": {
+    "candidate": "FORMAL_ALL_ON",
+    "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4"
+  },
+  "candidate_grid": [
+    "B7.8:bias_off",
+    "B7.8:bias_score_2_2_1",
+    "B7.8:bias_score_4_2_1",
+    "B7.8:ema_abs_threshold_12pct",
+    "B7.8:ema_abs_threshold_20pct",
+    "B7.8:ema_half_life_120",
+    "B7.8:ema_half_life_80",
+    "B7.8:ema_off",
+    "B7.8:inflation_gate_off",
+    "B7.8:inflation_lookback_100",
+    "B7.8:inflation_lookback_150",
+    "B7.8:logvol_off",
+    "B7.8:logvol_score_5_3_2",
+    "B7.8:logvol_score_7_2_1",
+    "B7.8:official_ema_target_vol_20pct",
+    "B7.8:official_ema_target_vol_30pct",
+    "B7.8:official_ema_target_vol_off",
+    "B7.8:official_first_lb_130_old_value",
+    "B7.8:official_lbs_140_240_360",
+    "B7.8:official_lbs_180_280_380",
+    "B7.8:official_off",
+    "B7.8:target_vol_off",
+    "B7.8:top_n_2",
+    "B7.8:top_n_4",
+    "B7.8:volreg_1p6_1p3",
+    "B7.8:volreg_2p0_1p5",
+    "B7.8:volreg_off",
+    "B7.9:bias_off",
+    "B7.9:bias_score_2_2_1",
+    "B7.9:bias_score_4_2_1",
+    "B7.9:ema_abs_threshold_12pct",
+    "B7.9:ema_abs_threshold_20pct",
+    "B7.9:ema_half_life_120",
+    "B7.9:ema_half_life_80",
+    "B7.9:ema_off",
+    "B7.9:inflation_gate_off",
+    "B7.9:inflation_lookback_100",
+    "B7.9:inflation_lookback_150",
+    "B7.9:logvol_off",
+    "B7.9:logvol_score_5_3_2",
+    "B7.9:logvol_score_7_2_1",
+    "B7.9:official_ema_target_vol_25pct",
+    "B7.9:official_ema_target_vol_35pct",
+    "B7.9:official_ema_target_vol_off",
+    "B7.9:official_first_lb_130_old_value",
+    "B7.9:official_lbs_140_240_360",
+    "B7.9:official_lbs_180_280_380",
+    "B7.9:official_off",
+    "B7.9:target_vol_off",
+    "B7.9:top_n_1",
+    "B7.9:top_n_3",
+    "B7.9:volreg_1p6_1p3",
+    "B7.9:volreg_2p0_1p5",
+    "B7.9:volreg_off",
+    "FORMAL_ALL_ON",
+    "PAIR:B7.8:volreg_off + B7.9:volreg_off",
+    "PAIR:B7.8:volreg_off + Sub-C:equity_target_vol__off",
+    "PAIR:B7.9:official_off + Sub-C:asset_weight_QQQM__off",
+    "PAIR:Sub-A:r2_threshold_off + Sub-A-DK:scorehot_off",
+    "PAIR:Sub-A:r2win15 + Sub-A-DK:ma60_mom15",
+    "Sub-A-DK:deadband0",
+    "Sub-A-DK:deadband015",
+    "Sub-A-DK:deadband035",
+    "Sub-A-DK:hot70_35_zero",
+    "Sub-A-DK:hot80_40_quarter",
+    "Sub-A-DK:hot90_45_zero",
+    "Sub-A-DK:ma50_mom20",
+    "Sub-A-DK:ma60_mom15",
+    "Sub-A-DK:ma60_mom25",
+    "Sub-A-DK:ma70_mom20",
+    "Sub-A-DK:maxlev125",
+    "Sub-A-DK:maxlev175_unfunded",
+    "Sub-A-DK:maxlev_off_uncapped",
+    "Sub-A-DK:minlev005",
+    "Sub-A-DK:minlev020",
+    "Sub-A-DK:ranking_off_cash_null",
+    "Sub-A-DK:scorehot_off",
+    "Sub-A-DK:targetvol_off",
+    "Sub-A-DK:tv12",
+    "Sub-A-DK:tv16",
+    "Sub-A-DK:volwin30",
+    "Sub-A-DK:volwin50",
+    "Sub-A:amount_cyb_days_off",
+    "Sub-A:amount_zz_days_off",
+    "Sub-A:cybdays3",
+    "Sub-A:cybdays4_formal",
+    "Sub-A:cybdays5",
+    "Sub-A:cybma15d5_old",
+    "Sub-A:lev100",
+    "Sub-A:lev125_formal",
+    "Sub-A:lev150_old",
+    "Sub-A:ma50",
+    "Sub-A:ma60_formal",
+    "Sub-A:ma70",
+    "Sub-A:max_leverage_off",
+    "Sub-A:mom15",
+    "Sub-A:mom20_formal",
+    "Sub-A:mom25",
+    "Sub-A:r2_010",
+    "Sub-A:r2_015_formal",
+    "Sub-A:r2_020_old",
+    "Sub-A:r2_025_old",
+    "Sub-A:r2_030_old",
+    "Sub-A:r2_threshold_off",
+    "Sub-A:r2_window_off",
+    "Sub-A:r2win15",
+    "Sub-A:r2win20_formal",
+    "Sub-A:r2win30",
+    "Sub-A:rank_core_off_cash",
+    "Sub-A:rank_ma_off",
+    "Sub-A:rank_momentum_off",
+    "Sub-A:rank_slope_weight_off",
+    "Sub-A:slope2",
+    "Sub-A:slope3_formal",
+    "Sub-A:slope4",
+    "Sub-A:target_vol_off",
+    "Sub-A:tv015",
+    "Sub-A:tv020_formal",
+    "Sub-A:tv025",
+    "Sub-A:tv030_old",
+    "Sub-A:vol_window_off",
+    "Sub-A:volwin120_old",
+    "Sub-A:volwin60",
+    "Sub-A:volwin80_formal",
+    "Sub-A:zzdays2",
+    "Sub-A:zzdays3_formal",
+    "Sub-A:zzdays4",
+    "Sub-C:asset_weight_AVDV__0p8x",
+    "Sub-C:asset_weight_AVDV__1p2x",
+    "Sub-C:asset_weight_AVDV__formal",
+    "Sub-C:asset_weight_AVDV__off",
+    "Sub-C:asset_weight_AVUV__0p8x",
+    "Sub-C:asset_weight_AVUV__1p2x",
+    "Sub-C:asset_weight_AVUV__formal",
+    "Sub-C:asset_weight_AVUV__off",
+    "Sub-C:asset_weight_DBMF__0p8x",
+    "Sub-C:asset_weight_DBMF__1p2x",
+    "Sub-C:asset_weight_DBMF__formal",
+    "Sub-C:asset_weight_DBMF__off",
+    "Sub-C:asset_weight_GLDM__0p8x",
+    "Sub-C:asset_weight_GLDM__1p2x",
+    "Sub-C:asset_weight_GLDM__formal",
+    "Sub-C:asset_weight_GLDM__off",
+    "Sub-C:asset_weight_IBIT__0p8x",
+    "Sub-C:asset_weight_IBIT__1p2x",
+    "Sub-C:asset_weight_IBIT__formal",
+    "Sub-C:asset_weight_IBIT__off",
+    "Sub-C:asset_weight_KMLM__0p8x",
+    "Sub-C:asset_weight_KMLM__1p2x",
+    "Sub-C:asset_weight_KMLM__formal",
+    "Sub-C:asset_weight_KMLM__off",
+    "Sub-C:asset_weight_QQQM__0p8x",
+    "Sub-C:asset_weight_QQQM__1p2x",
+    "Sub-C:asset_weight_QQQM__formal",
+    "Sub-C:asset_weight_QQQM__off",
+    "Sub-C:asset_weight_VEA__0p8x",
+    "Sub-C:asset_weight_VEA__1p2x",
+    "Sub-C:asset_weight_VEA__formal",
+    "Sub-C:asset_weight_VEA__off",
+    "Sub-C:asset_weight_VGIT__0p8x",
+    "Sub-C:asset_weight_VGIT__1p2x",
+    "Sub-C:asset_weight_VGIT__formal",
+    "Sub-C:asset_weight_VGIT__off",
+    "Sub-C:asset_weight_VTI__0p8x",
+    "Sub-C:asset_weight_VTI__1p2x",
+    "Sub-C:asset_weight_VTI__formal",
+    "Sub-C:asset_weight_VTI__off",
+    "Sub-C:deadband__0p25",
+    "Sub-C:deadband__0p45",
+    "Sub-C:deadband__formal",
+    "Sub-C:deadband__off",
+    "Sub-C:equity_target_vol__0p12",
+    "Sub-C:equity_target_vol__0p18",
+    "Sub-C:equity_target_vol__off",
+    "Sub-C:equity_vol_window__10",
+    "Sub-C:equity_vol_window__20",
+    "Sub-C:equity_vol_window__formal",
+    "Sub-C:equity_vol_window__off",
+    "Sub-C:gold_long_window__189",
+    "Sub-C:gold_long_window__378",
+    "Sub-C:gold_long_window__formal",
+    "Sub-C:gold_long_window__off",
+    "Sub-C:gold_short_window__20",
+    "Sub-C:gold_short_window__40",
+    "Sub-C:gold_short_window__formal",
+    "Sub-C:gold_short_window__off",
+    "Sub-C:max_lev__1p25",
+    "Sub-C:max_lev__1p75",
+    "Sub-C:max_lev__formal",
+    "Sub-C:max_lev__off",
+    "Sub-C:min_lev__0p4",
+    "Sub-C:min_lev__0p6",
+    "Sub-C:min_lev__formal",
+    "Sub-C:min_lev__off"
+  ],
+  "data_snapshot": {
+    "input_path": "outputs/v80_recert_20260926/l1_final/formal_inputs.pkl",
+    "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "formal_daily_path": "outputs/v80_recert_20260926/l2/formal_daily_returns.pkl",
+    "formal_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+    "combined_start": "2020-12-03",
+    "combined_end": "2026-09-25",
+    "return_days": 1509,
+    "paper_only": true
+  },
+  "cost_model": {
+    "description": "Each candidate uses its original formal sleeve fee, execution clock, financing and overlay path from the frozen L6 runs; remaining sleeves stay formal. B financing can be negative because BIL daily price return plus 100bp/252 is not floored.",
+    "combined_weights": {
+      "Sub-A": 0.15,
+      "Sub-A-DK": 0.15,
+      "B7.8": 0.2,
+      "B7.9": 0.2,
+      "Sub-C": 0.3
+    },
+    "combined_method": "initial capital buy-and-hold sum of independently compounded sleeve NAVs"
+  },
+  "outputs": {
+    "record": "quant_param_scan_runs\\20260930_v80_l8_final_combo\\record.md",
+    "scan_summary": "quant_param_scan_runs\\20260930_v80_l8_final_combo\\scan_summary.csv",
+    "window_metrics": "quant_param_scan_runs\\20260930_v80_l8_final_combo\\window_metrics.csv",
+    "scan_meta": "quant_param_scan_runs\\20260930_v80_l8_final_combo\\scan_meta.json",
+    "command_log": "quant_param_scan_runs\\20260930_v80_l8_final_combo\\command_log.txt"
+  },
+  "decision": "keep_formal_research_only",
+  "stability_label": "fragile_A_R2_ADK_momentum_executable_account_unverified",
+  "unavailable_segments": {
+    "Sub-A:rank_core_off_cash": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:ma50": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:ma60_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:ma70": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:mom15": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:mom20_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:mom25": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:slope2": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:slope3_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:slope4": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_010": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_015_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_020_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_025_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_030_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2win15": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2win20_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2win30": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:zzdays2": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:zzdays3_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:zzdays4": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:cybdays3": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:cybdays4_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:cybdays5": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:cybma15d5_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:tv015": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:tv020_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:tv025": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:tv030_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:volwin60": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:volwin80_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:volwin120_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:lev100": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:lev125_formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:lev150_old": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:rank_ma_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:rank_momentum_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:rank_slope_weight_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_threshold_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:r2_window_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:amount_zz_days_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:amount_cyb_days_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:target_vol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:vol_window_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A:max_leverage_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:scorehot_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:ma50_mom20": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:ma70_mom20": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:ma60_mom15": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:ma60_mom25": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:hot70_35_zero": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:hot90_45_zero": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:hot80_40_quarter": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:tv12": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:tv16": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:volwin30": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:volwin50": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:maxlev125": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:maxlev175_unfunded": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:deadband015": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:deadband035": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:deadband0": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:targetvol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:minlev005": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:minlev020": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:maxlev_off_uncapped": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-A-DK:ranking_off_cash_null": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:bias_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:bias_score_2_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:bias_score_4_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:ema_abs_threshold_12pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:ema_abs_threshold_20pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:ema_half_life_120": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:ema_half_life_80": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:ema_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:inflation_gate_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:inflation_lookback_100": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:inflation_lookback_150": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:logvol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:logvol_score_5_3_2": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:logvol_score_7_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_ema_target_vol_20pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_ema_target_vol_30pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_ema_target_vol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_first_lb_130_old_value": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_lbs_140_240_360": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_lbs_180_280_380": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:official_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:target_vol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:top_n_2": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:top_n_4": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:volreg_1p6_1p3": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:volreg_2p0_1p5": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.8:volreg_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:bias_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:bias_score_2_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:bias_score_4_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:ema_abs_threshold_12pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:ema_abs_threshold_20pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:ema_half_life_120": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:ema_half_life_80": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:ema_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:inflation_gate_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:inflation_lookback_100": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:inflation_lookback_150": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:logvol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:logvol_score_5_3_2": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:logvol_score_7_2_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_ema_target_vol_25pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_ema_target_vol_35pct": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_ema_target_vol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_first_lb_130_old_value": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_lbs_140_240_360": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_lbs_180_280_380": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:official_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:target_vol_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:top_n_1": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:top_n_3": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:volreg_1p6_1p3": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:volreg_2p0_1p5": {
+      "last_10y": "insufficient post-start history"
+    },
+    "B7.9:volreg_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVDV__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVDV__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVDV__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVDV__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVUV__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVUV__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVUV__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_AVUV__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_DBMF__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_DBMF__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_DBMF__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_DBMF__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_GLDM__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_GLDM__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_GLDM__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_GLDM__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_IBIT__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_IBIT__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_IBIT__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_IBIT__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_KMLM__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_KMLM__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_KMLM__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_KMLM__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_QQQM__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_QQQM__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_QQQM__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_QQQM__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VEA__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VEA__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VEA__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VEA__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VGIT__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VGIT__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VGIT__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VGIT__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VTI__0p8x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VTI__1p2x": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VTI__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:asset_weight_VTI__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:deadband__0p25": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:deadband__0p45": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:deadband__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:deadband__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_target_vol__0p12": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_target_vol__0p18": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_target_vol__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_vol_window__10": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_vol_window__20": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_vol_window__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:equity_vol_window__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_long_window__189": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_long_window__378": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_long_window__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_long_window__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_short_window__20": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_short_window__40": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_short_window__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:gold_short_window__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:max_lev__1p25": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:max_lev__1p75": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:max_lev__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:max_lev__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:min_lev__0p4": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:min_lev__0p6": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:min_lev__formal": {
+      "last_10y": "insufficient post-start history"
+    },
+    "Sub-C:min_lev__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "FORMAL_ALL_ON": {
+      "last_10y": "insufficient post-start history"
+    },
+    "PAIR:Sub-A:r2win15 + Sub-A-DK:ma60_mom15": {
+      "last_10y": "insufficient post-start history"
+    },
+    "PAIR:Sub-A:r2_threshold_off + Sub-A-DK:scorehot_off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "PAIR:B7.8:volreg_off + Sub-C:equity_target_vol__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "PAIR:B7.9:official_off + Sub-C:asset_weight_QQQM__off": {
+      "last_10y": "insufficient post-start history"
+    },
+    "PAIR:B7.8:volreg_off + B7.9:volreg_off": {
+      "last_10y": "insufficient post-start history"
+    }
+  },
+  "source_hashes": {
+    "source": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+    "cross_summary": "15c4b0e8b9b03f4c03fcbf9df88b4567dcb06405fde7e94c510fae4bdd04bd2b",
+    "one_group": "56847ca2fee4f5012181f4cd563fc071056ab5f0392e614d4acb104ade8face1",
+    "pairs": "d25ab577de76f155493db536c9ab8cd8795e997ce438d6bb69ba94de16fab291"
+  },
+  "parity_check": {
+    "formal_max_abs_daily": 0.0,
+    "reference": "outputs/v80_recert_20260926/l8/root/audit_formal_combined.json"
+  },
+  "metric_convention": "ann_return is calendar-time CAGR; ann_vol is sample daily standard deviation times sqrt(252); sharpe_repo field stores L8 standardized zero-risk-free mean daily return over sample standard deviation times sqrt(252), not the sleeves' heterogeneous L6 Sharpe conventions.",
+  "cache_write_risk": "No market cache update; L8 reads frozen L1/L2/L6 files. Repo has preexisting uncommitted changes; no production config mutation.",
+  "finalized_at": "2026-09-30T22:56:24+08:00"
+}

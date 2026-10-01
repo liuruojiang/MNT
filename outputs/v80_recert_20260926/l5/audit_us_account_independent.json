@@ -1,0 +1,335 @@
+{
+  "evidence_sha256": {
+    "source": "b2ce48847b14f78f6790ddde824e16980e40f0c5db059274a8dfee771bb32d22",
+    "inputs": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "formal_c": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a",
+    "b78": "116eed496f60cce392c8b624483a09d015f4f7742fe484dfe7bdc16120b34a89",
+    "b79": "8687a3a7a36890ecfe9b361a13e0ee3e1e8f48656139812d21d24c79af4537d4"
+  },
+  "frozen_l2_source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "five_window_paper_metrics_from_l2": {
+    "B7.8": [
+      {
+        "window": "Full",
+        "annual_pct": 12.797180910863414,
+        "max_dd_pct": -12.224822113231378,
+        "reason": "",
+        "start": "2008-12-15",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "10Y",
+        "annual_pct": 18.4442628208666,
+        "max_dd_pct": -12.22482211323135,
+        "reason": "",
+        "start": "2016-09-26",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "5Y",
+        "annual_pct": 23.657401285497272,
+        "max_dd_pct": -12.022695054816154,
+        "reason": "",
+        "start": "2021-09-27",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "3Y",
+        "annual_pct": 34.76579865561138,
+        "max_dd_pct": -12.022695054816174,
+        "reason": "",
+        "start": "2023-09-25",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "1Y",
+        "annual_pct": 29.095414887631897,
+        "max_dd_pct": -12.022695054816143,
+        "reason": "",
+        "start": "2025-09-25",
+        "end": "2026-09-25"
+      }
+    ],
+    "B7.9": [
+      {
+        "window": "Full",
+        "annual_pct": 17.291981614130634,
+        "max_dd_pct": -16.741418846247473,
+        "reason": "",
+        "start": "2008-12-15",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "10Y",
+        "annual_pct": 25.309110095580213,
+        "max_dd_pct": -15.529551080717308,
+        "reason": "",
+        "start": "2016-09-26",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "5Y",
+        "annual_pct": 32.39017022773729,
+        "max_dd_pct": -15.529551080717244,
+        "reason": "",
+        "start": "2021-09-27",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "3Y",
+        "annual_pct": 47.29659543837872,
+        "max_dd_pct": -13.501081587161048,
+        "reason": "",
+        "start": "2023-09-25",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "1Y",
+        "annual_pct": 34.64745868867365,
+        "max_dd_pct": -13.501081587161051,
+        "reason": "",
+        "start": "2025-09-25",
+        "end": "2026-09-25"
+      }
+    ],
+    "Sub-C": [
+      {
+        "window": "Full",
+        "annual_pct": 15.730617642881484,
+        "max_dd_pct": -20.566164277038737,
+        "reason": "",
+        "start": "2020-12-03",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "10Y",
+        "annual_pct": "",
+        "max_dd_pct": "",
+        "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-09-25",
+        "start": "",
+        "end": ""
+      },
+      {
+        "window": "5Y",
+        "annual_pct": 14.081013355309048,
+        "max_dd_pct": -20.56616427703874,
+        "reason": "",
+        "start": "2021-09-27",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "3Y",
+        "annual_pct": 24.910462158856905,
+        "max_dd_pct": -9.772796212774043,
+        "reason": "",
+        "start": "2023-09-25",
+        "end": "2026-09-25"
+      },
+      {
+        "window": "1Y",
+        "annual_pct": 17.761024319095363,
+        "max_dd_pct": -8.14060774443931,
+        "reason": "",
+        "start": "2025-09-25",
+        "end": "2026-09-25"
+      }
+    ]
+  },
+  "physical_C_metrics": "N/A: formal scale return lacks a complete continuous security/cash/borrow ledger; 10Y additionally lacks post-start history",
+  "B7.8": {
+    "rows": 4472,
+    "first": "2008-12-15",
+    "last": "2026-09-25",
+    "asset_minus_borrow_minus_equity_max_abs": 0.0,
+    "security_values_minus_reported_assets_max_abs": 1.7763568394002505e-15,
+    "nav_chain_max_abs": 0.0,
+    "return_from_nav_max_abs": 0.0,
+    "fee_vs_open_turnover_max_abs": 8.673617379884035e-19,
+    "fee_on_zero_turnover_days": 0,
+    "trade_days_positive_turnover": 953,
+    "max_gross_security_assets_over_nav": 1.391520756714236,
+    "max_borrow_over_nav": 0.391520756714236,
+    "passive_hold_days": 3516,
+    "passive_security_quantity_residual_max_abs": 1.3322676295501878e-15,
+    "passive_borrow_financing_residual_max_abs": 1.9504797083014225e-16,
+    "component_model_target_weight_error_max_abs": 0.0,
+    "four_leg_target_column_prefix": "model_target_w_",
+    "component_weights": [
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ],
+    "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.036850313508069894,
+    "diagnostic_leg_net_mean_vs_final_return_diff_days": 4472
+  },
+  "B7.9": {
+    "rows": 4472,
+    "first": "2008-12-15",
+    "last": "2026-09-25",
+    "asset_minus_borrow_minus_equity_max_abs": 0.0,
+    "security_values_minus_reported_assets_max_abs": 3.552713678800501e-15,
+    "nav_chain_max_abs": 0.0,
+    "return_from_nav_max_abs": 0.0,
+    "fee_vs_open_turnover_max_abs": 1.734723475976807e-18,
+    "fee_on_zero_turnover_days": 0,
+    "trade_days_positive_turnover": 942,
+    "max_gross_security_assets_over_nav": 1.2678338179683815,
+    "max_borrow_over_nav": 0.2678338179683815,
+    "passive_hold_days": 3516,
+    "passive_security_quantity_residual_max_abs": 3.552713678800501e-15,
+    "passive_borrow_financing_residual_max_abs": 1.8621172312438539e-16,
+    "component_model_target_weight_error_max_abs": 0.0,
+    "four_leg_target_column_prefix": "model_target_w_",
+    "component_weights": [
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ],
+    "diagnostic_leg_net_mean_vs_final_return_max_abs": 0.04126276358315207,
+    "diagnostic_leg_net_mean_vs_final_return_diff_days": 4472
+  },
+  "C": {
+    "rows": 1459,
+    "dates_with_unchanged_scales_no_annual": 1376,
+    "annual_rebalance_days": [
+      "2020-12-31",
+      "2021-12-31",
+      "2022-12-30",
+      "2023-12-29",
+      "2024-12-31",
+      "2025-12-31"
+    ],
+    "annual_rebalance_scaled_asset_fee_cases": [
+      {
+        "date": "2020-12-31",
+        "equity_scale": 1.206048221754671,
+        "gold_scale": 1.2552088674809927,
+        "base_turnover": 0.042751793215007036,
+        "scaled_asset_turnover": 0.045535655472759125,
+        "base_fee_fraction_reported": 4.2751793215007035e-05,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 4.553565547275913e-05,
+        "scaled_minus_base_fee_fraction": 2.7838622577520936e-06
+      },
+      {
+        "date": "2021-12-31",
+        "equity_scale": 1.0385206599445373,
+        "gold_scale": 1.2552088674809927,
+        "base_turnover": 0.12448788760146935,
+        "scaled_asset_turnover": 0.13337836483883747,
+        "base_fee_fraction_reported": 0.00012448788760146938,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 0.00013337836483883747,
+        "scaled_minus_base_fee_fraction": 8.890477237368091e-06
+      },
+      {
+        "date": "2022-12-30",
+        "equity_scale": 0.6709170717101639,
+        "gold_scale": 0.8028924216374336,
+        "base_turnover": 0.12983525181929645,
+        "scaled_asset_turnover": 0.10891511011646546,
+        "base_fee_fraction_reported": 0.00012983525181929645,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 0.00010891511011646546,
+        "scaled_minus_base_fee_fraction": -2.0920141702830984e-05
+      },
+      {
+        "date": "2023-12-29",
+        "equity_scale": 1.5,
+        "gold_scale": 0.8938947949388826,
+        "base_turnover": 0.1459473258995533,
+        "scaled_asset_turnover": 0.16438310969560704,
+        "base_fee_fraction_reported": 0.0001459473258995533,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 0.00016438310969560705,
+        "scaled_minus_base_fee_fraction": 1.8435783796053745e-05
+      },
+      {
+        "date": "2024-12-31",
+        "equity_scale": 1.0636803190186703,
+        "gold_scale": 0.9762820945455923,
+        "base_turnover": 0.12439949254619709,
+        "scaled_asset_turnover": 0.12695798428360433,
+        "base_fee_fraction_reported": 0.0001243994925461971,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 0.00012695798428360433,
+        "scaled_minus_base_fee_fraction": 2.5584917374072205e-06
+      },
+      {
+        "date": "2025-12-31",
+        "equity_scale": 1.484892958809135,
+        "gold_scale": 1.3712278679218783,
+        "base_turnover": 0.14674669766052434,
+        "scaled_asset_turnover": 0.1921507121156546,
+        "base_fee_fraction_reported": 0.00014674669766052433,
+        "scaled_asset_trade_10bp_fee_fraction_if_same_nav": 0.0001921507121156546,
+        "scaled_minus_base_fee_fraction": 4.540401445513026e-05
+      }
+    ],
+    "equity_gold_daily_paper_interaction_max_abs": 6.938893903907228e-18,
+    "equity_gold_daily_paper_interaction_days_gt_1e_12": 0,
+    "ten_asset_base_return_error_max_abs": 0.0,
+    "formal_no_scale_or_annual_fee_on_first_gap_date": true,
+    "first_two_day_no_trade_counterexample": {
+      "date": "2020-12-04",
+      "prior_date": "2020-12-03",
+      "equity_scale": 0.8411760174233801,
+      "gold_scale": 1.2552088674809927,
+      "passive_nav": 1.0033460696539327,
+      "reported_return_from_exact_prior_target": 0.0033460696539328715,
+      "one_day_return_replay_error": -1.7867651802561113e-16,
+      "asset_weight_gap_l1": 0.0011577179860417473,
+      "asset_weight_gap_max": 0.00023011796377395144,
+      "largest_gap_asset": "GLDM",
+      "largest_gap_signed": 0.00023011796377395144,
+      "hypothetical_10bp_full_reset_fee_rate": 1.1577179860417473e-06,
+      "formal_scale_fee": 0.0,
+      "formal_annual_rebalance_fee_rate": 0.0,
+      "next_date_if_no_reset": "2020-12-07",
+      "next_day_no_trade_return": 0.002613115951675571,
+      "next_day_formal_return": 0.0026096437290129833,
+      "next_day_no_trade_minus_formal": 3.4722226625876103e-06
+    },
+    "first_following_day_return_counterexample": {
+      "date": "2020-12-04",
+      "prior_date": "2020-12-03",
+      "equity_scale": 0.8411760174233801,
+      "gold_scale": 1.2552088674809927,
+      "passive_nav": 1.0033460696539327,
+      "reported_return_from_exact_prior_target": 0.0033460696539328715,
+      "one_day_return_replay_error": -1.7867651802561113e-16,
+      "asset_weight_gap_l1": 0.0011577179860417473,
+      "asset_weight_gap_max": 0.00023011796377395144,
+      "largest_gap_asset": "GLDM",
+      "largest_gap_signed": 0.00023011796377395144,
+      "hypothetical_10bp_full_reset_fee_rate": 1.1577179860417473e-06,
+      "formal_scale_fee": 0.0,
+      "formal_annual_rebalance_fee_rate": 0.0,
+      "next_date_if_no_reset": "2020-12-07",
+      "next_day_no_trade_return": 0.002613115951675571,
+      "next_day_formal_return": 0.0026096437290129833,
+      "next_day_no_trade_minus_formal": 3.4722226625876103e-06
+    },
+    "following_day_return_counterexample_count": 1299,
+    "max_one_day_unrecorded_reset_turnover_case": {
+      "date": "2025-04-09",
+      "prior_date": "2025-04-08",
+      "equity_scale": 0.6928113570182041,
+      "gold_scale": 0.9762820945455923,
+      "passive_nav": 1.045497252865254,
+      "reported_return_from_exact_prior_target": 0.045497252865253836,
+      "one_day_return_replay_error": 1.3183898417423734e-16,
+      "asset_weight_gap_l1": 0.012530358669711635,
+      "asset_weight_gap_max": 0.002661434529097534,
+      "largest_gap_asset": "GLDM",
+      "largest_gap_signed": 0.002661434529097534,
+      "hypothetical_10bp_full_reset_fee_rate": 1.2530358669711636e-05,
+      "formal_scale_fee": 0.0,
+      "formal_annual_rebalance_fee_rate": 0.0,
+      "next_date_if_no_reset": "2025-04-10",
+      "next_day_no_trade_return": -0.011643592408483228,
+      "next_day_formal_return": -0.011466654655126925,
+      "next_day_no_trade_minus_formal": -0.00017693775335630296
+    },
+    "sum_hypothetical_10bp_reset_fee_rate": 0.0021575552982659235,
+    "sum_formal_scale_fee_on_unchanged_dates": 0.0,
+    "note": "One-day local continuity test assumes exact formal target lots at previous close, then no trade on an unchanged-scale non-annual date. A nonzero next-close weight gap proves ongoing reset is needed to match the next formal base exposure. Fee sum is illustrative, not a replacement executable NAV."
+  }
+}

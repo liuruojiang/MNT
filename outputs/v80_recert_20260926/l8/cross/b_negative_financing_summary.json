@@ -1,0 +1,54 @@
+[
+  {
+    "label": "b78",
+    "rows": 4472,
+    "negative_days": 790,
+    "negative_no_execution_days": 584,
+    "negative_execution_days": 206,
+    "negative_sum_account_currency": -0.021048400465678338,
+    "positive_days": 3429,
+    "positive_sum_account_currency": 0.23272565396445272,
+    "max_abs_reconstruction_error": 2.168404344971009e-19,
+    "negative_days_with_bil_component_below_minus_spread": 790,
+    "first_negative": {
+      "date": "2009-02-03",
+      "reported_financing": -8.369720003423587e-06,
+      "pre_debt": 0.010065686435993598,
+      "bil_return": -0.0008711926464840536,
+      "bil_component": -8.769152004851904e-06,
+      "spread_component": 3.994320014283174e-07,
+      "execution": false,
+      "reported_return": -0.004569614096758712,
+      "same_day_zero_floor_return": -0.004577835293084997,
+      "return_difference": -8.22119632628531e-06
+    },
+    "diagnostic_floor": "The single-day counterexample holds all lots/debt fixed and clamps signed financing at zero; a full rerun would need changed future account/debt states.",
+    "economic_boundary": "BIL adjusted-price daily change plus 100 bp/252 is a signed return proxy, not a documented nonnegative broker borrowing APR. A falling BIL quote can produce borrower credit in the paper NAV. Do not label this verified financing revenue or executable borrowing cost."
+  },
+  {
+    "label": "b79",
+    "rows": 4472,
+    "negative_days": 700,
+    "negative_no_execution_days": 519,
+    "negative_execution_days": 181,
+    "negative_sum_account_currency": -0.02012973541502866,
+    "positive_days": 3246,
+    "positive_sum_account_currency": 0.2469760587793649,
+    "max_abs_reconstruction_error": 1.3471049059746395e-18,
+    "negative_days_with_bil_component_below_minus_spread": 700,
+    "first_negative": {
+      "date": "2009-04-17",
+      "reported_financing": -7.712864837291986e-05,
+      "pre_debt": 0.0,
+      "bil_return": -0.0010894213004052355,
+      "bil_component": -7.789686123574261e-05,
+      "spread_component": 7.682128628227618e-07,
+      "execution": true,
+      "reported_return": -0.005595870447149265,
+      "same_day_zero_floor_return": -0.005674376821518181,
+      "return_difference": -7.850637436891605e-05
+    },
+    "diagnostic_floor": "The single-day counterexample holds all lots/debt fixed and clamps signed financing at zero; a full rerun would need changed future account/debt states.",
+    "economic_boundary": "BIL adjusted-price daily change plus 100 bp/252 is a signed return proxy, not a documented nonnegative broker borrowing APR. A falling BIL quote can produce borrower credit in the paper NAV. Do not label this verified financing revenue or executable borrowing cost."
+  }
+]

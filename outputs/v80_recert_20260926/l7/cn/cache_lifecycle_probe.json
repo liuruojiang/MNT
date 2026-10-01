@@ -1,0 +1,38 @@
+{
+  "source_sha256": "06b69d328b41416f7aaf350371a17b5839deb0339e06ad57af09fb77ecbed3b4",
+  "same_request_first": [
+    "snapshot",
+    1
+  ],
+  "same_request_after_source_change": [
+    "snapshot",
+    1
+  ],
+  "new_instance_after_source_change": [
+    "snapshot",
+    2
+  ],
+  "same_instance_other_key": [
+    "snapshot",
+    2
+  ],
+  "fetch_calls": [
+    1,
+    2,
+    2,
+    3,
+    4
+  ],
+  "same_instance_sequential_run_observed": [
+    [
+      "snapshot",
+      3
+    ],
+    [
+      "snapshot",
+      4
+    ]
+  ],
+  "source_note": "_cached_fetch_data memoizes inside a request; run() now clears request cache before each _run_impl",
+  "live_deployment_lifecycle": "Poe deployed instance reuse is not established by local source; local same-instance run() parity verified"
+}

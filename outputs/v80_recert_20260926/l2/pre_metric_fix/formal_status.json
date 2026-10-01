@@ -1,0 +1,49 @@
+{
+  "stage": "complete",
+  "source_sha256": "ebf646b4a1c35f08118cb575c1bb120d524ab9e38be84e2e6363b1e319841150",
+  "formal_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "amount_sha256": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6",
+  "clock_beijing": "2026-09-26 19:40:51.800117",
+  "entrypoint": "CombinedStrategyV80._cached_run_strategies",
+  "strict_subb_open_execution": true,
+  "network_allowed": false,
+  "real_market_input_paper_model": true,
+  "elapsed_seconds": 120.93,
+  "result_sha256": "038875ea6eb6277d8a680ecb1fed79c148c289c0e65014ef9d4d5472fc9d24e8",
+  "subc_sha256": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a",
+  "daily_sha256": "0531bd78681949a3cfeec430e348232a3c6ebdaa53c959b794d17fce5b94284b",
+  "rows": {
+    "Sub-A": 2189,
+    "Sub-A-DK": 2783,
+    "B7.8": 4472,
+    "B7.9": 4472,
+    "Sub-C": 1459,
+    "Combined": 1509
+  },
+  "date_ranges": {
+    "Sub-A": [
+      "2017-09-19 00:00:00",
+      "2026-09-24 00:00:00"
+    ],
+    "Sub-A-DK": [
+      "2015-04-20 00:00:00",
+      "2026-09-24 00:00:00"
+    ],
+    "B7.8": [
+      "2008-12-15 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "B7.9": [
+      "2008-12-15 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "Sub-C": [
+      "2020-12-03 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "Combined": [
+      "2020-12-03 00:00:00",
+      "2026-09-25 00:00:00"
+    ]
+  }
+}

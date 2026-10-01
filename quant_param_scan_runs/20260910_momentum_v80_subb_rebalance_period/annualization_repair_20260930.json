@@ -1,0 +1,31 @@
+{
+  "scan": "20260910_momentum_v80_subb_rebalance_period",
+  "affected_rows": 35,
+  "first_return": "2008-12-15",
+  "first_anchor": "2008-12-12",
+  "max_abs_change_pp": 0.17485562910106722,
+  "largest_change": {
+    "candidate": "weekly",
+    "sleeve": "",
+    "segment": "last_3y",
+    "old": 0.4072092051315679,
+    "new": 0.4054606488405572,
+    "change_pp": -0.17485562910106722,
+    "anchor": "2023-09-01",
+    "rows": 754
+  },
+  "original_hashes": {
+    "scan_summary.csv": "3b9a8d274b09329debe96687699198bab9543dcd52a06a7161f243363bd1b369",
+    "window_metrics.csv": "6879336d9c870a3b92d807628c4bdfd84ea03b10f2488e4a2a15eb532d915895",
+    "scan_meta.json": "ef62df06e8db7a1a6232f51e267aff840fc7c195b5b25b757fa6f428b0b3bec5",
+    "record.md": "d9f167814cd86760381c16c41cddf0fce2af9e84b0fa731f83d17f5c12e3c3ac"
+  },
+  "repaired_hashes": {
+    "scan_summary.csv": "653e08cf5b00c20e74aca266a00d6f21a8803cf878f582bcadc70c72890ec7be",
+    "window_metrics.csv": "f12e9bc25f9d05d6f2565bbf50d3707f7beb3ac04d5f42d2829cd59b24bc34fb",
+    "scan_meta.json": "20eb2811296312a21fe746018129fc5fdf1dbbe1716a0dea4bd0f6d44e52f98c",
+    "record.md": "734ab5b8a95789ddedf5d079cad9d79261d96731594d59cf27c46abc771f576e"
+  },
+  "daily_returns_sha256": "1d21a4302247f6b5cd49960254d07c492825621d7ac1a04f0e72b67a16f92960",
+  "frozen_input_sha256": "acae61827252e772225a6f6fd239161476fbb5fd608f8e1ee21d1697a6dd391f"
+}

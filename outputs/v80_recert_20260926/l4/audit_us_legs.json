@@ -1,0 +1,736 @@
+{
+  "audit": "L4 independent US leg arithmetic on frozen formal replay",
+  "l1_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "l2_results_sha256": "ade2905b1d14a511912995f8735f275f91855b76d719273d2577c136dc978dad",
+  "l2_subc_sha256": "d0754188ef71f8ee938298398a994c3fe78782257df92fd544e7b1c53ed0fb9a",
+  "raw_ohlc_sha256": "01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50",
+  "price_basis": "frozen Yahoo-adjusted US close and adjusted open, XNYS sessions; BTC pre-IBIT proxy is research",
+  "B7.8": {
+    "legs": {
+      "official": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 2.220446049250313e-16,
+        "max_gross_error_date": "2011-04-29",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 904,
+        "fee_days": 904,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "AGG": 1684,
+          "BIL": 2126,
+          "BTC-USD": 731,
+          "DBC": 1662,
+          "DBMF": 234,
+          "EFA": 2500,
+          "EMXC": 2460,
+          "GLD": 2715,
+          "KMLM": 223,
+          "QQQ": 3947,
+          "UUP": 249
+        },
+        "first_active_date_by_proxy": {
+          "AGG": "2008-12-19",
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-02-10",
+          "DBC": "2010-05-14",
+          "DBMF": "2021-07-30",
+          "EFA": "2009-06-19",
+          "EMXC": "2009-05-29",
+          "GLD": "2008-12-19",
+          "KMLM": "2022-01-21",
+          "QQQ": "2009-06-12",
+          "UUP": "2009-06-05"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "EMA": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 2.220446049250313e-16,
+        "max_gross_error_date": "2011-04-29",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 664,
+        "fee_days": 664,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "AGG": 0,
+          "BIL": 2488,
+          "BTC-USD": 533,
+          "DBC": 655,
+          "DBMF": 198,
+          "EFA": 744,
+          "EMXC": 1142,
+          "GLD": 1617,
+          "KMLM": 406,
+          "QQQ": 2854,
+          "UUP": 98
+        },
+        "first_active_date_by_proxy": {
+          "AGG": null,
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-04-14",
+          "DBC": "2011-01-14",
+          "DBMF": "2019-10-04",
+          "EFA": "2009-07-31",
+          "EMXC": "2009-04-17",
+          "GLD": "2008-12-15",
+          "KMLM": "2021-04-30",
+          "QQQ": "2009-06-05",
+          "UUP": "2015-01-09"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "Bias": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 1.1102230246251565e-16,
+        "max_gross_error_date": "2023-06-23",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 928,
+        "fee_days": 927,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "AGG": 1114,
+          "BIL": 239,
+          "BTC-USD": 509,
+          "DBC": 1028,
+          "DBMF": 250,
+          "EFA": 1730,
+          "EMXC": 1851,
+          "GLD": 1946,
+          "KMLM": 141,
+          "QQQ": 3368,
+          "UUP": 1242
+        },
+        "first_active_date_by_proxy": {
+          "AGG": "2008-12-19",
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-07-28",
+          "DBC": "2010-12-10",
+          "DBMF": "2021-11-19",
+          "EFA": "2009-07-17",
+          "EMXC": "2009-05-08",
+          "GLD": "2008-12-19",
+          "KMLM": "2022-06-24",
+          "QQQ": "2009-05-29",
+          "UUP": "2008-12-19"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "LogVol": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 6.938893903907228e-18,
+        "max_gross_error_date": "2011-05-05",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 928,
+        "fee_days": 928,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "AGG": 1184,
+          "BIL": 199,
+          "BTC-USD": 616,
+          "DBC": 1042,
+          "DBMF": 255,
+          "EFA": 1699,
+          "EMXC": 1728,
+          "GLD": 1941,
+          "KMLM": 198,
+          "QQQ": 3392,
+          "UUP": 1162
+        },
+        "first_active_date_by_proxy": {
+          "AGG": "2008-12-15",
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-04-14",
+          "DBC": "2010-12-17",
+          "DBMF": "2022-01-28",
+          "EFA": "2009-07-17",
+          "EMXC": "2009-05-08",
+          "GLD": "2009-01-30",
+          "KMLM": "2022-03-18",
+          "QQQ": "2009-06-12",
+          "UUP": "2008-12-15"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      }
+    },
+    "target_vol_and_gross_by_leg": {
+      "official": {
+        "non_unit_scale_days": 4432,
+        "scale_min": 0.9863899622054425,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.4436148289381112
+      },
+      "EMA": {
+        "non_unit_scale_days": 4472,
+        "scale_min": 1.2165229647254343,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.459455100248987
+      },
+      "Bias": {
+        "non_unit_scale_days": 4432,
+        "scale_min": 0.9401190724410107,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.454647465876416
+      },
+      "LogVol": {
+        "non_unit_scale_days": 4472,
+        "scale_min": 1.1614342429665117,
+        "scale_max": 1.25,
+        "max_abs_risky_target_weight_sum": 1.2297275501244935
+      }
+    },
+    "official_base_candidate_pool": [
+      "AGG",
+      "BTC-USD",
+      "DBC",
+      "EFA",
+      "EMXC",
+      "GLD",
+      "QQQ"
+    ],
+    "official_macro_conditional_pool": [
+      "DBMF",
+      "KMLM",
+      "UUP"
+    ],
+    "asset_proxy_to_live_and_first_raw_date": {
+      "AGG": {
+        "live": "AGG",
+        "live_first_raw_date": "2003-09-29"
+      },
+      "BTC-USD": {
+        "live": "IBIT",
+        "live_first_raw_date": "2024-01-11"
+      },
+      "DBC": {
+        "live": "PDBC",
+        "live_first_raw_date": "2014-11-07"
+      },
+      "DBMF": {
+        "live": "DBMF",
+        "live_first_raw_date": "2019-05-08"
+      },
+      "EFA": {
+        "live": "VEA",
+        "live_first_raw_date": "2007-07-26"
+      },
+      "EMXC": {
+        "live": "EMXC",
+        "live_first_raw_date": "2017-07-26"
+      },
+      "GLD": {
+        "live": "GLDM",
+        "live_first_raw_date": "2018-06-26"
+      },
+      "KMLM": {
+        "live": "KMLM",
+        "live_first_raw_date": "2020-12-02"
+      },
+      "QQQ": {
+        "live": "QQQM",
+        "live_first_raw_date": "2020-10-13"
+      },
+      "UUP": {
+        "live": "UUP",
+        "live_first_raw_date": "2007-03-01"
+      }
+    },
+    "four_leg_component_net_identity_max_abs": 0.0,
+    "pre_volreg_model_identity_max_abs": 0.0,
+    "four_leg_diagnostic_gross_mean": 0.0005590196706620293,
+    "signal_days": 928,
+    "inflation_gate_lookback": 126,
+    "gate_on_signal_days": 277,
+    "gate_off_signal_days": 651,
+    "gate_state_disagreements": 0,
+    "wrong_official_candidate_pool_on_signal_days": [],
+    "wrong_official_candidate_pool_count": 0,
+    "macro_asset_day_count_by_leg": {
+      "official": 706,
+      "EMA": 702,
+      "Bias": 1633,
+      "LogVol": 1615
+    },
+    "volreg_ratio_replay_max_abs": 8.881784197001252e-16,
+    "volreg_defense_days": 279,
+    "volreg_transition_days": 36,
+    "volreg_execution_days": 36,
+    "account_cost_days": 953,
+    "first_full_ibit_etf_return": "2024-01-12",
+    "btc_signal_proxy_constraint": "160/260/390 lookbacks and recursive EMA retain pre-IBIT proxy influence after 2024-01-12"
+  },
+  "B7.9": {
+    "legs": {
+      "official": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 1.1102230246251565e-16,
+        "max_gross_error_date": "2021-01-22",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 881,
+        "fee_days": 881,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "BIL": 1624,
+          "BTC-USD": 731,
+          "DBC": 1489,
+          "DBMF": 120,
+          "EMXC": 2289,
+          "GLD": 2573,
+          "KMLM": 199,
+          "QQQ": 3642
+        },
+        "first_active_date_by_proxy": {
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-02-03",
+          "DBC": "2010-12-31",
+          "DBMF": "2022-03-11",
+          "EMXC": "2009-05-29",
+          "GLD": "2008-12-19",
+          "KMLM": "2022-01-28",
+          "QQQ": "2009-07-17"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "EMA": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 3.469446951953614e-18,
+        "max_gross_error_date": "2024-02-29",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 611,
+        "fee_days": 611,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "BIL": 2130,
+          "BTC-USD": 528,
+          "DBC": 471,
+          "DBMF": 79,
+          "EMXC": 991,
+          "GLD": 1307,
+          "KMLM": 406,
+          "QQQ": 2380
+        },
+        "first_active_date_by_proxy": {
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-04-14",
+          "DBC": "2011-01-28",
+          "DBMF": "2019-10-04",
+          "EMXC": "2009-04-17",
+          "GLD": "2008-12-15",
+          "KMLM": "2021-04-30",
+          "QQQ": "2009-07-24"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "Bias": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 3.469446951953614e-18,
+        "max_gross_error_date": "2025-08-19",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 928,
+        "fee_days": 830,
+        "first_fee_date": "2008-12-19",
+        "active_days_by_proxy": {
+          "BIL": 916,
+          "BTC-USD": 494,
+          "DBC": 920,
+          "DBMF": 213,
+          "EMXC": 1611,
+          "GLD": 1700,
+          "KMLM": 116,
+          "QQQ": 3058
+        },
+        "first_active_date_by_proxy": {
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-07-28",
+          "DBC": "2010-12-17",
+          "DBMF": "2022-01-21",
+          "EMXC": "2009-05-08",
+          "GLD": "2008-12-19",
+          "KMLM": "2022-06-24",
+          "QQQ": "2009-06-12"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      },
+      "LogVol": {
+        "rows": 4472,
+        "first": "2008-12-15",
+        "last": "2026-09-25",
+        "max_abs_gross_replay_error": 3.469446951953614e-18,
+        "max_gross_error_date": "2023-08-02",
+        "max_abs_net_fee_identity_error": 1.1102230246251565e-16,
+        "max_abs_prior_target_to_next_open_weight_error": 0.0,
+        "prior_target_lag_check_available": true,
+        "days_with_changed_open_weight": 928,
+        "fee_days": 805,
+        "first_fee_date": "2009-01-30",
+        "active_days_by_proxy": {
+          "BIL": 951,
+          "BTC-USD": 611,
+          "DBC": 911,
+          "DBMF": 170,
+          "EMXC": 1588,
+          "GLD": 1684,
+          "KMLM": 188,
+          "QQQ": 2953
+        },
+        "first_active_date_by_proxy": {
+          "BIL": "2008-12-15",
+          "BTC-USD": "2023-04-14",
+          "DBC": "2010-12-27",
+          "DBMF": "2022-01-28",
+          "EMXC": "2009-05-08",
+          "GLD": "2009-01-30",
+          "KMLM": "2022-03-18",
+          "QQQ": "2009-07-17"
+        },
+        "note": "B diagnostic leg weights/fees, not final B account P&L"
+      }
+    },
+    "target_vol_and_gross_by_leg": {
+      "official": {
+        "non_unit_scale_days": 4432,
+        "scale_min": 0.816955939633063,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.5000000000000002
+      },
+      "EMA": {
+        "non_unit_scale_days": 4472,
+        "scale_min": 1.1561093631324413,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.5000000000000002
+      },
+      "Bias": {
+        "non_unit_scale_days": 4432,
+        "scale_min": 0.8512388598279134,
+        "scale_max": 1.5,
+        "max_abs_risky_target_weight_sum": 1.0000000000000002
+      },
+      "LogVol": {
+        "non_unit_scale_days": 4472,
+        "scale_min": 0.9770678415895857,
+        "scale_max": 1.25,
+        "max_abs_risky_target_weight_sum": 1.0000000000000002
+      }
+    },
+    "official_base_candidate_pool": [
+      "BTC-USD",
+      "DBC",
+      "EMXC",
+      "GLD",
+      "QQQ"
+    ],
+    "official_macro_conditional_pool": [
+      "DBMF",
+      "KMLM"
+    ],
+    "asset_proxy_to_live_and_first_raw_date": {
+      "BTC-USD": {
+        "live": "IBIT",
+        "live_first_raw_date": "2024-01-11"
+      },
+      "DBC": {
+        "live": "PDBC",
+        "live_first_raw_date": "2014-11-07"
+      },
+      "DBMF": {
+        "live": "DBMF",
+        "live_first_raw_date": "2019-05-08"
+      },
+      "EMXC": {
+        "live": "EMXC",
+        "live_first_raw_date": "2017-07-26"
+      },
+      "GLD": {
+        "live": "GLDM",
+        "live_first_raw_date": "2018-06-26"
+      },
+      "KMLM": {
+        "live": "KMLM",
+        "live_first_raw_date": "2020-12-02"
+      },
+      "QQQ": {
+        "live": "QQQM",
+        "live_first_raw_date": "2020-10-13"
+      }
+    },
+    "four_leg_component_net_identity_max_abs": 0.0,
+    "pre_volreg_model_identity_max_abs": 0.0,
+    "four_leg_diagnostic_gross_mean": 0.0007134947389837361,
+    "signal_days": 928,
+    "inflation_gate_lookback": 126,
+    "gate_on_signal_days": 277,
+    "gate_off_signal_days": 651,
+    "gate_state_disagreements": 0,
+    "wrong_official_candidate_pool_on_signal_days": [],
+    "wrong_official_candidate_pool_count": 0,
+    "macro_asset_day_count_by_leg": {
+      "official": 319,
+      "EMA": 485,
+      "Bias": 329,
+      "LogVol": 358
+    },
+    "volreg_ratio_replay_max_abs": 8.881784197001252e-16,
+    "volreg_defense_days": 279,
+    "volreg_transition_days": 36,
+    "volreg_execution_days": 36,
+    "account_cost_days": 942,
+    "first_full_ibit_etf_return": "2024-01-12",
+    "btc_signal_proxy_constraint": "160/260/390 lookbacks and recursive EMA retain pre-IBIT proxy influence after 2024-01-12"
+  },
+  "Sub-C": {
+    "rows": 1459,
+    "start": "2020-12-03",
+    "end": "2026-09-25",
+    "assets": {
+      "VTI": {
+        "base_weight": 0.2,
+        "price_proxy": "VTI",
+        "live_etf_first_raw_date": "2003-01-02",
+        "proxy_price_first_frozen_date": "2003-01-02",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1453,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.2,
+        "last_exposure": 0.20569805366214927,
+        "scale_group": "SPY equity",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "QQQM": {
+        "base_weight": 0.1,
+        "price_proxy": "QQQ",
+        "live_etf_first_raw_date": "2020-10-13",
+        "proxy_price_first_frozen_date": "2003-01-02",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1451,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.1,
+        "last_exposure": 0.10976816329620777,
+        "scale_group": "SPY equity",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "AVUV": {
+        "base_weight": 0.1,
+        "price_proxy": "AVUV",
+        "live_etf_first_raw_date": "2019-09-26",
+        "proxy_price_first_frozen_date": "2019-09-26",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1450,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.1,
+        "last_exposure": 0.10788496077875324,
+        "scale_group": "SPY equity",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "VEA": {
+        "base_weight": 0.1,
+        "price_proxy": "VEA",
+        "live_etf_first_raw_date": "2007-07-26",
+        "proxy_price_first_frozen_date": "2007-07-26",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1445,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.1,
+        "last_exposure": 0.10408520588345217,
+        "scale_group": "SPY equity",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "AVDV": {
+        "base_weight": 0.1,
+        "price_proxy": "AVDV",
+        "live_etf_first_raw_date": "2019-09-26",
+        "proxy_price_first_frozen_date": "2019-09-26",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1441,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.1,
+        "last_exposure": 0.10837940749592616,
+        "scale_group": "SPY equity",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "VGIT": {
+        "base_weight": 0.15,
+        "price_proxy": "VGIT",
+        "live_etf_first_raw_date": "2009-11-23",
+        "proxy_price_first_frozen_date": "2009-11-23",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1424,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.15,
+        "last_exposure": 0.13205779314156607,
+        "scale_group": "unscaled",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "DBMF": {
+        "base_weight": 0.025,
+        "price_proxy": "DBMF",
+        "live_etf_first_raw_date": "2019-05-08",
+        "proxy_price_first_frozen_date": "2019-05-08",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1435,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.025,
+        "last_exposure": 0.026708434683237192,
+        "scale_group": "unscaled",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "KMLM": {
+        "base_weight": 0.025,
+        "price_proxy": "KMLM",
+        "live_etf_first_raw_date": "2020-12-02",
+        "proxy_price_first_frozen_date": "2020-12-02",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1434,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.025,
+        "last_exposure": 0.027136204983769886,
+        "scale_group": "unscaled",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "GLDM": {
+        "base_weight": 0.15,
+        "price_proxy": "GLD",
+        "live_etf_first_raw_date": "2018-06-26",
+        "proxy_price_first_frozen_date": "2004-11-18",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1436,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.15,
+        "last_exposure": 0.13463273342396426,
+        "scale_group": "GLD gold",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      },
+      "IBIT": {
+        "base_weight": 0.05,
+        "price_proxy": "BTC-USD",
+        "live_etf_first_raw_date": "2024-01-11",
+        "proxy_price_first_frozen_date": "2014-09-17",
+        "active_signal_days": 1459,
+        "zero_signal_days": 0,
+        "nonzero_exposure_days": 1459,
+        "first_nonzero_exposure_date": "2020-12-03",
+        "nonzero_contribution_days": 1457,
+        "max_abs_contribution_error": 0.0,
+        "first_exposure": 0.05,
+        "last_exposure": 0.04364904265097407,
+        "scale_group": "unscaled",
+        "annual_fee_basis": "pooled 10bp base-portfolio turnover; not separately charged by asset"
+      }
+    },
+    "base_return_from_ten_contributions_plus_fee_max_abs": 0.0,
+    "raw_return_vs_base_account_max_abs": 0.0,
+    "equity_scale_change_count": 52,
+    "gold_scale_change_count": 18,
+    "equity_scale_first_change": "2020-12-08",
+    "gold_scale_first_change": "2022-03-09",
+    "scaled_no_transition_rows": 1389,
+    "scaled_no_transition_max_abs_error": 6.938893903907228e-18,
+    "annual_rebalances": [
+      {
+        "date": "2020-12-31",
+        "turnover": 0.042751793215007036,
+        "independent_turnover": 0.042751793215007036,
+        "base_fee_fraction": 4.2751793215007035e-05,
+        "fee_vs_10bp_turnover_error": 0.0,
+        "post_close_base_weight_error": 0.0
+      },
+      {
+        "date": "2021-12-31",
+        "turnover": 0.12448788760146935,
+        "independent_turnover": 0.12448788760146935,
+        "base_fee_fraction": 0.00012448788760146938,
+        "fee_vs_10bp_turnover_error": 2.710505431213761e-20,
+        "post_close_base_weight_error": 0.0
+      },
+      {
+        "date": "2022-12-30",
+        "turnover": 0.12983525181929645,
+        "independent_turnover": 0.12983525181929645,
+        "base_fee_fraction": 0.00012983525181929645,
+        "fee_vs_10bp_turnover_error": 0.0,
+        "post_close_base_weight_error": 0.0
+      },
+      {
+        "date": "2023-12-29",
+        "turnover": 0.1459473258995533,
+        "independent_turnover": 0.1459473258995533,
+        "base_fee_fraction": 0.0001459473258995533,
+        "fee_vs_10bp_turnover_error": 0.0,
+        "post_close_base_weight_error": 0.0
+      },
+      {
+        "date": "2024-12-31",
+        "turnover": 0.12439949254619709,
+        "independent_turnover": 0.12439949254619709,
+        "base_fee_fraction": 0.0001243994925461971,
+        "fee_vs_10bp_turnover_error": 2.710505431213761e-20,
+        "post_close_base_weight_error": 0.0
+      },
+      {
+        "date": "2025-12-31",
+        "turnover": 0.14674669766052434,
+        "independent_turnover": 0.1467466976605243,
+        "base_fee_fraction": 0.00014674669766052433,
+        "fee_vs_10bp_turnover_error": 2.710505431213761e-20,
+        "post_close_base_weight_error": 0.0
+      }
+    ],
+    "transition_rows": 70,
+    "transition_note": "Open-trade transition events require price-lot replay; 2024-01-30 gold and 2024-02-15 equity independently checked in L2 timing audit",
+    "all_etf_full_return_first_date": "2024-01-12",
+    "before_ibit_note": "IBIT BTC-USD column represents pre-listing proxy history; early Sub-C sample is proxy research"
+  }
+}

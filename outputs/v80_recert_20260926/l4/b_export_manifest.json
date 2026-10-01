@@ -1,0 +1,10 @@
+{
+  "status": "complete",
+  "source_arm_summary_sha256": "aa2504349eae418219d87053f86e26a70958d7cf2e7d976ad13f59f4dcb4769d",
+  "daily_rows": 71552,
+  "execution_event_rows": 15106,
+  "state_event_rows": 120,
+  "daily_sha256": "ea53161c7b9f208b0cccb43b0533c012713d1c83eee031c784c07ad3168fc500",
+  "events_sha256": "e5ac9c0cad4a68ce7456fe8a57e2e587a1f5fdba31f5cb9dbab0b9663eb42180",
+  "state_events_sha256": "efb34dbb5892a2f05356cd0638055aa57969dc375c2292608b478080374c17a5"
+}

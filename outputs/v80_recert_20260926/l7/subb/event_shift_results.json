@@ -1,0 +1,36 @@
+{
+  "B7.8": {
+    "rows": 4472,
+    "start": "2008-12-15",
+    "end": "2026-09-25",
+    "us_dates_not_cn": 2280,
+    "pending_model": 928,
+    "executed_model": 928,
+    "pending_volreg": 36,
+    "executed_volreg": 36,
+    "positive_turnover_days": 953,
+    "first_anomalies": [],
+    "anomaly_count": 0,
+    "fault_wrong_clock_mismatch_count": 1855,
+    "fault_omit_first_fee_detected": true,
+    "first_pending_date": "2008-12-18",
+    "first_execution_date": "2008-12-19"
+  },
+  "B7.9": {
+    "rows": 4472,
+    "start": "2008-12-15",
+    "end": "2026-09-25",
+    "us_dates_not_cn": 2280,
+    "pending_model": 928,
+    "executed_model": 928,
+    "pending_volreg": 36,
+    "executed_volreg": 36,
+    "positive_turnover_days": 942,
+    "first_anomalies": [],
+    "anomaly_count": 0,
+    "fault_wrong_clock_mismatch_count": 1855,
+    "fault_omit_first_fee_detected": true,
+    "first_pending_date": "2008-12-18",
+    "first_execution_date": "2008-12-19"
+  }
+}

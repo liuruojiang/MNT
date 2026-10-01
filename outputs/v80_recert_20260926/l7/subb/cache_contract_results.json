@@ -1,0 +1,23 @@
+{
+  "strategy_baseline": 1.0,
+  "strategy_unchanged": 1.0,
+  "strategy_changed_close": 2.0,
+  "strategy_changed_open": 2.0,
+  "strategy_run_calls": [
+    1.0,
+    2.0,
+    2.0,
+    2.0
+  ],
+  "first_fetch": 1,
+  "second_same_instance_fetch": 1,
+  "new_instance_fetch": 2,
+  "resumed_same_instance_fetch": 3,
+  "resumed_same_instance_strategy": 2.0,
+  "fetch_calls": [
+    1,
+    2,
+    3
+  ],
+  "entrypoint_instantiates_per_script_run": true
+}

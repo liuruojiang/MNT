@@ -1,0 +1,140 @@
+{
+  "audit": "L3 independent source and frozen-output boundary audit A",
+  "scope": "read-only account, signal, and module-off checks; current V8.0 paper replay only",
+  "verdict": "PASS for stated official-leg core module-off boundary; executable A/ADK self-financing and pure single-window/no-target-vol B baseline remain unverified",
+  "source_sha256": "435255b292a633f75e8216b505ff46396896a5ca80f97987b67c412b0898c499",
+  "core_daily_sha256": "657fec91b6f409c0961bd96990107565e66264f30eb1e3af0155f6b47ae27ef3",
+  "formal_daily_sha256": "fbcf4c3abe297c792e732d356e7378b6e3bbfc33e87bb035bbf6f17ba7e15299",
+  "formal_parity_max_abs_daily_difference": {
+    "Sub-A": 0.0,
+    "Sub-A-DK": 0.0,
+    "B7.8": 6.661338147750939e-16,
+    "B7.9": 4.440892098500626e-16,
+    "Sub-C": 0.0,
+    "Combined": 4.440892098500626e-16
+  },
+  "independence": "Loaded saved L2 formal and L3 core result frames; recomputed conditions and counts directly from frame columns without calling run_core.py or its performance helper.",
+  "sub_a": {
+    "volume_columns_absent_in_core": true,
+    "core_non_cash_weight_exactly_one": true,
+    "first_formal_volume_trigger": {
+      "date": "2017-09-19",
+      "formal_weight": 0.0,
+      "core_weight": 1.0,
+      "formal_return": 0.0001211499702025165,
+      "core_return": -0.0008789711797676514
+    },
+    "isolated_low_r2_positive_momentum_case": {
+      "date": "2017-10-12",
+      "score": 1.3465901458856298,
+      "r2": 0.046996914765100956,
+      "r2_threshold": 0.15,
+      "formal_volume_trigger": false,
+      "formal_holding": "cash",
+      "core_holding": "1.930955",
+      "count_same_case": 209
+    }
+  },
+  "sub_adk": {
+    "all_ten_pairs": [
+      "HS300/CYB",
+      "HS300/ZZ1000",
+      "HS300/ZZ500",
+      "SZ50/CYB",
+      "SZ50/HS300",
+      "SZ50/ZZ1000",
+      "SZ50/ZZ500",
+      "ZZ1000/CYB",
+      "ZZ500/CYB",
+      "ZZ500/ZZ1000"
+    ],
+    "overheat_columns_absent_in_core": true,
+    "core_weight_exactly_one": true,
+    "first_formal_score_hot_trigger": {
+      "date": "2015-04-21",
+      "formal_weight": 0.0,
+      "core_weight": 1.0,
+      "formal_return": 0.0,
+      "core_return": -0.04247836089865187,
+      "attribution_limit": "formal-vs-core return difference includes simultaneous target-vol removal; not a single-module score-hot effect"
+    },
+    "core_start": "2015-02-13",
+    "formal_same_window_start": "2015-04-20",
+    "same_window_full_rows_each": 2783
+  },
+  "sub_b": {
+    "B7.8": {
+      "rows": 4472,
+      "base_pool": [
+        "AGG",
+        "BTC-USD",
+        "DBC",
+        "EFA",
+        "EMXC",
+        "GLD",
+        "QQQ"
+      ],
+      "volreg_execution_count": 0,
+      "model_execution_count": 892,
+      "charged_execution_count": 892,
+      "non_unit_internal_scale_days": 4432,
+      "three_momentum_windows_retained": [
+        160,
+        260,
+        390
+      ],
+      "internal_inverse_volatility_and_target_vol_retained": true,
+      "macro_gate_diagnostic_column_present_but_no_macro_rank_or_weight": true
+    },
+    "B7.9": {
+      "rows": 4472,
+      "base_pool": [
+        "BTC-USD",
+        "DBC",
+        "EMXC",
+        "GLD",
+        "QQQ"
+      ],
+      "volreg_execution_count": 0,
+      "model_execution_count": 875,
+      "charged_execution_count": 875,
+      "non_unit_internal_scale_days": 4432,
+      "three_momentum_windows_retained": [
+        160,
+        260,
+        390
+      ],
+      "internal_inverse_volatility_and_target_vol_retained": true,
+      "macro_gate_diagnostic_column_present_but_no_macro_rank_or_weight": true
+    }
+  },
+  "sub_c": {
+    "rows": 1459,
+    "equity_scale_min_max": [
+      1.0,
+      1.0
+    ],
+    "gold_scale_min_max": [
+      1.0,
+      1.0
+    ],
+    "vs_extra_cost_max_abs": 0.0,
+    "raw_scaled_return_max_abs_difference": 0.0,
+    "annual_base_rebalance_count": 6,
+    "annual_base_fee_positive_count": 6,
+    "annual_rebalance_dates": [
+      "2020-12-31",
+      "2021-12-31",
+      "2022-12-30",
+      "2023-12-29",
+      "2024-12-31",
+      "2025-12-31"
+    ]
+  },
+  "limits": [
+    "B official momentum leg still uses three lookbacks, inverse-volatility weighting and internal target-vol; no claim of single-window constant-one scale.",
+    "A and ADK remain paper target-weight return models; L2 physical lot/cash self-financing failure is inherited.",
+    "The L3 off-arm comparison changes several enhancements together, so no per-module return attribution follows.",
+    "BTC proxy history remains research-only and full-history windows are not homogeneous live-ETF samples."
+  ]
+}
