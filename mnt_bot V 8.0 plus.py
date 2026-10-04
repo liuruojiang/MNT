@@ -205,7 +205,7 @@ CN_DK_CYB_SECID = '0.399006'
 CN_DK_COLS = ['DK_ZZ1000', 'DK_SZ50', 'DK_HS300', 'DK_ZZ500', 'DK_CYB']
 CN_DK_PUBLICATION_DATES = {'DK_SZ50': pd.Timestamp('2004-01-02'), 'DK_HS300': pd.Timestamp('2005-04-08'), 'DK_ZZ500': pd.Timestamp('2007-01-15'), 'DK_CYB': pd.Timestamp('2010-06-01'), 'DK_ZZ1000': pd.Timestamp('2014-10-17')}
 CN_DK_NAMES = {'DK_ZZ1000': '中证1000', 'DK_SZ50': '上证50', 'DK_HS300': '沪深300', 'DK_ZZ500': '中证500', 'DK_CYB': '创业板'}
-CN_DK_BIAS_N = 60
+CN_DK_BIAS_N = 45
 CN_DK_MOM_DAY = 20
 CN_DK_VOL_SCALE_ENABLED = True
 CN_DK_TARGET_VOL = 0.14
@@ -289,8 +289,8 @@ US_ROT_TOP_N = 2
 US_ROT_REBALANCE_THRESHOLD = 1.0
 SUBB_V75_OFFICIAL_WEIGHT = 0.5
 SUBB_V75_EMA_WEIGHT = 0.5
-SUBB_V75_EMA_HALF_LIFE = 100
-SUBB_V75_EMA_ABS_THRESHOLD = 0.16
+SUBB_V75_EMA_HALF_LIFE = 70
+SUBB_V75_EMA_ABS_THRESHOLD = 0.15
 SUBB_V75_EMA_VOL_MODE = 'ewma6m_1vol'
 SUBB_V75_EMA_VOL_HALFLIFE_DAYS = int(round(US_TRADING_DAYS * 6 / 12))
 SUBB_BLEND_VOL_NOTE = '混合后不再做组合级二次波动率归一；最终波动由官方腿与EMA腿各自VolScale及50/50日收益混合共同决定。'
@@ -7114,12 +7114,12 @@ _v80_b78_US_ROT_WINDOW_WEIGHT_LABEL = '160/260/390=60%/30%/10%'
 _v80_b78_US_ROT_MAX_LB = max(_v80_b78_US_ROT_LBS)
 _v80_b78_US_ROT_VOL_LB = 20
 _v80_b78_US_ROT_MIN_TURNOVER = 0.0
-_v80_b78_US_ROT_ABS_THRESHOLD = 0.04
+_v80_b78_US_ROT_ABS_THRESHOLD = 0.0
 _v80_b78_US_ROT_REBALANCE_THRESHOLD = 1.05
 _v80_b78_SUBB_V75_OFFICIAL_WEIGHT = 0.5
 _v80_b78_SUBB_V75_EMA_WEIGHT = 0.5
-_v80_b78_SUBB_V75_EMA_HALF_LIFE = 100
-_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD = 0.16
+_v80_b78_SUBB_V75_EMA_HALF_LIFE = 70
+_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD = 0.15
 _v80_b78_SUBB_V75_EMA_VOL_MODE = 'ewma6m_1vol'
 _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS = int(round(_v80_b78_US_TRADING_DAYS * 6 / 12))
 _v80_b78_SUBB_BLEND_VOL_NOTE = '混合后不再做组合级二次波动率归一；最终波动由官方腿与EMA腿各自VolScale及50/50日收益混合共同决定。'
@@ -8989,6 +8989,8 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
             if label == 'B7.8':
                 top_n = V80_SUBB_V78_TOP_N
                 abs_threshold = _v80_b78_US_ROT_ABS_THRESHOLD
+                ema_half_life = _v80_b78_SUBB_V75_EMA_HALF_LIFE
+                ema_abs_threshold = _v80_b78_SUBB_V75_EMA_ABS_THRESHOLD
                 rebalance_threshold = _v80_b78_US_ROT_REBALANCE_THRESHOLD
                 target_vol = _v80_b78_US_ROT_TARGET_VOL
                 max_lev = _v80_b78_US_ROT_MAX_LEV
@@ -8997,12 +8999,14 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
             else:
                 top_n = US_ROT_TOP_N
                 abs_threshold = US_ROT_ABS_THRESHOLD
+                ema_half_life = SUBB_V75_EMA_HALF_LIFE
+                ema_abs_threshold = SUBB_V75_EMA_ABS_THRESHOLD
                 rebalance_threshold = US_ROT_REBALANCE_THRESHOLD
                 target_vol = US_ROT_TARGET_VOL
                 max_lev = US_ROT_MAX_LEV
                 volreg_enter = US_ROT_VOLREG_THRESHOLD
                 volreg_exit = US_ROT_VOLREG_EXIT_THRESHOLD
-            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜绝对动量>{abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
+            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜官方腿绝对动量>{abs_threshold:.0%}｜EMA评分半衰期{ema_half_life}日/年化评分>{ema_abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
         if rows:
             w(f'| ETF | 当前已生效 | {target_title} | 调整量 |\n')
             w('|:-|------:|------:|------:|\n')
@@ -9274,7 +9278,7 @@ def _write_v80_b78_detail(w, us_rot_result, *, query_kind='signal'):
     if query_kind in {'params', 'live_params'}:
         _v80_b78_write_v78_subb_param_tables(w)
     else:
-        w(f'规则: Top{V80_SUBB_V78_TOP_N}｜绝对动量>{_v80_b78_US_ROT_ABS_THRESHOLD:.0%}｜挑战者/持仓比>{_v80_b78_US_ROT_REBALANCE_THRESHOLD:.2f}x｜目标波动{_v80_b78_US_ROT_TARGET_VOL:.0%}｜VolReg进入/恢复={_v80_b78_US_ROT_VOLREG_THRESHOLD:.2f}/{_v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD:.2f}\n\n')
+        w(f'规则: Top{V80_SUBB_V78_TOP_N}｜官方腿绝对动量>{_v80_b78_US_ROT_ABS_THRESHOLD:.0%}｜EMA评分半衰期{_v80_b78_SUBB_V75_EMA_HALF_LIFE}日/年化评分>{_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD:.0%}｜挑战者/持仓比>{_v80_b78_US_ROT_REBALANCE_THRESHOLD:.2f}x｜目标波动{_v80_b78_US_ROT_TARGET_VOL:.0%}｜VolReg进入/恢复={_v80_b78_US_ROT_VOLREG_THRESHOLD:.2f}/{_v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD:.2f}\n\n')
         _v80_b78_write_v78_subb_component_leg_tables(w, b78, -1)
         _v80_b78_write_v78_subb_blend_table(w, b78, -1)
         warning = _v80_b78_v78_subb_volume_warning(b78)

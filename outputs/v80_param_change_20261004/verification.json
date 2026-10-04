@@ -1,0 +1,43 @@
+{
+  "stage": "complete",
+  "source_sha256": "cef733f30a48f2123725f5f213e483ee5112910462dea7b7f4bb47f41205414e",
+  "formal_inputs_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "amount_sha256": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6",
+  "entrypoint": "CombinedStrategyV80._cached_run_strategies",
+  "strict_subb_open_execution": true,
+  "network_allowed": false,
+  "clock_beijing": "2026-09-26 19:40:51.800117",
+  "date_ranges": {
+    "Sub-A": [
+      "2017-09-19 00:00:00",
+      "2026-09-24 00:00:00"
+    ],
+    "Sub-A-DK": [
+      "2015-03-27 00:00:00",
+      "2026-09-24 00:00:00"
+    ],
+    "B7.8": [
+      "2008-12-15 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "B7.9": [
+      "2008-12-15 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "Sub-C": [
+      "2020-12-03 00:00:00",
+      "2026-09-25 00:00:00"
+    ],
+    "Combined": [
+      "2020-12-03 00:00:00",
+      "2026-09-25 00:00:00"
+    ]
+  },
+  "comparisons": {
+    "Sub-A_unchanged_max_abs": 0.0,
+    "Sub-C_unchanged_max_abs": 0.0,
+    "Sub-A-DK_candidate_2020_max_abs": 9.974659986866641e-17,
+    "B7.8_candidate_2020_max_abs": 7.656635742092632e-16,
+    "B7.9_candidate_2020_max_abs": 7.268491364342822e-16
+  }
+}

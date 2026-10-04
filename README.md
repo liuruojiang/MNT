@@ -16,7 +16,8 @@ The shared production invariants are:
   Top-1 only, `score > 0` and 20-day R2 at least 0.15, with no second-place
   replacement. Its target-volatility layer is 20%/80 days and is capped at
   0.10x-1.25x; the A-share turnover overlay remains active.
-- ADK is one production strategy across all ten index pairs. Its score-hot
+- ADK is one production strategy across all ten index pairs, using MA45/20-day
+  bias momentum. Its score-hot
   enter/recover/scale rule is 80/40/0x; target volatility is 14%/40 days,
   leverage is 0.10x-1.50x, and the scale-change deadband is 0.25.
 - Sub-B uses `T close signal -> T+1 adjusted open execution -> T+1 close return`.
@@ -41,8 +42,9 @@ The shared production invariants are:
 - CN/ADK raw prices must be finite, positive, internally complete, and current
   through the latest required completed session, including pre-open/weekends.
 
-B7.8 uses Top-3, a 4% absolute-momentum threshold, and a 1.05x replacement
-buffer; B7.9 uses Top-2, a 0% threshold, and no replacement buffer. Each keeps
+B7.8 uses Top-3, a 0% absolute-momentum threshold, and a 1.05x replacement
+buffer; B7.9 uses Top-2, a 0% threshold, and no replacement buffer. Both use
+EMA score half-life 70 US trading days and a 15% annualized score threshold. Each keeps
 its own target-vol and VolReg rules, execution costs, holdings, and NAV. The
 retired SPY-volume/LogVol-high-vol discounts and DBC/PDBC profit guard are not
 part of the current production paths.
