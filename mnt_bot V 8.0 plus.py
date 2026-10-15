@@ -21,6 +21,7 @@ import xlsxwriter
 import time
 import threading
 import types
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
@@ -533,6 +534,32 @@ def _is_us_market_session(date_value):
     session = pd.Timestamp(date_value).normalize()
     return session.weekday() < 5 and session not in _us_market_holidays(session.year)
 
+def _assert_us_next_session(previous_date, date, *, context='US execution'):
+    previous, current = pd.Timestamp(previous_date), pd.Timestamp(date)
+    for value in (previous, current):
+        if pd.isna(value) or value.tzinfo is not None or value != value.normalize() or not _is_us_market_session(value):
+            raise ValueError(f'{context}: invalid market session {value}')
+    expected = previous + pd.Timedelta(days=1)
+    while not _is_us_market_session(expected):
+        expected += pd.Timedelta(days=1)
+    if current != expected:
+        raise ValueError(f'{context}: missing/invalid next market session; expected {expected.date()}, got {current.date()}')
+
+def _assert_us_execution_session(date, close_df, *, context='US execution'):
+    current = pd.Timestamp(date)
+    if pd.isna(current) or current.tzinfo is not None or current != current.normalize() or not _is_us_market_session(current):
+        raise ValueError(f'{context}: invalid market session {current}')
+    if close_df is not None and len(close_df):
+        index = close_df.index
+        if not isinstance(index, pd.DatetimeIndex) or not index.is_monotonic_increasing or index.has_duplicates:
+            raise ValueError(f'{context}: invalid daily price index')
+        position = index.searchsorted(current)
+        if position == 0 or position == len(index) or index[position] != current:
+            raise ValueError(f'{context}: missing execution session or preceding close for {current.date()}')
+        _assert_us_next_session(index[position - 1], current, context=context)
+    else:
+        raise ValueError(f'{context}: missing preceding close history')
+
 def _is_us_early_close_session(date_value):
     session = pd.Timestamp(date_value).normalize()
     if not _is_us_market_session(session):
@@ -579,6 +606,63 @@ def _is_cn_required_close_day(date_value):
         warnings.warn(f'CN market holiday calendar is not configured for {dt.year}; treating the session as unavailable.', RuntimeWarning, stacklevel=2)
         return False
     return dt.weekday() < 5 and dt.strftime('%Y-%m-%d') not in CN_MARKET_HOLIDAYS
+
+# Historical weekday closures: frozen Sina calendar independently matched
+# against baostock, 2010-02-22 through 2025-12-31 (282 dates).
+# Evidence: docs/v80_script_repairs_20261015.md; 2026 uses the official set above.
+_CN_VERIFIED_CALENDAR_START = pd.Timestamp('2010-02-22')
+_CN_VERIFIED_CALENDAR_END = pd.Timestamp('2025-12-31')
+_CN_VERIFIED_CLOSED_DAYS = pd.DatetimeIndex(pd.to_datetime((
+    '2010-04-05 2010-05-03 2010-06-14 2010-06-15 2010-06-16 2010-09-22 2010-09-23 2010-09-24 '
+    '2010-10-01 2010-10-04 2010-10-05 2010-10-06 2010-10-07 2011-01-03 2011-02-02 2011-02-03 '
+    '2011-02-04 2011-02-07 2011-02-08 2011-04-04 2011-04-05 2011-05-02 2011-06-06 2011-09-12 '
+    '2011-10-03 2011-10-04 2011-10-05 2011-10-06 2011-10-07 2012-01-02 2012-01-03 2012-01-23 '
+    '2012-01-24 2012-01-25 2012-01-26 2012-01-27 2012-04-02 2012-04-03 2012-04-04 2012-04-30 '
+    '2012-05-01 2012-06-22 2012-10-01 2012-10-02 2012-10-03 2012-10-04 2012-10-05 2013-01-01 '
+    '2013-01-02 2013-01-03 2013-02-11 2013-02-12 2013-02-13 2013-02-14 2013-02-15 2013-04-04 '
+    '2013-04-05 2013-04-29 2013-04-30 2013-05-01 2013-06-10 2013-06-11 2013-06-12 2013-09-19 '
+    '2013-09-20 2013-10-01 2013-10-02 2013-10-03 2013-10-04 2013-10-07 2014-01-01 2014-01-31 '
+    '2014-02-03 2014-02-04 2014-02-05 2014-02-06 2014-04-07 2014-05-01 2014-05-02 2014-06-02 '
+    '2014-09-08 2014-10-01 2014-10-02 2014-10-03 2014-10-06 2014-10-07 2015-01-01 2015-01-02 '
+    '2015-02-18 2015-02-19 2015-02-20 2015-02-23 2015-02-24 2015-04-06 2015-05-01 2015-06-22 '
+    '2015-09-03 2015-09-04 2015-10-01 2015-10-02 2015-10-05 2015-10-06 2015-10-07 2016-01-01 '
+    '2016-02-08 2016-02-09 2016-02-10 2016-02-11 2016-02-12 2016-04-04 2016-05-02 2016-06-09 '
+    '2016-06-10 2016-09-15 2016-09-16 2016-10-03 2016-10-04 2016-10-05 2016-10-06 2016-10-07 '
+    '2017-01-02 2017-01-27 2017-01-30 2017-01-31 2017-02-01 2017-02-02 2017-04-03 2017-04-04 '
+    '2017-05-01 2017-05-29 2017-05-30 2017-10-02 2017-10-03 2017-10-04 2017-10-05 2017-10-06 '
+    '2018-01-01 2018-02-15 2018-02-16 2018-02-19 2018-02-20 2018-02-21 2018-04-05 2018-04-06 '
+    '2018-04-30 2018-05-01 2018-06-18 2018-09-24 2018-10-01 2018-10-02 2018-10-03 2018-10-04 '
+    '2018-10-05 2018-12-31 2019-01-01 2019-02-04 2019-02-05 2019-02-06 2019-02-07 2019-02-08 '
+    '2019-04-05 2019-05-01 2019-05-02 2019-05-03 2019-06-07 2019-09-13 2019-10-01 2019-10-02 '
+    '2019-10-03 2019-10-04 2019-10-07 2020-01-01 2020-01-24 2020-01-27 2020-01-28 2020-01-29 '
+    '2020-01-30 2020-01-31 2020-04-06 2020-05-01 2020-05-04 2020-05-05 2020-06-25 2020-06-26 '
+    '2020-10-01 2020-10-02 2020-10-05 2020-10-06 2020-10-07 2020-10-08 2021-01-01 2021-02-11 '
+    '2021-02-12 2021-02-15 2021-02-16 2021-02-17 2021-04-05 2021-05-03 2021-05-04 2021-05-05 '
+    '2021-06-14 2021-09-20 2021-09-21 2021-10-01 2021-10-04 2021-10-05 2021-10-06 2021-10-07 '
+    '2022-01-03 2022-01-31 2022-02-01 2022-02-02 2022-02-03 2022-02-04 2022-04-04 2022-04-05 '
+    '2022-05-02 2022-05-03 2022-05-04 2022-06-03 2022-09-12 2022-10-03 2022-10-04 2022-10-05 '
+    '2022-10-06 2022-10-07 2023-01-02 2023-01-23 2023-01-24 2023-01-25 2023-01-26 2023-01-27 '
+    '2023-04-05 2023-05-01 2023-05-02 2023-05-03 2023-06-22 2023-06-23 2023-09-29 2023-10-02 '
+    '2023-10-03 2023-10-04 2023-10-05 2023-10-06 2024-01-01 2024-02-09 2024-02-12 2024-02-13 '
+    '2024-02-14 2024-02-15 2024-02-16 2024-04-04 2024-04-05 2024-05-01 2024-05-02 2024-05-03 '
+    '2024-06-10 2024-09-16 2024-09-17 2024-10-01 2024-10-02 2024-10-03 2024-10-04 2024-10-07 '
+    '2025-01-01 2025-01-28 2025-01-29 2025-01-30 2025-01-31 2025-02-03 2025-02-04 2025-04-04 '
+    '2025-05-01 2025-05-02 2025-05-05 2025-06-02 2025-10-01 2025-10-02 2025-10-03 2025-10-06 '
+    '2025-10-07 2025-10-08 '
+).split()))
+
+def _expected_cn_sessions(start_date, end_date):
+    start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
+    if end < start:
+        return pd.DatetimeIndex([])
+    days = pd.bdate_range(start, end)
+    historical = (days >= _CN_VERIFIED_CALENDAR_START) & (days <= _CN_VERIFIED_CALENDAR_END)
+    maintained = np.isin(days.year, list(CN_MARKET_HOLIDAY_YEARS))
+    if not (historical | maintained).all():
+        unknown = days[~(historical | maintained)][0]
+        raise ValueError(f'A股交易日历无可验证覆盖: {unknown.date()}')
+    closed = _CN_VERIFIED_CLOSED_DAYS.union(pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS))))
+    return days[~days.isin(closed)]
 
 def _latest_cn_required_close_date(asof_date=None):
     current = pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
@@ -2680,6 +2764,9 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
     timestamps = result.get('timestamp', [])
     if not timestamps:
         raise ValueError('No timestamps')
+    daily_dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+    if daily_dates.hasnans or daily_dates.has_duplicates or not daily_dates.is_monotonic_increasing:
+        raise DataSchemaError(f'{ticker} Yahoo invalid/duplicate daily date index')
     indicators = result['indicators']
     quote = indicators['quote'][0]
     adj_blocks = indicators.get('adjclose')
@@ -2710,7 +2797,14 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
             rows.append(row)
     df = pd.DataFrame(rows)
     df['date'] = pd.to_datetime(df['date'])
-    return df.drop_duplicates(subset='date').set_index('date').sort_index()
+    df = df.set_index('date').sort_index()
+    first_trade = (result.get('meta') or {}).get('firstTradeDate')
+    if first_trade is not None:
+        first_trade = pd.Timestamp(first_trade, unit='s', tz='UTC')
+        if ticker != 'BTC-USD':
+            first_trade = first_trade.tz_convert('America/New_York')
+        df.attrs['provider_first_trade_date'] = first_trade.date().isoformat()
+    return df
 
 def _fetch_us_stooq(ticker, start_date='2003-01-01'):
     stooq_sym = _ticker_to_stooq(ticker)
@@ -2746,9 +2840,11 @@ def _fetch_us_nasdaq_history(ticker, start_date, end_date):
     if 'date' not in frame.columns or 'close' not in frame.columns or 'open' not in frame.columns:
         raise DataSchemaError(f'Nasdaq OHLC schema changed for {ticker}')
     frame['date'] = pd.to_datetime(frame['date'], format='%m/%d/%Y', errors='coerce')
+    if frame['date'].isna().any() or frame['date'].duplicated().any():
+        raise DataSchemaError(f'{ticker} Nasdaq invalid/duplicate daily date index')
     for column in ('open', 'close'):
         frame[column] = pd.to_numeric(frame[column].astype(str).str.replace('[$,]', '', regex=True), errors='coerce')
-    return frame[['date', 'open', 'close']].dropna(subset=['date']).drop_duplicates(subset='date').set_index('date').sort_index()
+    return frame[['date', 'open', 'close']].set_index('date').sort_index()
 
 def _merge_same_ticker_gap_prices(primary, fallback, missing_dates, ticker):
     merged = primary.copy().sort_index()
@@ -2785,14 +2881,20 @@ def _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, frame):
     valid = _valid_us_ohlc_index(frame)
     if len(valid) < 2:
         return (frame, 0, 0)
-    expected = _expected_us_ohlc_index(valid[0], valid[-1])
+    expected = _expected_ticker_ohlc_index(ticker, valid[0], valid[-1])
     missing = expected.difference(valid)
     if len(missing) == 0:
         return (frame, 0, 0)
+    if ticker == 'BTC-USD':
+        return (frame, 0, len(missing))
     fallback = _fetch_us_nasdaq_history(ticker, missing.min() - pd.Timedelta(days=14), missing.max() + pd.Timedelta(days=14))
     repaired, repaired_count = _merge_same_ticker_gap_prices(frame, fallback, missing, ticker)
     remaining = expected.difference(_valid_us_ohlc_index(repaired))
     return (repaired, repaired_count, len(remaining))
+
+# Verified native OHLC coverage bounds, NOT fund inception or listing dates.
+# Frozen Yahoo raw source SHA256: 01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50
+_US_VERIFIED_HISTORY_STARTS = {'AGG': '2003-09-29', 'AVDV': '2019-09-26', 'AVUV': '2019-09-26', 'BIL': '2007-05-30', 'BTC-USD': '2014-09-17', 'DBC': '2006-02-06', 'DBMF': '2019-05-08', 'EEM': '2003-04-14', 'EFA': '2003-01-02', 'EMXC': '2017-07-26', 'GLD': '2004-11-18', 'GLDM': '2018-06-26', 'IBIT': '2024-01-11', 'KMLM': '2020-12-02', 'PDBC': '2014-11-07', 'QQQ': '2003-01-02', 'QQQM': '2020-10-13', 'SPY': '2003-01-02', 'TLT': '2003-01-02', 'UUP': '2007-03-01', 'VEA': '2007-07-26', 'VGIT': '2009-11-23', 'VTI': '2003-01-02'}
 
 def fetch_yahoo(ticker, start_date='2003-01-01'):
     sources = [('Yahoo', lambda: _fetch_us_yahoo(ticker, start_date)), ('Stooq', lambda: _fetch_us_stooq(ticker, start_date))]
@@ -2801,6 +2903,12 @@ def fetch_yahoo(ticker, start_date='2003-01-01'):
         try:
             df = fetcher()
             if df is not None and len(df) > 50:
+                expected_start = _us_history_expected_start(ticker, start_date, df)
+                valid = _valid_us_ohlc_index(df)
+                if len(valid) == 0 or valid[0] > expected_start:
+                    raise DataSchemaError(f'{ticker}: missing requested history start {expected_start.date()}')
+                df.attrs['history_requested_start'] = pd.Timestamp(start_date).date().isoformat()
+                df.attrs['history_expected_start'] = expected_start.date().isoformat()
                 if name == 'Yahoo':
                     try:
                         df, repaired_count, remaining_count = _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, df)
@@ -2818,6 +2926,24 @@ def fetch_yahoo(ticker, start_date='2003-01-01'):
             last_err = DataSchemaError(f'{name} schema changed for {ticker}: {e}')
             time.sleep(1)
     return (None, 'FAILED')
+
+def _us_history_expected_start(ticker, requested_start, frame=None):
+    bounds = []
+    if ticker in _US_VERIFIED_HISTORY_STARTS:
+        bounds.append(pd.Timestamp(_US_VERIFIED_HISTORY_STARTS[ticker]))
+    native = frame.attrs.get('provider_first_trade_date') if frame is not None else None
+    if native is not None:
+        date = pd.Timestamp(native)
+        if pd.isna(date):
+            raise DataSchemaError(f'{ticker}: invalid provider first trade date')
+        bounds.append(date)
+    start = pd.Timestamp(requested_start).normalize()
+    if bounds:
+        start = max(start, min(bounds))
+    expected = _expected_ticker_ohlc_index(ticker, start, start + pd.Timedelta(days=14))
+    if not len(expected):
+        raise DataSchemaError(f'{ticker}: no verified requested session')
+    return expected[0]
 
 def _valid_us_ohlc_index(frame):
     if frame is None or not isinstance(frame, pd.DataFrame):
@@ -2837,6 +2963,22 @@ def _expected_us_ohlc_index(start_date, end_date):
         holidays.update(_us_market_holidays(year))
     return days[~days.normalize().isin(pd.DatetimeIndex(sorted(holidays)))]
 
+def _expected_ticker_ohlc_index(ticker, start_date, end_date):
+    if ticker == 'BTC-USD':
+        return pd.date_range(start_date, end_date, freq='D')
+    if ticker == 'BTC/IBIT':
+        # The pre-IBIT proxy trades every day; the ETF phase follows XNYS.
+        boundary = _ibit_first_trading_session()
+        proxy = pd.date_range(start_date, min(pd.Timestamp(end_date), boundary - pd.Timedelta(days=1)), freq='D')
+        live = _expected_us_ohlc_index(max(pd.Timestamp(start_date), boundary), end_date)
+        return proxy.union(live)
+    return _expected_us_ohlc_index(start_date, end_date)
+
+def _ibit_first_trading_session():
+    # IBIT exchange trading began Jan 11, distinct from Jan 5 fund inception.
+    # https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf
+    return pd.Timestamp('2024-01-11')
+
 def _shared_us_ohlc_index(raw_dict, tickers):
     bounds = []
     for ticker in dict.fromkeys(tickers or ()):
@@ -2849,7 +2991,7 @@ def _shared_us_ohlc_index(raw_dict, tickers):
         return pd.DatetimeIndex([])
     return _expected_us_ohlc_index(min((start for start, _end in bounds)), max((end for _start, end in bounds)))
 
-def _assert_us_internal_price_history(raw_dict, tickers, label='US'):
+def _assert_us_internal_price_history(raw_dict, tickers, label='US', *, expected_starts=None):
     problems = []
     for ticker in dict.fromkeys(tickers or ()):
         frame = (raw_dict or {}).get(ticker)
@@ -2858,10 +3000,17 @@ def _assert_us_internal_price_history(raw_dict, tickers, label='US'):
             problems.append(f'{ticker}: no valid open/close history')
             continue
         dates = pd.DatetimeIndex(frame.index)
-        if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing):
+        if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing) or dates.tz is not None or not dates.equals(dates.normalize()):
             problems.append(f'{ticker}: invalid daily date index')
             continue
-        expected = _expected_us_ohlc_index(dates[0], dates[-1])
+        if ticker == 'IBIT' and dates[0] < _ibit_first_trading_session():
+            problems.append(f'{ticker}: native OHLC before first trading session {_ibit_first_trading_session().date()}')
+            continue
+        expected_start = (expected_starts or {}).get(ticker, frame.attrs.get('history_expected_start', dates[0]))
+        expected = _expected_ticker_ohlc_index(ticker, min(pd.Timestamp(expected_start), dates[0]), dates[-1])
+        extra = dates.difference(expected)
+        if len(extra):
+            problems.append(f'{ticker}: non-session OHLC {extra[0].date()}')
         missing = expected.difference(valid)
         if len(missing) > 0:
             preview = ','.join((pd.Timestamp(day).date().isoformat() for day in missing[:3]))
@@ -2880,7 +3029,7 @@ def _retry_incomplete_us_price_history(us_raw, us_sources, tickers, *, reference
         best_valid = _valid_us_ohlc_index(best)
         if len(best_valid) == 0:
             continue
-        expected = _expected_us_ohlc_index(best.index[0], best.index[-1])
+        expected = _expected_ticker_ohlc_index(ticker, best.index[0], best.index[-1])
         best_missing = expected.difference(best_valid)
         if len(best_missing) == 0:
             continue
@@ -3044,6 +3193,10 @@ def _build_btc_ibit_formal_ohlc(us_raw, proxy_ticker='BTC-USD', live_ticker='IBI
     if len(live_valid) == 0:
         return proxy_prices
     switch_date = live_valid[0]
+    if live_ticker == 'IBIT':
+        switch_date = _ibit_first_trading_session()
+        if live_prices.index.min() < switch_date:
+            raise DataSchemaError('IBIT native OHLC before its first trading session 2024-01-11')
     return pd.concat([proxy_prices.loc[proxy_prices.index < switch_date], live_prices.loc[switch_date:]], axis=0).sort_index()
 
 def _build_proxy_live_spliced_series(proxy_series, live_series=None, switch_start=None, name=None, live_name=None):
@@ -5985,17 +6138,20 @@ def _v78_target_from_scores(score_row, vol_row, scale, top_n=US_ROT_TOP_N, abs_t
     raw_w = _us_raw_weights(score_row, vol_row, US_ROT_POOL, top_n, abs_threshold, prev_risky=None, threshold=1.0)
     return _apply_subb_btc_cap(_us_model_b(raw_w, scale))
 
+def _v79_subb_new_line_risk_parameters(line):
+    return {'bias': (0.25, 40, 1.5), 'logvol': (0.3, 40, 1.25)}[line]
+
 def run_v78_subb_new_line(close_df, line='bias', us_open=None, strict_open_execution=False):
     close_df = _apply_subb_btc_start_filter(close_df)
     w_assets = list(dict.fromkeys(US_ROT_POOL + ['BIL']))
     if line == 'bias':
         scores = _v78_score_bias_level(close_df)
-        target_vol, vol_window, max_leverage = (0.25, 40, 1.5)
+        target_vol, vol_window, max_leverage = _v79_subb_new_line_risk_parameters('bias')
         abs_threshold = 0.0
         start_idx = max(390, US_ROT_VOL_LB, vol_window) + 1
     elif line == 'logvol':
         scores = _v78_score_log_weighted(close_df)
-        target_vol, vol_window, max_leverage = (0.3, 40, 1.25)
+        target_vol, vol_window, max_leverage = _v79_subb_new_line_risk_parameters('logvol')
         abs_threshold = 0.0
         start_idx = max(320, US_ROT_VOL_LB, vol_window) + 1
     else:
@@ -8012,6 +8168,8 @@ def _v80_b78_active_weight_assets(*weight_dicts, min_abs=1e-12):
     return sorted(assets)
 
 def _v80_b78_us_open_row(date, assets, us_open, close_df, *, strict=False, context='US open execution'):
+    if strict:
+        _assert_us_execution_session(date, close_df, context=context)
     prices = {}
     missing = []
     fallback_assets = []
@@ -8276,6 +8434,7 @@ def _v80_b78_subb_final_effective_weights(row, assets):
 
 def _v80_us_spread_time_fractions(previous_date, date):
     previous_date, date = (pd.Timestamp(previous_date), pd.Timestamp(date))
+    _assert_us_next_session(previous_date, date, context='US financing')
     eastern = ZoneInfo('America/New_York')
     previous_hour = 13 if _is_us_early_close_session(previous_date) else 16
     close_hour = 13 if _is_us_early_close_session(date) else 16
@@ -9040,7 +9199,20 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
                 max_lev = US_ROT_MAX_LEV
                 volreg_enter = US_ROT_VOLREG_THRESHOLD
                 volreg_exit = US_ROT_VOLREG_EXIT_THRESHOLD
-            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜官方腿绝对动量>{abs_threshold:.0%}｜EMA评分半衰期{ema_half_life}日/年化评分>{ema_abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜目标波动{target_vol:.0%}｜杠杆上限{max_lev:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
+            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜官方腿绝对动量>{abs_threshold:.0%}｜EMA评分半衰期{ema_half_life}日/年化评分>{ema_abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
+            if label == 'B7.8':
+                window, ema_window = _v80_b78_US_ROT_VOL_WINDOW, _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS
+                bias_config = (_v80_b78_V78_SUBB_BIAS_TARGET_VOL, _v80_b78_V78_SUBB_BIAS_VOL_WINDOW, _v80_b78_V78_SUBB_BIAS_MAX_LEV)
+                logvol_config = (_v80_b78_V78_SUBB_LOGVOL_TARGET_VOL, _v80_b78_V78_SUBB_LOGVOL_VOL_WINDOW, _v80_b78_V78_SUBB_LOGVOL_MAX_LEV)
+            else:
+                window, ema_window = US_ROT_VOL_WINDOW, SUBB_V75_EMA_VOL_HALFLIFE_DAYS
+                bias_config = _v79_subb_new_line_risk_parameters('bias')
+                logvol_config = _v79_subb_new_line_risk_parameters('logvol')
+            w('| 腿 | 目标波动 | 波动估计 | 杠杆上限 |\n|:-|------:|:-|------:|\n')
+            for leg, config, mode in [('官方', (target_vol, window, max_lev), '滚动窗口'), ('EMA', (target_vol, ema_window, max_lev), 'EWMA半衰期'), ('Bias', bias_config, '滚动窗口'), ('LogVol', logvol_config, '滚动窗口')]:
+                target, days, cap = config
+                w(f'| {leg} | {target:.0%} | {mode}{days}日 | {cap:.2f}x |\n')
+            w('\n')
         if rows:
             w(f'| ETF | 当前已生效 | {target_title} | 调整量 |\n')
             w('|:-|------:|------:|------:|\n')
@@ -9892,6 +10064,8 @@ def _active_weight_assets(*weight_dicts, min_abs=1e-12):
     return sorted(assets)
 
 def _us_open_row(date, assets, us_open, close_df, *, strict=False, context='US open execution'):
+    if strict:
+        _assert_us_execution_session(date, close_df, context=context)
     prices = {}
     missing = []
     fallback_assets = []
@@ -10719,7 +10893,7 @@ def calc_monthly_metrics(ret_series, rf_monthly=0.0):
 def _performance_clean_daily_returns(ret_series, *, name='series'):
     raw = pd.Series(ret_series).copy()
     if len(raw) == 0:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     if not isinstance(raw.index, pd.DatetimeIndex):
         try:
             parsed_index = pd.to_datetime(raw.index, errors='raise')
@@ -10740,7 +10914,7 @@ def _performance_clean_daily_returns(ret_series, *, name='series'):
     values = pd.to_numeric(raw, errors='coerce')
     valid = values.notna()
     if not valid.any():
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     first = int(np.flatnonzero(valid.to_numpy())[0])
     last = int(np.flatnonzero(valid.to_numpy())[-1])
     values = values.iloc[first:last + 1]
@@ -10802,17 +10976,79 @@ def _performance_initial_period_anchors(daily_returns, cn_close, cn_dk_close, us
         anchors['Combined'] = max(candidates)
     return anchors
 
-def _performance_combined_daily_returns(daily_returns):
+def _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+    """One session-aware, confirmed cutoff for text, charts and workbooks."""
+    start, requested_end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
+    sources = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close, 'B7.8': us_rot_close, 'B7.9': us_rot_close, 'Sub-C': us_prod_daily}
+    ends = {}
+    for name, frame in sources.items():
+        if frame is None or len(frame) == 0:
+            raise ValueError(f'{name}: 报告无可用源数据')
+        ends[name] = pd.Timestamp(frame.index[-1]).normalize()
+    cutoff = min(requested_end, max(ends.values()))
+    # A closed market may legitimately end earlier. Only an absent required
+    # session reduces the shared cutoff; never compress US dates to CN dates.
+    while True:
+        earlier = cutoff
+        for name, last in ends.items():
+            if last < cutoff:
+                required = _performance_expected_sessions(name, last + pd.Timedelta(days=1), cutoff)
+                if len(required):
+                    earlier = min(earlier, last)
+        if earlier == cutoff:
+            break
+        cutoff = earlier
+    available = pd.DatetimeIndex(sorted(set().union(*(frame.index[frame.index <= cutoff] for frame in sources.values()))))
+    if len(available) == 0 or available[-1] < start:
+        raise ValueError('请求区间没有可用的确认收盘数据')
+    cutoff = pd.Timestamp(available[-1]).normalize()
+    generated = pd.Timestamp(beijing_now())
+    generated = generated.tz_localize('Asia/Shanghai') if generated.tzinfo is None else generated.tz_convert('Asia/Shanghai')
+    return {'requested_start': start, 'requested_end': requested_end,
+            'actual_start': start, 'actual_end': cutoff,
+            'sleeve_asof': {name: pd.Timestamp(frame.index[frame.index <= cutoff][-1]).normalize() for name, frame in sources.items() if len(frame.index[frame.index <= cutoff])},
+            'generated_at': generated.isoformat(), 'run_id': uuid.uuid4().hex[:12]}
+
+def _finalize_performance_report_context(context, daily_returns):
+    ranges = {}
+    for name, series in daily_returns.items():
+        clean = _performance_clean_daily_returns(series, name=name)
+        if not clean.empty:
+            ranges[name] = (clean.index[0], clean.index[-1])
+    if not ranges:
+        raise ValueError('请求区间没有可用策略收益')
+    context['sleeve_return_ranges'] = ranges
+    context['actual_start'] = min(bounds[0] for bounds in ranges.values())
+    context['actual_end'] = max(bounds[1] for bounds in ranges.values())
+    return context
+
+def _performance_report_filename(prefix, extension, context):
+    def stamp(key):
+        return pd.Timestamp(context[key]).strftime('%Y%m%d')
+    return f"{prefix}_req_{stamp('requested_start')}_{stamp('requested_end')}_actual_{stamp('actual_start')}_{stamp('actual_end')}_{context['run_id']}.{extension}"
+
+def _write_performance_report_context(w, context):
+    w(f"> 请求区间：{context['requested_start']:%Y-%m-%d} 至 {context['requested_end']:%Y-%m-%d}；实际收益覆盖：{context['actual_start']:%Y-%m-%d} 至 {context['actual_end']:%Y-%m-%d}。\n\n")
+    w('> 各袖确认收盘：' + '；'.join(f'{name} {date:%Y-%m-%d}' for name, date in context['sleeve_asof'].items()) + '。真实休市按零收益承接，交易日缺行拒绝计算。\n\n')
+    w(f"> 生成时间（北京时间）：{context['generated_at']}；报告编号：{context['run_id']}。\n\n")
+
+def _performance_expected_sessions(name, start, end):
+    if name in ('Sub-A', 'Sub-A-DK'):
+        return _expected_cn_sessions(start, end)
+    return _expected_us_ohlc_index(start, end)
+
+def _performance_combined_daily_returns(daily_returns, *, expected_sessions=None):
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     series_map = {}
     for name in PERFORMANCE_COMBO_ORDER:
         value = daily_returns.get(name)
         if value is None:
             continue
         cleaned = _performance_clean_daily_returns(value, name=name)
-        if len(cleaned) > 1:
+        if len(cleaned) > 0:
             series_map[name] = cleaned
     if len(series_map) < len(PERFORMANCE_COMBO_ORDER):
-        return pd.Series(dtype=float)
+        return empty
     common_start = max((series.index[0] for series in series_map.values()))
     latest_by_name = {name: series.index[-1] for name, series in series_map.items()}
     common_end = max(latest_by_name.values())
@@ -10821,10 +11057,20 @@ def _performance_combined_daily_returns(daily_returns):
         stale = min(latest_by_name, key=latest_by_name.get)
         raise ValueError(f'{stale}: stale sleeve end {latest_by_name[stale].date()} vs combined end {common_end.date()}')
     if common_end < common_start:
-        return pd.Series(dtype=float)
+        return empty
+    for name, series in series_map.items():
+        expected = (expected_sessions or {}).get(name)
+        if expected is None:
+            expected = _performance_expected_sessions(name, common_start, common_end)
+        else:
+            expected = pd.DatetimeIndex(expected)
+            expected = expected[(expected >= common_start) & (expected <= common_end)]
+        missing = expected.difference(series.index)
+        if len(missing):
+            raise ValueError(f'{name}: missing market-session return at {missing[0].date()}; refusing zero fill')
     union_dates = pd.DatetimeIndex(sorted(set().union(*(series.loc[common_start:common_end].index for series in series_map.values()))))
-    if len(union_dates) <= 1:
-        return pd.Series(dtype=float)
+    if len(union_dates) == 0:
+        return empty
     component_nav = {}
     for name, series in series_map.items():
         aligned_returns = series.reindex(union_dates).fillna(0.0)
@@ -10915,9 +11161,10 @@ def _write_performance_standard_window_table(w, daily_returns, end_date=None, fi
     return rows
 
 def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
+    ret_series = _performance_clean_daily_returns(ret_series, name='monthly aggregation')
     period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
     if len(period) == 0:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, index=pd.PeriodIndex([], freq='M'))
     return period.groupby(period.index.to_period('M')).apply(lambda x: (1 + x).prod() - 1)
 
 def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
@@ -11228,6 +11475,7 @@ def _parse_cn_num(s):
 
 def parse_date_range(text):
     try:
+        _validate_date_tokens(text)
         start, end = _parse_date_range_unchecked(text)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError('日期无效，请使用有效的年月日或完整起止日期。') from exc
@@ -11238,6 +11486,21 @@ def parse_date_range(text):
     if start > end:
         raise ValueError('日期范围无效：开始日期晚于结束日期。')
     return (start, end)
+
+def _validate_date_tokens(text):
+    # Validate the whole token before permissive natural-language extraction or
+    # LLM fallback can reinterpret an invalid day as just a month/year.
+    if re.search(r'(?<!\d)\d{4}[-年/.]\d+(?:[-月/.]\d+)?[日号月]?[A-Za-z_]', str(text)):
+        raise ValueError('日期无效：日期后不能紧接字母或科学计数法后缀。')
+    for token in re.finditer(r'(?=(?<!\d)(\d{4})[-年/.](\d+)(?:([-月/.])(\d+))?)', str(text)):
+        if len(token.group(2)) > 2:
+            raise ValueError('日期无效：月份不能超过两位。')
+        day = token.group(4)
+        if day and len(day) > 2:
+            # YYYY-MM-YYYY-MM is an existing valid month-range form.
+            next_year = token.group(3) == '-' and len(day) == 4 and re.match(r'[-年/.]\d{1,2}(?!\d)', str(text)[token.end(4):])
+            if not next_year:
+                raise ValueError('日期无效：日期日数不能超过两位。')
 
 def _parse_date_range_unchecked(text):
     now = pd.Timestamp(beijing_now()).normalize()
@@ -11353,6 +11616,7 @@ def _parse_date_range_unchecked(text):
     return (None, None)
 
 def parse_all_date_ranges(text):
+    _validate_date_tokens(text)
     parts = re.split('以及|、|；|;\\s*', text)
     if len(parts) == 1:
         parts = re.split('(?<=[年月日\\d])\\s*和\\s*(?=[近最过])', text)
@@ -12243,6 +12507,8 @@ def _subc_annual_close_date(year):
 def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ticker, prod_sig_b=None, blend_a=0.5, annual_rebalance_cost=None):
     if annual_rebalance_cost is None:
         annual_rebalance_cost = PROD_COMMISSION
+    if not np.isfinite(annual_rebalance_cost) or not 0.0 <= annual_rebalance_cost < 1.0:
+        raise ValueError('Sub-C annual commission must be finite and in [0, 1)')
     required = [cfg['proxy'] for cfg in portfolio.values()] + [cash_ticker]
     missing = sorted(set(required) - set(us_prod_daily.columns))
     if missing:
@@ -12308,8 +12574,20 @@ def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ti
             row[f'pre_close_weight::{name}'] = float(before_rebalance[name])
         if pd.Timestamp(date).normalize() in annual_closes:
             target = pd.Series({name: cfg['w'] for name, cfg in portfolio.items()}, dtype=float)
-            turnover = float((target - before_rebalance).abs().sum())
-            rebalance_cost = float(close_value * turnover * annual_rebalance_cost)
+            # Targets are funded from post-fee NAV. Solve fee against the actual
+            # trades, rather than charging turnover of pre-fee target weights.
+            cost_fraction = 0.0
+            for _ in range(100):
+                turnover = float((target * (1.0 - cost_fraction) - before_rebalance).abs().sum())
+                next_cost = turnover * annual_rebalance_cost
+                if abs(next_cost - cost_fraction) <= 1e-16:
+                    cost_fraction = next_cost
+                    break
+                cost_fraction = next_cost
+            else:
+                raise ValueError('Sub-C annual fee did not converge')
+            turnover = float((target * (1.0 - cost_fraction) - before_rebalance).abs().sum())
+            rebalance_cost = float(close_value * cost_fraction)
             holdings = target * (close_value - rebalance_cost)
             row['asset_turnover'] = turnover
             row['asset_cost_fraction'] = rebalance_cost / close_value
@@ -12753,7 +13031,7 @@ def generate_signal_excel(date_str, signal_info, rebalance_records, cn_dk_result
     output.seek(0)
     return output.getvalue()
 
-def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalance_records, is_short_period=False, *, standard_windows=None):
+def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalance_records, is_short_period=False, *, standard_windows=None, report_context=None):
     output = io.BytesIO()
     with xlsxwriter.Workbook(output, {'in_memory': True}) as wb:
         header_fmt = wb.add_format({'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1})
@@ -12821,6 +13099,16 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
             basis.write(i, 0, label, header_fmt)
             basis.write(i, 1, note, wrap_fmt)
             basis.set_row(i, 46)
+        if report_context is not None:
+            metadata = wb.add_worksheet('报告元数据')
+            metadata.set_column('A:A', 30)
+            metadata.set_column('B:B', 68)
+            fields = [(key, report_context[key]) for key in ('requested_start', 'requested_end', 'actual_start', 'actual_end', 'generated_at', 'run_id')]
+            fields += [(f'{name} 确认收盘', date) for name, date in report_context.get('sleeve_asof', {}).items()]
+            fields += [(f'{name} 收益覆盖', f'{bounds[0]:%Y-%m-%d} 至 {bounds[1]:%Y-%m-%d}') for name, bounds in report_context.get('sleeve_return_ranges', {}).items()]
+            for i, (key, value) in enumerate(fields):
+                metadata.write(i, 0, key, header_fmt)
+                metadata.write(i, 1, value.strftime('%Y-%m-%d') if isinstance(value, pd.Timestamp) else str(value), cell_fmt)
     output.seek(0)
     return output.getvalue()
 
@@ -12930,7 +13218,9 @@ class CombinedStrategyBase:
         _formal_validation_tickers = [ticker for ticker in _formal_us_history_tickers if ticker != US_ROT_BTC_TICKER]
         _formal_validation_raw['BTC/IBIT'] = _build_btc_ibit_formal_ohlc(us_raw)
         _formal_validation_tickers.append('BTC/IBIT')
-        _assert_us_internal_price_history(_formal_validation_raw, _formal_validation_tickers, label='Formal US price history')
+        _formal_expected_starts = {ticker: _us_history_expected_start(ticker, '2003-01-01', _formal_validation_raw.get(ticker)) for ticker in _formal_validation_tickers if ticker != 'BTC/IBIT'}
+        _formal_expected_starts['BTC/IBIT'] = _us_history_expected_start('BTC-USD', '2003-01-01', us_raw.get('BTC-USD'))
+        _assert_us_internal_price_history(_formal_validation_raw, _formal_validation_tickers, label='Formal US price history', expected_starts=_formal_expected_starts)
         rot_tickers = _v80_subb_all_rot_tickers(us_raw)
         _late_rot = _us_rot_late_history_tickers()
         rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
@@ -13699,6 +13989,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
+            report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            end_date = report_context['actual_end']
             w('⏳ 正在计算策略净值...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_daily_ret = cn_result['return']
@@ -13712,22 +14004,24 @@ class CombinedStrategyV78(CombinedStrategyBase):
         b78_period = b78_daily_ret[(b78_daily_ret.index >= start_date) & (b78_daily_ret.index <= end_date)]
         us_period = us_daily_ret[(us_daily_ret.index >= start_date) & (us_daily_ret.index <= end_date)]
         subc_period = subc_daily_ret[(subc_daily_ret.index >= start_date) & (subc_daily_ret.index <= end_date)]
-        if all((len(s) < 2 for s in (cn_period, dk_period, b78_period, us_period, subc_period))):
+        if all((len(s) < 1 for s in (cn_period, dk_period, b78_period, us_period, subc_period))):
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间数据不足")
         nav_series = {}
-        if len(cn_period) > 1:
+        if len(cn_period) > 0:
             nav_series['Sub-A'] = _nav_from_period_returns(cn_period)
-        if len(dk_period) > 1:
+        if len(dk_period) > 0:
             nav_series['Sub-A-DK'] = _nav_from_period_returns(dk_period)
-        if len(b78_period) > 1:
+        if len(b78_period) > 0:
             nav_series['B7.8'] = _nav_from_period_returns(b78_period)
-        if len(us_period) > 1:
+        if len(us_period) > 0:
             nav_series['B7.9'] = _nav_from_period_returns(us_period)
-        if len(subc_period) > 1:
+        if len(subc_period) > 0:
             nav_series['Sub-C'] = _nav_from_period_returns(subc_period)
         combined_period = _performance_combined_daily_returns({'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period})
-        if len(combined_period) > 1:
+        if len(combined_period) > 0:
             nav_series['Combined'] = _nav_from_period_returns(combined_period)
+        _finalize_performance_report_context(report_context, {'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period, 'Combined': combined_period})
+        start_date, end_date = report_context['actual_start'], report_context['actual_end']
         if not nav_series:
             raise poe.BotError('不能算该时段的净值曲线')
         colors = {'Sub-A': '#E74C3C', 'Sub-A-DK': '#9B59B6', 'B7.8': '#3498DB', 'B7.9': '#1F4E79', 'Sub-C': '#16A085', 'Combined': '#F39C12'}
@@ -13741,6 +14035,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             w(f'## 📈 净值曲线: {period_label}\n\n')
+            _write_performance_report_context(w, report_context)
             _write_suba_volume_query_warning(msg, cn_result)
             notes = _performance_basis_notes()
             if 'Sub-A' in nav_series or 'Combined' in nav_series:
@@ -13759,7 +14054,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         display = labels[name]
                         w(f'| {display} | {final_nav:.4f} | {ret:+.2f}% | {dd:.2f}% |\n')
                 w('\n')
-            msg.attach_file(name=f"nav_chart_{datetime.now().strftime('%Y%m%d')}.png", contents=chart_bytes, content_type='image/png', is_inline=True)
+            msg.attach_file(name=_performance_report_filename('nav_chart', 'png', report_context), contents=chart_bytes, content_type='image/png', is_inline=True)
 
     def _handle_performance(self, query, _forced_range=None):
         if _forced_range:
@@ -13770,14 +14065,9 @@ class CombinedStrategyV78(CombinedStrategyBase):
             raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 表现 今年 / 去年\n- 表现 过去两年 / 最近6个月\n- 表现 2024-01到2025-01\n- 表现 2024至今\n- 表现 2024年\n- 表现 2024年3月15日到2025年1月20日')
         with _sm() as msg:
             w = msg.write
-            requested_end_date = pd.Timestamp(end_date).normalize()
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
-            available_end_dates = [pd.Timestamp(frame.index[-1]).normalize() for frame in (cn_close, cn_dk_close, us_rot_close, us_prod_daily) if frame is not None and len(frame) > 0]
-            if available_end_dates:
-                available_end_date = min(available_end_dates)
-                if requested_end_date > available_end_date:
-                    end_date = available_end_date
-                    w(f'⚠️ 请求区间原定截至 {requested_end_date.date().isoformat()}；正式可用数据共同截至 {end_date.date().isoformat()}，本次绩效按实际确认收盘计算。\n')
+            report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            end_date = report_context['actual_end']
             w('⏳ 正在计算策略...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         b78_result, _ = _v80_subb_results(us_rot_result)
@@ -13790,6 +14080,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all)
         first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period})
+        _finalize_performance_report_context(report_context, {'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period, 'Combined': comb_daily})
+        start_date, end_date = report_context['actual_start'], report_context['actual_end']
         cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date)
         dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result['return'], start_date, end_date)
         b78_monthly_period = _monthly_returns_from_daily_window(b78_result['return'], start_date, end_date)
@@ -13914,9 +14206,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             w(f"## 📈 策略表现: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}\n\n")
+            _write_performance_report_context(w, report_context)
             _write_suba_volume_query_warning(msg, cn_result)
             if chart_bytes:
-                msg.attach_file(name=f"perf_nav_{datetime.now().strftime('%Y%m%d')}.png", contents=chart_bytes, content_type='image/png', is_inline=True)
+                msg.attach_file(name=_performance_report_filename('perf_nav', 'png', report_context), contents=chart_bytes, content_type='image/png', is_inline=True)
                 w('\n\n')
             range_info = {}
             if len(cn_monthly_period) >= 1:
@@ -14011,8 +14304,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             else:
                 w('该时段无调仓记录\n')
         now_str = beijing_now().strftime('%Y%m%d')
-        excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period, standard_windows=standard_windows)
-        filename = f'performance_{now_str}.xlsx'
+        excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period, standard_windows=standard_windows, report_context=report_context)
+        filename = _performance_report_filename('performance', 'xlsx', report_context)
         with _sm() as msg:
             w = msg.write
             msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

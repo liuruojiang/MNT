@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "hash_basis": "Git blob bytes (LF text), excluding this manifest itself",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "base_commit": "c2ee3f5eaa27b2448dce2b60f3f5cb31199df405",
+  "code_and_tests_identical_to_tested_tree": "19823e6ee39db889929cc3ae18bc5b0ae2b42550",
+  "files": {
+    "docs/evidence/v80_script_repairs_20261015/README.md": {
+      "bytes": 2843,
+      "sha256": "ffecf30cfaa0a5471d0e94ca268da3017da785627c7aedbbd730053b5980a6f3"
+    },
+    "docs/evidence/v80_script_repairs_20261015/artifact_reconciliation.json": {
+      "bytes": 13847,
+      "sha256": "f84961cbbf03c2f7edb654ac66fa514349e95537338a6703daef7de1b78c12e6"
+    },
+    "docs/evidence/v80_script_repairs_20261015/chart_parity.json": {
+      "bytes": 658,
+      "sha256": "6b740b760a154fc8785691d361c2b6c81a72dc96f49e536d6082c03f452f20d2"
+    },
+    "docs/evidence/v80_script_repairs_20261015/clean_export_test_results.json": {
+      "bytes": 4446,
+      "sha256": "10d9493f44cd8b4ae37cebac095932af6b6d4bf4c0e0f73696f26b1e5da1581e"
+    },
+    "docs/evidence/v80_script_repairs_20261015/cn_calendar_embedded_evidence.json": {
+      "bytes": 1370,
+      "sha256": "5f70fcf8949163c03911410f41d2a37e6c7815547e33616efcd0b5f8b5399d0c"
+    },
+    "docs/evidence/v80_script_repairs_20261015/evidence_origins.json": {
+      "bytes": 2141,
+      "sha256": "ce355e6f68c4db6c13dee004aec8f3b917cc6daeac9bb9515b850778a3bcc2a4"
+    },
+    "docs/evidence/v80_script_repairs_20261015/formal_fetch_verification.json": {
+      "bytes": 3549,
+      "sha256": "5a25ad5333781f269942054c68701199f9006a8aa00e9a6f807182f62d909827"
+    },
+    "docs/evidence/v80_script_repairs_20261015/frozen_replay_verification.json": {
+      "bytes": 4748,
+      "sha256": "995687dc887f973caf436035a47c54fe2316e0e4e8ea98b440bc05b1abfa9abf"
+    },
+    "docs/evidence/v80_script_repairs_20261015/full_local_test_results.json": {
+      "bytes": 859,
+      "sha256": "864aacb8fccefd4cd70e3e00b32ce2ea12c3a1e0909c9a836d202d973536c9c7"
+    },
+    "docs/evidence/v80_script_repairs_20261015/syntax_check.json": {
+      "bytes": 232,
+      "sha256": "5dfc524f3565ccc9e740c6707c983b646aa6db65edd29939e84773e0b9700b7a"
+    },
+    "docs/evidence/v80_script_repairs_20261015/us_verified_history_start_bounds.json": {
+      "bytes": 1195,
+      "sha256": "5f2f5ff038ab269d1498b6121ff104b72cf0b9a7c93dad3caa6d707739f7a7dc"
+    },
+    "docs/evidence/v80_script_repairs_20261015/window_metric_deltas.csv": {
+      "bytes": 1070,
+      "sha256": "58055ecc5f1dab24b61e262727fa08886db6440b460c0e32df1f317f4e88a7ae"
+    },
+    "docs/evidence/v80_script_repairs_20261015/window_metrics.csv": {
+      "bytes": 2245,
+      "sha256": "8f2b58baf73547f7cc25ba92f8e6f6f421ecf5f1eabc46f7e617309388e5773e"
+    },
+    "docs/v80_script_repairs_20261015.md": {
+      "bytes": 10640,
+      "sha256": "f9c8d15845e5ce23c7abe6b53401ab8b9fd54cf776f1d261f5f28bfb6be23fe7"
+    },
+    "docs/v80_strategy_and_script_adversarial_audit_20261013.md": {
+      "bytes": 17057,
+      "sha256": "60387f418b42a8c17c6bd0201ca859d5f96635700d82b0658734e15b3bdf1783"
+    },
+    "mnt_bot V 8.0 plus.py": {
+      "bytes": 851729,
+      "sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930"
+    },
+    "tests/test_v78_cn_live_freshness.py": {
+      "bytes": 22583,
+      "sha256": "1759935d8edd6e8ced0ad8a60b7d0f09705c6740c2aa974717888c91f24593f3"
+    },
+    "tests/test_v80_data_contract_repairs_20261015.py": {
+      "bytes": 15397,
+      "sha256": "43e8294f201957e5ed9123d6c17b6ff09f81a9b9af8aa8a5f8a1831ecaf7bd71"
+    },
+    "tests/test_v80_doublecheck_data_math_20261007.py": {
+      "bytes": 13669,
+      "sha256": "688ebee868b37038e45e5c4bcc145a9b551add1613c73b98390f6e951b9545e0"
+    },
+    "tests/test_v80_fee_and_parser_repairs_20261015.py": {
+      "bytes": 7367,
+      "sha256": "f560239989b4b06d6f0b9a8932255e7355186677ce72996d140175d2e3261615"
+    },
+    "tests/test_v80_reporting_repairs_20261015.py": {
+      "bytes": 14845,
+      "sha256": "6ac678daa56690ce8b89a52daf10a1116be2f66c6247d1aed5336072a36d7473"
+    }
+  },
+  "delivery_scope": "V8.0 script repairs, five modified/new test files, two audit reports and compact acceptance evidence; no Poe deployment or live trading."
+}

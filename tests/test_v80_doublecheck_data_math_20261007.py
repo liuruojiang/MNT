@@ -57,8 +57,6 @@ def synthetic_vendor_fetch(v80, monkeypatch, clock, include_us_live,
     )]
     cn = pd.DataFrame({"close": 100.0 + np.arange(len(cn_dates)) * 0.01},
                       index=cn_dates)
-    us_dates = v80._expected_us_ohlc_index("2026-01-05", us_end)
-    us = pd.DataFrame({"open": 100.0, "close": 100.0}, index=us_dates)
     monkeypatch.setattr(v80, "beijing_now", lambda: current)
     monkeypatch.setattr(v80, "fetch_cn_kline", lambda *a, **k:
                         (cn.copy(), "SYNTHETIC_TEST_ONLY"))
@@ -67,7 +65,13 @@ def synthetic_vendor_fetch(v80, monkeypatch, clock, include_us_live,
     fetch_counts = {}
     def vendor_us(ticker, *args, **kwargs):
         fetch_counts[ticker] = fetch_counts.get(ticker, 0) + 1
-        response = us.copy()
+        # This is a freshness-boundary fixture, not a deliberately truncated
+        # history. Meet the native coverage/calendar contract so the target
+        # assertion still exercises future-row capping after the Oct 15 fix.
+        start = v80._US_VERIFIED_HISTORY_STARTS[ticker]
+        dates = (pd.date_range(start, us_end, freq='D') if ticker == 'BTC-USD'
+                 else v80._expected_us_ohlc_index(start, us_end))
+        response = pd.DataFrame({'open': 100.0, 'close': 100.0}, index=dates)
         if retry_spy_gap and ticker == "SPY" and fetch_counts[ticker] == 1:
             response.loc[pd.Timestamp("2026-09-23"), "open"] = np.nan
         return response, "Yahoo"

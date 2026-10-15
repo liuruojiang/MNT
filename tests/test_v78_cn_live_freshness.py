@@ -247,7 +247,15 @@ def test_performance_fetch_uses_previous_common_cn_close_without_relaxing_signal
 
     monkeypatch.setattr(module, "fetch_cn_kline", fetch_cn)
     monkeypatch.setattr(module, "_fetch_cn_dk_price_index", lambda _idx, _secid: (cn_frame("2026-09-10"), "fixture-dk"))
-    monkeypatch.setattr(module, "fetch_yahoo", lambda _ticker: (cn_frame("2026-09-10").rename(columns={"close": "close"}).assign(open=lambda x: x["close"]), "fixture-us"))
+    def us_fixture(ticker):
+        # Synthetic prices isolate the CN freshness gate. US history must now
+        # cover its verified start and genuine sessions, not CN business days.
+        start = module._US_VERIFIED_HISTORY_STARTS[ticker]
+        dates = (pd.date_range(start, '2026-09-10', freq='D') if ticker == 'BTC-USD'
+                 else module._expected_us_ohlc_index(start, '2026-09-10'))
+        return pd.DataFrame({'open': 100.0, 'close': 100.0}, index=dates), 'fixture-us'
+
+    monkeypatch.setattr(module, "fetch_yahoo", us_fixture)
 
     class Sink:
         def __init__(self, chunks):

@@ -1,0 +1,429 @@
+{
+  "status": "PASS",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "basis": "Frozen real-input replay artifacts; read-only XLSX cell extraction and independent daily-return capital arithmetic; no production import or rerun",
+  "data_is_current": false,
+  "network": false,
+  "workbooks_checked": 4,
+  "daily_sha256": "ae64bb4e077fcb89814f3ca1bcaaeb2903a93684bf6ceb84c76d7109b4c0bf4b",
+  "window_metrics_sha256": "5210f51f28891510d9f16ad3fd713a6e6f5cf0b578f8a020dc97b5652561f58d",
+  "numeric_tolerance": 1e-10,
+  "max_abs_numeric_error": 7.034373084024992e-13,
+  "numeric_comparisons": 229,
+  "standard_window_cells_checked": 120,
+  "monthly_cells_checked": 96,
+  "csv_standard_window_checks": [
+    {
+      "window": "Full",
+      "sleeve": "Sub-A",
+      "display": "20.60% / -21.22%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "Sub-A",
+      "display": "N/A (insufficient post-start history: starts 2017-09-19 after required 2016-09-25)"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "Sub-A",
+      "display": "24.57% / -18.65%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "Sub-A",
+      "display": "43.43% / -16.24%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "Sub-A",
+      "display": "13.85% / -16.24%"
+    },
+    {
+      "window": "Full",
+      "sleeve": "Sub-A-DK",
+      "display": "17.49% / -15.48%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "Sub-A-DK",
+      "display": "20.11% / -15.48%"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "Sub-A-DK",
+      "display": "20.65% / -15.48%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "Sub-A-DK",
+      "display": "23.00% / -15.48%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "Sub-A-DK",
+      "display": "12.53% / -15.48%"
+    },
+    {
+      "window": "Full",
+      "sleeve": "B7.8",
+      "display": "12.90% / -12.74%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "B7.8",
+      "display": "19.14% / -12.45%"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "B7.8",
+      "display": "24.14% / -12.06%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "B7.8",
+      "display": "35.31% / -12.06%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "B7.8",
+      "display": "30.68% / -12.06%"
+    },
+    {
+      "window": "Full",
+      "sleeve": "B7.9",
+      "display": "17.43% / -18.26%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "B7.9",
+      "display": "26.42% / -14.51%"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "B7.9",
+      "display": "34.50% / -14.51%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "B7.9",
+      "display": "50.07% / -13.00%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "B7.9",
+      "display": "37.33% / -13.00%"
+    },
+    {
+      "window": "Full",
+      "sleeve": "Sub-C",
+      "display": "15.73% / -20.57%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "Sub-C",
+      "display": "N/A (insufficient post-start history: starts 2020-12-03 after required 2016-09-25)"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "Sub-C",
+      "display": "14.08% / -20.57%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "Sub-C",
+      "display": "24.91% / -9.77%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "Sub-C",
+      "display": "17.76% / -8.14%"
+    },
+    {
+      "window": "Full",
+      "sleeve": "Combined",
+      "display": "23.87% / -7.49%"
+    },
+    {
+      "window": "10Y",
+      "sleeve": "Combined",
+      "display": "N/A (insufficient post-start history: starts 2020-12-03 after required 2016-09-25)"
+    },
+    {
+      "window": "5Y",
+      "sleeve": "Combined",
+      "display": "23.57% / -7.49%"
+    },
+    {
+      "window": "3Y",
+      "sleeve": "Combined",
+      "display": "35.68% / -7.49%"
+    },
+    {
+      "window": "1Y",
+      "sleeve": "Combined",
+      "display": "24.26% / -7.04%"
+    }
+  ],
+  "workbooks": [
+    {
+      "file": "query_4_performance_req_20250926_20260926_actual_20250926_20260925_5278cbf7f1ac.xlsx",
+      "sha256": "f0f4c8ef9dade0888fbda73846b87fc3c50fe2ac1425cab8d19c244ead4d5829",
+      "metadata": {
+        "requested_start": "2025-09-26",
+        "requested_end": "2026-09-26",
+        "actual_start": "2025-09-26",
+        "actual_end": "2026-09-25",
+        "generated_at": "2026-09-26T19:40:51.800117+08:00",
+        "run_id": "5278cbf7f1ac",
+        "Sub-A 确认收盘": "2026-09-24",
+        "Sub-A-DK 确认收盘": "2026-09-24",
+        "B7.8 确认收盘": "2026-09-25",
+        "B7.9 确认收盘": "2026-09-25",
+        "Sub-C 确认收盘": "2026-09-25",
+        "Sub-A 收益覆盖": "2025-09-26 至 2026-09-24",
+        "Sub-A-DK 收益覆盖": "2025-09-26 至 2026-09-24",
+        "B7.8 收益覆盖": "2025-09-26 至 2026-09-25",
+        "B7.9 收益覆盖": "2025-09-26 至 2026-09-25",
+        "Sub-C 收益覆盖": "2025-09-26 至 2026-09-25",
+        "Combined 收益覆盖": "2025-09-26 至 2026-09-25"
+      },
+      "overview": {
+        "Sub-A": {
+          "cumulative": 0.13821300771751832,
+          "annual": 0.1387191383527131,
+          "max_dd": -0.16242816755180245,
+          "annualization_anchor": "2025-09-25"
+        },
+        "Sub-A-DK": {
+          "cumulative": 0.1274078364270539,
+          "annual": 0.12787221751000266,
+          "max_dd": -0.15479377018730556,
+          "annualization_anchor": "2025-09-25"
+        },
+        "B7.8": {
+          "cumulative": 0.3141035943101693,
+          "annual": 0.3143494759726988,
+          "max_dd": -0.12060677410604859,
+          "annualization_anchor": "2025-09-25"
+        },
+        "B7.9": {
+          "cumulative": 0.3792500006854893,
+          "annual": 0.37955379021248015,
+          "max_dd": -0.1300177069118379,
+          "annualization_anchor": "2025-09-25"
+        },
+        "Sub-C": {
+          "cumulative": 0.1852966686332136,
+          "annual": 0.18543468505903604,
+          "max_dd": -0.0814060774443921,
+          "annualization_anchor": "2025-09-25"
+        },
+        "Combined": {
+          "cumulative": 0.23410284621078237,
+          "annual": 0.2342806579624772,
+          "max_dd": -0.06781627001812518,
+          "annualization_anchor": "2025-09-25"
+        }
+      },
+      "monthly_cells_checked": 78,
+      "standard_window_cells_checked": 30,
+      "common_asof_check": "2026-09-25 US session retained; CN 2026-09-25 holiday uses latest confirmed CN close 2026-09-24"
+    },
+    {
+      "file": "query_6_performance_req_20260924_20260924_actual_20260924_20260924_8e2c87deaea2.xlsx",
+      "sha256": "3d52a8ef004948489bd8137c8e85422c68b9e358fce71ed1f2a92cc8e797b2cb",
+      "metadata": {
+        "requested_start": "2026-09-24",
+        "requested_end": "2026-09-24",
+        "actual_start": "2026-09-24",
+        "actual_end": "2026-09-24",
+        "generated_at": "2026-09-26T19:40:51.800117+08:00",
+        "run_id": "8e2c87deaea2",
+        "Sub-A 确认收盘": "2026-09-24",
+        "Sub-A-DK 确认收盘": "2026-09-24",
+        "B7.8 确认收盘": "2026-09-24",
+        "B7.9 确认收盘": "2026-09-24",
+        "Sub-C 确认收盘": "2026-09-24",
+        "Sub-A 收益覆盖": "2026-09-24 至 2026-09-24",
+        "Sub-A-DK 收益覆盖": "2026-09-24 至 2026-09-24",
+        "B7.8 收益覆盖": "2026-09-24 至 2026-09-24",
+        "B7.9 收益覆盖": "2026-09-24 至 2026-09-24",
+        "Sub-C 收益覆盖": "2026-09-24 至 2026-09-24",
+        "Combined 收益覆盖": "2026-09-24 至 2026-09-24"
+      },
+      "overview": {
+        "Sub-A": {
+          "cumulative": 0.0001211499702025165,
+          "annual": null,
+          "max_dd": 0.0,
+          "annualization_anchor": null
+        },
+        "Sub-A-DK": {
+          "cumulative": -0.006859169853712932,
+          "annual": null,
+          "max_dd": -0.006859169853712932,
+          "annualization_anchor": null
+        },
+        "B7.8": {
+          "cumulative": 0.001506468694180585,
+          "annual": null,
+          "max_dd": 0.0,
+          "annualization_anchor": null
+        },
+        "B7.9": {
+          "cumulative": 0.0020389016407131866,
+          "annual": null,
+          "max_dd": 0.0,
+          "annualization_anchor": null
+        },
+        "Sub-C": {
+          "cumulative": -0.00209264465869885,
+          "annual": null,
+          "max_dd": -0.00209264465869885,
+          "annualization_anchor": null
+        },
+        "Combined": {
+          "cumulative": -0.000929422313157513,
+          "annual": null,
+          "max_dd": -0.000929422313157513,
+          "annualization_anchor": null
+        }
+      },
+      "monthly_cells_checked": 6,
+      "standard_window_cells_checked": 30,
+      "single_day_check": {
+        "cell": "绩效概览!G2",
+        "observed": -0.000929422313157513,
+        "weighted_sleeve_sum": -0.00092942231315751,
+        "annual_cell_G3": "N/A"
+      }
+    },
+    {
+      "file": "query_7_performance_req_20260901_20260915_actual_20260901_20260915_4c66a2b92585.xlsx",
+      "sha256": "1345dbe029bcc15132ba2fa5d322511578bc0f9a810f8e384493611efaa7655c",
+      "metadata": {
+        "requested_start": "2026-09-01",
+        "requested_end": "2026-09-15",
+        "actual_start": "2026-09-01",
+        "actual_end": "2026-09-15",
+        "generated_at": "2026-09-26T19:40:51.800117+08:00",
+        "run_id": "4c66a2b92585",
+        "Sub-A 确认收盘": "2026-09-15",
+        "Sub-A-DK 确认收盘": "2026-09-15",
+        "B7.8 确认收盘": "2026-09-15",
+        "B7.9 确认收盘": "2026-09-15",
+        "Sub-C 确认收盘": "2026-09-15",
+        "Sub-A 收益覆盖": "2026-09-01 至 2026-09-15",
+        "Sub-A-DK 收益覆盖": "2026-09-01 至 2026-09-15",
+        "B7.8 收益覆盖": "2026-09-01 至 2026-09-15",
+        "B7.9 收益覆盖": "2026-09-01 至 2026-09-15",
+        "Sub-C 收益覆盖": "2026-09-01 至 2026-09-15",
+        "Combined 收益覆盖": "2026-09-01 至 2026-09-15"
+      },
+      "overview": {
+        "Sub-A": {
+          "cumulative": 0.0013334572180350168,
+          "annual": 0.03298023257773419,
+          "max_dd": 0.0,
+          "annualization_anchor": "2026-08-31"
+        },
+        "Sub-A-DK": {
+          "cumulative": -0.010756208913339171,
+          "annual": -0.23151364320334755,
+          "max_dd": -0.015745442327579684,
+          "annualization_anchor": "2026-08-31"
+        },
+        "B7.8": {
+          "cumulative": 0.019732719892800787,
+          "annual": 0.6093212094600213,
+          "max_dd": -0.013036434353049797,
+          "annualization_anchor": "2026-08-31"
+        },
+        "B7.9": {
+          "cumulative": 0.03521253791276524,
+          "annual": 1.322570427670318,
+          "max_dd": -0.01576838752511811,
+          "annualization_anchor": "2026-08-31"
+        },
+        "Sub-C": {
+          "cumulative": -0.0208701411228428,
+          "annual": -0.40164189735951306,
+          "max_dd": -0.029526032055324447,
+          "annualization_anchor": "2026-08-31"
+        },
+        "Combined": {
+          "cumulative": 0.0033145964699647923,
+          "annual": 0.08391225876618358,
+          "max_dd": -0.01006139617351376,
+          "annualization_anchor": "2026-08-31"
+        }
+      },
+      "monthly_cells_checked": 6,
+      "standard_window_cells_checked": 30
+    },
+    {
+      "file": "query_7_performance_req_20260916_20260926_actual_20260916_20260925_e397ba593583.xlsx",
+      "sha256": "c5272567c3fdc6187216f1ae56b4d411ede08b8f84111a8bf11195cb4722c24a",
+      "metadata": {
+        "requested_start": "2026-09-16",
+        "requested_end": "2026-09-26",
+        "actual_start": "2026-09-16",
+        "actual_end": "2026-09-25",
+        "generated_at": "2026-09-26T19:40:51.800117+08:00",
+        "run_id": "e397ba593583",
+        "Sub-A 确认收盘": "2026-09-24",
+        "Sub-A-DK 确认收盘": "2026-09-24",
+        "B7.8 确认收盘": "2026-09-25",
+        "B7.9 确认收盘": "2026-09-25",
+        "Sub-C 确认收盘": "2026-09-25",
+        "Sub-A 收益覆盖": "2026-09-16 至 2026-09-24",
+        "Sub-A-DK 收益覆盖": "2026-09-16 至 2026-09-24",
+        "B7.8 收益覆盖": "2026-09-16 至 2026-09-25",
+        "B7.9 收益覆盖": "2026-09-16 至 2026-09-25",
+        "Sub-C 收益覆盖": "2026-09-16 至 2026-09-25",
+        "Combined 收益覆盖": "2026-09-16 至 2026-09-25"
+      },
+      "overview": {
+        "Sub-A": {
+          "cumulative": -0.00928703787527596,
+          "annual": -0.3152216042868965,
+          "max_dd": -0.009766991883799037,
+          "annualization_anchor": "2026-09-15"
+        },
+        "Sub-A-DK": {
+          "cumulative": 0.008543574742982063,
+          "annual": 0.4123485841310053,
+          "max_dd": -0.01008197038945935,
+          "annualization_anchor": "2026-09-15"
+        },
+        "B7.8": {
+          "cumulative": 0.007601935342551824,
+          "annual": 0.31865282377281035,
+          "max_dd": -0.005329949943491785,
+          "annualization_anchor": "2026-09-15"
+        },
+        "B7.9": {
+          "cumulative": 0.0016598014092270574,
+          "annual": 0.062446205025056045,
+          "max_dd": -0.007706406915271913,
+          "annualization_anchor": "2026-09-15"
+        },
+        "Sub-C": {
+          "cumulative": 0.014190874112486762,
+          "annual": 0.6731003216541973,
+          "max_dd": -0.01714547671462363,
+          "annualization_anchor": "2026-09-15"
+        },
+        "Combined": {
+          "cumulative": 0.005998090114257781,
+          "annual": 0.24411673138723122,
+          "max_dd": -0.007152366585791214,
+          "annualization_anchor": "2026-09-15"
+        }
+      },
+      "monthly_cells_checked": 6,
+      "standard_window_cells_checked": 30
+    }
+  ],
+  "scope": "Cumulative return, annual return, daily max drawdown, monthly compounded returns, Full/10Y/5Y/3Y/1Y annual/MDD cells and chat, report metadata, single-day total, chart terminal NAV. Static generated workbooks; no claim of live Excel recalculation."
+}

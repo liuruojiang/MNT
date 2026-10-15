@@ -1,0 +1,154 @@
+{
+  "status": "PASS",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "baseline_sha256": "9b2e98e06043d8763049af60843ac09b1078a02feaed2ae39cfef3545a3cf068",
+  "clock_beijing": "2026-09-26 19:40:51.800117",
+  "network": false,
+  "data_is_current": false,
+  "basis": "frozen real data / formal paper model / strict adjusted open",
+  "unchanged_existing_config_assignments": 292,
+  "new_validation_config_fields": [
+    "_CN_VERIFIED_CALENDAR_END",
+    "_CN_VERIFIED_CALENDAR_START",
+    "_CN_VERIFIED_CLOSED_DAYS",
+    "_US_VERIFIED_HISTORY_STARTS"
+  ],
+  "return_differences": {
+    "Sub-A": {
+      "max_abs_daily_delta": 9.978725745013461e-17,
+      "changed_days_over_1e12": 0
+    },
+    "Sub-A-DK": {
+      "max_abs_daily_delta": 9.974659986866641e-17,
+      "changed_days_over_1e12": 0
+    },
+    "B7.8": {
+      "max_abs_daily_delta": 6.166941957097549e-16,
+      "changed_days_over_1e12": 0
+    },
+    "B7.9": {
+      "max_abs_daily_delta": 3.929148673087468e-16,
+      "changed_days_over_1e12": 0
+    },
+    "Sub-C": {
+      "max_abs_daily_delta": 1.0167496385885683e-07,
+      "changed_days_over_1e12": 5
+    },
+    "Combined": {
+      "max_abs_daily_delta": 2.670681881113829e-08,
+      "changed_days_over_1e12": 1472
+    }
+  },
+  "queries": {
+    "信号": {
+      "text_file": "query_0.txt",
+      "attachments": [
+        "signal_20260926.xlsx"
+      ],
+      "charts": []
+    },
+    "实时信号": {
+      "text_file": "query_1.txt",
+      "attachments": [],
+      "charts": []
+    },
+    "参数": {
+      "text_file": "query_2.txt",
+      "attachments": [],
+      "charts": []
+    },
+    "实时参数": {
+      "text_file": "query_3.txt",
+      "attachments": [],
+      "charts": []
+    },
+    "表现 过去一年": {
+      "text_file": "query_4.txt",
+      "attachments": [
+        "perf_nav_req_20250926_20260926_actual_20250926_20260925_5278cbf7f1ac.png",
+        "performance_req_20250926_20260926_actual_20250926_20260925_5278cbf7f1ac.xlsx"
+      ],
+      "charts": [
+        {
+          "start": "2025-09-26",
+          "end": "2026-09-25",
+          "last_nav": {
+            "Sub-A": 1.138213007717514,
+            "Sub-A-DK": 1.12740783642705,
+            "B7.8": 1.3141035943101647,
+            "B7.9": 1.3792500006854838,
+            "Sub-C": 1.1852966686332111,
+            "Combined": 1.234102846210778
+          }
+        }
+      ]
+    },
+    "净值曲线 过去一年": {
+      "text_file": "query_5.txt",
+      "attachments": [
+        "nav_chart_req_20250926_20260926_actual_20250926_20260925_e7809a3b2d8f.png"
+      ],
+      "charts": [
+        {
+          "start": "2025-09-26",
+          "end": "2026-09-25",
+          "last_nav": {
+            "Sub-A": 1.138213007717514,
+            "Sub-A-DK": 1.12740783642705,
+            "B7.8": 1.3141035943101647,
+            "B7.9": 1.3792500006854838,
+            "Sub-C": 1.1852966686332111,
+            "Combined": 1.234102846210778
+          }
+        }
+      ]
+    },
+    "表现 2026-09-24": {
+      "text_file": "query_6.txt",
+      "attachments": [
+        "performance_req_20260924_20260924_actual_20260924_20260924_8e2c87deaea2.xlsx"
+      ],
+      "charts": []
+    },
+    "表现 2026-09-01到2026-09-15；2026-09-16到2026-09-26": {
+      "text_file": "query_7.txt",
+      "attachments": [
+        "perf_nav_req_20260916_20260926_actual_20260916_20260925_e397ba593583.png",
+        "performance_req_20260916_20260926_actual_20260916_20260925_e397ba593583.xlsx",
+        "perf_nav_req_20260901_20260915_actual_20260901_20260915_4c66a2b92585.png",
+        "performance_req_20260901_20260915_actual_20260901_20260915_4c66a2b92585.xlsx"
+      ],
+      "charts": [
+        {
+          "start": "2026-09-16",
+          "end": "2026-09-25",
+          "last_nav": {
+            "Sub-A": 0.9907129621247239,
+            "Sub-A-DK": 1.0085435747429818,
+            "B7.8": 1.0076019353425516,
+            "B7.9": 1.001659801409227,
+            "Sub-C": 1.014190874112487,
+            "Combined": 1.0059980901142576
+          }
+        },
+        {
+          "start": "2026-09-01",
+          "end": "2026-09-15",
+          "last_nav": {
+            "Sub-A": 1.001333457218035,
+            "Sub-A-DK": 0.9892437910866605,
+            "B7.8": 1.0197327198928008,
+            "B7.9": 1.0352125379127652,
+            "Sub-C": 0.9791298588771569,
+            "Combined": 1.0033145964699646
+          }
+        }
+      ]
+    }
+  },
+  "input_hashes": {
+    "formal_inputs.pkl": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "suba_amount.pkl": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6",
+    "us_raw_ohlc.pkl": "01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50"
+  }
+}

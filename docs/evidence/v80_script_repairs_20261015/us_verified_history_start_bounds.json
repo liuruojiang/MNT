@@ -1,0 +1,31 @@
+{
+  "meaning": "Latest permitted native provider-history start already verified in the frozen source; not fund inception, not exchange listing, not proof of all earlier availability. Apply against actual requested start and separately verified provider firstTradeDate; do not require prelisting proxy values as native ETF.",
+  "source": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_final\\us_raw_ohlc.pkl",
+  "source_sha256": "01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50",
+  "source_provider": "Yahoo",
+  "verified_native_history_earliest": {
+    "AGG": "2003-09-29",
+    "AVDV": "2019-09-26",
+    "AVUV": "2019-09-26",
+    "BIL": "2007-05-30",
+    "BTC-USD": "2014-09-17",
+    "DBC": "2006-02-06",
+    "DBMF": "2019-05-08",
+    "EEM": "2003-04-14",
+    "EFA": "2003-01-02",
+    "EMXC": "2017-07-26",
+    "GLD": "2004-11-18",
+    "GLDM": "2018-06-26",
+    "IBIT": "2024-01-11",
+    "KMLM": "2020-12-02",
+    "PDBC": "2014-11-07",
+    "QQQ": "2003-01-02",
+    "QQQM": "2020-10-13",
+    "SPY": "2003-01-02",
+    "TLT": "2003-01-02",
+    "UUP": "2007-03-01",
+    "VEA": "2007-07-26",
+    "VGIT": "2009-11-23",
+    "VTI": "2003-01-02"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "png_sha256": "49a09eeaf800c18f659db75488199990b802e00e0df370a023b5064756e2b51d",
+  "files": [
+    "outputs\\v80_script_repairs_20261015\\main\\final_verified\\query_4_perf_nav_req_20250926_20260926_actual_20250926_20260925_5278cbf7f1ac.png",
+    "outputs\\v80_script_repairs_20261015\\main\\final_verified\\query_5_nav_chart_req_20250926_20260926_actual_20250926_20260925_e7809a3b2d8f.png"
+  ],
+  "actual_start": "2025-09-26",
+  "actual_end": "2026-09-25",
+  "visual_inspection": "title dates, six labeled NAV curves and drawdown panel legible"
+}

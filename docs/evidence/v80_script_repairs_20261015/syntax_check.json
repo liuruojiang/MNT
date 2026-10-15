@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "checks": [
+    "current Python compile without writing bytecode",
+    "Python 3.11 AST grammar"
+  ],
+  "bytes": 851729
+}

@@ -1,0 +1,74 @@
+{
+  "scope": "Frozen real provider input through real _cached_fetch_data; malformed-provider boundaries only. No network, new strategy returns, latest-data certification or orders.",
+  "source_sha256_before": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "inputs": {
+    "formal_inputs.pkl": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "us_raw_ohlc.pkl": "01ba842c1d8ef688be14c5894a77a11e80f03224f20a6d1fe7c3df2b2bf67f50",
+    "suba_amount.pkl": "d1cb114b0f08c3f67b2f392831caddd9df7d974af0eaa10dc02d9283937c42c6"
+  },
+  "clock": "2026-09-25 10:00 Asia/Shanghai",
+  "cutoff": "2026-09-24 for both markets",
+  "cn_input": "close columns reconstructed from frozen formal input; not an independently downloaded CN provider response",
+  "checks": [
+    {
+      "name": "normal_formal_fetch",
+      "outcome": "PASS",
+      "frozen_input_frame_parity": "all four frames equal within 1e-12 after aligning columns by labels; dates retained exact order",
+      "frames": [
+        {
+          "rows": 2269,
+          "first": "2017-05-26",
+          "last": "2026-09-24"
+        },
+        {
+          "rows": 2906,
+          "first": "2014-10-17",
+          "last": "2026-09-24"
+        },
+        {
+          "rows": 4862,
+          "first": "2007-05-30",
+          "last": "2026-09-24"
+        },
+        {
+          "rows": 5970,
+          "first": "2003-01-02",
+          "last": "2026-09-24"
+        }
+      ]
+    },
+    {
+      "name": "ETF_holiday_row",
+      "outcome": "PASS_REJECTED",
+      "exception_class": "BotError",
+      "error": "Formal US price history internal OHLC gap after retry: QQQ: non-session OHLC 2026-07-03; EMXC: non-session OHLC 2026-07-03; GLD: non-session OHLC 2026-07-03; DBC: non-session OHLC 2026-07-03; DBMF: non-session OHLC 2026-07-03; KMLM: non-session OHLC 2026-07-03; BIL: non-session OHLC 2026-07-03; SPY: non-session OHLC 2026-07-03; TLT: non-session OHLC 2026-07-03; EFA: non-session OHLC 2026-07-03; AGG: non-session OHLC 2026-07-03; UUP: non-session OHLC 2026-07-03; QQQM: non-session OHLC 2026-07-03; GLDM: non-session OHLC 2026-07-03; PDBC: non-session OHLC 2026-07-03; IBIT: non-session OHLC 2026-07-03; VEA: non-session OHLC 2026-07-03; EEM: non-session OHLC 2026-07-03; VTI: non-session OHLC 2026-07-03; AVUV: non-session OHLC 2026-07-03; AVDV: non-session OHLC 2026-07-03; VGIT: non-session OHLC 2026-07-03; BTC/IBIT: non-session OHLC 2026-07-03"
+    },
+    {
+      "name": "DBMF_prefix_truncated",
+      "outcome": "PASS_REJECTED",
+      "exception_class": "BotError",
+      "error": "Formal US price history internal OHLC gap after retry: DBMF: missing 2019-05-08,2019-05-09,2019-05-10"
+    },
+    {
+      "name": "BTC_missing_weekend",
+      "outcome": "PASS_REJECTED",
+      "exception_class": "BotError",
+      "error": "Formal US price history internal OHLC gap after retry: BTC/IBIT: missing 2023-09-23"
+    },
+    {
+      "name": "IBIT_first_day_truncated",
+      "outcome": "PASS_REJECTED",
+      "exception_class": "BotError",
+      "error": "Formal US price history internal OHLC gap after retry: IBIT: missing 2024-01-11; BTC/IBIT: missing 2024-01-11"
+    },
+    {
+      "name": "IBIT_prelisting_rows",
+      "outcome": "PASS_REJECTED",
+      "exception_class": "DataSchemaError",
+      "error": "IBIT native OHLC before its first trading session 2024-01-11"
+    }
+  ],
+  "source_sha256_after": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "source_unchanged_during_verification": true,
+  "elapsed_seconds": 15.79
+}

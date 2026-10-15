@@ -1,0 +1,41 @@
+{
+  "scope": "vendor calendar agreement, not independent exchange certification for every historical year",
+  "sources": [
+    {
+      "path": "D:\\动量策略\\美股A股混合池子动量策略\\outputs\\cn_trading_days_cache_20100101.csv",
+      "sha256": "8a3ebc9453475846ed2002ad2b5557abb4a5407d81d448c0f8278be0c01d6b92"
+    },
+    {
+      "path": "D:\\动量策略\\微盘股对冲策略\\research_reports\\20261002_l2_full_repair\\data\\trade_calendar_evidence\\baostock_trade_calendar_20100222_20260930.csv",
+      "sha256": "80cfc76c2a0f3ce46251f887103e68d494fb9c154735ee2a7b6df6268b230442"
+    }
+  ],
+  "verified_common_start": "2010-02-22",
+  "verified_common_end": "2026-09-30",
+  "common_trading_days": 4037,
+  "differences": [],
+  "embedded_range_start": "2010-02-22",
+  "embedded_range_end": "2025-12-31",
+  "historical_weekday_closures_count": 282,
+  "historical_trade_days": 3856,
+  "closure_count_by_year": {
+    "2010": 13,
+    "2011": 16,
+    "2012": 18,
+    "2013": 23,
+    "2014": 16,
+    "2015": 17,
+    "2016": 17,
+    "2017": 16,
+    "2018": 18,
+    "2019": 17,
+    "2020": 19,
+    "2021": 18,
+    "2022": 18,
+    "2023": 18,
+    "2024": 20,
+    "2025": 18
+  },
+  "normalized_text_sha256": "0bab1261e6d3f4361f80c48fb9991d7efa22ba69bb8ddcef9f487acb0b2fbaa3",
+  "file_sha256": "8a467e2bbcde316972ac4efc02f73c70b3849e7a9a8db9ef7f809c468b45a8ce"
+}

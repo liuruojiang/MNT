@@ -1,0 +1,18 @@
+{
+  "scope": "Actual full local regression on the final source; original logs retained locally",
+  "source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "source_unchanged": true,
+  "tests": 603,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "reported_duration_seconds": 154.84,
+  "existing_warnings": 35,
+  "command": "python -B -X utf8 -m pytest tests -q -p no:cacheprovider",
+  "original_artifacts": {
+    "main/full_final.xml": "cc20f4b35c40af7f6eb0e1b43e7a91e79bfc4f1bf2e11eb3b2725fa9015d6e49",
+    "main/full_final.log": "9cfbf0e897da1f6e801e2966825072d71d6605906cfe73e4d48f3dfb11cea403",
+    "main/full_final_identity.json": "db87c7121aa6686b5b8aa453d2c4f848662ce10c2d6dec2a5b758dac8e1dbd26"
+  },
+  "note": "Full local input/evidence dependencies are absent from clean exports; their skips are reported separately."
+}

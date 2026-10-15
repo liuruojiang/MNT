@@ -1,0 +1,38 @@
+{
+  "frozen_replay_verification.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/main/final_verified/verification.json",
+    "local_original_sha256": "1a45be47e9c63fa1f69ebe92fa4e3e500db9363c2067c1b1db3faa880e811e22"
+  },
+  "formal_fetch_verification.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/data_review/formal_fetch_verification.json",
+    "local_original_sha256": "ec70050a6999c570db48d7f3b2b0606f99d996fc190252f9c6bd3ec093f90225"
+  },
+  "artifact_reconciliation.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/report_review/final_artifact_reconciliation.json",
+    "local_original_sha256": "3183ea869aded8b2132ca711c61380596fb976ea823361861506adcec5303cc3"
+  },
+  "chart_parity.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/main/final_verified/chart_parity.json",
+    "local_original_sha256": "52068ff610fe5e9612b3693fc1d419ab910bbe79c83620b6dc073e2cd4fd45f8"
+  },
+  "window_metrics.csv": {
+    "local_original": "outputs/v80_script_repairs_20261015/main/final_verified/window_metrics.csv",
+    "local_original_sha256": "5210f51f28891510d9f16ad3fd713a6e6f5cf0b578f8a020dc97b5652561f58d"
+  },
+  "window_metric_deltas.csv": {
+    "local_original": "outputs/v80_script_repairs_20261015/main/final_verified/window_metric_deltas.csv",
+    "local_original_sha256": "b35175172de3e966d1b0a0a0a64d045bf1ec3c93ec9be93aebcf77c6b6b002bb"
+  },
+  "syntax_check.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/main/syntax_check.json",
+    "local_original_sha256": "f14bb116694da3712f382a8db705c92b50133a6a4315346f0f028d87b2a78ccb"
+  },
+  "us_verified_history_start_bounds.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/data_review/us_verified_history_start_bounds.json",
+    "local_original_sha256": "9ebc50b043f984ee314bc5ec9e837e69da373a419210ea6d803890093cbd837b"
+  },
+  "cn_calendar_embedded_evidence.json": {
+    "local_original": "outputs/v80_script_repairs_20261015/data_review/cn_calendar_embedded_evidence.json",
+    "local_original_sha256": "cce681a5d9bc29511b438571466fed3d74195d40da846dd22d9400a0e54e8456"
+  }
+}

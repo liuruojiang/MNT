@@ -1,0 +1,123 @@
+{
+  "status": "PASS_WITH_DOCUMENTED_SKIPS",
+  "git_tree_tested": "19823e6ee39db889929cc3ae18bc5b0ae2b42550",
+  "git_blob_source_sha256": "c76e4764e1273ebf70f447533df191d77e8f1aabe481885e98e5874d5c1e7930",
+  "export_source_sha256": "13fec90126402751acb6e24abfc51fbf086159ef61ec19a08adcd5d0049c2078",
+  "line_endings": "core.autocrlf converted exported text to CRLF; LF-normalized source equals accepted source byte for byte",
+  "source_unchanged": true,
+  "tests": 603,
+  "passed": 578,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 25,
+  "reported_duration_seconds": 303.01,
+  "warnings": 5,
+  "absent_frozen_inputs": {
+    "formal_inputs.pkl": true,
+    "suba_amount.pkl": true,
+    "us_raw_ohlc.pkl": true
+  },
+  "command": "python -B -X utf8 -m pytest tests -q -rs -p no:cacheprovider",
+  "skip_reasons": {
+    "optional frozen real OHLC source is absent": 3,
+    "optional real-input diagnostic requires the git-ignored local L1 freeze": 1,
+    "optional retained-evidence audit requires git-ignored local artifacts: .codex_backups\\20261007_141858\\mnt_bot V 8.0 plus.py, .codex_backups\\20261007_143341\\mnt_bot V 8.0 plus.py, outputs\\v80_recert_20260926\\l1_final\\formal_inputs.pkl, outputs\\v80_recert_20260926\\l1_final\\suba_amount.pkl, outputs\\v80_script_doublecheck_20261007\\query_4.txt, outputs\\v80_script_doublecheck_20261007\\query_4_performance_20260926.xlsx, outputs\\v80_script_audit_20261007\\before_status.json, outputs\\v80_script_audit_20261007\\before_daily.csv.gz, outputs\\v80_script_audit_20261007\\before_window_metrics.csv, outputs\\v80_script_audit_20261007\\after_status.json, outputs\\v80_script_audit_20261007\\after_daily.csv.gz, outputs\\v80_script_audit_20261007\\after_window_metrics.csv": 8,
+    "optional real-input execution diagnostic requires the git-ignored local L1 freeze": 13
+  },
+  "test_module_counts": {
+    "tests.test_poe_adk_16_spread_decay": {
+      "passed": 95,
+      "skipped": 0
+    },
+    "tests.test_suba_delayed_entry_copy.StrategyADelayedEntryTests": {
+      "passed": 4,
+      "skipped": 0
+    },
+    "tests.test_v77_adk_drawdown_warning_panel": {
+      "passed": 1,
+      "skipped": 0
+    },
+    "tests.test_v78_adk_subb_blend_display": {
+      "passed": 63,
+      "skipped": 0
+    },
+    "tests.test_v78_cn_live_freshness": {
+      "passed": 21,
+      "skipped": 0
+    },
+    "tests.test_v78_overlay_freshness_and_volreg": {
+      "passed": 13,
+      "skipped": 0
+    },
+    "tests.test_v78_suba_new_signal_display": {
+      "passed": 29,
+      "skipped": 0
+    },
+    "tests.test_v78_v79_adversarial_repairs": {
+      "passed": 74,
+      "skipped": 0
+    },
+    "tests.test_v78_v79_subc_sleeve_vol": {
+      "passed": 9,
+      "skipped": 0
+    },
+    "tests.test_v79_external_audit_repairs": {
+      "passed": 36,
+      "skipped": 0
+    },
+    "tests.test_v80_cn_subc_audit_20261007": {
+      "passed": 15,
+      "skipped": 0
+    },
+    "tests.test_v80_data_contract_repairs_20261015": {
+      "passed": 46,
+      "skipped": 3
+    },
+    "tests.test_v80_data_display_audit_20261007": {
+      "passed": 17,
+      "skipped": 0
+    },
+    "tests.test_v80_doublecheck_data_math_20261007": {
+      "passed": 27,
+      "skipped": 1
+    },
+    "tests.test_v80_doublecheck_evidence_20261007": {
+      "passed": 1,
+      "skipped": 8
+    },
+    "tests.test_v80_doublecheck_execution_20261007": {
+      "passed": 29,
+      "skipped": 13
+    },
+    "tests.test_v80_execution_audit_20261007": {
+      "passed": 23,
+      "skipped": 0
+    },
+    "tests.test_v80_fee_and_parser_repairs_20261015": {
+      "passed": 39,
+      "skipped": 0
+    },
+    "tests.test_v80_l1_input_boundaries": {
+      "passed": 5,
+      "skipped": 0
+    },
+    "tests.test_v80_l2_annualization_period": {
+      "passed": 6,
+      "skipped": 0
+    },
+    "tests.test_v80_report_audit_20261007": {
+      "passed": 6,
+      "skipped": 0
+    },
+    "tests.test_v80_reporting_repairs_20261015": {
+      "passed": 19,
+      "skipped": 0
+    }
+  },
+  "local_artifact_hashes": {
+    "clean_export_tests.log": "f8871a45dc8037529f0d64e1a7823f770242741b29d5848b03ee16b2753133af",
+    "clean_export_tests.xml": "fee3b3ee39bf30f7a0086afb94ce712c31590a5647e30b75accc9e500be7d3ac",
+    "clean_export_identity.json": "0894cb819ce6180b6e0f4f80bc09a8da68d6468ef7993e3d3ca414461d1d355d"
+  },
+  "scope": "Local clean Git-tree export, not GitHub CI; final delivery adds documentation/evidence only relative to tested source and tests."
+}
