@@ -1,0 +1,17 @@
+{
+  "sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "baseline_sha256": "cd5c9592ba7da0b2ab68b7b30f59219955996a23296fc834f917aca5b5bb14a7",
+  "changed_definitions": [
+    "_v80_subb_variant_rows",
+    "_write_v80_subb_overview"
+  ],
+  "added_definitions": [
+    "_v80_subb_model_reference_weights",
+    "_write_v80_subb_model_reference"
+  ],
+  "removed_definitions": [],
+  "unchanged_definitions": 593,
+  "other_top_level_equal": true,
+  "diff_check_exit": 0,
+  "diff_check_output": "warning: in the working copy of 'mnt_bot V 8.0 plus.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tests/test_v78_cn_live_freshness.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tests/test_v80_reporting_repairs_20261015.py', LF will be replaced by CRLF the next time Git touches it\n"
+}

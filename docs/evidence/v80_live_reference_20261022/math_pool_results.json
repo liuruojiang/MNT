@@ -1,0 +1,48 @@
+{
+  "source_sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "status": "PASS",
+  "cases": [
+    {
+      "mode": "btc_cap",
+      "label": "B7.8",
+      "difference": 0.0,
+      "reference": {
+        "BTC-USD": 0.3,
+        "BIL": 0.007063692269206001,
+        "GLD": 0.5123799956641413,
+        "QQQ": 0.483715946698875
+      }
+    },
+    {
+      "mode": "btc_cap",
+      "label": "B7.9",
+      "difference": 0.0,
+      "reference": {
+        "BIL": 0.1628346249546901,
+        "BTC-USD": 0.27578572476936497,
+        "QQQ": 0.6920967314199564
+      }
+    },
+    {
+      "mode": "macro_pool",
+      "label": "B7.8",
+      "difference": 0.0,
+      "reference": {
+        "DBMF": 0.3340209338275241,
+        "UUP": 0.2621176240140068,
+        "KMLM": 0.4038614421584691,
+        "BIL": 0.0
+      }
+    },
+    {
+      "mode": "macro_pool",
+      "label": "B7.9",
+      "difference": 0.0,
+      "reference": {
+        "BIL": 0.0,
+        "DBMF": 0.4526750396784984,
+        "KMLM": 0.5473249603215016
+      }
+    }
+  ]
+}

@@ -8970,23 +8970,147 @@ def _v80_subb_results(us_rot_result):
         raise ValueError('V8.0 performance requires the independently computed B7.8 result')
     return (b78, us_rot_result)
 
-def _v80_performance_daily_returns(cn_return, adk_return, us_rot_result, subc_return):
+def _v80_performance_daily_returns(cn_return, adk_return, us_rot_result, subc_return, *, end_date):
     b78, b79 = _v80_subb_results(us_rot_result)
     daily_returns = {'Sub-A': cn_return, 'Sub-A-DK': adk_return, 'B7.8': b78['return'], 'B7.9': b79['return'], 'Sub-C': subc_return}
+    # Keep all history for standard windows, but respect the report's confirmed
+    # cutoff before combining markets. A newer CN close cannot imply a US return.
+    cutoff = pd.Timestamp(end_date).normalize()
+    daily_returns = {name: series.loc[series.index <= cutoff] for name, series in daily_returns.items()}
     daily_returns['Combined'] = _performance_combined_daily_returns(daily_returns)
     return daily_returns
 
 def _v80_subb_mapping(label):
     return _v80_b78_ROT_PROXY_TO_LIVE if label == 'B7.8' else _ROT_PROXY_TO_LIVE
 
-def _v80_subb_variant_rows(result, idx=-1, min_weight=0.0005, label='B7.9'):
+def _v80_subb_model_reference_weights(close_df, result, label):
+    """Reprice a hypothetical weekly decision without changing the account ledger."""
+    if label not in {'B7.8', 'B7.9'} or result is None or len(result) == 0:
+        raise ValueError('Sub-B model reference requires a valid variant and result')
+    is_b78 = label == 'B7.8'
+    pool = _v80_b78_US_ROT_POOL if is_b78 else US_ROT_POOL
+    lbs = _v80_b78_US_ROT_LBS if is_b78 else US_ROT_LBS
+    vol_lb = _v80_b78_US_ROT_VOL_LB if is_b78 else US_ROT_VOL_LB
+    trading_days = _v80_b78_US_TRADING_DAYS if is_b78 else US_TRADING_DAYS
+    threshold = _v80_b78_US_ROT_REBALANCE_THRESHOLD if is_b78 else US_ROT_REBALANCE_THRESHOLD
+    top_n = V80_SUBB_V78_TOP_N if is_b78 else US_ROT_TOP_N
+    required_prices = list(dict.fromkeys(list(pool) + ['BIL', 'SPY', 'TLT']))
+    _validate_subb_price_input(close_df, required_prices, max(lbs) + 2, f'{label} model reference')
+    date = result.index[-1]
+    if close_df.index[-1] != date:
+        raise ValueError(f'{label} model reference price/result date mismatch')
+    components = {}
+    for line in ('bias', 'logvol'):
+        component = result.attrs.get(f'v78_subb_{line}')
+        if component is None or len(component) == 0 or component.index[-1] != date:
+            raise ValueError(f'{label} model reference {line} component date missing/mismatch')
+        components[line] = component
+
+    def scale_at(frame, column):
+        value = float(frame.iloc[-1].get(column, np.nan))
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f'{label} model reference missing/invalid {column}')
+        return value
+
+    # These are each leg's existing T decision scales, based on returns through
+    # T-1. Do not derive them from the final account's after-overlay returns.
+    official_scale = scale_at(result, 'official_scale')
+    ema_scale = scale_at(result, 'ema_scale')
+    line_scales = {line: scale_at(frame, 'target_vol_scale') for line, frame in components.items()}
+    prices = (_v80_b78_apply_subb_btc_start_filter if is_b78 else _apply_subb_btc_start_filter)(close_df)
+    # Leading gaps represent unavailable history (including the BTC start rule).
+    # Once an asset is available, gaps/invalid quotes must not look like a rank
+    # change via pct_change's fill or score functions silently dropping assets.
+    for asset in required_prices:
+        series = prices[asset]
+        numeric = pd.to_numeric(series, errors='coerce')
+        invalid = series.notna() & (~np.isfinite(numeric) | (numeric <= 0.0))
+        first_valid = numeric.first_valid_index()
+        if first_valid is not None:
+            invalid |= numeric.isna() & (numeric.index >= first_valid)
+        elif asset in {'BIL', 'SPY', 'TLT', 'DBC'} or any(
+            float(result.iloc[-1].get(f'{prefix}{asset}', 0.0)) > 0.0
+            for prefix in ('effective_w_', 'actual_w_', 'model_w_', 'ema_actual_w_', 'official_actual_w_', 'official_w_')
+        ):
+            raise ValueError(f'{label} model reference missing price history for {asset}')
+        if invalid.any():
+            bad_date = numeric.index[invalid][0]
+            raise ValueError(f'{label} model reference invalid/missing finite positive price for {asset} at {bad_date:%Y-%m-%d}')
+        prices[asset] = numeric
+    vol_row = prices.pct_change().rolling(vol_lb).std().mul(np.sqrt(trading_days)).iloc[-1]
+    momentum_rows = {lb: prices.div(prices.shift(lb)).sub(1).iloc[-1] for lb in lbs}
+    previous_mix = _us_mix_prev_risky_by_lb_from_result(result, date, include_current=False)
+    # Native Buffer decisions use the leg's actual holdings after today's open,
+    # before today's decision. ema_w_* stores the decision's target instead.
+    ema_row = result.iloc[-1]
+    ema_holdings = {}
+    for asset in pool:
+        column = f'ema_actual_w_{asset}'
+        value = float(ema_row.get(column, np.nan))
+        if not np.isfinite(value) or value < 0:
+            raise ValueError(f'{label} model reference missing/invalid current EMA holding {asset}')
+        ema_holdings[asset] = value
+    previous_ema = {asset for asset, weight in ema_holdings.items() if weight > 0.001} or None
+    if is_b78:
+        ranking = _v80_b78_subb_active_ranking_codes(prices, -1)
+        official, _ = _v80_b78_us_mix_target_weights(momentum_rows, vol_row, ranking, official_scale, top_n=top_n, abs_threshold=_v80_b78_US_ROT_ABS_THRESHOLD, prev_risky_by_lb=previous_mix, threshold=threshold)
+        ema_score = _v80_b78_subb_v75_ema_score(prices).iloc[-1]
+        ema_raw = _v80_b78_us_raw_weights(ema_score, vol_row, pool, top_n, _v80_b78_SUBB_V75_EMA_ABS_THRESHOLD, prev_risky=previous_ema, threshold=threshold)
+        ema = _v80_b78_apply_subb_btc_cap(_v80_b78_us_model_b(ema_raw, ema_scale))
+        bias = _v80_b78_v78_target_from_scores(_v80_b78_v78_score_bias_level(prices).iloc[-1], vol_row, line_scales['bias'], top_n=top_n)
+        logvol = _v80_b78_v78_target_from_scores(_v80_b78_v78_score_log_weighted(prices).iloc[-1], vol_row, line_scales['logvol'], top_n=top_n)
+        weights = _weighted_average_weight_dicts([(official, _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_OFFICIAL_WEIGHT), (ema, _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_EMA_WEIGHT), (bias, _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT), (logvol, _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT)])
+        enabled, next_state, overlay = (_v80_b78_US_ROT_VOLREG_ENABLED, _v80_b78_volreg_next_cash_state, _v80_b78_apply_subb_volreg_defense_scale_to_weights)
+    else:
+        ranking = _subb_active_ranking_codes(prices, -1)
+        official, _ = _us_mix_target_weights(momentum_rows, vol_row, ranking, official_scale, top_n=top_n, abs_threshold=US_ROT_ABS_THRESHOLD, prev_risky_by_lb=previous_mix, threshold=threshold)
+        ema, _, _ = _subb_v75_ema_snapshot(prices, -1, ema_scale, ranking_codes=pool, prev_risky=previous_ema, threshold=threshold)
+        bias = _v78_subb_new_line_hypo_weights(prices, components['bias'], line='bias')
+        logvol = _v78_subb_new_line_hypo_weights(prices, components['logvol'], line='logvol')
+        weights = _blend_v78_subb_weight_dicts(_blend_subb_v75_weight_dicts(official, ema), bias, logvol)
+        enabled, next_state, overlay = (US_ROT_VOLREG_ENABLED, _volreg_next_cash_state, _apply_subb_volreg_defense_scale_to_weights)
+    last = result.iloc[-1]
+    if enabled:
+        current_defense = last.get('volreg_defense')
+        if not isinstance(current_defense, (bool, np.bool_)) or 'volreg_ratio' not in result.columns:
+            raise ValueError(f'{label} model reference missing/invalid VolReg state')
+        ratio = float(last['volreg_ratio'])
+        if np.isinf(ratio) or ratio < 0.0:
+            raise ValueError(f'{label} model reference invalid VolReg ratio')
+        # Explicit NaN keeps the known state, matching the native policy.
+        if next_state(current_defense, ratio):
+            weights, _ = overlay(weights, True)
+    if not weights or any(not np.isfinite(float(value)) or float(value) < 0 for value in weights.values()):
+        raise ValueError(f'{label} model reference invalid weights')
+    return weights
+
+
+def _write_v80_subb_model_reference(w, result, close_df, label, *, us_intraday=False):
+    try:
+        targets = _v80_subb_model_reference_weights(close_df, result, label)
+        rows = _v80_subb_variant_rows(result, label=label, target_weights=targets)
+    except (DataSchemaError, TypeError, ValueError, KeyError, IndexError) as exc:
+        w(f'\n⚠️ 今日模型参考不可用：{_short_error(exc)}；不能据此判断模型没有变化。\n')
+        return
+    basis = '盘中快照' if us_intraday else '收盘数据'
+    w(f'\n**今日模型参考｜假设今天是周度信号日**（{result.index[-1]:%Y-%m-%d} {basis}）\n\n')
+    w('| ETF | 当前已生效 | 今日模型参考 | 参考差额 |\n|:-|------:|------:|------:|\n')
+    for item in rows:
+        delta = f"{item['delta']:+.1%}" if abs(item['delta']) >= 0.0005 else '—'
+        w(f"| {item['live_name']} | {item['current']:.1%} | **{item['target']:.1%}** | {delta} |\n")
+    w('\n本表仅供参考，不生成调仓指令；实际操作仍按上方执行目标与周度/VolReg确认规则。\n')
+
+
+def _v80_subb_variant_rows(result, idx=-1, min_weight=0.0005, label='B7.9', *, target_weights=None):
     if result is None or len(result) == 0:
         return []
     row = result.iloc[idx]
     target_prefix = 'execution_target_w_' if any((isinstance(col, str) and col.startswith('execution_target_w_') for col in result.columns)) else 'target_w_'
     prefixes = ('w_', 'effective_w_', 'actual_w_', target_prefix)
     assets = {col[len(prefix):] for col in result.columns if isinstance(col, str) for prefix in prefixes if col.startswith(prefix)}
-    if not assets or not any((f'{target_prefix}{asset}' in result.columns for asset in assets)):
+    if target_weights is not None:
+        assets.update(target_weights)
+    if not assets or (target_weights is None and not any((f'{target_prefix}{asset}' in result.columns for asset in assets))):
         raise DataSchemaError(f'{label} missing target weight fields')
     rows = []
     mapping = _v80_subb_mapping(label)
@@ -8996,9 +9120,9 @@ def _v80_subb_variant_rows(result, idx=-1, min_weight=0.0005, label='B7.9'):
             raise DataSchemaError(f'{label} missing current weight for {asset}')
         current = float(row[current_col])
         target_col = f'{target_prefix}{asset}'
-        if target_col not in result.columns:
+        if target_weights is None and target_col not in result.columns:
             raise DataSchemaError(f'{label} missing {target_col}')
-        target = float(row.get(target_col))
+        target = float(row.get(target_col)) if target_weights is None else float(target_weights.get(asset, 0.0))
         if not np.isfinite(current) or not np.isfinite(target):
             raise DataSchemaError(f'{label} non-finite weight for {asset}')
         if max(abs(current), abs(target), abs(target - current)) < min_weight:
@@ -9171,7 +9295,7 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
         elif state['risk_action']:
             mark, status_text, target_title = ('🟡' if us_intraday else '🔴', 'VolReg盘中假设调整' if us_intraday else 'VolReg收盘确认调整', '盘中假设目标' if us_intraday else '下一开盘风控目标')
         elif is_signal_day is False:
-            mark, status_text, target_title = ('🟡', '非信号日参考', '参考目标（不执行）')
+            mark, status_text, target_title = ('🟡', '非信号日参考', '下一执行目标（非周度日）')
         elif us_intraday:
             mark, status_text, target_title = ('🟡', '信号日盘中假设变化' if changed else '信号日盘中假设维持', '盘中假设目标')
         else:
@@ -9221,6 +9345,8 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
                 w(f"| {item['live_name']} | {item['current']:.1%} | **{item['target']:.1%}** | {delta_text} |\n")
         else:
             w('⚠️ 本版本 B 状态不可用。\n')
+        if not state['weekly_day']:
+            _write_v80_subb_model_reference(w, result, us_rot_close, label, us_intraday=us_intraday)
         _write_v80_subb_risk_chain(w, result, label)
         if query_kind in {'params', 'live_params'}:
             action = '本页只核对参数；实际操作以“实时信号”为准。'
@@ -9235,7 +9361,7 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
             if us_intraday and pd.Timestamp(result.index[-1]).dayofweek == 4:
                 action = '今天（周五）是上一周四信号的执行日，不是新信号日；只按周四收盘确认目标在本次开盘执行，**不要把周五盘中变化当成新调仓指令**。'
             else:
-                action = '本收盘不是B策略周度信号日；表内变化只是参考测算，**不调仓**。等待常规周四收盘确认，下一美股交易日（通常周五）开盘执行。'
+                action = '本收盘不是B策略周度信号日；今日模型参考即使变化也**不调仓**。等待常规周四收盘确认，下一美股交易日（通常周五）开盘执行。'
         elif us_intraday:
             action = '今天是B策略周度信号日，但当前只是盘中假设；**现在不调仓**。等待收盘确认，若目标变化则下一美股交易日（通常周五）开盘执行。'
         elif changed:
@@ -14077,7 +14203,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         us_daily_period = us_rot_result['return'][(us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
         subc_daily_all = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
         subc_daily_period = subc_daily_all[(subc_daily_all.index >= start_date) & (subc_daily_all.index <= end_date)]
-        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all)
+        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all, end_date=end_date)
         first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period})
         _finalize_performance_report_context(report_context, {'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period, 'Combined': comb_daily})

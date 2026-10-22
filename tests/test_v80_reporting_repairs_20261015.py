@@ -88,11 +88,14 @@ def workbook_sheets(blob):
 
 
 @pytest.fixture
-def report_harness(v80, monkeypatch):
-    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp("2026-09-26 19:40:51").to_pydatetime())
-    calendar = pd.date_range("2026-06-30", "2026-09-25", freq="D")
-    cn_dates = pd.DatetimeIndex([day for day in calendar if v80._is_cn_required_close_day(day)])
-    us_dates = pd.DatetimeIndex([day for day in calendar if v80._is_us_market_session(day)])
+def report_harness(v80, monkeypatch, request):
+    bounds = getattr(request, "param", {})
+    cn_end = pd.Timestamp(bounds.get("cn_end", "2026-09-25"))
+    us_end = pd.Timestamp(bounds.get("us_end", "2026-09-25"))
+    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp(bounds.get("now", "2026-09-26 19:40:51")).to_pydatetime())
+    calendar = pd.date_range(bounds.get("start", "2026-06-30"), max(cn_end, us_end), freq="D")
+    cn_dates = v80._expected_cn_sessions(calendar[0], cn_end)
+    us_dates = pd.DatetimeIndex([day for day in calendar if day <= us_end and v80._is_us_market_session(day)])
     # These are diagnostic report inputs. The production strategy is not run
     # against these placeholder prices; only source date coverage is consumed.
     cn_source = pd.DataFrame({"diagnostic_source": np.arange(len(cn_dates)) + 100.0}, index=cn_dates)
@@ -166,6 +169,55 @@ def test_nav_and_performance_equal_cutoff_normal_control(report_harness):
     nav = report_harness.execute("净值曲线 2026-09-01到2026-09-24")
     for name in NAMES + ("Combined",):
         pd.testing.assert_series_equal(performance["charts"][0]["navs"][name], nav["charts"][0]["navs"][name])
+
+
+@pytest.mark.parametrize("report_harness", [{
+    "start": "2024-06-28",
+    "cn_end": "2026-10-20", "us_end": "2026-10-19", "now": "2026-10-20 17:12:00",
+}], indirect=True)
+def test_cn_close_ahead_of_us_uses_confirmed_cutoff_for_all_report_consumers(v80, report_harness, monkeypatch):
+    observed = []
+    original = v80._v80_performance_daily_returns
+
+    def standard_returns(*args, **kwargs):
+        result = original(*args, **kwargs)
+        observed.append(result)
+        return result
+
+    monkeypatch.setattr(v80, "_v80_performance_daily_returns", standard_returns)
+    # Reproduce the actual command and the explicit historical-range variant.
+    for query in ("最近一年表现", "表现 2026-09-01到2026-10-20"):
+        performance = report_harness.execute(query)
+        assert len(performance["attachments"]) == 2
+        assert performance["charts"][0]["end"] == pd.Timestamp("2026-10-19")
+        for series in observed[-1].values():
+            assert series.index[-1] == pd.Timestamp("2026-10-19")
+            assert series.index[0] == pd.Timestamp("2024-07-01"), "standard windows must retain earlier history"
+        book = next(item for item in performance["attachments"] if item["name"].endswith(".xlsx"))
+        sheets = workbook_sheets(book["contents"])
+        assert "标准窗口指标" in sheets
+        standard = sheets["标准窗口指标"]
+        row = next(cell[1:] for cell, value in standard.items() if cell.startswith("A") and value == "1Y")
+        one_year_cells = [standard[column + row] for column in "BCDEFG"]
+        assert all("N/A" not in value for value in one_year_cells), "exercise numeric 1Y metrics for every sleeve and Combined"
+        assert "| 1Y | " + " | ".join(one_year_cells) + " |" in performance["text"]
+        metadata = "\n".join(str(value) for value in sheets["报告元数据"].values())
+        assert "2026-10-19" in metadata and "2026-10-20" in metadata
+    nav = report_harness.execute("净值曲线 2026-09-01到2026-10-20")
+    for name in NAMES + ("Combined",):
+        pd.testing.assert_series_equal(performance["charts"][0]["navs"][name], nav["charts"][0]["navs"][name])
+    assert report_harness.frames[0].index[-1] == pd.Timestamp("2026-10-20"), "source/signal data must remain intact"
+
+
+@pytest.mark.parametrize("report_harness", [{
+    "cn_end": "2026-10-20", "us_end": "2026-10-19", "now": "2026-10-20 17:12:00",
+}], indirect=True)
+@pytest.mark.parametrize("missing", ["2026-10-15", "2026-10-19"])
+def test_confirmed_cutoff_still_rejects_missing_completed_us_returns(v80, report_harness, missing):
+    results = report_harness.bot._cached_run_strategies(*report_harness.frames)
+    results[2].attrs["v80_b78"].drop(pd.Timestamp(missing), inplace=True)
+    with pytest.raises(ValueError, match=f"B7.8: missing market-session return at {missing}; refusing zero fill"):
+        report_harness.execute("最近一年表现")
 
 
 def subb_display_result():

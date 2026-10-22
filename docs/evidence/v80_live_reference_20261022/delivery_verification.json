@@ -1,0 +1,28 @@
+{
+  "source_sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "xml_checks": {
+    "full": {
+      "tests": 681,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "data": {
+      "tests": 100,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "hashes": {
+    "mnt_bot V 8.0 plus.py": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+    "tests/test_v78_cn_live_freshness.py": "42253eba068422018b143f573367bb19e365269bcdd452c927699f0e70f3760e",
+    "tests/test_v80_live_model_reference_20261021.py": "af0f4a05b1c3288154b005e2ebbe73c7af1106c73e020cbbe30ca922ba290ed8",
+    "tests/test_v80_reference_native_state_20261022.py": "94aa3c2b654c2919e19755a51a4bd1b6631ccd402e3bdd31f63511d43f12b99b",
+    "tests/test_v80_reference_data_boundaries_20261022.py": "c2670423573f56c5a3e73ed41e67fe4c2fbfe5f3bb5cdf06ba779e1849d1b017",
+    "docs/v80_live_signal_reference_fix_20261021.md": "8fb9afd9d98c8ff5407e2de060fb270fd5eab5366e0c160f6cc39e2481d5fbbf",
+    "docs/v80_live_reference_adversarial_audit_20261022.md": "3adec52ffff9e75042693ba1ab2e95ba2fdb6eef1178de9844657363298ea7b7"
+  },
+  "git_diff_check": 0,
+  "deployment": "local only; Poe and remote not updated"
+}

@@ -43,7 +43,9 @@ def test_v80_subb_non_signal_day_is_reference_only(monkeypatch):
     assert "常规周四收盘确认周度信号" in text
     assert "下一美股交易日（通常周五）开盘执行" in text
     assert "非信号日参考" in text
-    assert "参考目标（不执行）" in text
+    assert "下一执行目标（非周度日）" in text
+    assert text.count("今日模型参考不可用") == 2
+    assert "不能据此判断模型没有变化" in text
     assert "本收盘不是B策略周度信号日" in text
     assert info["B7.8"]["is_signal"] is False
     assert info["B7.9"]["is_signal"] is False

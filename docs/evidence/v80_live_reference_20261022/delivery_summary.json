@@ -1,0 +1,20 @@
+{
+  "source_sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "full_tests": 681,
+  "query_checks": 50,
+  "data_checks": 100,
+  "math_native_comparisons": 18,
+  "math_threshold_probes": 6,
+  "math_thursday_regression": "PASS, difference 0",
+  "independent_reviews": {
+    "model_math": "PASS",
+    "query_execution": "PASS",
+    "test_adversary": "PASS"
+  },
+  "report_hashes": {
+    "model_math": "06454ec4c0c22a8744994b224606ac1bef2e9d6311f25f03d362126751c0bede",
+    "query_execution": "ee998694968b6ce6583458ec2da3d05532489ceef968c9e50b2f966704a3c13b",
+    "test_adversary": "48b286a68a13e613d77a1a7085bef3734e2f375bc34cecd4c23eebc7c44c4fe2"
+  },
+  "deployment": "local only; Poe and remote not updated"
+}

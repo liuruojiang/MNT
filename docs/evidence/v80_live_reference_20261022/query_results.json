@@ -1,0 +1,1682 @@
+{
+  "source": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_live_reference_adversarial_audit_20261021\\round4\\candidate.py",
+  "sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "run_label": "round4_final",
+  "passed": 50,
+  "failed": 0,
+  "results": [
+    {
+      "scenario": "wed_intraday",
+      "kind": "signal",
+      "price_date": "2026-10-20",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011794798619975573,
+            "BIL": 0.0,
+            "KMLM": 0.48368515766532416,
+            "EFA": 0.2595095002195722,
+            "QQQ": 0.09133770364201664,
+            "GLD": 0.17028476538808318,
+            "AGG": 0.0671975851093385
+          },
+          "date": "2026-10-20",
+          "qqq_price": 129.25646903957337
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02057767938103361,
+            "GLD": 0.6025291778978994,
+            "KMLM": 0.2022996182526786,
+            "QQQ": 0.41430468477787175
+          },
+          "date": "2026-10-20",
+          "qqq_price": 129.25646903957337
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "GLDM 41.5%, VEA 37.0%, KMLM 24.3%, PDBC 7.4%, AGG 0.8%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 62.2%, KMLM 36.2%, PDBC 11.4%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "wed_intraday",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "wed_intraday",
+      "kind": "params",
+      "price_date": "2026-10-20",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011794798619975573,
+            "BIL": 0.0,
+            "KMLM": 0.48368515766532416,
+            "EFA": 0.2595095002195722,
+            "QQQ": 0.09133770364201664,
+            "GLD": 0.17028476538808318,
+            "AGG": 0.0671975851093385
+          },
+          "date": "2026-10-20",
+          "qqq_price": 129.25646903957337
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02057767938103361,
+            "GLD": 0.6025291778978994,
+            "KMLM": 0.2022996182526786,
+            "QQQ": 0.41430468477787175
+          },
+          "date": "2026-10-20",
+          "qqq_price": 129.25646903957337
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "wed_intraday",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "wed_confirmed",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "GLDM 41.2%, VEA 37.2%, KMLM 24.4%, PDBC 7.4%, AGG 0.8%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 62.1%, KMLM 36.3%, PDBC 11.5%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "wed_confirmed",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "wed_confirmed",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "wed_confirmed",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_intraday",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "GLDM 41.2%, VEA 37.2%, KMLM 24.4%, PDBC 7.4%, AGG 0.8%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 62.1%, KMLM 36.3%, PDBC 11.5%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "thu_intraday",
+      "kind": "live_signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_intraday",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_intraday",
+      "kind": "live_params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_confirmed",
+      "kind": "signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "KMLM 48.7%, VEA 25.8%, GLDM 16.6%, QQQM 8.6%, AGG 7.3%, EMXC 1.1%, PDBC 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "GLDM 61.2%, QQQM 40.4%, KMLM 20.3%, EMXC 2.1%, PDBC 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "thu_confirmed",
+      "kind": "live_signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_confirmed",
+      "kind": "params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "thu_confirmed",
+      "kind": "live_params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_intraday",
+      "kind": "signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "KMLM 48.7%, VEA 25.8%, GLDM 16.6%, QQQM 8.6%, AGG 7.3%, EMXC 1.1%, PDBC 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "GLDM 61.2%, QQQM 40.4%, KMLM 20.3%, EMXC 2.1%, PDBC 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "fri_intraday",
+      "kind": "live_signal",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_intraday",
+      "kind": "params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_intraday",
+      "kind": "live_params",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_confirmed",
+      "kind": "signal",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "VEA 36.5%, GLDM 28.1%, KMLM 24.7%, AGG 10.1%, PDBC 6.8%, EMXC 0.7%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 45.4%, KMLM 36.3%, EMXC 12.1%, PDBC 10.7%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "fri_confirmed",
+      "kind": "live_signal",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_confirmed",
+      "kind": "params",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fri_confirmed",
+      "kind": "live_params",
+      "price_date": "2026-10-23",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.010965522818652963,
+            "BIL": 0.0,
+            "KMLM": 0.49430269351606404,
+            "EFA": 0.29380876502090186,
+            "QQQ": 0.09961077629200363,
+            "GLD": 0.17935006119651192,
+            "AGG": 0.011562250991934968
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02040059464585867,
+            "GLD": 0.6322252611608254,
+            "KMLM": 0.20344354476109,
+            "QQQ": 0.38373030210929665
+          },
+          "date": "2026-10-23",
+          "qqq_price": 133.0178701836483
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "holiday_early_confirmed",
+      "kind": "signal",
+      "price_date": "2026-11-25",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "VEA 73.0%, GLDM 21.3%, QQQM 15.5%, AGG 1.3%, PDBC 0.0%, EMXC 0.0%, KMLM 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "GLDM 70.3%, QQQM 51.5%, EMXC 2.1%, PDBC 0.0%, KMLM 0.0%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "holiday_early_confirmed",
+      "kind": "live_signal",
+      "price_date": "2026-11-25",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "holiday_early_confirmed",
+      "kind": "params",
+      "price_date": "2026-11-25",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "holiday_early_confirmed",
+      "kind": "live_params",
+      "price_date": "2026-11-25",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_enter",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.0,
+            "BIL": 0.3497638639308428,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.0,
+            "QQQ": 0.0,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.39383457273972466,
+            "EMXC": 0.0,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.0,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "PDBC 60.0%, BIL 40.0%, QQQM 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "PDBC 60.0%, BIL 40.0%, QQQM 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "volreg_enter",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.0,
+            "BIL": 0.3497638639308428,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.0,
+            "QQQ": 0.0,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.39383457273972466,
+            "EMXC": 0.0,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.0,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_enter",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.0,
+            "BIL": 0.3497638639308428,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.0,
+            "QQQ": 0.0,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.39383457273972466,
+            "EMXC": 0.0,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.0,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_enter",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.0,
+            "BIL": 0.3497638639308428,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.0,
+            "QQQ": 0.0,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.39383457273972466,
+            "EMXC": 0.0,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.0,
+            "CASH": 0.0
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_recover",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "PDBC 60.0%, QQQM 40.0%, BIL 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "PDBC 60.0%, QQQM 40.0%, BIL 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "volreg_recover",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_recover",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "volreg_recover",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "targets": {
+            "EMXC": 0.011273510604469468,
+            "BIL": 0.0,
+            "KMLM": 0.4874353572819916,
+            "EFA": 0.25893985113022416,
+            "QQQ": 0.07955050219614919,
+            "GLD": 0.17572480764009368,
+            "AGG": 0.06869211737425576
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        },
+        {
+          "label": "B7.9",
+          "targets": {
+            "BIL": 0.0,
+            "EMXC": 0.02029531544775671,
+            "GLD": 0.6447507227648737,
+            "KMLM": 0.2012670467715231,
+            "QQQ": 0.37353925729196796
+          },
+          "date": "2026-10-21",
+          "qqq_price": 131.08800063030114
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "GLDM 41.2%, VEA 37.2%, KMLM 24.4%, PDBC 7.4%, AGG 0.8%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 62.1%, KMLM 36.3%, PDBC 11.5%",
+          "独立账户；非周度信号日，仅供参考，不执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "preview_failure",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure_with_volreg",
+      "kind": "signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "是",
+          "PDBC 60.0%, BIL 40.0%, QQQM 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "是",
+          "PDBC 60.0%, BIL 40.0%, QQQM 0.0%",
+          "独立账户；VolReg收盘确认，下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "preview_failure_with_volreg",
+      "kind": "live_signal",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure_with_volreg",
+      "kind": "params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "preview_failure_with_volreg",
+      "kind": "live_params",
+      "price_date": "2026-10-21",
+      "native_weekly": false,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [
+        {
+          "label": "B7.8",
+          "error": "B7.8 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        },
+        {
+          "label": "B7.9",
+          "error": "B7.9 model reference missing/invalid target_vol_scale",
+          "date": "2026-10-21"
+        }
+      ],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "weekly_no_change",
+      "kind": "signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {
+        "B7.8": [
+          "否",
+          "GLDM 41.0%, VEA 37.2%, KMLM 24.4%, PDBC 7.5%, AGG 0.7%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "B7.9": [
+          "否",
+          "GLDM 61.8%, KMLM 36.5%, PDBC 11.6%",
+          "独立账户；周度收盘确认后于下一美股交易日开盘执行"
+        ],
+        "Sub-C": [
+          "否",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "scenario": "weekly_no_change",
+      "kind": "live_signal",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "weekly_no_change",
+      "kind": "params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": false,
+          "include_us_live_snapshot": false,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "weekly_no_change",
+      "kind": "live_params",
+      "price_date": "2026-10-22",
+      "native_weekly": true,
+      "fetch_flags": [
+        {
+          "include_cn_live_snapshot": true,
+          "include_us_live_snapshot": true,
+          "allow_last_confirmed_cn_close": false
+        }
+      ],
+      "reference_calls": [],
+      "xlsx_signal_rows": {}
+    },
+    {
+      "scenario": "fresh_request_changes_reference",
+      "kind": "live_signal",
+      "passed": true
+    },
+    {
+      "scenario": "fresh_request_changes_reference",
+      "kind": "live_params",
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "limits": [
+    "Synthetic adjusted prices and opens, not market performance.",
+    "_fetch_data and unrelated A/ADK/C sleeves are mocked; actual request caches and run dispatch execute. No live vendor/Poe connectivity is certified.",
+    "Real run dispatch, request caches, four handlers, _compute_signal_data, B reference/overview/state, B history extraction, confirmed filter and XLSX export execute.",
+    "Reference helper is wrapped only for observation; real function is called."
+  ]
+}

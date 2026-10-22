@@ -1,0 +1,394 @@
+{
+  "source_sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "oracle_source_sha256": "cd5c9592ba7da0b2ab68b7b30f59219955996a23296fc834f917aca5b5bb14a7",
+  "cases": [
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false,
+      "round1_difference": 0.0,
+      "round1_reference": {
+        "BIL": 0.0,
+        "EMXC": 0.008733330138587972,
+        "QQQ": 0.583910345692125,
+        "GLD": 0.7043937783717271,
+        "DBC": 0.09606768051407001
+      },
+      "round2_reference": {
+        "BIL": 0.0,
+        "EMXC": 0.008733330138587972,
+        "QQQ": 0.583910345692125,
+        "GLD": 0.7043937783717271,
+        "DBC": 0.09606768051407001
+      },
+      "native_forced_target": {
+        "AGG": 0.0,
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.09606768051407001,
+        "DBMF": 0.0,
+        "EFA": 0.0,
+        "EMXC": 0.008733330138587972,
+        "GLD": 0.7043937783717271,
+        "KMLM": 0.0,
+        "QQQ": 0.583910345692125,
+        "UUP": 0.0,
+        "CASH": 0.0
+      },
+      "thursday_ema_target": {
+        "AGG": 0.0,
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EFA": 0.0,
+        "EMXC": 0.03641128367218252,
+        "GLD": 0.7697922525208065,
+        "KMLM": 0.0,
+        "QQQ": 0.6755908219709197,
+        "UUP": 0.0
+      },
+      "thursday_ema_actual": {
+        "AGG": 0.0,
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.32414799658989074,
+        "DBMF": 0.0,
+        "EFA": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.48404848960585134,
+        "KMLM": 0.0,
+        "QQQ": 0.5297295155093126,
+        "UUP": 0.0
+      },
+      "friday_ema_target": {
+        "AGG": 0.0,
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EFA": 0.0,
+        "EMXC": 0.03641128367218252,
+        "GLD": 0.7697922525208065,
+        "KMLM": 0.0,
+        "QQQ": 0.6755908219709197,
+        "UUP": 0.0
+      },
+      "friday_ema_actual": {
+        "AGG": 0.0,
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EFA": 0.0,
+        "EMXC": 0.03641128367218252,
+        "GLD": 0.7697922525208065,
+        "KMLM": 0.0,
+        "QQQ": 0.6755908219709197,
+        "UUP": 0.0
+      },
+      "friday_ema_scores": {
+        "QQQ": 0.4500000000000001,
+        "GLD": 0.3500000000000001,
+        "DBC": 0.20099999999999996,
+        "EMXC": 0.2
+      }
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false,
+      "round1_difference": 0.0,
+      "round1_reference": {
+        "BIL": 0.0,
+        "GLD": 0.6834505971984448,
+        "QQQ": 0.5665494028015552
+      },
+      "round2_reference": {
+        "BIL": 0.0,
+        "GLD": 0.6834505971984448,
+        "QQQ": 0.5665494028015552
+      },
+      "native_forced_target": {
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.6834505971984448,
+        "KMLM": 0.0,
+        "QQQ": 0.5665494028015552,
+        "CASH": 0.0
+      },
+      "thursday_ema_target": {
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.7988805176698641,
+        "KMLM": 0.0,
+        "QQQ": 0.7011194823301361
+      },
+      "thursday_ema_actual": {
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.7162048601816884,
+        "KMLM": 0.0,
+        "QQQ": 0.7837951398183116
+      },
+      "friday_ema_target": {
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.7988805176698641,
+        "KMLM": 0.0,
+        "QQQ": 0.7011194823301361
+      },
+      "friday_ema_actual": {
+        "BIL": 0.0,
+        "BTC-USD": 0.0,
+        "DBC": 0.0,
+        "DBMF": 0.0,
+        "EMXC": 0.0,
+        "GLD": 0.7988805176698641,
+        "KMLM": 0.0,
+        "QQQ": 0.7011194823301361
+      },
+      "friday_ema_scores": {
+        "QQQ": 0.4500000000000001,
+        "GLD": 0.3500000000000001,
+        "DBC": 0.20099999999999996,
+        "EMXC": 0.2
+      }
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "enter",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 4.9510093666543,
+      "next_defense": true
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "enter",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 4.9510093666543,
+      "next_defense": true
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "recover",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": true,
+      "ratio": 0.02061976050217314,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 540,
+      "mode": "recover",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": true,
+      "ratio": 0.02061976050217314,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-15",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-15",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-19",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-19",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-21",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-21",
+      "rows": 540,
+      "mode": "normal",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 0.7231692677616067,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 392,
+      "mode": "normal",
+      "label": "B7.8",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 1.0862531810190261,
+      "next_defense": false
+    },
+    {
+      "end": "2026-10-16",
+      "rows": 392,
+      "mode": "normal",
+      "label": "B7.9",
+      "max_weight_difference": 0.0,
+      "current_defense": false,
+      "ratio": 1.0862531810190261,
+      "next_defense": false
+    }
+  ],
+  "threshold_probes": [
+    {
+      "label": "B7.8",
+      "current_ema_emxc_weight": 0.000999,
+      "prev_risky": [
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.3951839627492154,
+        "DBC": 0.12809024068542668,
+        "GLD": 0.4767257965653579
+      },
+      "top_n": 3,
+      "threshold": 1.05
+    },
+    {
+      "label": "B7.8",
+      "current_ema_emxc_weight": 0.001,
+      "prev_risky": [
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.3951839627492154,
+        "DBC": 0.12809024068542668,
+        "GLD": 0.4767257965653579
+      },
+      "top_n": 3,
+      "threshold": 1.05
+    },
+    {
+      "label": "B7.8",
+      "current_ema_emxc_weight": 0.001001,
+      "prev_risky": [
+        "EMXC",
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.4374063607228895,
+        "EMXC": 0.03493332055435189,
+        "GLD": 0.5276603187227586
+      },
+      "top_n": 3,
+      "threshold": 1.05
+    },
+    {
+      "label": "B7.9",
+      "current_ema_emxc_weight": 0.000999,
+      "prev_risky": [
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.4532395222412442,
+        "GLD": 0.5467604777587558
+      },
+      "top_n": 2,
+      "threshold": 1.0
+    },
+    {
+      "label": "B7.9",
+      "current_ema_emxc_weight": 0.001,
+      "prev_risky": [
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.4532395222412442,
+        "GLD": 0.5467604777587558
+      },
+      "top_n": 2,
+      "threshold": 1.0
+    },
+    {
+      "label": "B7.9",
+      "current_ema_emxc_weight": 0.001001,
+      "prev_risky": [
+        "EMXC",
+        "GLD",
+        "QQQ"
+      ],
+      "raw": {
+        "QQQ": 0.4532395222412442,
+        "GLD": 0.5467604777587558
+      },
+      "top_n": 2,
+      "threshold": 1.0
+    }
+  ],
+  "assertion_failures": [],
+  "status": "PASS"
+}
