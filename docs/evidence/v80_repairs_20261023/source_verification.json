@@ -1,0 +1,30 @@
+{
+  "baseline_sha256": "c90184824bf3dae06d11c2f4afa532ba0f8f3a2cca04243b63df23ee08643f3b",
+  "final_sha256": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d",
+  "frozen_sha256": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d",
+  "source_equals_frozen": true,
+  "changed_top_level_assignments": [],
+  "python": "3.14.4",
+  "post_test_sha256": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d",
+  "runs": {
+    "full_final": {
+      "tests": 773,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "adversarial_final": {
+      "tests": 124,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "cleanup_full": {
+      "tests": 897,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "cleanup_source_sha256": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d"
+}

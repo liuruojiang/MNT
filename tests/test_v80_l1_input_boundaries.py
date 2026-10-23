@@ -30,7 +30,8 @@ def test_cn_stock_frame_starts_on_latest_component_publication(v80):
 
 
 def test_zz2000_amount_cannot_signal_before_publication(v80, monkeypatch):
-    dates = pd.bdate_range("2023-06-01", "2023-10-13")
+    # Valid exchange sessions: this test targets publication, not holiday rows.
+    dates = v80._expected_cn_sessions("2023-06-01", "2023-10-13")
     zz2000 = pd.DataFrame({"amount": np.linspace(200.0, 20.0, len(dates))}, index=dates)
     cyb = pd.DataFrame({"amount": np.linspace(20.0, 200.0, len(dates))}, index=dates)
 

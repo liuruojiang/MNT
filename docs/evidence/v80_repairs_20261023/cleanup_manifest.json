@@ -1,0 +1,59 @@
+{
+  "source_sha256": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d",
+  "test_reorganization": "5 original counterexample modules and 3 independent review modules renamed to test_*.py; all assertions retained; shared imports updated",
+  "removed_intermediate_evidence": [
+    "cn_round2.xml",
+    "cn_round3_working.log",
+    "full_round1.log",
+    "full_round1.xml",
+    "full_round2.log",
+    "full_round2.xml",
+    "review_us_round1.xml"
+  ],
+  "removed_duplicate_sources": [
+    "outputs/v80_repairs_20261023/baseline.py",
+    "outputs/v80_repairs_20261023/candidate_round1.py",
+    "outputs/v80_repairs_20261023/candidate_round2.py",
+    "outputs/v80_repairs_20261023/candidate_round3.py"
+  ],
+  "preserved": "Initial failure evidence, final success evidence, reports, production source and all regression tests",
+  "local_finalization": "Repository .git is read-only in this session; recursive directory cleanup rejected by automatic approval. scripts/finalize_v80_sync_20261023.ps1 verifies the published commit and local blobs, removes only explicit disposable paths, then synchronizes HEAD/index without overwriting working files.",
+  "text_normalization": {
+    "docs/evidence/v80_adversarial_20261023/conditional_and_reporting.log": {
+      "before_sha256": "6d89033342a12c296a44fcd9b5fc38d25ec150b99ac6183c2d454359c5b7e5f3",
+      "after_sha256": "f11bea8678bf39f78325d403a872806dfcd54a0b854cfbceb4006eb9fe5743a2"
+    },
+    "docs/evidence/v80_adversarial_20261023/conditional_and_reporting.xml": {
+      "before_sha256": "44edf227e1c54268e36fecd93c534d6453999c898e9703d2f73e0eeec631f5c6",
+      "after_sha256": "edda9f7682c222dd0ce2ae3ba9bf8ceb9fe11eb725dab313f7bb99bd3bde8ada"
+    },
+    "docs/evidence/v80_adversarial_20261023/core_counterexamples.log": {
+      "before_sha256": "58fd68fb77677e85ad4d0c6f59ca51508d30561111144285a1a0e1dded42a4ca",
+      "after_sha256": "148c1244ebfbe7fb721805293514a801c1ac24691ec0ef3289cadc4d51cc5fe7"
+    },
+    "docs/evidence/v80_adversarial_20261023/core_counterexamples.xml": {
+      "before_sha256": "e6b02f863283fc85569ce5d59f562630287e2e892fc134770b7b0e1d8f11139c",
+      "after_sha256": "c837ff9ce34deea0908dd37d4032ed4b277f5be631fc632e1899ac0aadd36665"
+    },
+    "docs/evidence/v80_repairs_20261023/adversarial_final.log": {
+      "before_sha256": "d87b89b10b51bfc2e505310a3c0499b919982bfde914021c386d9a86ccf072e1",
+      "after_sha256": "a22a3e67aa53f24ccf9053a35ebe68b0ef2465d2ede912828645a6ff36c76013"
+    },
+    "docs/evidence/v80_repairs_20261023/cleanup_full.log": {
+      "before_sha256": "a24954d2f56465724bebc69933593ab0d22f1ea35152d1a326e56a8539b329a4",
+      "after_sha256": "2a06a2e126d381d8557ab333bd9a051bdc886b8265d485eae07ee3281dbf0785"
+    },
+    "docs/evidence/v80_repairs_20261023/cleanup_manifest.json": {
+      "before_sha256": "85840ae7cee19930f1c22442fb316251fc67709cdd40fe0f8fee1e7a84a27acf",
+      "after_sha256": "fc6b78d7a52fa138198637b8ac049cce386fc3b7c42ad56d034f6c772c91fbf2"
+    },
+    "docs/evidence/v80_repairs_20261023/full_final.log": {
+      "before_sha256": "70dfcdb1029a2d14cb9dc6fd406a68a6e69f3b5c002fb4ae3f75c3ac87970881",
+      "after_sha256": "18c85c92099f517d7f06dbec1c180994e39e632e495ea4845d53b88af8ce369a"
+    },
+    "docs/evidence/v80_repairs_20261023/source_verification.json": {
+      "before_sha256": "218ac5969eaf86c68b4c06a8df5aa56d274389bf853c10f313dab90c8de51430",
+      "after_sha256": "8a8e7433f8db2636e51f86ba12c178b90bd69d18ba88964a591b22b06b592ccb"
+    }
+  }
+}

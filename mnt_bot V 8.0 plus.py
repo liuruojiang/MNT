@@ -2271,35 +2271,87 @@ def _consecutive_below_amount(amount, ma):
         streak.append(cur)
     return pd.Series(streak, index=amount.index, dtype=float)
 
+def _suba_amount_rule_frame(amount, ma, days, publication_date=None, expected_date=None):
+    """Preserve missing trading sessions and separate unknown from false.
+
+    Natural publication warmup cannot trigger the rule. A truncated vendor
+    history is unknown until the entire MA/streak dependency is observed.
+    """
+    amount = pd.Series(amount, dtype=float)
+    dates = amount.index
+    if not isinstance(dates, pd.DatetimeIndex) or dates.hasnans or dates.has_duplicates or dates.tz is not None or not dates.is_monotonic_increasing or not dates.equals(dates.normalize()):
+        raise DataSchemaError('Sub-A amount has invalid daily date index')
+    if publication_date is not None:
+        amount = amount.loc[amount.index >= pd.Timestamp(publication_date)]
+    if expected_date is not None:
+        amount = amount.loc[amount.index <= pd.Timestamp(expected_date)]
+    if amount.empty:
+        raise DataSchemaError('Sub-A amount has no post-publication data')
+    end = max(amount.index[-1], pd.Timestamp(expected_date)) if expected_date is not None else amount.index[-1]
+    sessions = _expected_cn_sessions(amount.index[0], end)
+    if len(amount.index.difference(sessions)):
+        raise DataSchemaError('Sub-A amount contains a non-session observation')
+    amount = amount.where(np.isfinite(amount) & (amount > 0.0)).reindex(sessions)
+    width = int(ma) + int(days) - 1
+    if int(ma) < 1 or int(days) < 1:
+        raise ValueError('Sub-A amount MA and days must be positive')
+    valid = amount.notna()
+    known = valid.rolling(width, min_periods=1).sum().eq(pd.Series(np.minimum(np.arange(len(amount)) + 1, width), index=sessions))
+    if publication_date is not None:
+        publication_sessions = _expected_cn_sessions(pd.Timestamp(publication_date), amount.index[0])
+        if len(publication_sessions) and amount.index[0] > publication_sessions[0]:
+            known.iloc[:width - 1] = False
+    streak = _consecutive_below_amount(amount, ma)
+    return pd.DataFrame({'amount': amount, 'streak': streak.where(known),
+                         'signal': ((streak >= int(days)) & known), 'known': known}, index=sessions)
+
+
 def _build_consecutive_below_amount_signal(rule_specs, mode='or'):
     if mode not in ('or', 'and'):
         raise ValueError("mode must be 'or' or 'and'.")
     frames = []
     signals = []
+    known_values = []
     for name, spec in rule_specs.items():
         amount = spec['amount']
         ma = int(spec['ma'])
         days = int(spec['days'])
-        streak = _consecutive_below_amount(amount, ma)
-        sig = streak >= days
-        frames.append(pd.DataFrame({f'{name}_amount': pd.Series(amount, dtype=float).sort_index(), f'{name}_streak': streak, f'{name}_signal': sig}))
-        signals.append(sig.rename(name))
+        rule = _suba_amount_rule_frame(amount, ma, days, spec.get('publication_date'), spec.get('expected_date'))
+        frames.append(rule.rename(columns={col: f'{name}_{col}' for col in rule}))
+        signals.append(rule['signal'].rename(name))
+        known_values.append(rule['known'].rename(name))
     if not signals:
         return (pd.Series(dtype=bool), pd.DataFrame())
     signal_df = pd.concat(signals, axis=1).fillna(False).astype(bool).sort_index()
-    signal = signal_df.any(axis=1) if mode == 'or' else signal_df.all(axis=1)
+    known_df = pd.concat(known_values, axis=1).reindex(signal_df.index).fillna(False).astype(bool)
+    for name, spec in rule_specs.items():
+        publication = spec.get('publication_date')
+        if publication is not None:
+            known_df.loc[known_df.index < pd.Timestamp(publication), name] = True
+    known_true = signal_df & known_df
+    known_false = ~signal_df & known_df
+    signal = known_true.any(axis=1) if mode == 'or' else known_true.all(axis=1)
+    known = (known_true.any(axis=1) | known_df.all(axis=1)) if mode == 'or' else (known_false.any(axis=1) | known_df.all(axis=1))
     feature = pd.concat(frames, axis=1).reindex(signal.index)
     feature['combined_signal'] = signal
+    feature['combined_unresolved'] = ~known
     return (signal.astype(bool), feature)
 
 def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma, days):
-    pair = pd.concat([pd.Series(numerator_amount, dtype=float).sort_index().rename('numerator'), pd.Series(denominator_amount, dtype=float).sort_index().rename('denominator')], axis=1).dropna()
-    pair = pair[pair['denominator'] > 0]
-    ratio = (pair['numerator'] / pair['denominator']).rename('severe_ratio_value')
+    numerator = pd.Series(numerator_amount, dtype=float)
+    denominator = pd.Series(denominator_amount, dtype=float)
+    for series in (numerator, denominator):
+        if series.empty or not isinstance(series.index, pd.DatetimeIndex) or series.index.has_duplicates or not series.index.is_monotonic_increasing:
+            raise DataSchemaError('Sub-A amount ratio has invalid daily date index')
+    pair = pd.concat([numerator.rename('numerator'), denominator.rename('denominator')], axis=1)
+    pair = pair.loc[pair.index >= max(numerator.index[0], denominator.index[0])]
+    ratio = pair['numerator'].where(pair['numerator'] > 0) / pair['denominator'].where(pair['denominator'] > 0)
+    rule = _suba_amount_rule_frame(ratio, ma, days, CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE)
+    ratio = rule['amount'].rename('severe_ratio_value')
     ratio_ma = ratio.rolling(int(ma)).mean().rename('severe_ratio_ma_value')
-    streak = _consecutive_below_amount(ratio, ma).rename('severe_ratio_streak')
-    signal = (streak >= int(days)).rename('severe_ratio_signal')
-    feature = pd.concat([ratio, ratio_ma, streak, signal], axis=1)
+    streak = rule['streak'].rename('severe_ratio_streak')
+    signal = rule['signal'].rename('severe_ratio_signal')
+    feature = pd.concat([ratio, ratio_ma, streak, signal, (~rule['known']).rename('severe_ratio_unresolved')], axis=1)
     return (signal.astype(bool), feature)
 
 def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=None):
@@ -2345,7 +2397,13 @@ def _load_suba_volume_signal(expected_date=None):
     specs = {}
     sources = {}
     errors = {}
+    inactive = set()
     for name, label, secid, ma, days in [('zz2000', 'ZZ2000', CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS), ('cyb', 'CYB', CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)]:
+        publication = CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE if name == 'zz2000' else CN_DK_PUBLICATION_DATES['DK_CYB']
+        if expected_date is not None and pd.Timestamp(expected_date) < publication:
+            inactive.add(name)
+            sources[name] = 'not-yet-published'
+            continue
         try:
             df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date)
             if expected_date is not None:
@@ -2353,7 +2411,9 @@ def _load_suba_volume_signal(expected_date=None):
             amount = df['amount']
             if name == 'zz2000':
                 amount = amount.loc[amount.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
-            specs[name] = {'amount': amount, 'ma': ma, 'days': days}
+            _suba_amount_rule_frame(amount, ma, days, publication, expected_date)
+            specs[name] = {'amount': amount, 'ma': ma, 'days': days,
+                           'publication_date': publication, 'expected_date': expected_date}
             sources[name] = source
         except _DATA_FETCH_ERRORS as exc:
             errors[name] = str(exc)
@@ -2406,20 +2466,29 @@ def _load_suba_volume_signal(expected_date=None):
     if severe_error is not None:
         feature['clear_ratio_error'] = severe_error
     if len(feature) > 0:
+        rule_unresolved = feature['combined_unresolved'].fillna(True).astype(bool)
         if severe_error is not None:
             feature['combined_unresolved'] = True
         elif errors:
             if CN_SA_VOLUME_RULE_MODE == 'or':
-                feature['combined_unresolved'] = ~feature['old_combined_signal'].astype(bool)
+                feature['combined_unresolved'] = rule_unresolved | ~feature['old_combined_signal'].astype(bool)
             elif CN_SA_VOLUME_RULE_MODE == 'and':
-                feature['combined_unresolved'] = feature['old_combined_signal'].astype(bool)
+                feature['combined_unresolved'] = rule_unresolved | feature['old_combined_signal'].astype(bool)
             else:
                 feature['combined_unresolved'] = True
         else:
-            feature['combined_unresolved'] = False
+            feature['combined_unresolved'] = rule_unresolved
+        if CN_SA_VOLUME_CLEAR_RATIO_ENABLED and 'severe_ratio_unresolved' in feature:
+            ratio_unknown = feature['severe_ratio_unresolved'].fillna(True).astype(bool)
+            ratio_unknown.loc[ratio_unknown.index < CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE] = False
+            feature['combined_unresolved'] |= ratio_unknown
         for name in ('zz2000', 'cyb'):
             if name in sources:
                 feature[f'{name}_source'] = sources[name]
+                if name in inactive:
+                    feature[f'{name}_streak'] = 0.0
+                    feature[f'{name}_signal'] = False
+                    feature[f'{name}_known'] = True
             else:
                 feature[f'{name}_source'] = 'unavailable'
                 feature[f'{name}_error'] = errors.get(name, 'unknown')
@@ -2428,10 +2497,20 @@ def _load_suba_volume_signal(expected_date=None):
         feature['partial_unavailable'] = bool(errors)
     return (combined_signal, feature)
 
-def _suba_volume_feature_has_unresolved(feature):
+def _suba_volume_feature_has_unresolved(feature, consumer_index=None):
     if feature is None or len(feature) == 0 or 'combined_unresolved' not in feature.columns:
-        return False
-    return bool(feature['combined_unresolved'].fillna(False).astype(bool).any())
+        return consumer_index is not None and len(consumer_index) > 0
+    unknown = feature['combined_unresolved']
+    if consumer_index is not None:
+        required = pd.DatetimeIndex(consumer_index)
+        # Intraday price snapshots intentionally use confirmed close-only risk
+        # data. Every actually confirmed consumed session must still be present.
+        confirmed = _latest_confirmed_cn_rule_date(required)
+        if confirmed is not None:
+            required = required[required <= confirmed]
+        unknown = unknown.reindex(required)
+        return bool(unknown.fillna(True).astype(bool).any())
+    return bool(unknown.fillna(True).astype(bool).any())
 
 def _mark_suba_volume_unavailable(cn_result, exc):
     out = cn_result.copy()
@@ -2455,7 +2534,7 @@ def _write_suba_volume_query_warning(msg, cn_result):
         msg.write('⚠️ Sub-A成交额风控不可判定：本次查询继续显示主信号/净值，但未用成交额风控改写仓位；不应按正常仓位执行。\n\n')
 
 def _apply_suba_volume_overlay_policy(cn_result, close_df, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=False):
-    if _suba_volume_feature_has_unresolved(suba_volume_feature):
+    if _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
         message = 'Sub-A成交额风控不可判定，本次不应用该风控改写仓位'
         if not allow_unresolved_suba_volume:
             raise poe.BotError('Sub-A成交额风控存在不可判定项，正式路径中止。')
@@ -2463,7 +2542,7 @@ def _apply_suba_volume_overlay_policy(cn_result, close_df, suba_volume_signal, s
     return apply_suba_volume_overlay(cn_result, close_df, suba_volume_signal, suba_volume_feature, scale=CN_SA_VOLUME_SCALE, rule_name=CN_SA_VOLUME_RULE_NAME)
 
 def _apply_v78_suba_new_volume_overlay_policy(new_result, close_df, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=False):
-    if _suba_volume_feature_has_unresolved(suba_volume_feature):
+    if _suba_volume_feature_has_unresolved(suba_volume_feature, new_result.index):
         message = 'Sub-A成交额风控不可判定，本次不应用该风控改写仓位'
         if not allow_unresolved_suba_volume:
             raise poe.BotError('Sub-A成交额风控存在不可判定项，正式路径中止。')
@@ -2847,32 +2926,81 @@ def _fetch_us_nasdaq_history(ticker, start_date, end_date):
     return frame[['date', 'open', 'close']].set_index('date').sort_index()
 
 def _merge_same_ticker_gap_prices(primary, fallback, missing_dates, ticker):
+    """Fill adjusted OHLC using a verified factor for each individual session.
+
+    A window-wide median is not an adjustment factor across ex-dividend/split
+    boundaries. An entire missing row needs matching immediate session anchors;
+    an ambiguous gap stays missing for the formal history validator to reject.
+    """
     merged = primary.copy().sort_index()
     fallback = fallback.copy().sort_index()
+    for label, frame in (('Yahoo', merged), ('Nasdaq', fallback)):
+        if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.hasnans or frame.index.has_duplicates or frame.index.tz is not None or not frame.index.equals(frame.index.normalize()):
+            raise DataSchemaError(f'{ticker} {label} gap repair requires unique daily dates')
+        if not {'open', 'close'}.issubset(frame.columns):
+            raise DataSchemaError(f'{ticker} {label} gap repair requires open/close')
     missing = pd.DatetimeIndex(missing_dates).normalize().unique().sort_values()
     common = merged.index.intersection(fallback.index)
     primary_close = pd.to_numeric(merged.get('close'), errors='coerce').reindex(common)
     fallback_close = pd.to_numeric(fallback.get('close'), errors='coerce').reindex(common)
     valid_overlap = np.isfinite(primary_close) & np.isfinite(fallback_close) & (primary_close > 0.0) & (fallback_close > 0.0)
     ratios = (primary_close[valid_overlap] / fallback_close[valid_overlap]).astype(float)
-    if ratios.empty:
-        raise ValueError(f'{ticker} Nasdaq gap repair has no valid Yahoo overlap')
-    scale = float(ratios.median())
-    relative_spread = float((ratios / scale - 1.0).abs().max())
-    if not np.isfinite(scale) or scale <= 0.0 or relative_spread > 0.01:
-        raise ValueError(f'{ticker} Nasdaq/Yahoo price scale mismatch (median={scale!r}, max_relative_spread={relative_spread:.4%})')
     candidate_dates = missing.intersection(fallback.index)
     if len(candidate_dates) == 0:
         return (merged, 0)
     merged = merged.reindex(merged.index.union(candidate_dates)).sort_index()
+    evidence = list(primary.attrs.get('nasdaq_gap_repair_evidence', []))
+
+    def positive_value(frame, date, column):
+        if date not in frame.index:
+            return np.nan
+        value = pd.to_numeric(pd.Series([frame.at[date, column]]), errors='coerce').iloc[0]
+        return float(value) if np.isfinite(value) and value > 0 else np.nan
+
     for date in candidate_dates:
+        record = {'ticker': ticker, 'date': date.date().isoformat(),
+                  'source': 'Nasdaq', 'basis': 'Yahoo adjusted OHLC', 'filled_columns': []}
+        scale = np.nan
+        if date in ratios.index:
+            scale = float(ratios.loc[date])
+            record['method'] = 'same_day_close_factor'
+        else:
+            # The adjusted open is also authoritative when only close is absent.
+            adjusted_open = positive_value(primary, date, 'open')
+            raw_open = positive_value(fallback, date, 'open')
+            if np.isfinite(adjusted_open) and np.isfinite(raw_open):
+                scale = adjusted_open / raw_open
+                record['method'] = 'same_day_open_factor'
+            else:
+                sessions = _expected_ticker_ohlc_index(ticker, date - pd.Timedelta(days=14), date + pd.Timedelta(days=14))
+                before, after = sessions[sessions < date], sessions[sessions > date]
+                if len(before) and len(after) and before[-1] in ratios.index and after[0] in ratios.index:
+                    left, right = float(ratios.loc[before[-1]]), float(ratios.loc[after[0]])
+                    record['anchors'] = [{'date': before[-1].date().isoformat(), 'factor': left},
+                                         {'date': after[0].date().isoformat(), 'factor': right}]
+                    if np.isclose(left, right, rtol=1e-7, atol=0.0):
+                        scale = left
+                        record['method'] = 'matching_adjacent_session_close_factors'
+                    else:
+                        record['reason'] = 'adjacent_adjustment_factors_disagree'
+                else:
+                    record['reason'] = 'no_verified_immediate_session_factor_pair'
+        if not np.isfinite(scale) or scale <= 0:
+            record['status'] = 'unresolved'
+            evidence.append(record)
+            continue
+        record['factor'] = scale
         for column in ('open', 'close'):
-            fallback_value = pd.to_numeric(pd.Series([fallback.at[date, column]]), errors='coerce').iloc[0]
-            if not np.isfinite(fallback_value) or fallback_value <= 0.0:
+            fallback_value = positive_value(fallback, date, column)
+            if not np.isfinite(fallback_value):
                 continue
-            current = merged.at[date, column] if column in merged.columns else np.nan
-            if pd.isna(current) or not np.isfinite(float(current)) or float(current) <= 0.0:
-                merged.at[date, column] = float(fallback_value) * scale
+            if not np.isfinite(positive_value(merged, date, column)):
+                merged.at[date, column] = fallback_value * scale
+                record['filled_columns'].append(column)
+                record[column] = {'raw': fallback_value, 'adjusted': fallback_value * scale}
+        record['status'] = 'repaired' if date in _valid_us_ohlc_index(merged.loc[[date]]) else 'unresolved'
+        evidence.append(record)
+    merged.attrs['nasdaq_gap_repair_evidence'] = evidence
     before = len(missing)
     remaining = missing.difference(_valid_us_ohlc_index(merged))
     return (merged, before - len(remaining))
@@ -5756,7 +5884,7 @@ def run_us_rotation_mix(close_df, ranking_codes, top_n=US_ROT_TOP_N, abs_thresho
     required = list(ranking_codes) + ['BIL']
     if ranking_code_selector is not None:
         required += list(SUBB_INFLATION_GATE_TICKERS)
-    _validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation')
+    _validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation', strict_calendar=strict_open_execution)
     momentum_by_lb = {lb: close_df.div(close_df.shift(lb)).sub(1) for lb in US_ROT_LBS}
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     signal_days = _us_signal_days(close_df, start_idx)
@@ -5843,7 +5971,7 @@ def run_subb_v75_ema_base7_rotation(close_df, base_codes=None, half_life=SUBB_V7
     close_df = _apply_subb_btc_start_filter(close_df)
     ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_POOL)
     start_idx = max(half_life, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
-    _validate_subb_price_input(close_df, ranking_codes + ['BIL'], start_idx + 1, 'Sub-B EMA rotation')
+    _validate_subb_price_input(close_df, ranking_codes + ['BIL'], start_idx + 1, 'Sub-B EMA rotation', strict_calendar=strict_open_execution)
     score_df = _subb_v75_ema_score(close_df, half_life)
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     signal_days = _us_signal_days(close_df, start_idx)
@@ -6156,7 +6284,7 @@ def run_v78_subb_new_line(close_df, line='bias', us_open=None, strict_open_execu
         start_idx = max(320, US_ROT_VOL_LB, vol_window) + 1
     else:
         raise ValueError(line)
-    _validate_subb_price_input(close_df, list(US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.9 {line} rotation')
+    _validate_subb_price_input(close_df, list(US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.9 {line} rotation', strict_calendar=strict_open_execution)
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     signal_days = _us_signal_days(close_df, start_idx)
     holdings = {'BIL': 1.0}
@@ -7170,8 +7298,13 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w('> 参数核对页；下单只看“实时信号”。\n\n')
     suba = _suba_query_overview(cn_result, -1)
     suba_available = bool(suba['rows'])
-    suba_mark = '🔴' if suba_available and suba['changed'] else '🟢' if suba_available else '⚠️'
-    suba_status = '需要调整' if suba_available and suba['changed'] else '维持' if suba_available else '状态不可判定'
+    a_volume_unresolved = False
+    if cn_result is not None and len(cn_result) > 0:
+        a_row = cn_result.iloc[-1]
+        a_volume_unresolved = bool(a_row.get('suba_volume_unresolved', a_row.get('suba_volume_unavailable', False)))
+    suba_executable = suba_available and not a_volume_unresolved
+    suba_mark = '🔴' if suba_executable and suba['changed'] else '🟢' if suba_executable else '⚠️'
+    suba_status = '需要调整' if suba_executable and suba['changed'] else '维持' if suba_executable else '状态不可判定'
     w(f'### A策略（Sub-A）｜{suba_mark} {suba_status}\n\n')
     if cn_result is not None and len(cn_result) > 0:
         w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
@@ -7179,10 +7312,12 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w(f'规则：**A策略（单一生产策略）**｜MA{CN_BIAS_N}/动量{CN_MOM_DAY}日｜原始Top-1需score>0且R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD:.2f}，失败不递补｜目标波动{CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日｜杠杆{CN_MIN_LEV:.2f}–{CN_MAX_LEV:.2f}x\n\n')
         w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜A股收盘执行｜现金收益与借款成本均按{CN_RF_ANNUAL:.0%}/年回测假设，非券商融资报价\n\n')
     if suba['rows']:
-        w('| 策略 | 当前已生效 | 收盘最终目标 | 操作 |\n')
+        target_label = '诊断目标（不可执行）' if a_volume_unresolved else '收盘最终目标'
+        w(f'| 策略 | 当前已生效 | {target_label} | 操作 |\n')
         w('|:-|:-|:-|:-|\n')
         for item in suba['rows']:
-            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
+            action = '风控不可判定；停止执行并刷新数据' if a_volume_unresolved else item['action']
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
     else:
         w('⚠️ A策略状态不可用。\n')
     _write_suba_decision_explanation(w, cn_result)
@@ -7197,7 +7332,7 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         a_measure += '｜成交额覆盖=不可判定（禁止按正常仓位执行）' if a_volume_unresolved else f'｜成交额乘数={float(a_volume_scale):.2f}x'
         w(f"\n关键风控：目标波动={CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日（上限{CN_MAX_LEV:.2f}x）｜{a_measure}｜最终目标={suba['target_exposure']:.2f}x\n\n")
     if query_kind not in {'params', 'live_params'}:
-        suba_action = _query_action_instruction(suba['changed'], cn_intraday, query_kind) if suba_available else '状态不可判定：停止执行并重试，不能按“维持”处理。'
+        suba_action = _query_action_instruction(suba['changed'], cn_intraday, query_kind) if suba_executable else '状态不可判定：停止执行并重试，不能按“维持”处理。'
         w(f'**现在怎么做：{suba_action}**\n\n')
     adk = _adk_query_overview(cn_dk_result, -1)
     adk_available = bool(adk['rows'])
@@ -7250,10 +7385,12 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         adk_action = _query_action_instruction(adk['changed'], dk_intraday, query_kind) if adk_available else '状态不可判定：停止执行并重试，不能按“维持”处理。'
         w(f'**现在怎么做：{adk_action}**\n\n')
     a_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in suba['rows'])) or '状态不可用'
+    if a_volume_unresolved:
+        a_target_text = '风控不可判定；仅供诊断，不可执行：' + a_target_text
     adk_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in adk['rows'])) or '状态不可用'
     a_date = pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d') if cn_result is not None and len(cn_result) else 'N/A'
     adk_date = pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d') if cn_dk_result is not None and len(cn_dk_result) else 'N/A'
-    return {'Sub-A': {'is_signal': bool(suba_available and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': '状态不可用；不生成正式调整指令' if not suba_available else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
+    return {'Sub-A': {'is_signal': bool(suba_executable and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': '状态不可用或风控不可判定；停止执行，不生成正式调整指令' if not suba_executable else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
 _v80_b78_US_ROT_COMMISSION = 0.001
 _v80_b78_US_TRADING_DAYS = 252
 _v80_b78_US_ROT_FINANCING_BENCHMARK = 'BIL'
@@ -7551,7 +7688,7 @@ def _v80_b78_run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold
     required = list(ranking_codes) + ['BIL']
     if ranking_code_selector is not None:
         required += list(_v80_b78_SUBB_INFLATION_GATE_TICKERS)
-    _v80_b78_validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation')
+    _v80_b78_validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation', strict_calendar=strict_open_execution)
     momentum_by_lb = {lb: close_df.div(close_df.shift(lb)).sub(1) for lb in _v80_b78_US_ROT_LBS}
     vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
     signal_days = _v80_b78_us_signal_days(close_df, start_idx)
@@ -7637,9 +7774,10 @@ def _v80_b78_subb_v75_ema_scale_from_hist(hist):
 def _v80_b78_run_subb_v75_ema_base7_rotation(close_df, base_codes=None, half_life=_v80_b78_SUBB_V75_EMA_HALF_LIFE, abs_threshold=_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD, top_n=3, min_turnover=_v80_b78_US_ROT_MIN_TURNOVER, threshold=_v80_b78_US_ROT_REBALANCE_THRESHOLD, us_open=None, weight_assets=None, strict_open_execution=False):
     close_df = _v80_b78_apply_subb_btc_start_filter(close_df)
     ranking_codes = list(base_codes) if base_codes is not None else list(_v80_b78_US_ROT_POOL)
+    start_idx = max(half_life, _v80_b78_US_ROT_VOL_LB, _v80_b78_US_ROT_VOL_WINDOW) + 1
+    _v80_b78_validate_subb_price_input(close_df, ranking_codes + ['BIL'], start_idx + 1, 'Sub-B EMA rotation', strict_calendar=strict_open_execution)
     score_df = _v80_b78_subb_v75_ema_score(close_df, half_life)
     vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
-    start_idx = max(half_life, _v80_b78_US_ROT_VOL_LB, _v80_b78_US_ROT_VOL_WINDOW) + 1
     signal_days = _v80_b78_us_signal_days(close_df, start_idx)
     w_assets = list(dict.fromkeys(weight_assets if weight_assets is not None else ranking_codes))
     if 'BIL' not in w_assets:
@@ -7808,7 +7946,7 @@ def _v80_b78_run_v78_subb_new_line(close_df, line='bias', us_open=None, strict_o
         start_idx = max(320, _v80_b78_US_ROT_VOL_LB, vol_window) + 1
     else:
         raise ValueError(line)
-    _v80_b78_validate_subb_price_input(close_df, list(_v80_b78_US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.8 {line} rotation')
+    _v80_b78_validate_subb_price_input(close_df, list(_v80_b78_US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.8 {line} rotation', strict_calendar=strict_open_execution)
     vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
     signal_days = _v80_b78_us_signal_days(close_df, start_idx)
     holdings = {'BIL': 1.0}
@@ -8142,7 +8280,7 @@ def _v80_b78_us_weighted_return(weights, prev_prices, curr_prices):
         pr += weight * (float(curr_px) / float(prev_px) - 1)
     return pr
 
-def _v80_b78_validate_subb_price_input(close_df, required_columns, min_rows, context):
+def _v80_b78_validate_subb_price_input(close_df, required_columns, min_rows, context, *, strict_calendar=False):
     if close_df is None or not isinstance(close_df, pd.DataFrame):
         raise ValueError(f'{context}: price history must be a DataFrame')
     if not isinstance(close_df.index, pd.DatetimeIndex):
@@ -8154,6 +8292,8 @@ def _v80_b78_validate_subb_price_input(close_df, required_columns, min_rows, con
         raise ValueError(f"{context}: missing required price columns: {', '.join(missing)}")
     if len(close_df) < int(min_rows):
         raise ValueError(f'{context}: insufficient price history; rows={len(close_df)}, required>={int(min_rows)}')
+    if strict_calendar:
+        _assert_subb_full_session_index(close_df.index, context)
 
 def _v80_b78_active_weight_assets(*weight_dicts, min_abs=1e-12):
     assets = set()
@@ -9383,8 +9523,26 @@ def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intrad
     w('> B7.8与B7.9必须分别核对、分别下单，不合并持仓。\n\n')
     return signal_info
 
-def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False):
+def _subc_query_clock(us_prod_daily, now=None):
+    """C's bar confirmation and next execution belong to its own calendar."""
+    if us_prod_daily is None or len(us_prod_daily) == 0:
+        return {}
+    asof = pd.Timestamp(us_prod_daily.index[-1]).normalize()
+    current = pd.Timestamp(beijing_now() if now is None else now)
+    current = current.tz_localize('Asia/Shanghai') if current.tzinfo is None else current.tz_convert('Asia/Shanghai')
+    close_at = _subc_close_execution_at(asof)
+    execution_at = _subc_open_execution_at(_next_session_day(asof))
+    return {'asof': asof, 'close_at': close_at, 'execution_at': execution_at,
+            'unconfirmed': current < close_at, 'execution_elapsed': current >= execution_at}
+
+
+def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False, clock=None):
     w('## 🌐 C策略总览｜总组合30%\n\n')
+    clock = clock or {}
+    if clock:
+        us_intraday = bool(clock['unconfirmed'])
+        confirmation = '未收盘确认' if us_intraday else '已收盘确认'
+        w(f"> C数据截至 **{clock['asof']:%Y-%m-%d}**（{confirmation}）；该日收盘 {clock['close_at']:%Y-%m-%d %H:%M} 北京时间；缩放计划执行 **{clock['execution_at']:%Y-%m-%d %H:%M} 北京时间**，下一美股交易日开盘。\n\n")
     if query_kind in {'params', 'live_params'}:
         w(f'> 历史样本：{SUBC_FORMAL_START.date().isoformat()}起含BTC日线代理；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段不能按统一美股收盘/次日开盘口径认证。\n\n')
     info = info or {}
@@ -9406,6 +9564,9 @@ def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=F
     equity_changed = bool(info.get('pending_adjustment', abs(equity_next - equity_current) > 0.001))
     gold_changed = bool(info.get('gold_pending_adjustment', abs(gold_next - gold_current) > 0.001))
     annual_due = bool(info.get('annual_rebalance_due', False))
+    scale_execution_elapsed = bool(clock.get('execution_elapsed', False) and (equity_changed or gold_changed))
+    if scale_execution_elapsed:
+        w('⚠️ 该收盘目标已确认，但缩放计划时点已过；表中是数据日的持仓与目标。请先核对账户是否已执行并刷新C数据，不应据此重复下单或直接补单。\n\n')
     rv = info.get('rv_latest_no_shift', info.get('realized_vol'))
     if query_kind in {'params', 'live_params'}:
         w(f'规则：10ETF多资产｜股票袖SPY目标波动{PROD_VS_TARGET_VOL:.0%}/{PROD_VS_VOL_WINDOW}日｜黄金袖相对波动{PROD_GOLD_VS_SHORT_WINDOW}/{PROD_GOLD_VS_LONG_WINDOW}日｜scale {PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x｜调整死区{PROD_VS_THRESHOLD:.2f}｜缩放于下一美股开盘执行；年度基础重配于年末最后美股交易日收盘执行\n\n')
@@ -9456,7 +9617,9 @@ def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=F
     if query_kind in {'params', 'live_params'}:
         action = '本页只核对参数；实际操作以“实时信号”为准。'
     elif annual_due:
-        action = '年度重配在上述美股收盘时点执行；按年度目标复核，不因scale维持而漏调仓。' + ('缩放raw仍是盘中假设，等待收盘确认。' if us_intraday else '若缩放也有变更，另在下一美股开盘执行。')
+        action = '年度重配在上述美股收盘时点执行；按年度目标复核，不因scale维持而漏调仓。' + ('缩放计划时点已过，先核对账户是否已执行，勿重复下单。' if scale_execution_elapsed else '缩放raw仍是盘中假设，等待收盘确认。' if us_intraday else '若缩放也有变更，另按上述缩放计划时点执行。')
+    elif scale_execution_elapsed:
+        action = '收盘目标已确认，但计划时点已过；先核对账户是否已执行并刷新C数据，不应据此重复下单或直接补单。'
     elif us_intraday:
         action = '美股盘中raw可能变化；现在不执行，等待收盘确认。'
     elif changed:
@@ -9468,8 +9631,10 @@ def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=F
     signal_text = f'股票袖 {equity_next:.2f}x；黄金袖 {gold_next:.2f}x'
     if annual_due:
         signal_text += '；年度MOC目标：' + ', '.join((f'{name} {float(weight):.2%}' for name, weight in info['annual_target_weights'].items()))
-    note = '年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘' if annual_due else '盘中假设，等待收盘确认' if us_intraday else '收盘确认后于下一美股开盘执行'
-    return {'is_signal': bool(annual_due or (changed and (not us_intraday))), 'signal_text': signal_text, 'note': note}
+    note = '年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘' if annual_due else '计划时点已过，先核对执行状态，勿重复下单' if scale_execution_elapsed else '盘中假设，等待收盘确认' if us_intraday else '收盘确认后于下一美股开盘执行'
+    if clock:
+        note += f"；C数据日{clock['asof']:%Y-%m-%d}；缩放计划{clock['execution_at']:%Y-%m-%d %H:%M}北京时间"
+    return {'is_signal': bool(annual_due or (changed and (not us_intraday) and (not scale_execution_elapsed))), 'signal_text': signal_text, 'note': note}
 
 def _latest_series_value_at(series, date):
     if series is None:
@@ -10164,7 +10329,24 @@ def _us_weighted_return(weights, prev_prices, curr_prices):
         pr += active_weight * (curr_px / prev_px - 1)
     return pr
 
-def _validate_subb_price_input(close_df, required_columns, min_rows, context):
+def _assert_subb_full_session_index(index, context):
+    """Validate every US session, including warmup and non-execution days."""
+    if index.hasnans or index.tz is not None or not index.equals(index.normalize()):
+        raise ValueError(f'{context}: invalid daily market session index')
+    if len(index) == 0:
+        raise ValueError(f'{context}: empty market session index')
+    expected = _expected_us_ohlc_index(index[0], index[-1])
+    missing, extra = expected.difference(index), index.difference(expected)
+    if len(missing) or len(extra):
+        detail = []
+        if len(missing):
+            detail.append(f'missing market session {missing[0].date().isoformat()}')
+        if len(extra):
+            detail.append(f'non-market session {extra[0].date().isoformat()}')
+        raise ValueError(f'{context}: incomplete/invalid US calendar; ' + '; '.join(detail))
+
+
+def _validate_subb_price_input(close_df, required_columns, min_rows, context, *, strict_calendar=False):
     if close_df is None or not isinstance(close_df, pd.DataFrame):
         raise ValueError(f'{context}: price history must be a DataFrame')
     if not isinstance(close_df.index, pd.DatetimeIndex):
@@ -10176,6 +10358,8 @@ def _validate_subb_price_input(close_df, required_columns, min_rows, context):
         raise ValueError(f"{context}: missing required price columns: {', '.join(missing)}")
     if len(close_df) < int(min_rows):
         raise ValueError(f'{context}: insufficient price history; rows={len(close_df)}, required>={int(min_rows)}')
+    if strict_calendar:
+        _assert_subb_full_session_index(close_df.index, context)
 
 def _active_weight_assets(*weight_dicts, min_abs=1e-12):
     assets = set()
@@ -10222,7 +10406,7 @@ def run_us_rotation(close_df, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=U
         close_df = close_df.copy()
         close_df.loc[close_df.index < btc_start, btc_ticker] = np.nan
     start_idx = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
-    _validate_subb_price_input(close_df, list(ranking_codes) + ['BIL'], start_idx + 1, 'Sub-B legacy rotation')
+    _validate_subb_price_input(close_df, list(ranking_codes) + ['BIL'], start_idx + 1, 'Sub-B legacy rotation', strict_calendar=strict_open_execution)
     momentum = close_df.div(close_df.shift(US_ROT_LB)).sub(1)
     vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
     signal_days = _us_signal_days(close_df, start_idx)
@@ -11156,6 +11340,7 @@ def _performance_report_filename(prefix, extension, context):
 def _write_performance_report_context(w, context):
     w(f"> 请求区间：{context['requested_start']:%Y-%m-%d} 至 {context['requested_end']:%Y-%m-%d}；实际收益覆盖：{context['actual_start']:%Y-%m-%d} 至 {context['actual_end']:%Y-%m-%d}。\n\n")
     w('> 各袖确认收盘：' + '；'.join(f'{name} {date:%Y-%m-%d}' for name, date in context['sleeve_asof'].items()) + '。真实休市按零收益承接，交易日缺行拒绝计算。\n\n')
+    w('> 查询组合按区间起点重新配置初始权重；查询前已成立且状态完整的休市袖从首日承接零收益。尚未成立的袖仍限制共同起点；标准窗口沿用全历史资金漂移。\n\n')
     w(f"> 生成时间（北京时间）：{context['generated_at']}；报告编号：{context['run_id']}。\n\n")
 
 def _performance_expected_sessions(name, start, end):
@@ -11163,28 +11348,51 @@ def _performance_expected_sessions(name, start, end):
         return _expected_cn_sessions(start, end)
     return _expected_us_ohlc_index(start, end)
 
-def _performance_combined_daily_returns(daily_returns, *, expected_sessions=None):
+def _performance_combined_daily_returns(daily_returns, *, expected_sessions=None, history_returns=None, query_start=None):
     empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    query_mode = history_returns is not None and query_start is not None
+    if (history_returns is None) != (query_start is None):
+        raise ValueError('Combined query requires both untrimmed history and query_start')
     series_map = {}
+    history_map = {}
     for name in PERFORMANCE_COMBO_ORDER:
         value = daily_returns.get(name)
         if value is None:
             continue
         cleaned = _performance_clean_daily_returns(value, name=name)
-        if len(cleaned) > 0:
+        if query_mode:
+            history = _performance_clean_daily_returns(history_returns.get(name), name=f'{name} history')
+            if history.empty:
+                return empty  # Unknown inception is not evidence of a holiday holding.
+            history_map[name] = history
+        if len(cleaned) > 0 or query_mode:
             series_map[name] = cleaned
     if len(series_map) < len(PERFORMANCE_COMBO_ORDER):
         return empty
-    common_start = max((series.index[0] for series in series_map.values()))
-    latest_by_name = {name: series.index[-1] for name, series in series_map.items()}
-    common_end = max(latest_by_name.values())
+    observed_ends = [series.index[-1] for series in series_map.values() if not series.empty]
+    if not observed_ends:
+        return empty
+    common_end = max(observed_ends)
+    coverage = history_map if query_mode else series_map
+    common_start = max(series.index[0] for series in coverage.values())
+    if query_mode:
+        common_start = max(common_start, pd.Timestamp(query_start).tz_localize(None).normalize())
+    if common_end < common_start:
+        return empty
+    latest_by_name = {name: series.loc[:common_end].index[-1] for name, series in coverage.items()}
     earliest_end = min(latest_by_name.values())
     if common_end - earliest_end > pd.Timedelta(days=10):
         stale = min(latest_by_name, key=latest_by_name.get)
         raise ValueError(f'{stale}: stale sleeve end {latest_by_name[stale].date()} vs combined end {common_end.date()}')
-    if common_end < common_start:
-        return empty
     for name, series in series_map.items():
+        if query_mode:
+            earlier = history_map[name].loc[history_map[name].index < common_start]
+            if not earlier.empty:
+                # A stale pre-query state cannot prove that a closed sleeve
+                # was established and up to date at the requested start.
+                required_prior = _performance_expected_sessions(name, earlier.index[-1] + pd.Timedelta(days=1), common_start - pd.Timedelta(days=1))
+                if len(required_prior):
+                    raise ValueError(f'{name}: missing pre-query market-session return at {required_prior[0].date()}')
         expected = (expected_sessions or {}).get(name)
         if expected is None:
             expected = _performance_expected_sessions(name, common_start, common_end)
@@ -12880,14 +13088,21 @@ def _apply_subc_vol_scaling(subc_ret, us_prod_daily, target_vol=None, vol_window
         covered.update(assets)
         exposure = sum((components[f'exposure::{name}'] for name in assets), start=pd.Series(0.0, index=index))
         contribution = sum((components[f'contribution::{name}'] for name in assets), start=pd.Series(0.0, index=index))
-        scaled_contribution = scale * contribution
+        risk_exposure = pd.Series(0.0, index=index)
+        for name in assets:
+            signal_col = f'signal::{name}'
+            if signal_col not in components:
+                raise ValueError(f'Sub-C component ledger is missing {signal_col}')
+            signal = components[signal_col]
+            if not np.isfinite(signal.to_numpy(dtype=float)).all() or not signal.between(0.0, 1.0).all():
+                raise ValueError(f'Sub-C component ledger contains invalid momentum signals for {name}')
+            risk_exposure += components[f'exposure::{name}'] * signal
+        signal_cash = exposure - risk_exposure
+        scaled_contribution = scale * (contribution - signal_cash * bil)
         scale_changed = scale.diff().abs().fillna(0.0) > 1e-12
-        delta_exposure = (scale - 1.0) * exposure
-        reduced = delta_exposure <= 0.0
-        financing_return = pd.Series(0.0, index=index)
-        financing_return.loc[reduced] = -delta_exposure.loc[reduced] * bil.loc[reduced]
-        financing_return.loc[~reduced] = -delta_exposure.loc[~reduced] * (bil.loc[~reduced] + daily_spread)
-        group_cost = exposure * scale.diff().abs().fillna(0.0) * rebal_cost_bps / 10000
+        cash_exposure = exposure - scale * risk_exposure
+        financing_return = cash_exposure * bil - (-cash_exposure).clip(lower=0.0) * daily_spread
+        group_cost = risk_exposure * scale.diff().abs().fillna(0.0) * rebal_cost_bps / 10000
         group_return = scaled_contribution + financing_return - group_cost
         if us_open is not None or strict_open_execution:
             for pos in np.flatnonzero(scale_changed.to_numpy()):
@@ -12936,16 +13151,18 @@ def _build_subc_vs_info(us_prod_daily, components, actual_scale=None, target_vol
     gold_exposure = float(asset_risk_exposure['GLDM'])
     total_base_exposure = float(sum(asset_base_exposure.values()))
     fixed_exposure = float(sum((asset_risk_exposure[name] for name in PROD_PORTFOLIO if name not in equity_names and name != 'GLDM')))
-    base_signal_cash = float(sum((asset_base_exposure[name] * (1.0 - asset_signal[name]) for name in PROD_PORTFOLIO)))
+    equity_group_base = float(sum(asset_base_exposure[name] for name in equity_names))
+    gold_group_base = float(asset_base_exposure['GLDM'])
+    fixed_signal_cash = float(sum(asset_base_exposure[name] * (1.0 - asset_signal[name]) for name in PROD_PORTFOLIO if name not in equity_names and name != 'GLDM'))
 
     def _gross(eq_scale, au_scale):
         return fixed_exposure + equity_exposure * eq_scale + gold_exposure * au_scale
 
     def _cash(eq_scale, au_scale):
-        return base_signal_cash + max(1.0 - eq_scale, 0.0) * equity_exposure + max(1.0 - au_scale, 0.0) * gold_exposure
+        return fixed_signal_cash + max(equity_group_base - eq_scale * equity_exposure, 0.0) + max(gold_group_base - au_scale * gold_exposure, 0.0)
 
     def _borrow(eq_scale, au_scale):
-        return max(eq_scale - 1.0, 0.0) * equity_exposure + max(au_scale - 1.0, 0.0) * gold_exposure
+        return max(eq_scale * equity_exposure - equity_group_base, 0.0) + max(au_scale * gold_exposure - gold_group_base, 0.0)
     current_asset_weights = {}
     next_asset_weights = {}
     for name in PROD_PORTFOLIO:
@@ -12956,14 +13173,21 @@ def _build_subc_vs_info(us_prod_daily, components, actual_scale=None, target_vol
     return {'signal_ticker': PROD_VS_SIGNAL_TICKER, 'scale_scope': 'equity_only', 'realized_vol': realized_vol, 'rv_latest_no_shift': realized_vol, 'realized_vol_basis': 'SPY_latest_close_for_next_session', 'target_vol': target_vol, 'actual_scale': current_scale, 'current_scale': current_scale, 'prev_actual_scale': float(actual_scale.iloc[-2]) if len(actual_scale) >= 2 else current_scale, 'target_scale': equity_raw, 'next_target_scale': equity_raw, 'next_scale': equity_next, 'pending_adjustment': abs(equity_next - current_scale) > 0.001, 'equity_base_exposure': equity_exposure, 'gold_signal_ticker': PROD_GOLD_VS_SIGNAL_TICKER, 'gold_short_vol': gold_short_latest, 'gold_long_vol': gold_long_latest, 'gold_current_scale': gold_current, 'gold_target_scale': gold_raw, 'gold_next_scale': gold_next, 'gold_pending_adjustment': abs(gold_next - gold_current) > 0.001, 'gold_base_exposure': gold_exposure, 'fixed_base_exposure': fixed_exposure, 'asset_base_exposure': asset_base_exposure, 'asset_momentum_signal': asset_signal, 'current_asset_weights': current_asset_weights, 'next_asset_weights': next_asset_weights, 'current_gross_exposure': _gross(current_scale, gold_current), 'next_gross_exposure': _gross(equity_next, gold_next), 'current_cash_exposure': _cash(current_scale, gold_current), 'next_cash_exposure': _cash(equity_next, gold_next), 'current_borrow_exposure': _borrow(current_scale, gold_current), 'next_borrow_exposure': _borrow(equity_next, gold_next), 'rebalance_deadband': threshold, 'overlay_multiplier': 1.0, 'final_execution_scale': equity_next, 'btc_scale': 1.0}
 
 def _subc_scaled_allocation(base_weights, signals, equity_scale, gold_scale):
-    weights, cash, borrow = ({}, 0.0, 0.0)
+    weights = {}
+    group_cash = {'equity': 0.0, 'gold': 0.0, 'fixed': 0.0}
     for name, cfg in PROD_PORTFOLIO.items():
         base = float(base_weights[name])
         signal = float(signals.get(name, 1.0))
+        if not np.isfinite(base) or base < 0.0 or not np.isfinite(signal) or not 0.0 <= signal <= 1.0:
+            raise ValueError(f'Sub-C invalid base weight or momentum signal for {name}')
         scale = equity_scale if cfg['cls'] in PROD_VS_SCALE_CLASSES else gold_scale if name == 'GLDM' else 1.0
+        if not np.isfinite(scale) or scale < 0.0:
+            raise ValueError(f'Sub-C invalid scale for {name}')
         weights[name] = base * signal * scale
-        cash += base * (1.0 - signal) + base * signal * max(1.0 - scale, 0.0)
-        borrow += base * signal * max(scale - 1.0, 0.0)
+        group = 'equity' if cfg['cls'] in PROD_VS_SCALE_CLASSES else 'gold' if name == 'GLDM' else 'fixed'
+        group_cash[group] += base - weights[name]
+    cash = sum(max(value, 0.0) for value in group_cash.values())
+    borrow = sum(max(-value, 0.0) for value in group_cash.values())
     return (weights, cash, borrow)
 
 def _subc_add_annual_action_info(info, components):
@@ -13488,7 +13712,7 @@ class CombinedStrategyBase:
                 suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
                 suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date)
                 suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
-                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature):
+                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
                     raise poe.BotError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。信号查询可降级显示“0%仓位扩展风控不可判定，不应按正常仓位执行”。')
                 cn_result = _apply_suba_volume_overlay_policy(cn_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
             except _fetch_or_bot_errors() as exc:
@@ -13776,7 +14000,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
             signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=False, dk_intraday=False, query_kind='signal'))
             signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close, is_signal_day=is_us_signal))
-            signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=us_signal_live)
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
             w('> 前段仅显示可执行目标与关键风控；A/ADK基础评分统一置于C策略之后。\n\n')
@@ -13888,7 +14113,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 基于收盘数据（非盘中）\n\n')
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal')
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close, is_signal_day=is_us_signal)
-            _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=us_open and us_data_is_today)
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
             w('> 实时查询前段保留当前→目标→操作→关键风控；基础评分置于末尾，盘中目标均须等收盘确认。\n')
@@ -13900,6 +14126,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         us_rot_result_params = None
         subc_info_params = {}
         us_rot_close_p = None
+        us_prod_daily_p = None
         strategy_params_error = None
         with _sm() as msg:
             msg.write('⏳ 正在读取当前Sub-A / ADK持仓...\n')
@@ -13915,7 +14142,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w('## ⚙️ 策略参数总览\n\n')
             _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params')
             _write_v80_subb_overview(w, us_rot_result_params, query_kind='params', us_intraday=False, us_rot_close=us_rot_close_p)
-            _write_v80_subc_overview(w, subc_info_params, query_kind='params', us_intraday=False)
+            subc_clock = _subc_query_clock(us_prod_daily_p)
+            _write_v80_subc_overview(w, subc_info_params, query_kind='params', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
             _write_v80_a_adk_score_details(w, cn_result_params, cn_dk_result_params)
             if strategy_params_error:
                 w(f'⚠️ 当前状态读取不完整：{strategy_params_error}\n\n')
@@ -13958,7 +14186,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params')
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
-            _write_v80_subc_overview(w, _subc_live_info, query_kind='live_params', us_intraday=us_open and us_data_is_today)
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            _write_v80_subc_overview(w, _subc_live_info, query_kind='live_params', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；下单只看“实时信号”。\n')
             return
@@ -14143,7 +14372,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             nav_series['B7.9'] = _nav_from_period_returns(us_period)
         if len(subc_period) > 0:
             nav_series['Sub-C'] = _nav_from_period_returns(subc_period)
-        combined_period = _performance_combined_daily_returns({'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period})
+        combined_period = _performance_combined_daily_returns({'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period}, history_returns={'Sub-A': cn_daily_ret, 'Sub-A-DK': dk_daily_ret, 'B7.8': b78_daily_ret, 'B7.9': us_daily_ret, 'Sub-C': subc_daily_ret}, query_start=start_date)
         if len(combined_period) > 0:
             nav_series['Combined'] = _nav_from_period_returns(combined_period)
         _finalize_performance_report_context(report_context, {'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period, 'Combined': combined_period})
@@ -14205,7 +14434,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         subc_daily_period = subc_daily_all[(subc_daily_all.index >= start_date) & (subc_daily_all.index <= end_date)]
         standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all, end_date=end_date)
         first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
-        comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period})
+        comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period}, history_returns=standard_daily_returns, query_start=start_date)
         _finalize_performance_report_context(report_context, {'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period, 'Combined': comb_daily})
         start_date, end_date = report_context['actual_start'], report_context['actual_end']
         cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date)

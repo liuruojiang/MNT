@@ -1,0 +1,42 @@
+F..FFF                                                                   [100%]
+================================== FAILURES ===================================
+_____________ test_all_cash_momentum_sleeves_have_no_borrow_cost ______________
+tests\audit_v80_20261023_math.py:52: in test_all_cash_momentum_sleeves_have_no_borrow_cost
+    assert observed.tolist() == pytest.approx([0.0, 0.0], abs=1e-14)
+E   assert [-1.488095238...380952381e-05] == approx([0.0 ±....0 ± 1.0e-14])
+E
+E     comparison failed. Mismatched elements: 2 / 2:
+E     Max absolute difference: 1.4880952380952381e-05
+E     Max relative difference: 1.0
+E     Index | Obtained                | Expected
+E     0     | -1.4880952380952381e-05 | 0.0 ± 1.0e-14
+E     1     | -1.4880952380952381e-05 | 0.0 ± 1.0e-14
+______________ test_query_starting_on_cn_holiday_keeps_us_return ______________
+tests\audit_v80_20261023_math.py:85: in test_query_starting_on_cn_holiday_keeps_us_return
+    pd.testing.assert_series_equal(observed, full_then_clip)
+E   AssertionError: Series are different
+E
+E   Series length are different
+E   [left]:  1, DatetimeIndex(['2026-09-28'], dtype='datetime64[ns]', freq=None)
+E   [right]: 2, DatetimeIndex(['2026-09-25', '2026-09-28'], dtype='datetime64[ns]', freq=None)
+______________ test_single_cn_holiday_query_has_combined_return _______________
+tests\audit_v80_20261023_math.py:91: in test_single_cn_holiday_query_has_combined_return
+    assert observed.index.tolist() == pd.to_datetime(["2026-09-25"]).tolist()
+E   AssertionError: assert [] == [Timestamp('2...25 00:00:00')]
+E
+E     Right contains one more item: Timestamp('2026-09-25 00:00:00')
+E     Use -v to get more diff
+___________ test_real_report_holiday_only_combined_cell_is_numeric ____________
+tests\audit_v80_20261023_math.py:102: in test_real_report_holiday_only_combined_cell_is_numeric
+    assert cells.get("G2") == pytest.approx(expected, abs=1e-14)
+E   AssertionError: assert 'N/A' == -0.00027 ± 1.0e-14
+E
+E     comparison failed
+E     Obtained: N/A
+E     Expected: -0.00027 ± 1.0e-14
+=========================== short test summary info ===========================
+FAILED tests/audit_v80_20261023_math.py::test_all_cash_momentum_sleeves_have_no_borrow_cost
+FAILED tests/audit_v80_20261023_math.py::test_query_starting_on_cn_holiday_keeps_us_return
+FAILED tests/audit_v80_20261023_math.py::test_single_cn_holiday_query_has_combined_return
+FAILED tests/audit_v80_20261023_math.py::test_real_report_holiday_only_combined_cell_is_numeric
+4 failed, 2 passed, 1 warning in 3.90s

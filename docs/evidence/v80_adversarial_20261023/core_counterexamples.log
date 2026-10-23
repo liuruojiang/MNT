@@ -1,0 +1,101 @@
+..FFFF..FF..F.F...FFFF                                                   [100%]
+================================== FAILURES ===================================
+__________ test_amount_gap_reaches_native_suba_execution_weight[nan] __________
+tests\audit_v80_20261023_cn.py:72: in test_amount_gap_reaches_native_suba_execution_weight
+    assert actual["weight"].iloc[-1] == 0., (
+E   AssertionError: fault=nan: formal policy accepted incomplete source; holding=1.930955, weight=1.0, overlay=1.0
+E   assert np.float64(1.0) == 0.0
+________ test_amount_gap_reaches_native_suba_execution_weight[missing] ________
+tests\audit_v80_20261023_cn.py:72: in test_amount_gap_reaches_native_suba_execution_weight
+    assert actual["weight"].iloc[-1] == 0., (
+E   AssertionError: fault=missing: formal policy accepted incomplete source; holding=1.930955, weight=1.0, overlay=1.0
+E   assert np.float64(1.0) == 0.0
+________ test_internal_amount_gap_must_not_silently_restore_risk[nan] _________
+tests\audit_v80_20261023_cn.py:85: in test_internal_amount_gap_must_not_silently_restore_risk
+    assert v80._suba_volume_feature_has_unresolved(feature), (
+E   AssertionError: nan accepted: latest signal=False, scale=1.0, freshness_ok=True, unresolved=False
+E   assert False
+E    +  where False = <function _suba_volume_feature_has_unresolved at 0x0000020462D93D70>(                     zz2000_amount  zz2000_streak  ...  freshness_ok  freshness_error\n2026-06-01 00:00:00          100...         \n2026-09-24 00:00:00           60.0            0.0  ...          True                 \n\n[83 rows x 22 columns])
+E    +    where <function _suba_volume_feature_has_unresolved at 0x0000020462D93D70> = <module 'audit_v80_cn_20261023' from 'D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py'>._suba_volume_feature_has_unresolved
+______ test_internal_amount_gap_must_not_silently_restore_risk[missing] _______
+tests\audit_v80_20261023_cn.py:85: in test_internal_amount_gap_must_not_silently_restore_risk
+    assert v80._suba_volume_feature_has_unresolved(feature), (
+E   AssertionError: missing accepted: latest signal=False, scale=1.0, freshness_ok=True, unresolved=False
+E   assert False
+E    +  where False = <function _suba_volume_feature_has_unresolved at 0x0000020462D93D70>(                     zz2000_amount  zz2000_streak  ... freshness_ok  freshness_error\n2026-06-01 00:00:00          100....          \n2026-09-24 00:00:00           60.0            2.0  ...         True                 \n\n[83 rows x 22 columns])
+E    +    where <function _suba_volume_feature_has_unresolved at 0x0000020462D93D70> = <module 'audit_v80_cn_20261023' from 'D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py'>._suba_volume_feature_has_unresolved
+___________ test_missing_open_uses_its_own_known_adjustment_factor ____________
+tests\audit_v80_20261023_data.py:58: in test_missing_open_uses_its_own_known_adjustment_factor
+    assert result.loc[gap, "open"] == pytest.approx(raw.loc[gap, "open"] * factor)
+E   assert np.float64(99.5) == 100.0 ± 1.0e-04
+E
+E     comparison failed
+E     Obtained: 99.5
+E     Expected: 100.0 ± 1.0e-04
+_______ test_whole_missing_row_does_not_invent_a_cross_dividend_factor ________
+tests\audit_v80_20261023_data.py:69: in test_whole_missing_row_does_not_invent_a_cross_dividend_factor
+    assert gap not in v80._valid_us_ohlc_index(result), "Ambiguous adjustment factor must stay unresolved"
+E   AssertionError: Ambiguous adjustment factor must stay unresolved
+E   assert Timestamp('2026-09-28 00:00:00') not in DatetimeIndex(['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04',\n               '2026-06-05', '2026-06-08', '202...2026-09-25', '2026-09-28', '2026-09-29',\n               '2026-09-30'],\n              dtype='datetime64[ns]', freq=None)
+E    +  where DatetimeIndex(['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04',\n               '2026-06-05', '2026-06-08', '202...2026-09-25', '2026-09-28', '2026-09-29',\n               '2026-09-30'],\n              dtype='datetime64[ns]', freq=None) = <function _valid_us_ohlc_index at 0x0000020463136AE0>(             open  close\n2026-06-01   99.5   99.5\n2026-06-02   99.5   99.5\n2026-06-03   99.5   99.5\n2026-06-04   99.5 ...6-09-25   99.5   99.5\n2026-09-28   99.5   99.5\n2026-09-29  100.0  100.0\n2026-09-30  100.0  100.0\n\n[85 rows x 2 columns])
+E    +    where <function _valid_us_ohlc_index at 0x0000020463136AE0> = <module 'v80_data_adversary_20261023' from 'D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py'>._valid_us_ohlc_index
+_____ test_c_confirmation_uses_its_own_data_date[live_signal-2026-10-21] ______
+tests\audit_v80_20261023_display.py:119: in test_c_confirmation_uses_its_own_data_date
+    assert observed == [expected_intraday], "C confirmation must use C's latest bar, not B's latest bar"
+E   AssertionError: C confirmation must use C's latest bar, not B's latest bar
+E   assert [True] == [False]
+E
+E     At index 0 diff: True != False
+E     Use -v to get more diff
+_____ test_c_confirmation_uses_its_own_data_date[live_params-2026-10-21] ______
+tests\audit_v80_20261023_display.py:119: in test_c_confirmation_uses_its_own_data_date
+    assert observed == [expected_intraday], "C confirmation must use C's latest bar, not B's latest bar"
+E   AssertionError: C confirmation must use C's latest bar, not B's latest bar
+E   assert [True] == [False]
+E
+E     At index 0 diff: True != False
+E     Use -v to get more diff
+_ test_strict_runner_rejects_missing_nonexecution_session[_run_v80_subb_v78] __
+tests\audit_v80_20261023_us.py:58: in test_strict_runner_rejects_missing_nonexecution_session
+    with pytest.raises((ValueError, v80.poe.BotError), match="(?i)(session|calendar|gap|missing)"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE any of (<class 'ValueError'>, <class 'fastapi_poe.client.BotError'>)
+_ test_strict_runner_rejects_missing_nonexecution_session[_run_v80_subb_v79] __
+tests\audit_v80_20261023_us.py:58: in test_strict_runner_rejects_missing_nonexecution_session
+    with pytest.raises((ValueError, v80.poe.BotError), match="(?i)(session|calendar|gap|missing)"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE any of (<class 'ValueError'>, <class 'fastapi_poe.client.BotError'>)
+_ test_nasdaq_repaired_open_preserves_known_same_day_adjustment[_v80_b78_rebuild_subb_account_execution_costs] _
+tests\audit_v80_20261023_us.py:95: in test_nasdaq_repaired_open_preserves_known_same_day_adjustment
+    assert observed_return == pytest.approx(correct_return, abs=1e-13)
+E   assert 0.004021104523616925 == -0.0009990009...9652 ± 1.0e-13
+E
+E     comparison failed
+E     Obtained: 0.004021104523616925
+E     Expected: -0.0009990009990009652 ± 1.0e-13
+---------------------------- Captured stdout call -----------------------------
+{'runner': '_v80_b78_rebuild_subb_account_execution_costs', 'repaired_open': 99.5, 'correct_open': 100.0, 'repaired_net_return': 0.004021104523616925, 'correct_net_return': -0.0009990009990009652, 'net_return_error_bp': 50.2010552261789}
+_ test_nasdaq_repaired_open_preserves_known_same_day_adjustment[_rebuild_subb_account_execution_costs] _
+tests\audit_v80_20261023_us.py:95: in test_nasdaq_repaired_open_preserves_known_same_day_adjustment
+    assert observed_return == pytest.approx(correct_return, abs=1e-13)
+E   assert 0.004021104523616925 == -0.0009990009...9652 ± 1.0e-13
+E
+E     comparison failed
+E     Obtained: 0.004021104523616925
+E     Expected: -0.0009990009990009652 ± 1.0e-13
+---------------------------- Captured stdout call -----------------------------
+{'runner': '_rebuild_subb_account_execution_costs', 'repaired_open': 99.5, 'correct_open': 100.0, 'repaired_net_return': 0.004021104523616925, 'correct_net_return': -0.0009990009990009652, 'net_return_error_bp': 50.2010552261789}
+=========================== short test summary info ===========================
+FAILED tests/audit_v80_20261023_cn.py::test_amount_gap_reaches_native_suba_execution_weight[nan]
+FAILED tests/audit_v80_20261023_cn.py::test_amount_gap_reaches_native_suba_execution_weight[missing]
+FAILED tests/audit_v80_20261023_cn.py::test_internal_amount_gap_must_not_silently_restore_risk[nan]
+FAILED tests/audit_v80_20261023_cn.py::test_internal_amount_gap_must_not_silently_restore_risk[missing]
+FAILED tests/audit_v80_20261023_data.py::test_missing_open_uses_its_own_known_adjustment_factor
+FAILED tests/audit_v80_20261023_data.py::test_whole_missing_row_does_not_invent_a_cross_dividend_factor
+FAILED tests/audit_v80_20261023_display.py::test_c_confirmation_uses_its_own_data_date[live_signal-2026-10-21]
+FAILED tests/audit_v80_20261023_display.py::test_c_confirmation_uses_its_own_data_date[live_params-2026-10-21]
+FAILED tests/audit_v80_20261023_us.py::test_strict_runner_rejects_missing_nonexecution_session[_run_v80_subb_v78]
+FAILED tests/audit_v80_20261023_us.py::test_strict_runner_rejects_missing_nonexecution_session[_run_v80_subb_v79]
+FAILED tests/audit_v80_20261023_us.py::test_nasdaq_repaired_open_preserves_known_same_day_adjustment[_v80_b78_rebuild_subb_account_execution_costs]
+FAILED tests/audit_v80_20261023_us.py::test_nasdaq_repaired_open_preserves_known_same_day_adjustment[_rebuild_subb_account_execution_costs]
+12 failed, 10 passed, 21 warnings in 17.40s
