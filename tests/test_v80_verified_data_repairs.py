@@ -34,6 +34,10 @@ REFERENCE=parse_csindex_reference(read(FIX/'csi_zz1000_reference.json'))
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
+ M._V80_INTEGRITY_CONFLICTS.clear()
+ M._V80_INTEGRITY_COVERAGE.clear()
+ monkeypatch.setattr(M,'_V80_INTEGRITY_GENERATION',0)
+ monkeypatch.setattr(M,'_latest_us_required_close_date',lambda *a,**k:pd.Timestamp('2026-10-23'))
  def forbidden(*args,**kwargs):raise AssertionError('Network/LLM is forbidden in data repair regressions')
  monkeypatch.setattr(M.requests.sessions.Session,'request',forbidden)
  if hasattr(M.poe,'call'):monkeypatch.setattr(M.poe,'call',forbidden)

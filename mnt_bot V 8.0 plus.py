@@ -2824,6 +2824,124 @@ def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix='', compact
 def _ticker_to_stooq(ticker):
     special = {'BTC-USD': 'btc.v'}
     return special.get(ticker, f'{ticker.lower()}.us')
+_V80_INTEGRITY_LOCK = threading.RLock()
+_V80_INTEGRITY_GENERATION = 0
+_V80_INTEGRITY_CONFLICTS = {}
+_V80_INTEGRITY_COVERAGE = {}
+
+class _V80IntegrityStateChanged(VerifiedDataRepairConflict):
+    pass
+
+def _v80_integrity_generation():
+    with _V80_INTEGRITY_LOCK:
+        return _V80_INTEGRITY_GENERATION
+
+def _v80_integrity_pending(ticker=None):
+    with _V80_INTEGRITY_LOCK:
+        return bool(_V80_INTEGRITY_CONFLICTS if ticker is None else ticker in _V80_INTEGRITY_CONFLICTS)
+
+def _v80_assert_integrity(generation, ticker=None):
+    with _V80_INTEGRITY_LOCK:
+        pending = _V80_INTEGRITY_CONFLICTS if ticker is None else {ticker: _V80_INTEGRITY_CONFLICTS[ticker]} if ticker in _V80_INTEGRITY_CONFLICTS else {}
+        if pending:
+            raise _V80IntegrityStateChanged('Known data integrity conflict; old request caches and fallback sources quarantined: ' + '; '.join((f'{k}: {v}' for k, v in pending.items())))
+        if generation != _V80_INTEGRITY_GENERATION:
+            raise _V80IntegrityStateChanged('Data integrity generation changed; discard old in-flight inputs/results')
+
+def _v80_quarantine_integrity(ticker, error):
+    global _V80_INTEGRITY_GENERATION
+    with _V80_INTEGRITY_LOCK:
+        _V80_INTEGRITY_GENERATION += 1
+        _V80_INTEGRITY_CONFLICTS[ticker] = str(error)
+
+def _v80_accept_price_source(ticker, frame, source, generation):
+    if ticker != 'KMLM':
+        _v80_assert_integrity(generation, ticker)
+        return
+    valid = _valid_us_ohlc_index(frame)
+    required = _latest_us_required_close_date()
+    confirmed = valid[valid <= required]
+    expected = _expected_ticker_ohlc_index(ticker, valid[0], required) if len(valid) else pd.DatetimeIndex([])
+    missing = expected.difference(valid)
+    note = frame.attrs.get('verified_ca_repair', '')
+    with _V80_INTEGRITY_LOCK:
+        if generation != _V80_INTEGRITY_GENERATION:
+            raise _V80IntegrityStateChanged('Integrity changed during fresh price validation')
+        if ticker in _V80_INTEGRITY_CONFLICTS:
+            coverage = _V80_INTEGRITY_COVERAGE.get(ticker, pd.DatetimeIndex([]))
+            inception = pd.Timestamp(_US_VERIFIED_HISTORY_STARTS['KMLM'])
+            full_expected = _expected_ticker_ohlc_index(ticker, inception, required)
+            if source != 'Yahoo' or not note or len(valid) == 0 or len(missing) or (valid[-1] < required) or len(coverage.difference(valid)) or len(full_expected.difference(valid)):
+                raise VerifiedDataRepairConflict('KMLM recovery requires fresh complete Yahoo action anchors and confirmed historical coverage')
+            _V80_INTEGRITY_CONFLICTS.pop(ticker)
+        if source == 'Yahoo' and note and len(confirmed) and (not len(missing)):
+            prior = _V80_INTEGRITY_COVERAGE.get(ticker, pd.DatetimeIndex([]))
+            _V80_INTEGRITY_COVERAGE[ticker] = prior.union(confirmed).sort_values()
+        _v80_assert_integrity(generation, ticker)
+
+def _v80_frames_generation(*frames):
+    stamps = {frame.attrs['verified_integrity_generation'] for frame in frames if hasattr(frame, 'attrs') and 'verified_integrity_generation' in frame.attrs}
+    if len(stamps) > 1:
+        raise _V80IntegrityStateChanged('Market inputs mix integrity states; fetch complete data again')
+    return next(iter(stamps)) if stamps else _v80_integrity_generation()
+
+class _V80VerifiedMessage:
+
+    def __init__(self, message, generation):
+        self.message = message
+        self.generation = generation
+
+    def __getattr__(self, name):
+        return getattr(self.message, name)
+
+    def write(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.write(*args, **kwargs)
+
+    def attach_file(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.attach_file(*args, **kwargs)
+
+    def overwrite(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.overwrite(*args, **kwargs)
+
+def _verify_kmlm_suffix_factor_basis(dates, quote, adjusted, defer_missing=False):
+    """Check all observed post-event seams against independently frozen actions.
+
+    Tiingo divCash/splitFactor and Yahoo events were compared through 2026-10-23.
+    Accept either verified vendor amount, retaining its own factor convention.
+    An unknown new action requires renewed source evidence rather than scaling.
+    """
+    positions = np.flatnonzero(dates >= pd.Timestamp('2022-12-28'))
+    try:
+        raw = np.asarray([quote['close'][i] for i in positions], dtype=float)
+        adj = np.asarray([adjusted[i] for i in positions], dtype=float)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise VerifiedDataRepairConflict('KMLM suffix factor schema invalid') from exc
+    valid = np.isfinite(raw) & np.isfinite(adj) & (raw > 0) & (adj > 0)
+    missing_pair = np.isnan(raw) & np.isnan(adj)
+    if not valid.all():
+        if not defer_missing or not (valid | missing_pair).all():
+            raise VerifiedDataRepairConflict('KMLM suffix factor contains unusable prices')
+        positions, raw, adj = (positions[valid], raw[valid], adj[valid])
+    factors = adj / raw
+    actions = {pd.Timestamp('2024-12-17'): (0.23, 0.2301), pd.Timestamp('2025-12-22'): (1.303, 1.3035)}
+    for j in range(1, len(positions)):
+        if positions[j] != positions[j - 1] + 1:
+            span = dates[positions[j - 1] + 1:positions[j] + 1]
+            if any((day in actions for day in span)):
+                raise VerifiedDataRepairConflict('KMLM cannot verify an action across a missing daily row')
+        day = dates[positions[j]]
+        if day in actions:
+            implied = raw[j - 1] * (1.0 - factors[j - 1] / factors[j])
+            if min((abs(implied - value) for value in actions[day])) > 5e-05:
+                raise VerifiedDataRepairConflict('KMLM suffix action factor conflicts on ' + str(day.date()))
+        elif abs(factors[j] / factors[j - 1] - 1.0) > 2e-06:
+            raise VerifiedDataRepairConflict('KMLM mixed/partially corrected suffix or unknown action at ' + str(day.date()))
 
 def _verify_kmlm_prefix_factor_basis(dates, quote, adjusted):
     """Reject a partially repaired/mixed prefix before either repair branch.
@@ -2866,9 +2984,15 @@ def _repair_verified_kmlm_distribution(ticker, timestamps, quote, adjusted):
         return (adjusted, '')
     dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
     ex_day, prior_day = (pd.Timestamp('2022-12-28'), pd.Timestamp('2022-12-27'))
-    if not len(dates) or dates.min() >= ex_day or dates.max() < ex_day:
+    if not len(dates):
         return (adjusted, '')
-    if dates.has_duplicates or prior_day not in dates or ex_day not in dates:
+    if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing):
+        raise VerifiedDataRepairConflict('KMLM invalid daily factor dates')
+    _verify_kmlm_prefix_factor_basis(dates, quote, adjusted)
+    _verify_kmlm_suffix_factor_basis(dates, quote, adjusted, defer_missing=True)
+    if dates.min() >= ex_day or dates.max() < ex_day:
+        return (adjusted, '')
+    if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing) or (prior_day not in dates) or (ex_day not in dates):
         raise VerifiedDataRepairConflict('KMLM verified distribution anchors missing/duplicated')
     ip, ie = (dates.get_loc(prior_day), dates.get_loc(ex_day))
     try:
@@ -2878,7 +3002,6 @@ def _repair_verified_kmlm_distribution(ticker, timestamps, quote, adjusted):
         raise VerifiedDataRepairConflict('KMLM invalid corporate-action anchors') from exc
     if not all((np.isfinite(v) and v > 0 for v in (p, e, ap, ae))):
         raise VerifiedDataRepairConflict('KMLM nonpositive/nonfinite corporate-action anchors')
-    _verify_kmlm_prefix_factor_basis(dates, quote, adjusted)
     observed_factor = ap / p / (ae / e)
     implied_distribution = p * (1.0 - observed_factor)
     if min((abs(implied_distribution - full) for full in (4.0377, 4.038))) <= 5e-05:
@@ -2900,56 +3023,73 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
     if resp.status_code != 200:
         raise ValueError(f'Yahoo returned status {resp.status_code}')
     data = resp.json()
-    if 'chart' not in data or not data['chart'].get('result'):
-        raise ValueError('Yahoo returned empty result')
-    result = data['chart']['result'][0]
-    timestamps = result.get('timestamp', [])
-    if not timestamps:
-        raise ValueError('No timestamps')
-    daily_dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
-    if daily_dates.hasnans or daily_dates.has_duplicates or (not daily_dates.is_monotonic_increasing):
-        raise DataSchemaError(f'{ticker} Yahoo invalid/duplicate daily date index')
-    indicators = result['indicators']
-    quote = indicators['quote'][0]
-    adj_blocks = indicators.get('adjclose')
-    if not adj_blocks or not adj_blocks[0]:
-        raise ValueError(f'{ticker} Yahoo adjusted close missing')
-    adj_close = adj_blocks[0].get('adjclose')
-    if adj_close is None:
-        raise ValueError(f'{ticker} Yahoo adjusted close missing')
-    if len(adj_close) != len(timestamps):
-        raise ValueError(f'{ticker} Yahoo adjusted close length mismatch: adjusted={len(adj_close)}, timestamps={len(timestamps)}')
-    adj_close, verified_repair = _repair_verified_kmlm_distribution(ticker, timestamps, quote, adj_close)
-    rows = []
-    for i, ts in enumerate(timestamps):
-        dt = pd.Timestamp.fromtimestamp(ts, tz='UTC').strftime('%Y-%m-%d')
-        c = quote['close'][i]
-        o = quote['open'][i] if 'open' in quote else None
-        if c is None:
-            continue
-        ac = adj_close[i]
-        if ac is None:
-            raise ValueError(f'{ticker} Yahoo adjusted close missing at {dt}')
-        if c is not None and ac is not None:
-            adj_o = None
-            if o is not None and c != 0:
-                adj_o = o * (ac / c)
-            row = {'date': dt, 'close': ac}
-            if adj_o is not None:
-                row['open'] = adj_o
-            rows.append(row)
-    df = pd.DataFrame(rows)
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.set_index('date').sort_index()
-    if verified_repair:
-        df.attrs['verified_ca_repair'] = verified_repair
-    first_trade = (result.get('meta') or {}).get('firstTradeDate')
-    if first_trade is not None:
-        first_trade = pd.Timestamp(first_trade, unit='s', tz='UTC')
-        if ticker != 'BTC-USD':
-            first_trade = first_trade.tz_convert('America/New_York')
-        df.attrs['provider_first_trade_date'] = first_trade.date().isoformat()
-    return df
+    try:
+        if 'chart' not in data or not data['chart'].get('result'):
+            raise ValueError('Yahoo returned empty result')
+        result = data['chart']['result'][0]
+        timestamps = result.get('timestamp', [])
+        if not timestamps:
+            raise ValueError('No timestamps')
+        if ticker == 'KMLM':
+            if not isinstance(timestamps, (list, tuple, np.ndarray)) or any((isinstance(t, (bool, np.bool_)) or not isinstance(t, (int, float, np.integer, np.floating)) or (not np.isfinite(t)) for t in timestamps)):
+                raise DataSchemaError('KMLM invalid raw daily timestamps')
+            identity = (result.get('meta') or {}).get('symbol')
+            if identity is not None and identity != ticker:
+                raise DataSchemaError('KMLM Yahoo symbol identity mismatch')
+        daily_dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+        if daily_dates.hasnans or daily_dates.has_duplicates or (not daily_dates.is_monotonic_increasing):
+            raise DataSchemaError(f'{ticker} Yahoo invalid/duplicate daily date index')
+        indicators = result['indicators']
+        quote = indicators['quote'][0]
+        adj_blocks = indicators.get('adjclose')
+        if not adj_blocks or not adj_blocks[0]:
+            raise ValueError(f'{ticker} Yahoo adjusted close missing')
+        adj_close = adj_blocks[0].get('adjclose')
+        if adj_close is None:
+            raise ValueError(f'{ticker} Yahoo adjusted close missing')
+        if len(adj_close) != len(timestamps):
+            raise ValueError(f'{ticker} Yahoo adjusted close length mismatch: adjusted={len(adj_close)}, timestamps={len(timestamps)}')
+        adj_close, verified_repair = _repair_verified_kmlm_distribution(ticker, timestamps, quote, adj_close)
+        if ticker == 'KMLM' and len(quote['close']) != len(timestamps):
+            raise DataSchemaError('KMLM raw close length mismatch')
+        rows = []
+        for i, ts in enumerate(timestamps):
+            dt = pd.Timestamp.fromtimestamp(ts, tz='UTC').strftime('%Y-%m-%d')
+            c = quote['close'][i]
+            o = quote['open'][i] if 'open' in quote else None
+            if ticker == 'KMLM' and pd.isna(c) and pd.isna(adj_close[i]):
+                continue
+            if c is None:
+                continue
+            ac = adj_close[i]
+            if ac is None:
+                raise ValueError(f'{ticker} Yahoo adjusted close missing at {dt}')
+            if c is not None and ac is not None:
+                adj_o = None
+                if o is not None and c != 0:
+                    adj_o = o * (ac / c)
+                row = {'date': dt, 'close': ac}
+                if adj_o is not None:
+                    row['open'] = adj_o
+                rows.append(row)
+        df = pd.DataFrame(rows)
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.set_index('date').sort_index()
+        if verified_repair:
+            df.attrs['verified_ca_repair'] = verified_repair
+        first_trade = (result.get('meta') or {}).get('firstTradeDate')
+        if first_trade is not None:
+            first_trade = pd.Timestamp(first_trade, unit='s', tz='UTC')
+            if ticker != 'BTC-USD':
+                first_trade = first_trade.tz_convert('America/New_York')
+            df.attrs['provider_first_trade_date'] = first_trade.date().isoformat()
+        return df
+    except VerifiedDataRepairConflict:
+        raise
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as exc:
+        if ticker == 'KMLM':
+            raise VerifiedDataRepairConflict('KMLM corporate-action input/schema invalid: ' + str(exc)) from exc
+        raise
 
 def _fetch_us_stooq(ticker, start_date='2003-01-01'):
     stooq_sym = _ticker_to_stooq(ticker)
@@ -3084,6 +3224,7 @@ def _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, frame):
 _US_VERIFIED_HISTORY_STARTS = {'AGG': '2003-09-29', 'AVDV': '2019-09-26', 'AVUV': '2019-09-26', 'BIL': '2007-05-30', 'BTC-USD': '2014-09-17', 'DBC': '2006-02-06', 'DBMF': '2019-05-08', 'EEM': '2003-04-14', 'EFA': '2003-01-02', 'EMXC': '2017-07-26', 'GLD': '2004-11-18', 'GLDM': '2018-06-26', 'IBIT': '2024-01-11', 'KMLM': '2020-12-02', 'PDBC': '2014-11-07', 'QQQ': '2003-01-02', 'QQQM': '2020-10-13', 'SPY': '2003-01-02', 'TLT': '2003-01-02', 'UUP': '2007-03-01', 'VEA': '2007-07-26', 'VGIT': '2009-11-23', 'VTI': '2003-01-02'}
 
 def fetch_yahoo(ticker, start_date='2003-01-01'):
+    generation = _v80_integrity_generation()
     sources = [('Yahoo', lambda: _fetch_us_yahoo(ticker, start_date)), ('Stooq', lambda: _fetch_us_stooq(ticker, start_date))]
     last_err = None
     for name, fetcher in sources:
@@ -3100,20 +3241,26 @@ def fetch_yahoo(ticker, start_date='2003-01-01'):
                     try:
                         df, repaired_count, remaining_count = _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, df)
                         if repaired_count > 0 and remaining_count == 0:
+                            _v80_accept_price_source(ticker, df, name, generation)
                             repair_note = df.attrs.get('verified_ca_repair')
                             return (df, 'Yahoo+Nasdaq-gap' + ('+' + repair_note if repair_note else ''))
                     except _DATA_FETCH_ERRORS:
                         pass
                     except (KeyError, TypeError, IndexError):
                         pass
+                _v80_accept_price_source(ticker, df, name, generation)
                 repair_note = df.attrs.get('verified_ca_repair')
                 return (df, name + ('+' + repair_note if repair_note else ''))
-        except VerifiedDataRepairConflict:
+        except VerifiedDataRepairConflict as exc:
+            if ticker == 'KMLM' and (not isinstance(exc, _V80IntegrityStateChanged)):
+                _v80_quarantine_integrity(ticker, exc)
             raise
         except _DATA_FETCH_ERRORS as e:
+            _v80_assert_integrity(generation, ticker)
             last_err = e
             time.sleep(1)
         except (KeyError, TypeError, IndexError) as e:
+            _v80_assert_integrity(generation, ticker)
             last_err = DataSchemaError(f'{name} schema changed for {ticker}: {e}')
             time.sleep(1)
     return (None, 'FAILED')
@@ -13711,26 +13858,56 @@ class CombinedStrategyBase:
         return (cn_close, cn_dk_close, us_rot_close, us_prod_daily)
 
     def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False):
+        generation = _v80_integrity_generation()
+        if getattr(self, '_request_integrity_generation', None) != generation:
+            self._request_data_cache = {}
+            self._request_strategy_cache = {}
+            self._request_integrity_generation = generation
         cache = getattr(self, '_request_data_cache', None)
         if cache is None:
             cache = {}
             self._request_data_cache = cache
+        if _v80_integrity_pending():
+            cache.clear()
+            self._request_strategy_cache = {}
         key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot), bool(allow_last_confirmed_cn_close))
         if key not in cache:
-            cache[key] = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close)
+            try:
+                data = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close)
+            except Exception:
+                _v80_assert_integrity(generation)
+                raise
+            with _V80_INTEGRITY_LOCK:
+                _v80_assert_integrity(generation)
+                for frame in data:
+                    if hasattr(frame, 'attrs'):
+                        frame.attrs['verified_integrity_generation'] = generation
+                cache[key] = data
         else:
             _debug_write(msg, '  DEBUG: reuse fetched market data for this request\n')
-        return cache[key]
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(generation)
+            return cache[key]
 
     def _cached_run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
+        generation = _v80_integrity_generation()
+        _v80_assert_integrity(generation)
+        for frame in (cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+            if getattr(frame, 'attrs', {}).get('verified_integrity_generation', generation) != generation:
+                raise _V80IntegrityStateChanged('Market inputs predate a known integrity conflict; fetch complete data again')
         cache = getattr(self, '_request_strategy_cache', None)
         if cache is None:
             cache = {}
             self._request_strategy_cache = cache
-        key = (_strategy_frame_cache_fingerprint(cn_close), _strategy_frame_cache_fingerprint(cn_dk_close), _strategy_frame_cache_fingerprint(us_rot_close), _strategy_frame_cache_fingerprint(us_prod_daily), _strategy_open_cache_fingerprint(getattr(self, '_us_open', None)), bool(allow_unresolved_suba_volume), bool(strict_subb_open_execution))
+        key = (generation, _strategy_frame_cache_fingerprint(cn_close), _strategy_frame_cache_fingerprint(cn_dk_close), _strategy_frame_cache_fingerprint(us_rot_close), _strategy_frame_cache_fingerprint(us_prod_daily), _strategy_open_cache_fingerprint(getattr(self, '_us_open', None)), bool(allow_unresolved_suba_volume), bool(strict_subb_open_execution))
         if key not in cache:
-            cache[key] = self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=allow_unresolved_suba_volume, strict_subb_open_execution=strict_subb_open_execution)
-        return cache[key]
+            result = self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=allow_unresolved_suba_volume, strict_subb_open_execution=strict_subb_open_execution)
+            with _V80_INTEGRITY_LOCK:
+                _v80_assert_integrity(generation)
+                cache[key] = result
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(generation)
+            return cache[key]
 
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
         cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
@@ -14025,6 +14202,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         us_signal_live = is_us_signal and us_open and us_data_is_today
         us_signal_confirmed = is_us_signal and (not us_signal_live)
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             w('## 📊 操作信号（收盘确认）\n\n')
             w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
@@ -14130,6 +14308,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         bj_time_str_val = bj_now.strftime('%H:%M')
         bj_date_str = bj_now.strftime('%Y-%m-%d')
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             w('## 📡 实时信号\n\n')
             if any_market_live:
@@ -14168,6 +14347,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             except Exception as exc:
                 strategy_params_error = _short_error(exc)
         with _sm() as msg:
+            if strategy_params_error is None:
+                msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p))
             w = msg.write
             w('## ⚙️ 策略参数总览\n\n')
             _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params')
@@ -14187,6 +14368,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w('⏳ 正在计算实时参数...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=True)
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             cn_date = cn_close.index[-1]
             dk_date = cn_dk_close.index[-1]
@@ -14233,6 +14415,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         _cn_market_above_ma = pd.Series(True, index=cn_close.index)
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             w(f"## 📋 信号历史: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}\n\n")
             _write_suba_volume_query_warning(msg, cn_result)
@@ -14418,6 +14601,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             max_dd[name] = _max_drawdown_pct_from_nav(nav)
         period_label = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             w(f'## 📈 净值曲线: {period_label}\n\n')
             _write_performance_report_context(w, report_context)
@@ -14589,6 +14773,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             chart_labels = {'Sub-A': 'Sub-A (CN Long)', 'Sub-A-DK': 'Sub-A-DK (CN Long-Short)', 'B7.8': 'B7.8 (50% of Sub-B)', 'B7.9': 'B7.9 (50% of Sub-B)', 'Sub-C': 'Sub-C (US Multi-Asset)', 'Combined': f'PV 5-line ({_performance_combo_weight_label()})'}
             chart_bytes = _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date)
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             w(f"## 📈 策略表现: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}\n\n")
             _write_performance_report_context(w, report_context)
@@ -14692,6 +14877,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period, standard_windows=standard_windows, report_context=report_context)
         filename = _performance_report_filename('performance', 'xlsx', report_context)
         with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
             msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             w(f'📎 绩效报告: **{filename}**')

@@ -1,0 +1,410 @@
+{
+  "final_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+  "baseline_commit": "e36634e98c81647587230f06855edac5dae3274a",
+  "cutoff": "2026-10-23",
+  "replay_clock": "2026-10-24 08:15 Asia/Shanghai",
+  "scope": "Original full V8 performance and signal handlers; original raw Yahoo/Sohu responses; no synthetic strategy return streams",
+  "parity": {
+    "all_daily_returns.csv": {
+      "rows": 4586,
+      "columns": 6,
+      "max_abs_numeric_difference": 6.999609225566417e-16,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "all_nav.csv": {
+      "rows": 4586,
+      "columns": 6,
+      "max_abs_numeric_difference": 3.6415315207705135e-14,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "Sub-A_daily.csv": {
+      "rows": 2204,
+      "columns": 55,
+      "max_abs_numeric_difference": 0.0,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "Sub-A-DK_daily.csv": {
+      "rows": 2813,
+      "columns": 43,
+      "max_abs_numeric_difference": 0.0,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "B7.8_daily.csv": {
+      "rows": 4492,
+      "columns": 309,
+      "max_abs_numeric_difference": 3.6415315207705135e-14,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "B7.9_daily.csv": {
+      "rows": 4492,
+      "columns": 249,
+      "max_abs_numeric_difference": 1.7763568394002505e-14,
+      "within_atol_rtol_1e12": true,
+      "non_numeric_exact_equal": true
+    },
+    "正式信号查询.txt": {
+      "exact_equal": true
+    },
+    "正式绩效查询.txt": {
+      "exact_equal_after_report_id_normalization": true,
+      "normalization": "run_id and its attachment filename only"
+    }
+  },
+  "original_global_assignments_unchanged": 361,
+  "actual_us_open_equal_by_symbol": true,
+  "all_four_inputs_equal_by_symbol": true,
+  "input_column_order_differences": [
+    {
+      "input": 2,
+      "before": [
+        "QQQ",
+        "GLD",
+        "DBC",
+        "EFA",
+        "AGG",
+        "UUP",
+        "BIL",
+        "TLT",
+        "EMXC",
+        "DBMF",
+        "KMLM",
+        "BTC-USD",
+        "SPY",
+        "PDBC",
+        "AVDV",
+        "AVUV",
+        "IBIT",
+        "QQQM",
+        "VGIT",
+        "GLDM",
+        "VTI",
+        "VEA"
+      ],
+      "after": [
+        "QQQ",
+        "GLD",
+        "DBC",
+        "EFA",
+        "AGG",
+        "UUP",
+        "BIL",
+        "TLT",
+        "EMXC",
+        "BTC-USD",
+        "KMLM",
+        "DBMF",
+        "SPY",
+        "GLDM",
+        "VTI",
+        "AVUV",
+        "PDBC",
+        "VGIT",
+        "AVDV",
+        "IBIT",
+        "QQQM",
+        "VEA"
+      ]
+    },
+    {
+      "input": 3,
+      "before": [
+        "VTI",
+        "QQQ",
+        "AVUV",
+        "VEA",
+        "AVDV",
+        "VGIT",
+        "DBMF",
+        "KMLM",
+        "GLD",
+        "BTC-USD",
+        "BIL",
+        "SPY",
+        "QQQM",
+        "GLDM",
+        "IBIT",
+        "PDBC",
+        "UUP",
+        "AGG",
+        "EMXC"
+      ],
+      "after": [
+        "VTI",
+        "QQQ",
+        "AVUV",
+        "VEA",
+        "AVDV",
+        "VGIT",
+        "DBMF",
+        "KMLM",
+        "GLD",
+        "BTC-USD",
+        "BIL",
+        "SPY",
+        "QQQM",
+        "GLDM",
+        "IBIT",
+        "EMXC",
+        "PDBC",
+        "UUP",
+        "AGG"
+      ]
+    }
+  ],
+  "numeric_parity_tolerance": {
+    "atol": 1e-12,
+    "rtol": 1e-12
+  },
+  "standard_windows": [
+    {
+      "window": "Full",
+      "start": null,
+      "end": "2026-10-23 00:00:00",
+      "metrics": {
+        "Sub-A": {
+          "annual": 20.409273339839864,
+          "max_dd": -21.22026414759676,
+          "reason": null,
+          "start": "2017-09-19 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-A-DK": {
+          "annual": 17.404384043883514,
+          "max_dd": -15.479377018730744,
+          "reason": null,
+          "start": "2015-03-27 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.8": {
+          "annual": 12.570211492394122,
+          "max_dd": -12.741193021620523,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.9": {
+          "annual": 17.146552177159634,
+          "max_dd": -18.25683792584733,
+          "reason": null,
+          "start": "2008-12-15 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-C": {
+          "annual": 14.79438161439981,
+          "max_dd": -20.566180888865148,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Combined": {
+          "annual": 23.006588790083015,
+          "max_dd": -7.475239143587381,
+          "reason": null,
+          "start": "2020-12-03 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        }
+      }
+    },
+    {
+      "window": "10Y",
+      "start": "2016-10-23 00:00:00",
+      "end": "2026-10-23 00:00:00",
+      "metrics": {
+        "Sub-A": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2017-09-19 after required 2016-10-23"
+        },
+        "Sub-A-DK": {
+          "annual": 20.45430470599541,
+          "max_dd": -15.479377018730696,
+          "reason": null,
+          "start": "2016-10-24 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.8": {
+          "annual": 18.860279365500677,
+          "max_dd": -12.446456246681933,
+          "reason": null,
+          "start": "2016-10-24 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.9": {
+          "annual": 26.282052967597046,
+          "max_dd": -14.48298598017758,
+          "reason": null,
+          "start": "2016-10-24 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-C": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-10-23"
+        },
+        "Combined": {
+          "annual": null,
+          "max_dd": null,
+          "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-10-23"
+        }
+      }
+    },
+    {
+      "window": "5Y",
+      "start": "2021-10-23 00:00:00",
+      "end": "2026-10-23 00:00:00",
+      "metrics": {
+        "Sub-A": {
+          "annual": 24.373221578121363,
+          "max_dd": -18.64634727932907,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-A-DK": {
+          "annual": 20.283608811176236,
+          "max_dd": -15.479377018730641,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.8": {
+          "annual": 22.490843930700755,
+          "max_dd": -12.06082667722914,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.9": {
+          "annual": 32.7657866960543,
+          "max_dd": -14.482985980177595,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-C": {
+          "annual": 12.395386137626074,
+          "max_dd": -20.56618088886534,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Combined": {
+          "annual": 22.291274143686902,
+          "max_dd": -7.475239143587369,
+          "reason": null,
+          "start": "2021-10-25 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        }
+      }
+    },
+    {
+      "window": "3Y",
+      "start": "2023-10-23 00:00:00",
+      "end": "2026-10-23 00:00:00",
+      "metrics": {
+        "Sub-A": {
+          "annual": 43.26140477976139,
+          "max_dd": -16.242816755180364,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-A-DK": {
+          "annual": 23.468005702727822,
+          "max_dd": -15.479377018730617,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.8": {
+          "annual": 32.86960540416639,
+          "max_dd": -12.06082667722914,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.9": {
+          "annual": 47.90205150004314,
+          "max_dd": -13.001749947990177,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-C": {
+          "annual": 23.96794449722193,
+          "max_dd": -9.772864666394778,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Combined": {
+          "annual": 34.52476659358836,
+          "max_dd": -7.475239143587375,
+          "reason": null,
+          "start": "2023-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        }
+      }
+    },
+    {
+      "window": "1Y",
+      "start": "2025-10-23 00:00:00",
+      "end": "2026-10-23 00:00:00",
+      "metrics": {
+        "Sub-A": {
+          "annual": 13.89048719069146,
+          "max_dd": -16.242816755180385,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-A-DK": {
+          "annual": 8.529322402936268,
+          "max_dd": -15.479377018730705,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.8": {
+          "annual": 20.7956177881395,
+          "max_dd": -12.060826677229125,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "B7.9": {
+          "annual": 25.338189609103857,
+          "max_dd": -13.001749947990177,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Sub-C": {
+          "annual": 10.434346632738922,
+          "max_dd": -8.14061030657587,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        },
+        "Combined": {
+          "annual": 16.97787026669726,
+          "max_dd": -7.041233866655952,
+          "reason": null,
+          "start": "2025-10-23 00:00:00",
+          "end": "2026-10-23 00:00:00"
+        }
+      }
+    }
+  ],
+  "combined_start": "2020-12-03",
+  "combined_end": "2026-10-23",
+  "combined_rows": 1529,
+  "combined_terminal_nav": 3.38531218910913,
+  "strict_native_baseline_parity": "Exact standard-window metrics equal original performance handler output",
+  "paper_boundary": "Original costs, financing, open execution, overlays, sleeve capital drift and pre-2024 Sub-C BTC proxy retained; not account/Poe deployment acceptance"
+}

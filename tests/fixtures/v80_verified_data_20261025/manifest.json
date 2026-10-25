@@ -58,6 +58,12 @@
       "file": "cn_result_control.csv",
       "derivation": "Last 5 actual rows from the same native complete replay; error-propagation control only",
       "sha256_lf": "29087a38605917c0960aa9ace2f9a9b17cca78cf19440497faefa05ee708c154"
+    },
+    {
+      "file": "corroborated_actions.json",
+      "sha256_lf": "c80db90b0aa96858a1442670b2291c5f996c85ce3582cfdfa5193e7d43911ded",
+      "extraction": "All KMLM action events extracted from independent real Tiingo/Yahoo archives through 2026-10-23; original archive hashes embedded",
+      "source_endpoint": "Tiingo daily KMLM prices and Yahoo chart events (frozen actual responses)"
     }
   ],
   "hash_basis": "CRLF normalized to LF for Git checkout portability; original_sha256 retains exact source response identity"

@@ -17,3 +17,6 @@ Deliberate mutations and synthetic request receipt labels in tests are explicit
 counterexamples/control scaffolding. They are not claims of observed vendor events
 and must not be used as historical prices. Hashes normalize checkout CRLF to LF;
 original source hashes preserve exact archived-response identity.
+
+- Corroborated KMLM actions extract supports the complete suffix-factor check.
+  Unknown later actions fail closed pending renewed independent evidence.

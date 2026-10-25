@@ -1,0 +1,50 @@
+{
+  "coverage_end": "2026-10-23",
+  "tiingo_rows": 1480,
+  "tiingo_source": "https://api.tiingo.com/tiingo/daily/KMLM/prices",
+  "tiingo_archive_sha256": "d37dad658334286df4d9d97a8847acdfcb9d0fd61c071017ce4558b3d16b0f3d",
+  "tiingo_actions": [
+    {
+      "date": "2021-12-29T00:00:00.000Z",
+      "divCash": 1.838123,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2022-12-28T00:00:00.000Z",
+      "divCash": 4.0377,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2024-12-17T00:00:00.000Z",
+      "divCash": 0.2301,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2025-12-22T00:00:00.000Z",
+      "divCash": 1.3035,
+      "splitFactor": 1.0
+    }
+  ],
+  "yahoo_archive_sha256": "2b4d31e1edda9e7f2b520c5a6f03f962c2c7a4bead43e7932167bd9f051b7bda",
+  "yahoo_events": {
+    "dividends": {
+      "1640788200": {
+        "amount": 1.838,
+        "date": 1640788200
+      },
+      "1672237800": {
+        "amount": 2.481,
+        "date": 1672237800
+      },
+      "1734445800": {
+        "amount": 0.23,
+        "date": 1734445800
+      },
+      "1766413800": {
+        "amount": 1.303,
+        "date": 1766413800
+      }
+    }
+  },
+  "interpretation": "No other Tiingo actions or splits in the 1480-row archive. Amount variants corroborate suffix seams; they are not additional price repairs."
+}

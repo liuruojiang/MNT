@@ -1,5 +1,7 @@
 # Task State
 
+Latest KMLM integrity follow-up: `docs/v80_independent_review_20261025.md`; 995 tests and 12 subtests pass, native normal-input parity retained. No Poe deployment.
+
 ## Data Integrity Repairs - 2026-10-25
 
 - User authorized applying the independently reviewed data repairs, committing,

@@ -1,0 +1,497 @@
+{
+  "scope": "V8.0 KMLM adjustment, dependent request caches, fallback, recovery and final publication only",
+  "before_commit": "e36634e98c81647587230f06855edac5dae3274a",
+  "before_sha256": "d4bcc51af3725686e19725dc253525fa8d483e0884cee9a033d423fd4d6438c9",
+  "final_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "P1",
+      "problem": "Partial adjustment including ex-date or later was scaled a second time; post-event-only slices skipped factor checks",
+      "evidence": "Actual-fixture scale0.9512297158 applied through ex-date/later dates was accepted; max price error4.8770284%.",
+      "fix": "Verify all observed prefix/suffix factors before slice early returns, using independently corroborated actions. Preserve unchanged legitimate slices and complete upstream repairs."
+    },
+    {
+      "id": "F2",
+      "severity": "P2",
+      "problem": "Malformed KMLM adjustment arrays/timestamps were ordinary errors and could switch to Stooq",
+      "evidence": "Missing/short/scalar arrays, invalid timestamps and missing suffix adjustment called fallback spy. This is a transport gate proof, not certification of actual Stooq data.",
+      "fix": "Typed integrity failures block fallback; known conflicts persist until fresh complete Yahoo action/history/confirmation validation."
+    },
+    {
+      "id": "F3",
+      "severity": "P2",
+      "problem": "Same-instance reentry and concurrent loads/results/final publication could outlive a witnessed conflict",
+      "evidence": "Native same-instance signal reused old cache with0 HTTP; actual inflight fetch populated cache after conflict; computed signal could still attach Excel after conflict.",
+      "fix": "Shared per-process generation/quarantine; stale request-cache and input generations cannot publish. Every normal message write and attachment checks integrity atomically. Recovery requires inception-to-confirmed-date coverage even without prior cache."
+    }
+  ],
+  "ca_independent": {
+    "code_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+    "main_cases": 29,
+    "main_valid_controls": 6,
+    "main_rejected_corruptions": 23,
+    "boundary_cases": 20,
+    "assertions": "PASS",
+    "remaining_transport_boundary": "HTTP200 undecodable JSON remains ordinary transport fallback when no known conflict; documented separately, not a CA accepted-data bypass."
+  },
+  "cache_independent_result_items": 15,
+  "targeted_regressions": "98 passed, 12 subtests passed",
+  "full_repository_regressions": "995 passed, 12 subtests passed",
+  "warnings": "110 existing dependency/numeric warnings retained in full log",
+  "normal_native_replay": {
+    "final_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+    "baseline_commit": "e36634e98c81647587230f06855edac5dae3274a",
+    "cutoff": "2026-10-23",
+    "replay_clock": "2026-10-24 08:15 Asia/Shanghai",
+    "scope": "Original full V8 performance and signal handlers; original raw Yahoo/Sohu responses; no synthetic strategy return streams",
+    "parity": {
+      "all_daily_returns.csv": {
+        "rows": 4586,
+        "columns": 6,
+        "max_abs_numeric_difference": 6.999609225566417e-16,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "all_nav.csv": {
+        "rows": 4586,
+        "columns": 6,
+        "max_abs_numeric_difference": 3.6415315207705135e-14,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "Sub-A_daily.csv": {
+        "rows": 2204,
+        "columns": 55,
+        "max_abs_numeric_difference": 0.0,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "Sub-A-DK_daily.csv": {
+        "rows": 2813,
+        "columns": 43,
+        "max_abs_numeric_difference": 0.0,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "B7.8_daily.csv": {
+        "rows": 4492,
+        "columns": 309,
+        "max_abs_numeric_difference": 3.6415315207705135e-14,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "B7.9_daily.csv": {
+        "rows": 4492,
+        "columns": 249,
+        "max_abs_numeric_difference": 1.7763568394002505e-14,
+        "within_atol_rtol_1e12": true,
+        "non_numeric_exact_equal": true
+      },
+      "正式信号查询.txt": {
+        "exact_equal": true
+      },
+      "正式绩效查询.txt": {
+        "exact_equal_after_report_id_normalization": true,
+        "normalization": "run_id and its attachment filename only"
+      }
+    },
+    "original_global_assignments_unchanged": 361,
+    "actual_us_open_equal_by_symbol": true,
+    "all_four_inputs_equal_by_symbol": true,
+    "input_column_order_differences": [
+      {
+        "input": 2,
+        "before": [
+          "QQQ",
+          "GLD",
+          "DBC",
+          "EFA",
+          "AGG",
+          "UUP",
+          "BIL",
+          "TLT",
+          "EMXC",
+          "DBMF",
+          "KMLM",
+          "BTC-USD",
+          "SPY",
+          "PDBC",
+          "AVDV",
+          "AVUV",
+          "IBIT",
+          "QQQM",
+          "VGIT",
+          "GLDM",
+          "VTI",
+          "VEA"
+        ],
+        "after": [
+          "QQQ",
+          "GLD",
+          "DBC",
+          "EFA",
+          "AGG",
+          "UUP",
+          "BIL",
+          "TLT",
+          "EMXC",
+          "BTC-USD",
+          "KMLM",
+          "DBMF",
+          "SPY",
+          "GLDM",
+          "VTI",
+          "AVUV",
+          "PDBC",
+          "VGIT",
+          "AVDV",
+          "IBIT",
+          "QQQM",
+          "VEA"
+        ]
+      },
+      {
+        "input": 3,
+        "before": [
+          "VTI",
+          "QQQ",
+          "AVUV",
+          "VEA",
+          "AVDV",
+          "VGIT",
+          "DBMF",
+          "KMLM",
+          "GLD",
+          "BTC-USD",
+          "BIL",
+          "SPY",
+          "QQQM",
+          "GLDM",
+          "IBIT",
+          "PDBC",
+          "UUP",
+          "AGG",
+          "EMXC"
+        ],
+        "after": [
+          "VTI",
+          "QQQ",
+          "AVUV",
+          "VEA",
+          "AVDV",
+          "VGIT",
+          "DBMF",
+          "KMLM",
+          "GLD",
+          "BTC-USD",
+          "BIL",
+          "SPY",
+          "QQQM",
+          "GLDM",
+          "IBIT",
+          "EMXC",
+          "PDBC",
+          "UUP",
+          "AGG"
+        ]
+      }
+    ],
+    "numeric_parity_tolerance": {
+      "atol": 1e-12,
+      "rtol": 1e-12
+    },
+    "standard_windows": [
+      {
+        "window": "Full",
+        "start": null,
+        "end": "2026-10-23 00:00:00",
+        "metrics": {
+          "Sub-A": {
+            "annual": 20.409273339839864,
+            "max_dd": -21.22026414759676,
+            "reason": null,
+            "start": "2017-09-19 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-A-DK": {
+            "annual": 17.404384043883514,
+            "max_dd": -15.479377018730744,
+            "reason": null,
+            "start": "2015-03-27 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.8": {
+            "annual": 12.570211492394122,
+            "max_dd": -12.741193021620523,
+            "reason": null,
+            "start": "2008-12-15 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.9": {
+            "annual": 17.146552177159634,
+            "max_dd": -18.25683792584733,
+            "reason": null,
+            "start": "2008-12-15 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-C": {
+            "annual": 14.79438161439981,
+            "max_dd": -20.566180888865148,
+            "reason": null,
+            "start": "2020-12-03 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Combined": {
+            "annual": 23.006588790083015,
+            "max_dd": -7.475239143587381,
+            "reason": null,
+            "start": "2020-12-03 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          }
+        }
+      },
+      {
+        "window": "10Y",
+        "start": "2016-10-23 00:00:00",
+        "end": "2026-10-23 00:00:00",
+        "metrics": {
+          "Sub-A": {
+            "annual": null,
+            "max_dd": null,
+            "reason": "insufficient post-start history: starts 2017-09-19 after required 2016-10-23"
+          },
+          "Sub-A-DK": {
+            "annual": 20.45430470599541,
+            "max_dd": -15.479377018730696,
+            "reason": null,
+            "start": "2016-10-24 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.8": {
+            "annual": 18.860279365500677,
+            "max_dd": -12.446456246681933,
+            "reason": null,
+            "start": "2016-10-24 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.9": {
+            "annual": 26.282052967597046,
+            "max_dd": -14.48298598017758,
+            "reason": null,
+            "start": "2016-10-24 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-C": {
+            "annual": null,
+            "max_dd": null,
+            "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-10-23"
+          },
+          "Combined": {
+            "annual": null,
+            "max_dd": null,
+            "reason": "insufficient post-start history: starts 2020-12-03 after required 2016-10-23"
+          }
+        }
+      },
+      {
+        "window": "5Y",
+        "start": "2021-10-23 00:00:00",
+        "end": "2026-10-23 00:00:00",
+        "metrics": {
+          "Sub-A": {
+            "annual": 24.373221578121363,
+            "max_dd": -18.64634727932907,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-A-DK": {
+            "annual": 20.283608811176236,
+            "max_dd": -15.479377018730641,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.8": {
+            "annual": 22.490843930700755,
+            "max_dd": -12.06082667722914,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.9": {
+            "annual": 32.7657866960543,
+            "max_dd": -14.482985980177595,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-C": {
+            "annual": 12.395386137626074,
+            "max_dd": -20.56618088886534,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Combined": {
+            "annual": 22.291274143686902,
+            "max_dd": -7.475239143587369,
+            "reason": null,
+            "start": "2021-10-25 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          }
+        }
+      },
+      {
+        "window": "3Y",
+        "start": "2023-10-23 00:00:00",
+        "end": "2026-10-23 00:00:00",
+        "metrics": {
+          "Sub-A": {
+            "annual": 43.26140477976139,
+            "max_dd": -16.242816755180364,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-A-DK": {
+            "annual": 23.468005702727822,
+            "max_dd": -15.479377018730617,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.8": {
+            "annual": 32.86960540416639,
+            "max_dd": -12.06082667722914,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.9": {
+            "annual": 47.90205150004314,
+            "max_dd": -13.001749947990177,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-C": {
+            "annual": 23.96794449722193,
+            "max_dd": -9.772864666394778,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Combined": {
+            "annual": 34.52476659358836,
+            "max_dd": -7.475239143587375,
+            "reason": null,
+            "start": "2023-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          }
+        }
+      },
+      {
+        "window": "1Y",
+        "start": "2025-10-23 00:00:00",
+        "end": "2026-10-23 00:00:00",
+        "metrics": {
+          "Sub-A": {
+            "annual": 13.89048719069146,
+            "max_dd": -16.242816755180385,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-A-DK": {
+            "annual": 8.529322402936268,
+            "max_dd": -15.479377018730705,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.8": {
+            "annual": 20.7956177881395,
+            "max_dd": -12.060826677229125,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "B7.9": {
+            "annual": 25.338189609103857,
+            "max_dd": -13.001749947990177,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Sub-C": {
+            "annual": 10.434346632738922,
+            "max_dd": -8.14061030657587,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          },
+          "Combined": {
+            "annual": 16.97787026669726,
+            "max_dd": -7.041233866655952,
+            "reason": null,
+            "start": "2025-10-23 00:00:00",
+            "end": "2026-10-23 00:00:00"
+          }
+        }
+      }
+    ],
+    "combined_start": "2020-12-03",
+    "combined_end": "2026-10-23",
+    "combined_rows": 1529,
+    "combined_terminal_nav": 3.38531218910913,
+    "strict_native_baseline_parity": "Exact standard-window metrics equal original performance handler output",
+    "paper_boundary": "Original costs, financing, open execution, overlays, sleeve capital drift and pre-2024 Sub-C BTC proxy retained; not account/Poe deployment acceptance"
+  },
+  "source_scope": {
+    "before_commit": "e36634e98c81647587230f06855edac5dae3274a",
+    "before_sha256": "d4bcc51af3725686e19725dc253525fa8d483e0884cee9a033d423fd4d6438c9",
+    "after_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+    "original_global_assignments_unchanged": 361,
+    "other_version_source_hashes": {
+      "mnt_bot V 6.1 plus.py": "c0cc2361b6687f50270c24414f8e11d08ee006c590cf00ca7aa4d038e5abd527",
+      "mnt_bot V 6.2 plus.py": "b9a6ee737a4826b501ebf14b8b9aea2a089bf8fd8e3f1890a7d8ccd0aa527e9e",
+      "mnt_bot V 6.3 plus.py": "db83b3e089b2841374c1dd2d2b27269b6022d5ed7e9d4c90c1203074226a39c6",
+      "mnt_bot V 6.4 plus.py": "6b2abcc8448a155c32d8701ef0dc32339eba89ba6336b9bbbf5c6a8eb24a7373",
+      "mnt_bot V 6.5 plus.py": "f5da3a2f0de3c2815e89cab87300b96d713b20f70295780558796b7547ffbb26",
+      "mnt_bot V 6.6 plus.py": "ec153671af18a2ad03e72891b0e43a81babf24eb258d1e515d88689a9aa1afc8",
+      "mnt_bot V 6.7 plus.py": "4e217da0afca1bf4f4b385380d30d0513c725e63aff03e6949fb9d77fd248da8",
+      "mnt_bot V 6.8 plus.py": "1cc1923d73a8a8e2613a9c3d5dbddf9767bd981b2ad6b15318cf703b3446deb3",
+      "mnt_bot V 6.8.1 plus.py": "5d71a5d819421c3eb97290c320f10124274fb636c415bee35b6c3cace97699af",
+      "mnt_bot V 6.8.2 plus.py": "8afc0d91a61c59098d32b752c36822071df17578bc4960aae4f10290aa595322",
+      "mnt_bot V 6.8.3 plus.py": "cc28f6244c0b4bd28ffcd98dc4aac5ae0bb54ddc0bfa417c66f6a92af4d9c408",
+      "mnt_bot V 6.9 plus.py": "8202cdff6bfca1b37750b32ac83d38f42823fc3d7559014058dc4af1a98215fd",
+      "mnt_bot V 7.0 plus.py": "93efa344426b33b92265959e78ca44fc139aa345cb8187a47d172f272046c3f9",
+      "mnt_bot V 7.1 plus.py": "747a03cdb944a181c74e8ade82b1461fdf25dac8ef61cb5ddd5b47f495543989",
+      "mnt_bot V 7.2 plus.py": "d403c6888193f9ed5f7f80a8909ad831bbaa0bb90f0ecab7df77c9951f689333",
+      "mnt_bot V 7.3 plus.py": "c4e9b349526eaf8c823e049d2398d780c8004fbdaeb19f5effff802d71590564",
+      "mnt_bot V 7.5 plus.py": "f2c46e5ca56a9a428009a2f63e8d4ba3487ffc2fb54b8409f8d50e6a454d4e3c",
+      "mnt_bot V 7.6 plus.py": "a6dab8f7e359bf5aa8890259dcf7415b8221ef4b3f2d42be2c4d7985cd67a7b7",
+      "mnt_bot V 7.7 plus.py": "edc8f8780d8685e85d9309449fec747e60f8485467f2a80dfc5d8471be757ad0",
+      "mnt_bot V 7.8 plus.py": "85e768add0843ef62d5aa3827c757745b0277c78a68e0efa6035170caa172e08",
+      "mnt_bot V 7.9 plus.py": "8a377e10894ebea98bd5f65048f3b4f1ca46affd1fda7b95884ba0b0d8d3e7bf"
+    },
+    "new_runtime_state_only": [
+      "_V80_INTEGRITY_CONFLICTS",
+      "_V80_INTEGRITY_COVERAGE",
+      "_V80_INTEGRITY_GENERATION",
+      "_V80_INTEGRITY_LOCK"
+    ]
+  },
+  "poe_deployment": false,
+  "trades": false,
+  "boundaries": [
+    "V8 run() already resets per-request caches; this is not a V1.6 TTL-cache finding.",
+    "Per-process state and scheduled-thread experiments; actual Poe worker sharing/multi-instance behavior not tested.",
+    "Actual Stooq price/adjustment quality not certified; its transport gate uses an explicitly labeled control.",
+    "Action evidence through2026-10-23; unknown later actions stop pending independent corroboration.",
+    "Undecodable transport JSON may still use the original fallback when no known integrity conflict exists.",
+    "Frozen paper model preserves original fees, financing, overlays, open execution and pre2024 Sub-C BTC proxy."
+  ]
+}
