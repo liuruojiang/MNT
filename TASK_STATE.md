@@ -1,5 +1,18 @@
 # Task State
 
+## Data Integrity Repairs - 2026-10-25
+
+- User authorized applying the independently reviewed data repairs, committing,
+  pushing and cleaning disposable test artifacts. Strategy parameters stay fixed.
+- V8.0 now includes the KMLM distribution and Sub-A amount repairs, with
+  deterministic integrity conflicts kept outside transient-data fallbacks.
+- Wind validation is retained as a separate tool, without adding a strategy feed.
+- Durable offline coverage lives in `tests/test_v80_verified_data_repairs.py`;
+  essential real extracts are in `tests/fixtures/v80_verified_data_20261025/`.
+- Exact validation/source identities and remaining data boundaries are recorded
+  in `docs/v80_verified_data_repairs_20261025.md` and its evidence JSON.
+- Poe upload, deployment and actual order execution are outside this sync.
+
 ## Current Production: V8.0 Unified Poe Bot
 
 - Authority: `mnt_bot V 8.0 plus.py`, maintained directly as the self-contained Poe production file. `tools/build_v80_unified.py` is a legacy bootstrap and must not overwrite this authority unless its transforms are first synchronized.

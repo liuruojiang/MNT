@@ -1,0 +1,162 @@
+{
+  "base_commit": "58beff8107212ef9015c37487209f07c8445fe48",
+  "original_source_sha256_lf": "f5e0663646ace3824944656a5a12be7dbe7e6f5021e939b536d07d8d87170a9d",
+  "independently_reviewed_source_sha256_lf": "1a0ca25dd04ac3ae54b040cec1b2ba388a13fc84c18678ef2a5196db870a0142",
+  "final_source_sha256_lf": "d4bcc51af3725686e19725dc253525fa8d483e0884cee9a033d423fd4d6438c9",
+  "wind_guard_sha256_lf": "f9c1c261e4a5662c751e0f6f3ab6e1f846fd26fe15a0022b728ae4d359fe6dc0",
+  "hash_basis": "UTF-8 LF Git blob; source worktree also LF at verification",
+  "canonicalization_AST_equal": true,
+  "strategy_global_assignments_unchanged": 361,
+  "retained_regression_tests": 63,
+  "retained_regression_subtests": 12,
+  "independent_candidate_review_checks": {
+    "regressions": 48,
+    "independent_ca": 23,
+    "independent_wind": 18,
+    "total": 89
+  },
+  "native_replay": {
+    "source_cutoff": "2026-10-23",
+    "replay_clock": "2026-10-24 08:15 Asia/Shanghai",
+    "combined_start": "2020-12-03",
+    "combined_end": "2026-10-23",
+    "combined_rows": 1529,
+    "native_signal_text_equal": true,
+    "normal_daily_parity": [
+      {
+        "component": "Sub-A",
+        "max_abs_daily_return_difference": 0.0
+      },
+      {
+        "component": "Sub-A-DK",
+        "max_abs_daily_return_difference": 0.0
+      },
+      {
+        "component": "B7.8",
+        "max_abs_daily_return_difference": 6.999609225566417e-16
+      },
+      {
+        "component": "B7.9",
+        "max_abs_daily_return_difference": 1.9949319973733282e-16
+      },
+      {
+        "component": "Sub-C",
+        "max_abs_daily_return_difference": 0.0
+      },
+      {
+        "component": "Combined",
+        "max_abs_daily_return_difference": 5.000340419503146e-16
+      }
+    ],
+    "standard_windows": [
+      {
+        "窗口": "Full",
+        "年化收益（%）": 23.006588790082994,
+        "最大回撤（%）": -7.475239143587372,
+        "与正常修复基线": "一致",
+        "不足窗口说明": null
+      },
+      {
+        "窗口": "10Y",
+        "年化收益（%）": null,
+        "最大回撤（%）": null,
+        "与正常修复基线": "一致",
+        "不足窗口说明": "insufficient post-start history: starts 2020-12-03 after required 2016-10-23"
+      },
+      {
+        "窗口": "5Y",
+        "年化收益（%）": 22.291274143686792,
+        "最大回撤（%）": -7.4752391435873795,
+        "与正常修复基线": "一致",
+        "不足窗口说明": null
+      },
+      {
+        "窗口": "3Y",
+        "年化收益（%）": 34.52476659358838,
+        "最大回撤（%）": -7.4752391435873715,
+        "与正常修复基线": "一致",
+        "不足窗口说明": null
+      },
+      {
+        "窗口": "1Y",
+        "年化收益（%）": 16.97787026669737,
+        "最大回撤（%）": -7.041233866655816,
+        "与正常修复基线": "一致",
+        "不足窗口说明": null
+      }
+    ],
+    "source_identity": "native entrypoint ran independently reviewed source; final canonical source has identical AST"
+  },
+  "production_Poe_deployed": false,
+  "orders_submitted": false,
+  "wind_feed_registered": false,
+  "findings_closed": [
+    {
+      "id": "F1",
+      "problem": "KMLM 混合前缀可能二次复权",
+      "repair": "修复及已完整分支前均校验前缀因子连续性和已知早期行动，混合缓存直接拒绝。"
+    },
+    {
+      "id": "F2",
+      "problem": "确定性冲突被降为数据不可用",
+      "repair": "专用完整性异常不再属于瞬时取数/数据缺失异常元组，贯穿严格及信号路径，不返回普通目标。"
+    },
+    {
+      "id": "F3",
+      "problem": "已有正确Sub-A目标值跳过口径核验",
+      "repair": "相邻单位和样本口径锚点先核验，已有正确值也不能绕过。"
+    },
+    {
+      "id": "F4",
+      "problem": "上游完整分配三位舍入误拒绝",
+      "repair": "识别已核验4.03770及其三位舍入4.038，并原样通过；不同现金总收益算法继续拒绝。"
+    },
+    {
+      "id": "F5",
+      "problem": "Wind原始JSON布尔值转成数值",
+      "repair": "数值转换前检查实际消费字段的原始类型，拒绝bool。"
+    },
+    {
+      "id": "F6",
+      "problem": "长短窗口重合没有区间独立性",
+      "repair": "重合窗口必须提供独立官方参考；不同区间复用同一响应回执拒绝。"
+    },
+    {
+      "id": "F7",
+      "problem": "时区及单位元数据漏检",
+      "repair": "严格限定offset范围并真实解析；成交量声明非股/shares拒绝，不猜测换算。合法+02:00日标签仍保留原日期。"
+    },
+    {
+      "id": "F8",
+      "problem": "同源自证被标为独立核验",
+      "repair": "Wind帧及其副本不能当参考；官方响应解析器保留来源和指数代码，校验请求身份。明确来源真实性仍由调用方负责。"
+    }
+  ],
+  "verification_commands": [
+    "python -B tools/prune_v80_poe.py --check \"mnt_bot V 8.0 plus.py\"",
+    "python -B -m pytest tests/test_v80_verified_data_repairs.py -q -p no:cacheprovider",
+    "python -B -m pytest tests -q -p no:cacheprovider",
+    "git diff --check"
+  ],
+  "final_suite_status": "PASS",
+  "final_suite": {
+    "passed": 960,
+    "warnings": 110,
+    "subtests_passed": 12,
+    "duration_seconds": 178.64,
+    "source_sha256_lf": "d4bcc51af3725686e19725dc253525fa8d483e0884cee9a033d423fd4d6438c9",
+    "no_failures": true,
+    "no_skips": true
+  },
+  "pruner_idempotent": true,
+  "python_3_11_syntax": "PASS",
+  "retained_fixture_hash_basis": "source hashes exact; extracted fixture checks normalize checkout CRLF to LF",
+  "temporary_cleanup": {
+    "status": "blocked_by_policy",
+    "deleted_items": 0,
+    "target_count": 18,
+    "estimated_bytes_retained": 560247042,
+    "all_regression_source_retained": true,
+    "no_bypass_attempted": true
+  }
+}

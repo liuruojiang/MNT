@@ -76,6 +76,23 @@ Research-only reproducibility utilities:
 - `research_v79_inflation_compass_50_50.py`: reconciled 50/50 V7.9 core plus frozen Inflation Compass study.
 - `research_v79_inflation_compass_weight_scan.py`: 0%-30% Inflation Compass allocation scan built on the reconciled runner.
 
+## Verified Data Repairs (2026-10-25)
+
+- The V8.0 Yahoo reader corrects only the independently verified KMLM
+  2022-12-28 omitted distribution, preserving the existing adjustment method.
+  Complete upstream factors are retained; mixed prefixes and unknown factors
+  fail closed without falling back to an ordinary position signal.
+- Sub-A fills only the verified 2018-12-14 ChiNext constituent-turnover gap,
+  after checking its neighbouring amount basis, including already-filled data.
+- `tools/wind_interval_guard.py` is an independent pre-consumption gate. It is
+  not registered as a production feed. It compares recent OHLCV and full date
+  coverage; it does not certify older values or TURNOVER.
+- `tests/test_v80_verified_data_repairs.py` retains offline counterexamples and
+  small real-data fixtures. No account, chat workspace, or network is required.
+
+See [repair and verification record](docs/v80_verified_data_repairs_20261025.md).
+The code is synchronized locally/remotely; this does not deploy to Poe or trade.
+
 ## Verification
 
 Run these commands after touching production behavior:

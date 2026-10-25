@@ -1,0 +1,64 @@
+{
+  "source_cutoff": "2026-10-23",
+  "record_identity": "frozen_real_data_extracts; deliberate mutations in tests are labelled counterexamples",
+  "files": [
+    {
+      "file": "yahoo_kmlm.json",
+      "original_sha256": "254fcd376ed1f20faf64cae212fb7b065e92f9572740c06065821aa3bbbc1680",
+      "extraction": "Unchanged full real frozen Yahoo response, through 2026-10-23",
+      "sha256_lf": "254fcd376ed1f20faf64cae212fb7b065e92f9572740c06065821aa3bbbc1680",
+      "source_endpoint": "https://query1.finance.yahoo.com/v8/finance/chart/KMLM"
+    },
+    {
+      "file": "sohu_cyb_gap.json",
+      "original_sha256": "cdd6ec0a5bb06131b476d41385f5566c619081ad4576399424c0fb91b3d82119",
+      "extraction": "Real hq rows in 2018-11-01..2019-01-31; known 2018-12-14 omission retained",
+      "sha256_lf": "d5bc87d1e73ccdc6b403dbb6be2bade46ebd506f2b89df2f7466fa6866be46fc",
+      "source_endpoint": "https://q.stock.sohu.com/hisHq?code=zs_399006"
+    },
+    {
+      "file": "wind_bad_long_tail.json",
+      "original_sha256": "6df9f4a6516e3cd7f95b7de8d8a21cd53c70cdaa0064288efacb665ff536b685",
+      "extraction": "Real tail rows from original 2014-10-17..2026-10-23 long response; bad 10/21 and absent 10/22,23 preserved",
+      "sha256_lf": "c6cbac44d15ee1a5fc1b4ef3e165e21ff6123ff5ac6e8275755c90be3ed31164",
+      "source_endpoint": "https://mcp.wind.com.cn/vserver_index_data/mcp/ (get_index_kline, 000852.SH)"
+    },
+    {
+      "file": "wind_short.json",
+      "original_sha256": "154093747d1b17c8af0bc0e62d70544755c9d1da8b3db41c7031ea1f386865ea",
+      "extraction": "Unchanged actual 2026-10-19..23 response",
+      "sha256_lf": "fd4ca3d03f1d29574098d55f966eea2cda080a3d14645ffafaa47c8565840caf",
+      "source_endpoint": "https://mcp.wind.com.cn/vserver_index_data/mcp/ (get_index_kline, 000852.SH)"
+    },
+    {
+      "file": "csi_zz1000_reference.json",
+      "original_sha256": "a2f1eca28a39d2dd7aa2ee442ceb52e662b6aba32a871526f3e4588cf3aeca2f",
+      "extraction": "Unchanged actual 2026-10-19..23 response",
+      "sha256_lf": "a9cba8af333529d79e4f2619275fa927d632a92bbe6939f6af9542e449135569",
+      "source_endpoint": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000852&startDate=20261019&endDate=20261023"
+    },
+    {
+      "file": "csi_zz2000_amount.json",
+      "original_sha256": "0aecfd1f0d9376b28decb298de308c3164e14794a989768877de7290dd821ffe",
+      "extraction": "Last 60 actual rows; used only for control-flow tests, not historical-performance claims",
+      "sha256_lf": "01fc470875b7dbfc68e8c58319e8f859353a000c3554e4a1fa0fbece17251e44",
+      "source_endpoint": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932000"
+    },
+    {
+      "file": "kmlm_expected_adjusted.csv",
+      "derivation": "Actual native V8.0 query _fetch_data us_rot_close.KMLM from complete independently reviewed repaired replay; source SHA1a0ca25d, not a synthetic price history",
+      "sha256_lf": "0bcfa233d544fb98f50bc92df205b71c0f9f9ee5d3c380dccece905c93235136"
+    },
+    {
+      "file": "cn_close_control.csv",
+      "derivation": "Last 5 actual rows from the same native complete replay; error-propagation control only",
+      "sha256_lf": "5766eca1933d4428107e156948b9189b141c4b75e549187c217e88db975d77aa"
+    },
+    {
+      "file": "cn_result_control.csv",
+      "derivation": "Last 5 actual rows from the same native complete replay; error-propagation control only",
+      "sha256_lf": "29087a38605917c0960aa9ace2f9a9b17cca78cf19440497faefa05ee708c154"
+    }
+  ],
+  "hash_basis": "CRLF normalized to LF for Git checkout portability; original_sha256 retains exact source response identity"
+}
