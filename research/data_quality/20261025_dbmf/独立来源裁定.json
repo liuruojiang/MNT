@@ -1,0 +1,89 @@
+{
+  "ticker": "DBMF",
+  "isin": "US53700T8273",
+  "currency": "USD",
+  "ex_date": "2026-09-29",
+  "prior_session": "2026-09-28",
+  "pay_date": "2026-09-30",
+  "verified_distribution": 0.1456,
+  "issuer_chart_benchmark_labels": [
+    {
+      "benchmark_index_id": "104"
+    },
+    {
+      "benchmark_index_id": "72"
+    },
+    {
+      "benchmark_index_id": "116"
+    }
+  ],
+  "issuer_market_price_total_return_rows": [
+    {
+      "value_date": "2026-09-28 00:00:00",
+      "share_class_value": "49.73880276352926",
+      "share_class_value_base100": "19895.521105411703",
+      "strategy_to_nav_switch_date": null,
+      "benchmark_index_id": "104",
+      "benchmark_value": "49.7166172038305",
+      "benchmark_value_base100": "19882.67034746271"
+    },
+    {
+      "value_date": "2026-09-29 00:00:00",
+      "share_class_value": "49.68261849542141",
+      "share_class_value_base100": "19873.047398168565",
+      "strategy_to_nav_switch_date": null,
+      "benchmark_index_id": "104",
+      "benchmark_value": "49.66417158494637",
+      "benchmark_value_base100": "19861.696294719604"
+    }
+  ],
+  "issuer_return": -0.0010548911376877523,
+  "inference_note": "Cash inferred from issuer market-price total-return ratio and matching close quotes; issuer page does not explicitly print this cash distribution.",
+  "issuer_implied_cash_using_tiingo_raw_close": 0.14560000000000173,
+  "broker_explicit_cash_record": {
+    "@type": "FinancialProduct",
+    "position": 8464,
+    "code": "DBMF",
+    "name": "IM GLOBAL PARTNER FUNDS IMGP DBI MANAGED FUTURE STRATEGY ETF FORMERLY IM DBI MANAGED FUTURES STRATEGY ETF TO 12/16/2021",
+    "market": "美股",
+    "dividendAmount": "0.1456",
+    "currency": "美元",
+    "exDividendDate": "2026/09/29",
+    "dividendPaymentDate": "2026/09/30",
+    "dividendRecordDate": "2026/10/05"
+  },
+  "broker_record_date_not_used": "Broker dividendRecordDate is an operational broker field, not assumed to be issuer record date.",
+  "tiingo_event": {
+    "date": "2026-09-29T00:00:00.000Z",
+    "close": 32.43,
+    "high": 32.62,
+    "low": 32.4,
+    "open": 32.43,
+    "volume": 3194274,
+    "adjClose": 32.43,
+    "adjHigh": 32.62,
+    "adjLow": 32.4,
+    "adjOpen": 32.43,
+    "adjVolume": 3194274,
+    "divCash": 0.1456,
+    "splitFactor": 1.0
+  },
+  "yahoo_event_present": false,
+  "yahoo_implied_cash_from_factor": 0.0,
+  "yahoo_raw_return": -0.005519788463869024,
+  "yahoo_adjusted_return": -0.005519788463869024,
+  "tiingo_adjusted_return": -0.0010548911390336757,
+  "yahoo_basis_repair_prefix_scale": 0.9955351120124242,
+  "correction_rule": "Only pre-exdate adjusted prices are scaled, preserving Yahoo convention; raw OHLCV untouched.",
+  "sources": {
+    "issuer": "https://www.imgp.com/us/fund/us53700t8273-imgp-dbi-managed-futures-strategy-etf/",
+    "broker": "https://www.esunsec.com.tw/foreignstock/rate",
+    "tiingo": "https://api.tiingo.com/tiingo/daily/DBMF/prices",
+    "yahoo": "https://query1.finance.yahoo.com/v8/finance/chart/DBMF"
+  },
+  "adjudication": "Yahoo omitted the 2026-09-29 distribution in both event ledger and price adjustment; Tiingo amount independently corroborated.",
+  "artifact_hashes": {
+    "issuer_fund.html": "8eada968c8587c24d1310906f04ad8af8a1debd5296fb4c9181313f8dee8d813",
+    "esun_dividends.html": "57fbdef76301ea2b9ceb3fa2ac462d1c834ff323b6aad906af6920450d9787d3"
+  }
+}

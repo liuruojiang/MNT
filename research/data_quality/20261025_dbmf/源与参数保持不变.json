@@ -1,0 +1,46 @@
+{
+  "v16": {
+    "production_path": "D:\\动量策略\\美股多头策略\\poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py",
+    "production_sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13",
+    "baseline_sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13",
+    "candidate_sha256": "2e0d89123f96de1a5c89aa3001ebbba98d4d11ede869a7e7b909a7f81387dc40",
+    "production_unchanged": true,
+    "economic_parameters_unchanged": true,
+    "changed_existing_functions": [
+      "_confirm_verified_data_repair_recovery",
+      "_repair_verified_kmlm_distribution",
+      "_fetch_yahoo_ohlcv_locked",
+      "load_all_curves",
+      "_load_all_curves_locked",
+      "load_v15_state",
+      "_load_v15_state_locked"
+    ],
+    "changed_existing_constants": [
+      "BOT_BUILD_VERSION",
+      "BOT_VERSION"
+    ],
+    "new_functions": [
+      "_repair_verified_dbmf_distribution",
+      "_verify_dbmf_factor_basis"
+    ]
+  },
+  "v80": {
+    "production_path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+    "production_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+    "baseline_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+    "candidate_sha256": "6067a217cd15c1582f0fd844df31315545e72d00bf084e4aaa0996ab5c866ce6",
+    "production_unchanged": true,
+    "economic_parameters_unchanged": true,
+    "changed_existing_functions": [
+      "_v80_accept_price_source",
+      "_repair_verified_kmlm_distribution",
+      "_fetch_us_yahoo",
+      "fetch_yahoo"
+    ],
+    "changed_existing_constants": [],
+    "new_functions": [
+      "_repair_verified_dbmf_distribution",
+      "_verify_dbmf_factor_basis"
+    ]
+  }
+}

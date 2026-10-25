@@ -4,6 +4,8 @@ Latest KMLM adjustment/cache adversarial follow-up: [2026-10-25 independent revi
 
 Shared V1.6 / V8.0 [read-only Tiingo / Yahoo source audit](docs/us_source_audit.md): 22 ETFs, archived responses and conflict reports; no production feed changes or Poe deployment.
 
+DBMF distribution follow-up: [independent adjudication and isolated V1.6 / V8.0 candidate](research/data_quality/20261025_dbmf/README.md). Full native replay completed; candidate patches remain unapplied to the formal bots and undeployed to Poe.
+
 This workspace contains the A-share / US momentum combo strategy family, including the unified V8.0 `mnt_bot` production query path.
 
 ## Current Stage

@@ -1,0 +1,189 @@
+--- a/poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py
++++ b/poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py
+@@ -176,8 +176,8 @@
+ BTC_SIGNAL_ANNUALIZATION_DAYS = 365.0
+ ONE_WAY_COST_BPS = 5.0
+ STRATEGY_VERSION = "1.6"
+-BOT_BUILD_VERSION = "1.6.6-rc13"
+-BOT_VERSION = "us_long_momentum_strategy_v1_6_bot_v1_6_6_rc13_poe_native"
++BOT_BUILD_VERSION = "1.6.6-rc14-dbmf-candidate"
++BOT_VERSION = "us_long_momentum_strategy_v1_6_bot_v1_6_6_rc14_dbmf_candidate"
+ BUILD_TIME_BJ = "2026-10-25"
+ V13_CAPITAL_FRACTION = 0.50
+ V14_CAPITAL_FRACTION = 0.50
+@@ -1656,7 +1656,7 @@
+                 + f'; missing={len(missing)}'
+             )
+         if symbol in _VERIFIED_DATA_REPAIR_CONFLICTS:
+-            if not verified_basis:
++            if not verified_basis or (symbol == "DBMF" and frame.index.min() > pd.Timestamp("2019-05-08")):
+                 raise VerifiedDataRepairConflict(
+                     'Known KMLM conflict requires full verified action anchors for recovery'
+                 )
+@@ -1729,6 +1729,83 @@
+         elif abs(factors[j] / factors[j - 1] - 1.0) > 2e-06:
+             raise VerifiedDataRepairConflict('KMLM mixed/partially corrected prefix at ' + day.date().isoformat())
+ 
++
++_DBMF_VERIFIED_ACTIONS = {'2019-06-27': [0.03], '2019-09-27': [0.047], '2019-12-27': [2.29], '2020-03-27': [0.017, 0.0174], '2020-12-29': [0.202, 0.2024], '2021-12-30': [2.677, 2.6772], '2022-12-28': [2.247, 2.2474], '2023-12-27': [0.7496, 0.75], '2024-03-26': [0.157, 0.1573], '2024-06-27': [0.254], '2024-09-27': [0.2507, 0.251], '2024-12-27': [0.8409, 0.841], '2025-03-27': [0.1789, 0.179], '2025-06-27': [0.171, 0.1714], '2025-09-29': [0.141, 0.1411], '2025-12-30': [1.168], '2026-03-30': [0.1186, 0.119], '2026-06-29': [0.1529, 0.153], '2026-09-29': [0.0, 0.1456]}
++_DBMF_CA_CACHE_REVISION = 'DBMF-20260929-v1'
++
++def _verify_dbmf_factor_basis(dates, quote, adjusted, require_complete=False):
++    """Frozen actions through 2026-10-23; unknown/mixed future seams fail closed."""
++    try:
++        if len(quote['close']) != len(dates) or len(adjusted) != len(dates):
++            raise ValueError('length mismatch')
++        raw = np.asarray(quote['close'], dtype=float)
++        adj = np.asarray(adjusted, dtype=float)
++    except (KeyError, TypeError, ValueError, IndexError) as exc:
++        raise VerifiedDataRepairConflict('DBMF factor input schema invalid') from exc
++    valid = np.isfinite(raw) & np.isfinite(adj) & (raw > 0) & (adj > 0)
++    paired_missing = np.isnan(raw) & np.isnan(adj)
++    if not (valid | paired_missing).all():
++        raise VerifiedDataRepairConflict('DBMF invalid/partial price pair')
++    positions = np.flatnonzero(valid)
++    for prior, current in zip(positions[:-1], positions[1:]):
++        day = dates[current].date().isoformat()
++        if current != prior + 1 and any(dates[prior] < pd.Timestamp(action) <= dates[current] for action in _DBMF_VERIFIED_ACTIONS):
++            raise VerifiedDataRepairConflict('DBMF cannot verify action across missing session')
++        ratio = (adj[prior] / raw[prior]) / (adj[current] / raw[current])
++        allowed = _DBMF_VERIFIED_ACTIONS.get(day)
++        if allowed is None:
++            if abs(ratio - 1) > 2e-6:
++                raise VerifiedDataRepairConflict('DBMF mixed factor or unknown action on ' + day)
++        else:
++            if require_complete and day == '2026-09-29':
++                allowed = [0.1456]
++            implied = raw[prior] * (1 - ratio)
++            if min(abs(implied - value) for value in allowed) > 5e-5:
++                raise VerifiedDataRepairConflict('DBMF factor conflicts on ' + day)
++
++def _repair_verified_dbmf_distribution(ticker, timestamps, quote, adjusted):
++    """Issuer total-return curve plus broker notice corroborate USD 0.1456.
++
++    https://www.imgp.com/us/fund/us53700t8273-imgp-dbi-managed-futures-strategy-etf/
++    https://www.esunsec.com.tw/foreignstock/rate
++    Only repair the observed zero cash-factor seam; preserve Yahoo convention.
++    """
++    if ticker != 'DBMF':
++        return adjusted, ''
++    if not isinstance(timestamps, (list, tuple, np.ndarray)) or any(isinstance(t, (bool, np.bool_)) or not isinstance(t, (int, float, np.integer, np.floating)) or not np.isfinite(t) for t in timestamps):
++        raise VerifiedDataRepairConflict('DBMF invalid raw timestamps')
++    dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
++    if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
++        raise VerifiedDataRepairConflict('DBMF duplicate/invalid factor dates')
++    if not len(dates):
++        return adjusted, ''
++    _verify_dbmf_factor_basis(dates, quote, adjusted)
++    ex, prior = pd.Timestamp('2026-09-29'), pd.Timestamp('2026-09-28')
++    if dates.max() < ex or dates.min() >= ex:
++        return adjusted, ''
++    if prior not in dates or ex not in dates:
++        raise VerifiedDataRepairConflict('DBMF distribution anchors missing')
++    ip, ie = dates.get_loc(prior), dates.get_loc(ex)
++    try:
++        p, e, ap, ae = [float(v) for v in (quote['close'][ip], quote['close'][ie], adjusted[ip], adjusted[ie])]
++    except (TypeError, ValueError, IndexError, KeyError) as exc:
++        raise VerifiedDataRepairConflict('DBMF distribution anchors invalid') from exc
++    if not all(np.isfinite(v) and v > 0 for v in (p, e, ap, ae)) or p <= 0.1456:
++        raise VerifiedDataRepairConflict('DBMF unusable distribution anchors')
++    observed = (ap / p) / (ae / e)
++    implied = p * (1 - observed)
++    if abs(implied - 0.1456) <= 5e-5:
++        return adjusted, 'DBMF-20260929-upstream-complete'
++    if abs(implied) > 5e-5:
++        raise VerifiedDataRepairConflict('DBMF unrecognized distribution factor')
++    out = list(adjusted)
++    scale = (1 - 0.1456 / p) / observed
++    for i in np.flatnonzero(dates < ex):
++        if out[i] is not None:
++            out[i] = float(out[i]) * scale
++    _verify_dbmf_factor_basis(dates, quote, out, require_complete=True)
++    return out, 'DBMF-20260929-verified-income-repair'
++
+ def _repair_verified_kmlm_distribution(ticker, timestamps, quote, adjusted):
+     """Correct only the verified 2022-12-28 Yahoo distribution omission.
+ 
+@@ -1737,6 +1814,8 @@
+     Preserve the existing Yahoo backward-factor convention. Never add a
+     second repair if upstream already implies the complete distribution.
+     """
++    if ticker == 'DBMF':
++        return _repair_verified_dbmf_distribution(ticker, timestamps, quote, adjusted)
+     if ticker != 'KMLM':
+         return (adjusted, '')
+     dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+@@ -1791,6 +1870,11 @@
+     now = time.time()
+     with _YAHOO_CACHE_LOCK:
+         cached = _YAHOO_OHLCV_CACHE.get(symbol)
++    if symbol == "DBMF" and cached is not None and cached[1].attrs.get("verified_dbmf_ca_revision") != _DBMF_CA_CACHE_REVISION:
++        with _YAHOO_CACHE_LOCK:
++            if _YAHOO_OHLCV_CACHE.get(symbol) is cached:
++                _YAHOO_OHLCV_CACHE.pop(symbol, None)
++        cached = None
+     if cached is not None:
+         cached_at, cached_frame, cached_source = cached
+         if (
+@@ -1852,8 +1936,8 @@
+             except VerifiedDataRepairConflict:
+                 raise
+             except (KeyError, IndexError, TypeError, ValueError, RuntimeError) as exc:
+-                if symbol == 'KMLM':
+-                    raise VerifiedDataRepairConflict('KMLM corporate-action input/schema invalid: ' + str(exc)) from exc
++                if symbol in ('KMLM', 'DBMF'):
++                    raise VerifiedDataRepairConflict(symbol + ' corporate-action input/schema invalid: ' + str(exc)) from exc
+                 raise
+             frame = frame.apply(pd.to_numeric, errors="coerce").sort_index()
+             _validate_yahoo_daily_date_upper_bound(frame, symbol, attempt_started_at)
+@@ -1918,11 +2002,13 @@
+                         _validate_raw_cache_replacement(symbol, existing[1], frame, existing_fetched_at=existing[0])
+                     _confirm_verified_data_repair_recovery(symbol, integrity_generation, bool(kmlm_repair_note), frame)
+                     _assert_verified_data_repair_state(integrity_generation, symbol)
++                    if symbol == "DBMF" and kmlm_repair_note:
++                        frame.attrs["verified_dbmf_ca_revision"] = _DBMF_CA_CACHE_REVISION
+                     _YAHOO_OHLCV_CACHE[symbol] = (attempt_finished_at, frame.copy(), source)
+             _assert_verified_data_repair_state(integrity_generation, symbol)
+             return frame, source
+         except VerifiedDataRepairConflict as exc:
+-            if symbol == 'KMLM':
++            if symbol in ('KMLM', 'DBMF'):
+                 _quarantine_verified_data_repair(symbol, exc)
+             raise
+         except Exception as exc:
+@@ -3975,7 +4061,7 @@
+     signal_availability_mode: bool = False,
+ ):
+     integrity_generation = _verified_data_repair_generation()
+-    cache_key = (bool(include_realtime), bool(signal_availability_mode))
++    cache_key = (bool(include_realtime), bool(signal_availability_mode), _DBMF_CA_CACHE_REVISION)
+     with _ALL_CURVES_CACHE_LOCK:
+         load_lock = _ALL_CURVES_LOAD_LOCKS.setdefault(cache_key, threading.Lock())
+     with load_lock:
+@@ -4028,7 +4114,7 @@
+ ):
+     now = time.time()
+     integrity_generation = _verified_data_repair_generation()
+-    cache_key = (bool(include_realtime), bool(signal_availability_mode))
++    cache_key = (bool(include_realtime), bool(signal_availability_mode), _DBMF_CA_CACHE_REVISION)
+     with _ALL_CURVES_CACHE_LOCK:
+         cached = _ALL_CURVES_CACHE.get(cache_key)
+     if cached is not None:
+@@ -7345,7 +7431,7 @@
+     signal_availability_mode: bool = False,
+ ) -> tuple[dict[str, dict[str, pd.DataFrame]], dict[str, pd.DataFrame], pd.DataFrame, dict[str, str]]:
+     integrity_generation = _verified_data_repair_generation()
+-    cache_key = (bool(include_realtime), bool(signal_availability_mode))
++    cache_key = (bool(include_realtime), bool(signal_availability_mode), _DBMF_CA_CACHE_REVISION)
+     with _V15_ALL_CURVES_CACHE_LOCK:
+         load_lock = _V15_ALL_CURVES_LOAD_LOCKS.setdefault(cache_key, threading.Lock())
+     with load_lock:
+@@ -7405,7 +7491,7 @@
+     signal_availability_mode: bool = False,
+ ) -> tuple[dict[str, dict[str, pd.DataFrame]], dict[str, pd.DataFrame], pd.DataFrame, dict[str, str]]:
+     integrity_generation = _verified_data_repair_generation()
+-    cache_key = (bool(include_realtime), bool(signal_availability_mode))
++    cache_key = (bool(include_realtime), bool(signal_availability_mode), _DBMF_CA_CACHE_REVISION)
+     now = time.time()
+     with _V15_ALL_CURVES_CACHE_LOCK:
+         cached = _V15_ALL_CURVES_CACHE.get(cache_key)

@@ -1,0 +1,2 @@
+# Preserve unified-diff context, including space-only blank context lines.
+*.patch text eol=lf -whitespace

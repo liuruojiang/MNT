@@ -1,0 +1,914 @@
+{
+  "V1.6": {
+    "scope": "Full native load_v15_state -> all child curves -> portfolio accounting -> native metrics/allocation/signal reports",
+    "baseline_parity": "Prior frozen native report numeric parity within 2e-12",
+    "cutoff": "2026-10-23",
+    "rows": 2585,
+    "first": "2019-09-26",
+    "last": "2026-10-23",
+    "baseline_nav": 2.6137840090065203,
+    "candidate_nav": 2.6140855796170306,
+    "terminal_nav_relative_change": 0.00011537702024000396,
+    "parameters_equal": true,
+    "upstream_complete_exact_parity": true,
+    "latest_allocations_equal": false,
+    "latest_allocations_before": {
+      "current": {
+        "SPY": 0.2072562950014501,
+        "QQQ": 0.10085900794035979,
+        "GLD": 0.04858889584331051,
+        "VEA": 0.09505279309480351,
+        "AGG": 0.04932376521096206,
+        "DBC": 0.05851391777029554,
+        "BTC": 0.03376910017281638,
+        "AVUV": 0.10791583052901663,
+        "AVDV": 0.10128427939925928,
+        "KMLM": 0.013034478813950047,
+        "DBMF": 0.02572558933057734,
+        "BIL": 0.1727625354669285,
+        "CASH": 0.0
+      },
+      "target": {
+        "SPY": 0.2072562950014501,
+        "QQQ": 0.10085900794035979,
+        "GLD": 0.04858889584331051,
+        "VEA": 0.09505279309480351,
+        "AGG": 0.04932376521096206,
+        "DBC": 0.05851391777029554,
+        "BTC": 0.03376910017281638,
+        "AVUV": 0.10791583052901663,
+        "AVDV": 0.10128427939925928,
+        "KMLM": 0.013034478813950047,
+        "DBMF": 0.02572558933057734,
+        "BIL": 0.1727625354669285,
+        "CASH": 0.0
+      }
+    },
+    "latest_allocations_after": {
+      "current": {
+        "SPY": 0.20723238514635328,
+        "QQQ": 0.10084737247102438,
+        "GLD": 0.048583290448024875,
+        "VEA": 0.09504182745195326,
+        "AGG": 0.04931807503841977,
+        "DBC": 0.05850716738765927,
+        "BTC": 0.03376520444413958,
+        "AVUV": 0.10790338095844718,
+        "AVDV": 0.10127259486903072,
+        "KMLM": 0.013032975108117132,
+        "DBMF": 0.025837985241078134,
+        "BIL": 0.17274260493990085,
+        "CASH": 0.0
+      },
+      "target": {
+        "SPY": 0.20723238514635328,
+        "QQQ": 0.10084737247102438,
+        "GLD": 0.048583290448024875,
+        "VEA": 0.09504182745195326,
+        "AGG": 0.04931807503841977,
+        "DBC": 0.05850716738765927,
+        "BTC": 0.03376520444413958,
+        "AVUV": 0.10790338095844718,
+        "AVDV": 0.10127259486903072,
+        "KMLM": 0.013032975108117132,
+        "DBMF": 0.025837985241078134,
+        "BIL": 0.17274260493990085,
+        "CASH": 0.0
+      }
+    },
+    "meta_changes": {
+      "return": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00011318767738022206
+      },
+      "gross_return": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00011318767738022206
+      },
+      "overnight_return": {
+        "count": 20,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00011318767738003374
+      },
+      "intraday_return": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 1.2222099418091048e-06
+      },
+      "start_weight_v13": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 6.0205250665024135e-05
+      },
+      "end_weight_v13": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 5.957289736885363e-05
+      },
+      "start_weight_v14": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 6.0205250664524534e-05
+      },
+      "end_weight_v14": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 5.957289736846505e-05
+      },
+      "nav": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.0003069146834944192
+      },
+      "v13_return": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00023301422310018083
+      },
+      "v13_nav": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.0005669621177486484
+      },
+      "buyhold_return": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00011662039864401754
+      },
+      "buyhold_nav": {
+        "count": 25,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "max_abs_difference": 0.00032729531223862907
+      }
+    },
+    "child_changes": {
+      "v13:qqq": {},
+      "v13:gld": {},
+      "v13:dbmf": {
+        "return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "gross_return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "overnight_return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "execution_open": {
+          "count": 1858,
+          "first": "2019-05-08",
+          "last": "2026-09-28",
+          "max_abs_difference": 0.14609114040379012
+        },
+        "nav": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.007591277801194396
+        },
+        "close": {
+          "count": 1858,
+          "first": "2019-05-08",
+          "last": "2026-09-28",
+          "max_abs_difference": 0.1463143813967207
+        },
+        "score": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.15027698113642485
+        },
+        "realized_vol": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.001984926151429464
+        },
+        "dbmf_wsmom60_we175_abs90_score": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.032984440851916874
+        },
+        "dbmf_wsmom60_we175_abs90_abs_mom": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.0048605583578664735
+        },
+        "dbmf_bias130_ma60_we3_score": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.2738616957486486
+        }
+      },
+      "v13:spy": {},
+      "v13:agg": {},
+      "v13:vea": {},
+      "v13:dbc": {},
+      "v13:btc": {},
+      "v13:bil": {},
+      "v13:core_qqq": {},
+      "v13:core_gld": {},
+      "v13:core_dbmf": {
+        "close": {
+          "count": 1858,
+          "first": "2019-05-08",
+          "last": "2026-09-28",
+          "max_abs_difference": 0.1463143813967207
+        },
+        "execution_open": {
+          "count": 1858,
+          "first": "2019-05-08",
+          "last": "2026-09-28",
+          "max_abs_difference": 0.14609114040379012
+        },
+        "overnight_return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "gross_return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "return": {
+          "count": 1,
+          "first": "2026-09-29",
+          "last": "2026-09-29",
+          "max_abs_difference": 0.004460156851116892
+        },
+        "nav": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.009123193216691305
+        }
+      },
+      "v13:core_spy": {},
+      "v13:core_agg": {},
+      "v13:core_vea": {},
+      "v13:core_dbc": {},
+      "v13:core_btc": {},
+      "v14:spy": {},
+      "v14:qqq": {},
+      "v14:avuv": {},
+      "v14:avdv": {},
+      "v14:gld": {},
+      "v14:agg": {},
+      "v14:dbc": {},
+      "v14:kmlm": {},
+      "v14:btc": {},
+      "v14:bil": {}
+    },
+    "evidence_boundary": "Frozen paper replay; native costs/calendars/open execution preserved. No Poe deployment or real orders."
+  },
+  "V8.0": {
+    "scope": "Full actual V8 performance handler and signal handler on identical original archived HTTP responses",
+    "cutoff": "2026-10-23",
+    "combined_rows": 1529,
+    "start": "2020-12-03",
+    "end": "2026-10-23",
+    "baseline_parity_max_return_error": 6.002143226879753e-16,
+    "baseline_nav": 3.385312189109106,
+    "candidate_nav": 3.388971105753821,
+    "terminal_nav_relative_change": 0.0010808210411099584,
+    "return_changes": {
+      "B7.8": {
+        "count": 19,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "latest_before": "0.007267264266378",
+        "latest_after": "0.0069951647368413"
+      },
+      "B7.9": {
+        "count": 6,
+        "first": "2026-10-16",
+        "last": "2026-10-23",
+        "latest_before": "0.0094780758747416",
+        "latest_after": "0.0105900710612296"
+      },
+      "Sub-C": {
+        "count": 19,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "latest_before": "-0.0038734069062906",
+        "latest_after": "-0.003871931189179"
+      },
+      "Combined": {
+        "count": 19,
+        "first": "2026-09-29",
+        "last": "2026-10-23",
+        "latest_before": "0.0033584948213123",
+        "latest_after": "0.0036416396698482"
+      }
+    },
+    "decision_changes": {
+      "B7.8": {
+        "target_w_BTC-USD": {
+          "count": 2,
+          "first": "2026-10-22",
+          "last": "2026-10-23",
+          "latest_before": "0.0874510556516664",
+          "latest_after": "0.0870239663578361"
+        },
+        "target_w_DBC": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.3239448228217469",
+          "latest_after": "0.3218960927014616"
+        },
+        "target_w_DBMF": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.3677763881535176",
+          "latest_after": "0.3714438815175199"
+        },
+        "target_w_EMXC": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.0723934148563046",
+          "latest_after": "0.0718271252276899"
+        },
+        "target_w_KMLM": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.0911336021780287",
+          "latest_after": "0.0905082178567568"
+        },
+        "target_w_QQQ": {
+          "count": 5,
+          "first": "2026-10-15",
+          "last": "2026-10-21",
+          "latest_before": "0.0859510745081033",
+          "latest_after": "0.0859510745081033"
+        },
+        "model_target_w_BTC-USD": {
+          "count": 2,
+          "first": "2026-10-22",
+          "last": "2026-10-23",
+          "latest_before": "0.0874510556516664",
+          "latest_after": "0.0870239663578361"
+        },
+        "model_target_w_DBC": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.3239448228217469",
+          "latest_after": "0.3218960927014616"
+        },
+        "model_target_w_DBMF": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.3677763881535176",
+          "latest_after": "0.3714438815175199"
+        },
+        "model_target_w_EMXC": {
+          "count": 17,
+          "first": "2026-10-01",
+          "last": "2026-10-23",
+          "latest_before": "0.0723934148563046",
+          "latest_after": "0.0718271252276899"
+        },
+        "model_target_w_KMLM": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.0911336021780287",
+          "latest_after": "0.0905082178567568"
+        },
+        "model_target_w_QQQ": {
+          "count": 5,
+          "first": "2026-10-15",
+          "last": "2026-10-21",
+          "latest_before": "0.0859510745081033",
+          "latest_after": "0.0859510745081033"
+        },
+        "execution_target_w_BTC-USD": {
+          "count": 16,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "latest_before": "0.0865344097778838",
+          "latest_after": "0.0861125815367611"
+        },
+        "execution_target_w_DBC": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "latest_before": "0.3246373813616967",
+          "latest_after": "0.3225872096596293"
+        },
+        "execution_target_w_DBMF": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "latest_before": "0.3673469495414763",
+          "latest_after": "0.3710135399958257"
+        },
+        "execution_target_w_EMXC": {
+          "count": 19,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "latest_before": "0.0725231462437436",
+          "latest_after": "0.0719564972419695"
+        },
+        "execution_target_w_KMLM": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.0917031353588335",
+          "latest_after": "0.0910746723211987"
+        },
+        "execution_target_w_QQQ": {
+          "count": 16,
+          "first": "2026-09-29",
+          "last": "2026-10-23",
+          "latest_before": "0.0857410402074848",
+          "latest_after": "0.0857418212116241"
+        }
+      },
+      "B7.9": {
+        "target_w_DBC": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.5038692185100079",
+          "latest_after": "0.5016884764259038"
+        },
+        "target_w_DBMF": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.2972624684008475",
+          "latest_after": "0.2994432104849516"
+        },
+        "target_w_QQQ": {
+          "count": 5,
+          "first": "2026-10-15",
+          "last": "2026-10-21",
+          "latest_before": "0.0988576375806838",
+          "latest_after": "0.0988576375806838"
+        },
+        "model_target_w_DBC": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.5038692185100079",
+          "latest_after": "0.5016884764259038"
+        },
+        "model_target_w_DBMF": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.2972624684008475",
+          "latest_after": "0.2994432104849516"
+        },
+        "model_target_w_QQQ": {
+          "count": 5,
+          "first": "2026-10-15",
+          "last": "2026-10-21",
+          "latest_before": "0.0988576375806838",
+          "latest_after": "0.0988576375806838"
+        },
+        "execution_target_w_BIL": {
+          "count": 1,
+          "first": "2026-10-23",
+          "last": "2026-10-23",
+          "latest_before": "0.0193117271640137",
+          "latest_after": "0.0193118663957632"
+        },
+        "execution_target_w_BTC-USD": {
+          "count": 5,
+          "first": "2026-10-16",
+          "last": "2026-10-23",
+          "latest_before": "0.0742250815702004",
+          "latest_after": "0.0742256167107332"
+        },
+        "execution_target_w_DBC": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.5050227606911994",
+          "latest_after": "0.5028406513893006"
+        },
+        "execution_target_w_DBMF": {
+          "count": 7,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.2969602463670694",
+          "latest_after": "0.2991409280259548"
+        },
+        "execution_target_w_EMXC": {
+          "count": 5,
+          "first": "2026-10-16",
+          "last": "2026-10-23",
+          "latest_before": "0.038617745392124",
+          "latest_after": "0.0386180238144634"
+        },
+        "execution_target_w_QQQ": {
+          "count": 6,
+          "first": "2026-10-15",
+          "last": "2026-10-23",
+          "latest_before": "0.0986309704390892",
+          "latest_after": "0.0986316815387466"
+        }
+      }
+    },
+    "selection_presence_changes": {
+      "B7.8": {
+        "v78_bias_target_w_DBMF": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        },
+        "v78_bias_target_w_KMLM": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        },
+        "model_target_w_KMLM": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        }
+      },
+      "B7.9": {
+        "v78_bias_target_w_DBMF": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        },
+        "v78_bias_target_w_QQQ": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": false,
+          "latest_after": false
+        },
+        "model_target_w_DBMF": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        },
+        "model_target_w_QQQ": {
+          "count": 5,
+          "dates": [
+            "2026-10-15",
+            "2026-10-16",
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "latest_before": true,
+          "latest_after": true
+        }
+      }
+    },
+    "latest_weight_changes": [
+      {
+        "leg": "B7.8",
+        "field": "target_w_BTC-USD",
+        "before": 0.0874510556516664,
+        "after": 0.0870239663578361,
+        "change_percentage_points": -0.04270892938302989
+      },
+      {
+        "leg": "B7.8",
+        "field": "target_w_DBC",
+        "before": 0.3239448228217469,
+        "after": 0.3218960927014616,
+        "change_percentage_points": -0.20487301202853359
+      },
+      {
+        "leg": "B7.8",
+        "field": "target_w_DBMF",
+        "before": 0.3677763881535176,
+        "after": 0.3714438815175199,
+        "change_percentage_points": 0.36674933640022944
+      },
+      {
+        "leg": "B7.8",
+        "field": "target_w_EMXC",
+        "before": 0.0723934148563046,
+        "after": 0.0718271252276899,
+        "change_percentage_points": -0.056628962861469956
+      },
+      {
+        "leg": "B7.8",
+        "field": "target_w_KMLM",
+        "before": 0.0911336021780287,
+        "after": 0.0905082178567568,
+        "change_percentage_points": -0.06253843212718907
+      },
+      {
+        "leg": "B7.8",
+        "field": "model_target_w_BTC-USD",
+        "before": 0.0874510556516664,
+        "after": 0.0870239663578361,
+        "change_percentage_points": -0.04270892938302989
+      },
+      {
+        "leg": "B7.8",
+        "field": "model_target_w_DBC",
+        "before": 0.3239448228217469,
+        "after": 0.3218960927014616,
+        "change_percentage_points": -0.20487301202853359
+      },
+      {
+        "leg": "B7.8",
+        "field": "model_target_w_DBMF",
+        "before": 0.3677763881535176,
+        "after": 0.3714438815175199,
+        "change_percentage_points": 0.36674933640022944
+      },
+      {
+        "leg": "B7.8",
+        "field": "model_target_w_EMXC",
+        "before": 0.0723934148563046,
+        "after": 0.0718271252276899,
+        "change_percentage_points": -0.056628962861469956
+      },
+      {
+        "leg": "B7.8",
+        "field": "model_target_w_KMLM",
+        "before": 0.0911336021780287,
+        "after": 0.0905082178567568,
+        "change_percentage_points": -0.06253843212718907
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_BTC-USD",
+        "before": 0.0865344097778838,
+        "after": 0.0861125815367611,
+        "change_percentage_points": -0.04218282411227042
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_DBC",
+        "before": 0.3246373813616967,
+        "after": 0.3225872096596293,
+        "change_percentage_points": -0.20501717020673937
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_DBMF",
+        "before": 0.3673469495414763,
+        "after": 0.3710135399958257,
+        "change_percentage_points": 0.36665904543494166
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_EMXC",
+        "before": 0.0725231462437436,
+        "after": 0.0719564972419695,
+        "change_percentage_points": -0.056664900177411104
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_KMLM",
+        "before": 0.0917031353588335,
+        "after": 0.0910746723211987,
+        "change_percentage_points": -0.06284630376347938
+      },
+      {
+        "leg": "B7.8",
+        "field": "execution_target_w_QQQ",
+        "before": 0.0857410402074848,
+        "after": 0.0857418212116241,
+        "change_percentage_points": 7.810041393052636e-05
+      },
+      {
+        "leg": "B7.9",
+        "field": "target_w_DBC",
+        "before": 0.5038692185100079,
+        "after": 0.5016884764259038,
+        "change_percentage_points": -0.21807420841041258
+      },
+      {
+        "leg": "B7.9",
+        "field": "target_w_DBMF",
+        "before": 0.2972624684008475,
+        "after": 0.2994432104849516,
+        "change_percentage_points": 0.21807420841040703
+      },
+      {
+        "leg": "B7.9",
+        "field": "model_target_w_DBC",
+        "before": 0.5038692185100079,
+        "after": 0.5016884764259038,
+        "change_percentage_points": -0.21807420841041258
+      },
+      {
+        "leg": "B7.9",
+        "field": "model_target_w_DBMF",
+        "before": 0.2972624684008475,
+        "after": 0.2994432104849516,
+        "change_percentage_points": 0.21807420841040703
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_BIL",
+        "before": 0.0193117271640137,
+        "after": 0.0193118663957632,
+        "change_percentage_points": 1.3923174950122852e-05
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_BTC-USD",
+        "before": 0.0742250815702004,
+        "after": 0.0742256167107332,
+        "change_percentage_points": 5.3514053280356855e-05
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_DBC",
+        "before": 0.5050227606911994,
+        "after": 0.5028406513893006,
+        "change_percentage_points": -0.21821093018988824
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_DBMF",
+        "before": 0.2969602463670694,
+        "after": 0.2991409280259548,
+        "change_percentage_points": 0.21806816588854083
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_EMXC",
+        "before": 0.038617745392124,
+        "after": 0.0386180238144634,
+        "change_percentage_points": 2.7842233939895378e-05
+      },
+      {
+        "leg": "B7.9",
+        "field": "execution_target_w_QQQ",
+        "before": 0.0986309704390892,
+        "after": 0.0986316815387466,
+        "change_percentage_points": 7.110996574077877e-05
+      }
+    ],
+    "latest_signal_report_text_equal": false,
+    "A_and_ADK_exactly_unchanged": true,
+    "parameters_and_active_flags_equal": true,
+    "evidence_boundary": "Frozen paper model; original costs, financing, overlays and next adjusted-open execution preserved. No deployment or actual trades."
+  },
+  "V1.6_signal_analysis": {
+    "DBMF_decision_changes": {},
+    "latest_allocation_changes": [
+      {
+        "symbol": "SPY",
+        "before": 0.2072562950014501,
+        "after": 0.2072323851463532,
+        "change_percentage_points": -0.002390985509689858
+      },
+      {
+        "symbol": "QQQ",
+        "before": 0.1008590079403597,
+        "after": 0.1008473724710243,
+        "change_percentage_points": -0.0011635469335399828
+      },
+      {
+        "symbol": "GLD",
+        "before": 0.0485888958433105,
+        "after": 0.0485832904480248,
+        "change_percentage_points": -0.0005605395285698811
+      },
+      {
+        "symbol": "VEA",
+        "before": 0.0950527930948035,
+        "after": 0.0950418274519532,
+        "change_percentage_points": -0.001096564285028856
+      },
+      {
+        "symbol": "AGG",
+        "before": 0.049323765210962,
+        "after": 0.0493180750384197,
+        "change_percentage_points": -0.000569017254230253
+      },
+      {
+        "symbol": "DBC",
+        "before": 0.0585139177702955,
+        "after": 0.0585071673876592,
+        "change_percentage_points": -0.0006750382636297458
+      },
+      {
+        "symbol": "BTC",
+        "before": 0.0337691001728163,
+        "after": 0.0337652044441395,
+        "change_percentage_points": -0.0003895728676796273
+      },
+      {
+        "symbol": "AVUV",
+        "before": 0.1079158305290166,
+        "after": 0.1079033809584471,
+        "change_percentage_points": -0.001244957056949214
+      },
+      {
+        "symbol": "AVDV",
+        "before": 0.1012842793992592,
+        "after": 0.1012725948690307,
+        "change_percentage_points": -0.0011684530228497914
+      },
+      {
+        "symbol": "KMLM",
+        "before": 0.01303447881395,
+        "after": 0.0130329751081171,
+        "change_percentage_points": -0.00015037058328989938
+      },
+      {
+        "symbol": "DBMF",
+        "before": 0.0257255893305773,
+        "after": 0.0258379852410781,
+        "change_percentage_points": 0.0112395910500801
+      },
+      {
+        "symbol": "BIL",
+        "before": 0.1727625354669285,
+        "after": 0.1727426049399008,
+        "change_percentage_points": -0.0019930527027700595
+      },
+      {
+        "symbol": "CASH",
+        "before": 0.0,
+        "after": 0.0,
+        "change_percentage_points": 0.0
+      }
+    ],
+    "latest_max_weight_change_percentage_points": 0.0112395910500801,
+    "interpretation": "Decision-state changes and drifted portfolio target weights are reported separately."
+  }
+}

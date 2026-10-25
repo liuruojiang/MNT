@@ -1,0 +1,168 @@
+--- a/mnt_bot V 8.0 plus.py
++++ b/mnt_bot V 8.0 plus.py
+@@ -2855,7 +2855,7 @@
+         _V80_INTEGRITY_CONFLICTS[ticker] = str(error)
+ 
+ def _v80_accept_price_source(ticker, frame, source, generation):
+-    if ticker != 'KMLM':
++    if ticker not in ('KMLM', 'DBMF'):
+         _v80_assert_integrity(generation, ticker)
+         return
+     valid = _valid_us_ohlc_index(frame)
+@@ -2869,7 +2869,7 @@
+             raise _V80IntegrityStateChanged('Integrity changed during fresh price validation')
+         if ticker in _V80_INTEGRITY_CONFLICTS:
+             coverage = _V80_INTEGRITY_COVERAGE.get(ticker, pd.DatetimeIndex([]))
+-            inception = pd.Timestamp(_US_VERIFIED_HISTORY_STARTS['KMLM'])
++            inception = pd.Timestamp(_US_VERIFIED_HISTORY_STARTS[ticker])
+             full_expected = _expected_ticker_ohlc_index(ticker, inception, required)
+             if source != 'Yahoo' or not note or len(valid) == 0 or len(missing) or (valid[-1] < required) or len(coverage.difference(valid)) or len(full_expected.difference(valid)):
+                 raise VerifiedDataRepairConflict('KMLM recovery requires fresh complete Yahoo action anchors and confirmed historical coverage')
+@@ -2972,6 +2972,83 @@
+         elif abs(factors[j] / factors[j - 1] - 1.0) > 2e-06:
+             raise VerifiedDataRepairConflict('KMLM mixed/partially corrected prefix at ' + day.date().isoformat())
+ 
++
++_DBMF_VERIFIED_ACTIONS = {'2019-06-27': [0.03], '2019-09-27': [0.047], '2019-12-27': [2.29], '2020-03-27': [0.017, 0.0174], '2020-12-29': [0.202, 0.2024], '2021-12-30': [2.677, 2.6772], '2022-12-28': [2.247, 2.2474], '2023-12-27': [0.7496, 0.75], '2024-03-26': [0.157, 0.1573], '2024-06-27': [0.254], '2024-09-27': [0.2507, 0.251], '2024-12-27': [0.8409, 0.841], '2025-03-27': [0.1789, 0.179], '2025-06-27': [0.171, 0.1714], '2025-09-29': [0.141, 0.1411], '2025-12-30': [1.168], '2026-03-30': [0.1186, 0.119], '2026-06-29': [0.1529, 0.153], '2026-09-29': [0.0, 0.1456]}
++_DBMF_CA_CACHE_REVISION = 'DBMF-20260929-v1'
++
++def _verify_dbmf_factor_basis(dates, quote, adjusted, require_complete=False):
++    """Frozen actions through 2026-10-23; unknown/mixed future seams fail closed."""
++    try:
++        if len(quote['close']) != len(dates) or len(adjusted) != len(dates):
++            raise ValueError('length mismatch')
++        raw = np.asarray(quote['close'], dtype=float)
++        adj = np.asarray(adjusted, dtype=float)
++    except (KeyError, TypeError, ValueError, IndexError) as exc:
++        raise VerifiedDataRepairConflict('DBMF factor input schema invalid') from exc
++    valid = np.isfinite(raw) & np.isfinite(adj) & (raw > 0) & (adj > 0)
++    paired_missing = np.isnan(raw) & np.isnan(adj)
++    if not (valid | paired_missing).all():
++        raise VerifiedDataRepairConflict('DBMF invalid/partial price pair')
++    positions = np.flatnonzero(valid)
++    for prior, current in zip(positions[:-1], positions[1:]):
++        day = dates[current].date().isoformat()
++        if current != prior + 1 and any(dates[prior] < pd.Timestamp(action) <= dates[current] for action in _DBMF_VERIFIED_ACTIONS):
++            raise VerifiedDataRepairConflict('DBMF cannot verify action across missing session')
++        ratio = (adj[prior] / raw[prior]) / (adj[current] / raw[current])
++        allowed = _DBMF_VERIFIED_ACTIONS.get(day)
++        if allowed is None:
++            if abs(ratio - 1) > 2e-6:
++                raise VerifiedDataRepairConflict('DBMF mixed factor or unknown action on ' + day)
++        else:
++            if require_complete and day == '2026-09-29':
++                allowed = [0.1456]
++            implied = raw[prior] * (1 - ratio)
++            if min(abs(implied - value) for value in allowed) > 5e-5:
++                raise VerifiedDataRepairConflict('DBMF factor conflicts on ' + day)
++
++def _repair_verified_dbmf_distribution(ticker, timestamps, quote, adjusted):
++    """Issuer total-return curve plus broker notice corroborate USD 0.1456.
++
++    https://www.imgp.com/us/fund/us53700t8273-imgp-dbi-managed-futures-strategy-etf/
++    https://www.esunsec.com.tw/foreignstock/rate
++    Only repair the observed zero cash-factor seam; preserve Yahoo convention.
++    """
++    if ticker != 'DBMF':
++        return adjusted, ''
++    if not isinstance(timestamps, (list, tuple, np.ndarray)) or any(isinstance(t, (bool, np.bool_)) or not isinstance(t, (int, float, np.integer, np.floating)) or not np.isfinite(t) for t in timestamps):
++        raise VerifiedDataRepairConflict('DBMF invalid raw timestamps')
++    dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
++    if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
++        raise VerifiedDataRepairConflict('DBMF duplicate/invalid factor dates')
++    if not len(dates):
++        return adjusted, ''
++    _verify_dbmf_factor_basis(dates, quote, adjusted)
++    ex, prior = pd.Timestamp('2026-09-29'), pd.Timestamp('2026-09-28')
++    if dates.max() < ex or dates.min() >= ex:
++        return adjusted, ''
++    if prior not in dates or ex not in dates:
++        raise VerifiedDataRepairConflict('DBMF distribution anchors missing')
++    ip, ie = dates.get_loc(prior), dates.get_loc(ex)
++    try:
++        p, e, ap, ae = [float(v) for v in (quote['close'][ip], quote['close'][ie], adjusted[ip], adjusted[ie])]
++    except (TypeError, ValueError, IndexError, KeyError) as exc:
++        raise VerifiedDataRepairConflict('DBMF distribution anchors invalid') from exc
++    if not all(np.isfinite(v) and v > 0 for v in (p, e, ap, ae)) or p <= 0.1456:
++        raise VerifiedDataRepairConflict('DBMF unusable distribution anchors')
++    observed = (ap / p) / (ae / e)
++    implied = p * (1 - observed)
++    if abs(implied - 0.1456) <= 5e-5:
++        return adjusted, 'DBMF-20260929-upstream-complete'
++    if abs(implied) > 5e-5:
++        raise VerifiedDataRepairConflict('DBMF unrecognized distribution factor')
++    out = list(adjusted)
++    scale = (1 - 0.1456 / p) / observed
++    for i in np.flatnonzero(dates < ex):
++        if out[i] is not None:
++            out[i] = float(out[i]) * scale
++    _verify_dbmf_factor_basis(dates, quote, out, require_complete=True)
++    return out, 'DBMF-20260929-verified-income-repair'
++
+ def _repair_verified_kmlm_distribution(ticker, timestamps, quote, adjusted):
+     """Correct only the verified 2022-12-28 Yahoo distribution omission.
+ 
+@@ -2980,6 +3057,8 @@
+     Preserve the existing Yahoo backward-factor convention. Never add a
+     second repair if upstream already implies the complete distribution.
+     """
++    if ticker == 'DBMF':
++        return _repair_verified_dbmf_distribution(ticker, timestamps, quote, adjusted)
+     if ticker != 'KMLM':
+         return (adjusted, '')
+     dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+@@ -3030,7 +3109,7 @@
+         timestamps = result.get('timestamp', [])
+         if not timestamps:
+             raise ValueError('No timestamps')
+-        if ticker == 'KMLM':
++        if ticker in ('KMLM', 'DBMF'):
+             if not isinstance(timestamps, (list, tuple, np.ndarray)) or any((isinstance(t, (bool, np.bool_)) or not isinstance(t, (int, float, np.integer, np.floating)) or (not np.isfinite(t)) for t in timestamps)):
+                 raise DataSchemaError('KMLM invalid raw daily timestamps')
+             identity = (result.get('meta') or {}).get('symbol')
+@@ -3050,14 +3129,14 @@
+         if len(adj_close) != len(timestamps):
+             raise ValueError(f'{ticker} Yahoo adjusted close length mismatch: adjusted={len(adj_close)}, timestamps={len(timestamps)}')
+         adj_close, verified_repair = _repair_verified_kmlm_distribution(ticker, timestamps, quote, adj_close)
+-        if ticker == 'KMLM' and len(quote['close']) != len(timestamps):
++        if ticker in ('KMLM', 'DBMF') and len(quote['close']) != len(timestamps):
+             raise DataSchemaError('KMLM raw close length mismatch')
+         rows = []
+         for i, ts in enumerate(timestamps):
+             dt = pd.Timestamp.fromtimestamp(ts, tz='UTC').strftime('%Y-%m-%d')
+             c = quote['close'][i]
+             o = quote['open'][i] if 'open' in quote else None
+-            if ticker == 'KMLM' and pd.isna(c) and pd.isna(adj_close[i]):
++            if ticker in ('KMLM', 'DBMF') and pd.isna(c) and pd.isna(adj_close[i]):
+                 continue
+             if c is None:
+                 continue
+@@ -3087,8 +3166,8 @@
+     except VerifiedDataRepairConflict:
+         raise
+     except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as exc:
+-        if ticker == 'KMLM':
+-            raise VerifiedDataRepairConflict('KMLM corporate-action input/schema invalid: ' + str(exc)) from exc
++        if ticker in ('KMLM', 'DBMF'):
++            raise VerifiedDataRepairConflict(ticker + ' corporate-action input/schema invalid: ' + str(exc)) from exc
+         raise
+ 
+ def _fetch_us_stooq(ticker, start_date='2003-01-01'):
+@@ -3228,6 +3307,8 @@
+     sources = [('Yahoo', lambda: _fetch_us_yahoo(ticker, start_date)), ('Stooq', lambda: _fetch_us_stooq(ticker, start_date))]
+     last_err = None
+     for name, fetcher in sources:
++        if name != 'Yahoo':
++            _v80_assert_integrity(generation, ticker)
+         try:
+             df = fetcher()
+             if df is not None and len(df) > 50:
+@@ -3252,7 +3333,7 @@
+                 repair_note = df.attrs.get('verified_ca_repair')
+                 return (df, name + ('+' + repair_note if repair_note else ''))
+         except VerifiedDataRepairConflict as exc:
+-            if ticker == 'KMLM' and (not isinstance(exc, _V80IntegrityStateChanged)):
++            if ticker in ('KMLM', 'DBMF') and (not isinstance(exc, _V80IntegrityStateChanged)):
+                 _v80_quarantine_integrity(ticker, exc)
+             raise
+         except _DATA_FETCH_ERRORS as e:
