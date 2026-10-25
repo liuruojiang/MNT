@@ -1,0 +1,383 @@
+{
+  "GLDM": {
+    "provenance": {
+      "tiingo_parent_sha256": "d95926874875586bd4dcb825cc45ef18458a66ed6eabb19e9a96939454b2ba82",
+      "yahoo_parent_sha256": "b4474ec67388176409a31d1256b9fcfdd797e33a5f779e1d6adefaa3d5be7cf2",
+      "note": "Actual split seam; numeric values unmodified."
+    },
+    "tiingo": [
+      {
+        "date": "2022-02-22T00:00:00.000Z",
+        "close": 18.88,
+        "high": 18.95,
+        "low": 18.82,
+        "open": 18.9,
+        "volume": 13015362,
+        "adjClose": 37.76,
+        "adjHigh": 37.9,
+        "adjLow": 37.64,
+        "adjOpen": 37.8,
+        "adjVolume": 6507681,
+        "divCash": 0.0,
+        "splitFactor": 1.0
+      },
+      {
+        "date": "2022-02-23T00:00:00.000Z",
+        "close": 37.95,
+        "high": 37.967,
+        "low": 37.75,
+        "open": 37.7653,
+        "volume": 5092975,
+        "adjClose": 37.95,
+        "adjHigh": 37.967,
+        "adjLow": 37.75,
+        "adjOpen": 37.7653,
+        "adjVolume": 5092975,
+        "divCash": 0.0,
+        "splitFactor": 0.5
+      },
+      {
+        "date": "2022-02-24T00:00:00.000Z",
+        "close": 37.72,
+        "high": 38.87,
+        "low": 37.32,
+        "open": 38.86,
+        "volume": 11592997,
+        "adjClose": 37.72,
+        "adjHigh": 38.87,
+        "adjLow": 37.32,
+        "adjOpen": 38.86,
+        "adjVolume": 11592997,
+        "divCash": 0.0,
+        "splitFactor": 1.0
+      }
+    ],
+    "yahoo": {
+      "chart": {
+        "result": [
+          {
+            "meta": {
+              "currency": "USD",
+              "symbol": "GLDM",
+              "exchangeName": "PCX",
+              "fullExchangeName": "NYSEArca",
+              "instrumentType": "ETF",
+              "firstTradeDate": 1530019800,
+              "regularMarketTime": 1792785600,
+              "hasPrePostMarketData": true,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "exchangeTimezoneName": "America/New_York",
+              "regularMarketPrice": 79.13,
+              "regularMarketChangePercent": -0.665,
+              "fulldayPrice": 79.13,
+              "fulldayChange": -0.16,
+              "fulldayChangePercent": -0.201,
+              "fiftyTwoWeekHigh": 109.74,
+              "fiftyTwoWeekLow": 77.5,
+              "regularMarketDayHigh": 79.66,
+              "regularMarketDayLow": 78.63,
+              "regularMarketVolume": 4194115,
+              "longName": "SPDR Gold MiniShares",
+              "shortName": "SPDR Gold MiniShares Trust",
+              "chartPreviousClose": 25.2,
+              "priceHint": 2,
+              "currentTradingPeriod": {
+                "pre": {
+                  "timezone": "EDT",
+                  "start": 1792742400,
+                  "end": 1792762200,
+                  "gmtoffset": -14400
+                },
+                "regular": {
+                  "timezone": "EDT",
+                  "start": 1792762200,
+                  "end": 1792785600,
+                  "gmtoffset": -14400
+                },
+                "post": {
+                  "timezone": "EDT",
+                  "start": 1792785600,
+                  "end": 1792800000,
+                  "gmtoffset": -14400
+                }
+              },
+              "dataGranularity": "1d",
+              "range": "",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "3mo",
+                "6mo",
+                "1y",
+                "2y",
+                "5y",
+                "10y",
+                "ytd",
+                "max"
+              ]
+            },
+            "timestamp": [
+              1645540200,
+              1645626600,
+              1645713000
+            ],
+            "events": {
+              "splits": {
+                "1645626600": {
+                  "date": 1645626600,
+                  "numerator": 1.0,
+                  "denominator": 2.0,
+                  "splitRatio": "1:2"
+                }
+              }
+            },
+            "indicators": {
+              "quote": [
+                {
+                  "high": [
+                    37.900001525878906,
+                    37.96699905395508,
+                    38.869998931884766
+                  ],
+                  "volume": [
+                    6508050,
+                    5096500,
+                    11592900
+                  ],
+                  "close": [
+                    37.7599983215332,
+                    37.95000076293945,
+                    37.720001220703125
+                  ],
+                  "low": [
+                    37.63999938964844,
+                    37.75,
+                    37.31999969482422
+                  ],
+                  "open": [
+                    37.79999923706055,
+                    37.76499938964844,
+                    38.86000061035156
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    37.7599983215332,
+                    37.95000076293945,
+                    37.720001220703125
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "error": null
+      }
+    },
+    "metadata": {
+      "ticker": "GLDM",
+      "name": "SPDR Gold MiniShares Trust",
+      "description": "SPDR Gold MiniShares Trust",
+      "startDate": "2018-06-26",
+      "endDate": "2026-10-23",
+      "exchangeCode": "NYSE"
+    },
+    "start": "2022-02-22",
+    "end": "2022-02-24"
+  },
+  "EEM": {
+    "provenance": {
+      "tiingo_parent_sha256": "b2d2ec1b5f28dd3b74c54a501de8001a1bec1009da7b1c9700c88e054d98fca3",
+      "yahoo_parent_sha256": "6ddf577c7e1e29f6369b90322c70ec405d551c5686afb2797c159ab9f7ee9db8",
+      "note": "Actual split seam; numeric values unmodified."
+    },
+    "tiingo": [
+      {
+        "date": "2005-06-08T00:00:00.000Z",
+        "close": 209.8,
+        "high": 211.92,
+        "low": 209.77,
+        "open": 211.36,
+        "volume": 366700,
+        "adjClose": 15.230920993,
+        "adjHigh": 15.3848273443,
+        "adjLow": 15.2287430729,
+        "adjOpen": 15.3441728364,
+        "adjVolume": 3300306,
+        "divCash": 0.0,
+        "splitFactor": 1.0
+      },
+      {
+        "date": "2005-06-09T00:00:00.000Z",
+        "close": 70.3,
+        "high": 71.1,
+        "low": 69.41,
+        "open": 69.9,
+        "volume": 280133,
+        "adjClose": 15.3107933728,
+        "adjHigh": 15.4850271523,
+        "adjLow": 15.1169582932,
+        "adjOpen": 15.2236764831,
+        "adjVolume": 840399,
+        "divCash": 0.0,
+        "splitFactor": 3.000003
+      },
+      {
+        "date": "2005-06-10T00:00:00.000Z",
+        "close": 70.5,
+        "high": 72.1,
+        "low": 70.02,
+        "open": 72.1,
+        "volume": 534700,
+        "adjClose": 15.3543518177,
+        "adjHigh": 15.7028193767,
+        "adjLow": 15.24981155,
+        "adjOpen": 15.7028193767,
+        "adjVolume": 1604101,
+        "divCash": 0.0,
+        "splitFactor": 1.0
+      }
+    ],
+    "yahoo": {
+      "chart": {
+        "result": [
+          {
+            "meta": {
+              "currency": "USD",
+              "symbol": "EEM",
+              "exchangeName": "PCX",
+              "fullExchangeName": "NYSEArca",
+              "instrumentType": "ETF",
+              "firstTradeDate": 1050327000,
+              "regularMarketTime": 1792785600,
+              "hasPrePostMarketData": true,
+              "gmtoffset": -14400,
+              "timezone": "EDT",
+              "exchangeTimezoneName": "America/New_York",
+              "regularMarketPrice": 62.01,
+              "regularMarketChangePercent": 0.47,
+              "fulldayPrice": 62.01,
+              "fulldayChange": 0.28,
+              "fulldayChangePercent": 0.454,
+              "fiftyTwoWeekHigh": 71.57,
+              "fiftyTwoWeekLow": 52.38,
+              "regularMarketDayHigh": 62.08,
+              "regularMarketDayLow": 61.6,
+              "regularMarketVolume": 21993172,
+              "longName": "iShares MSCI Emerging Markets ETF",
+              "shortName": "iShares MSCI Emerging Index Fun",
+              "chartPreviousClose": 11.144,
+              "priceHint": 2,
+              "currentTradingPeriod": {
+                "pre": {
+                  "timezone": "EDT",
+                  "end": 1792762200,
+                  "start": 1792742400,
+                  "gmtoffset": -14400
+                },
+                "regular": {
+                  "timezone": "EDT",
+                  "end": 1792785600,
+                  "start": 1792762200,
+                  "gmtoffset": -14400
+                },
+                "post": {
+                  "timezone": "EDT",
+                  "end": 1792800000,
+                  "start": 1792785600,
+                  "gmtoffset": -14400
+                }
+              },
+              "dataGranularity": "1d",
+              "range": "",
+              "validRanges": [
+                "1d",
+                "5d",
+                "1mo",
+                "3mo",
+                "6mo",
+                "1y",
+                "2y",
+                "5y",
+                "10y",
+                "ytd",
+                "max"
+              ]
+            },
+            "timestamp": [
+              1118237400,
+              1118323800,
+              1118410200
+            ],
+            "events": {
+              "dividends": {},
+              "splits": {
+                "1118323800": {
+                  "date": 1118323800,
+                  "numerator": 3.0,
+                  "denominator": 1.0,
+                  "splitRatio": "3:1"
+                }
+              }
+            },
+            "indicators": {
+              "quote": [
+                {
+                  "low": [
+                    23.307777404785156,
+                    23.136667251586914,
+                    23.34000015258789
+                  ],
+                  "close": [
+                    23.311111450195312,
+                    23.433332443237305,
+                    23.5
+                  ],
+                  "open": [
+                    23.48444366455078,
+                    23.299999237060547,
+                    24.03333282470703
+                  ],
+                  "high": [
+                    23.546667098999023,
+                    23.700000762939453,
+                    24.03333282470703
+                  ],
+                  "volume": [
+                    3300300,
+                    2521200,
+                    1604100
+                  ]
+                }
+              ],
+              "adjclose": [
+                {
+                  "adjclose": [
+                    15.216275215148926,
+                    15.29605484008789,
+                    15.33957576751709
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "error": null
+      }
+    },
+    "metadata": {
+      "ticker": "EEM",
+      "name": "ISHARES MSCI EMERGING MARKETS ETF ",
+      "description": "The Fund seeks to track the investment results of the MSCI Emerging Markets Index (the \u201cUnderlying Index\u201d), which is designed to measure equity market performance in the global emerging markets. As of August 31, 2024, the Underlying Index consisted of securities from the following 24 emerging market countries: Brazil, Chile, China, Colombia, Czech Republic, Egypt, Greece, Hungary, India, Indonesia, Kuwait, Malaysia, Mexico, Peru, the Philippines, Poland, Qatar, Saudi Arabia, South Africa, South Korea, Taiwan, Thailand, Turkey and the United Arab Emirates. The Underlying Index includes large- and mid-  capitalization companies and may change over time. As of August 31, 2024, a significant portion of the Underlying Index is represented by securities of companies in the financials and technology industries or sectors. The components of the Underlying Index are likely to change over time.  BFA uses an indexing approach to try to achieve the Fund\u2019s investment objective. The Fund does not try to \u201cbeat\u201d the index it tracks and does not seek temporary defensive positions when markets decline or appear overvalued.  Indexing may eliminate the chance that the Fund will substantially outperform the Underlying Index but also may reduce some of the risks of active management, such as poor security selection. Indexing seeks to achieve lower costs and better after-tax performance by aiming to keep portfolio turnover low in comparison to actively managed investment companies.  BFA uses a representative sampling indexing strategy to manage the Fund. \u201cRepresentative sampling\u201d is an indexing strategy that involves investing in a representative sample of securities that collectively has an investment profile similar to that of an applicable underlying index. The securities selected are expected   to have, in the aggregate, investment characteristics (based on factors such as market capitalization and industry weightings), fundamental characteristics (such as return variability and yield) and liquidity measures similar to those of an applicable underlying index. The Fund may or may not hold all of the securities in the Underlying Index.  The Fund generally will invest at least 80% of its assets in the component securities of its Underlying Index and in investments that have economic characteristics that are substantially identical to the component securities of its Underlying Index (i.e., depositary receipts representing securities of the Underlying Index) and may invest up to 20% of its assets in certain futures, options and swap contracts, cash and cash equivalents, including shares of money market funds advised by BFA or its affiliates, as well as in securities not included in the Underlying Index, but which BFA believes will help the Fund track the Underlying Index. Cash and cash equivalent investments associated with a derivative position will be treated as part of that position for the purposes of calculating the percentage of investments included in the Underlying Index. The Fund seeks to track the investment results of the Underlying Index before fees and expenses of the Fund.  The Fund may lend securities representing up to one-third of the value of the Fund's total assets (including the value of any collateral received).  The Underlying Index is sponsored by MSCI Inc. (the \u201cIndex Provider\u201d or \u201cMSCI\u201d), which is\u2009independent of the Fund and BFA. The Index Provider determines the composition and relative weightings of the securities in the Underlying Index and publishes information regarding the market value of the Underlying Index.   Industry Concentration Policy.\u00a0The Fund will concentrate its investments (i.e., hold 25% or more of its total assets) in a particular industry or group of industries to approximately the same extent that the Underlying Index is concentrated. For purposes of this limitation, securities of the U.S. government (including its agencies and instrumentalities) and repurchase agreements collateralized by U.S. government securities are not considered to be issued by members of any industry.   Diversification Policy.\u00a0The Fund intends to be diversified in approximately the same proportion as the Underlying Index is diversified. The Fund may become \u201cnon-diversified,\u201d as defined in the Investment Company Act of 1940, as amended (the \u201c1940 Act\u201d), solely as a result of a change in relative market capitalization or index weighting of one or more constituents of the Underlying Index. Shareholder approval will not be sought if the Fund becomes \u201cnon-diversified\u201d due solely to a change in the relative market capitalization or index weighting of one or more constituents of the Underlying Index. The Fund discloses its portfolio holdings and weightings at www.iShares.com.",
+      "startDate": "2003-04-11",
+      "endDate": "2026-10-23",
+      "exchangeCode": "NYSE"
+    },
+    "start": "2005-06-08",
+    "end": "2005-06-10"
+  }
+}

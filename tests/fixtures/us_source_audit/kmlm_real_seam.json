@@ -1,0 +1,176 @@
+{
+  "provenance": {
+    "tiingo_parent_sha256": "d37dad658334286df4d9d97a8847acdfcb9d0fd61c071017ce4558b3d16b0f3d",
+    "yahoo_parent_sha256": "254fcd376ed1f20faf64cae212fb7b065e92f9572740c06065821aa3bbbc1680",
+    "note": "Actual frozen 2022-12-27..29 rows, extracted without numeric edits; adversarial mutations occur only inside tests."
+  },
+  "tiingo": [
+    {
+      "date": "2022-12-27T00:00:00.000Z",
+      "close": 34.4,
+      "high": 34.5956,
+      "low": 34.21,
+      "open": 34.4,
+      "volume": 115793,
+      "adjClose": 28.7317159545,
+      "adjHigh": 28.8950858277,
+      "adjLow": 28.5730233373,
+      "adjOpen": 28.7317159545,
+      "adjVolume": 115793,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2022-12-28T00:00:00.000Z",
+      "close": 30.86,
+      "high": 31.0457,
+      "low": 30.0,
+      "open": 30.88,
+      "volume": 145939,
+      "adjClose": 29.1474070891,
+      "adjHigh": 29.322801564,
+      "adjLow": 28.3351332687,
+      "adjOpen": 29.1662971779,
+      "adjVolume": 145939,
+      "divCash": 4.0377,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2022-12-29T00:00:00.000Z",
+      "close": 30.62,
+      "high": 31.15,
+      "low": 30.61,
+      "open": 30.75,
+      "volume": 93002,
+      "adjClose": 28.9207260229,
+      "adjHigh": 29.4213133773,
+      "adjLow": 28.9112809785,
+      "adjOpen": 29.0435116004,
+      "adjVolume": 93002,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    }
+  ],
+  "yahoo": {
+    "chart": {
+      "result": [
+        {
+          "meta": {
+            "currency": "USD",
+            "symbol": "KMLM",
+            "exchangeName": "PCX",
+            "fullExchangeName": "NYSEArca",
+            "instrumentType": "ETF",
+            "firstTradeDate": 1606919400,
+            "regularMarketTime": 1792785600,
+            "hasPrePostMarketData": true,
+            "gmtoffset": -14400,
+            "timezone": "EDT",
+            "exchangeTimezoneName": "America/New_York",
+            "regularMarketPrice": 31.04,
+            "regularMarketChangePercent": 1.837,
+            "fulldayPrice": 31.04,
+            "fulldayChange": 0.54,
+            "fulldayChangePercent": 1.772,
+            "fiftyTwoWeekHigh": 31.735,
+            "fiftyTwoWeekLow": 25.77,
+            "regularMarketDayHigh": 31.04,
+            "regularMarketDayLow": 30.7,
+            "regularMarketVolume": 235191,
+            "longName": "KraneShares Mount Lucas Managed Futures Index Strategy ETF",
+            "shortName": "KraneShares Mount Lucas Managed",
+            "chartPreviousClose": 25.01,
+            "priceHint": 2,
+            "currentTradingPeriod": {
+              "pre": {
+                "timezone": "EDT",
+                "start": 1792742400,
+                "end": 1792762200,
+                "gmtoffset": -14400
+              },
+              "regular": {
+                "timezone": "EDT",
+                "start": 1792762200,
+                "end": 1792785600,
+                "gmtoffset": -14400
+              },
+              "post": {
+                "timezone": "EDT",
+                "start": 1792785600,
+                "end": 1792800000,
+                "gmtoffset": -14400
+              }
+            },
+            "dataGranularity": "1d",
+            "range": "",
+            "validRanges": [
+              "1d",
+              "5d",
+              "1mo",
+              "3mo",
+              "6mo",
+              "1y",
+              "2y",
+              "5y",
+              "10y",
+              "ytd",
+              "max"
+            ]
+          },
+          "timestamp": [
+            1672151400,
+            1672237800,
+            1672324200
+          ],
+          "indicators": {
+            "quote": [
+              {
+                "open": [
+                  34.400001525878906,
+                  30.8799991607666,
+                  30.75
+                ],
+                "close": [
+                  34.400001525878906,
+                  30.860000610351562,
+                  30.6200008392334
+                ],
+                "high": [
+                  34.59600067138672,
+                  31.04599952697754,
+                  31.149999618530273
+                ],
+                "volume": [
+                  115800,
+                  145900,
+                  93000
+                ],
+                "low": [
+                  34.209999084472656,
+                  30.0,
+                  30.610000610351562
+                ]
+              }
+            ],
+            "adjclose": [
+              {
+                "adjclose": [
+                  30.134443283081055,
+                  29.13465118408203,
+                  28.908069610595703
+                ]
+              }
+            ]
+          },
+          "events": {}
+        }
+      ],
+      "error": null
+    }
+  },
+  "metadata": {
+    "ticker": "KMLM",
+    "startDate": "2020-12-02",
+    "endDate": "2026-10-23"
+  }
+}

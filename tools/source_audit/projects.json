@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "history_start": "2003-01-01",
+  "projects": {
+    "V1.6": {
+      "directory": "美股多头策略",
+      "entrypoint": "poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py",
+      "entrypoint_lf_sha256": "e9fa3ca09e2d559869ed21f65c10fb4d781118dcf85990007964e97dbf2424c5",
+      "symbols": ["SPY", "QQQ", "AVUV", "AVDV", "GLD", "AGG", "DBC", "KMLM", "DBMF", "VEA", "BIL", "BTC-USD"],
+      "excluded": ["BTC-USD: crypto daily boundaries and volume aggregation require separate acceptance"]
+    },
+    "V8.0": {
+      "directory": "A股美股动量组合策略",
+      "entrypoint": "mnt_bot V 8.0 plus.py",
+      "entrypoint_lf_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+      "symbols": ["AGG", "AVDV", "AVUV", "BIL", "DBC", "DBMF", "EEM", "EFA", "EMXC", "GLD", "GLDM", "IBIT", "KMLM", "PDBC", "QQQ", "QQQM", "SPY", "TLT", "UUP", "VEA", "VGIT", "VTI", "BTC-USD"],
+      "excluded": ["BTC-USD: separate crypto acceptance", "A-share indices and turnover: Wind phase pending", "FRED macro series and fallback indices: outside ETF audit"]
+    }
+  },
+  "audit_thresholds_not_strategy_parameters": {
+    "raw_price_relative": 0.0001,
+    "adjusted_return_absolute": 0.0001,
+    "cash_absolute": 0.001,
+    "cash_relative": 0.001,
+    "volume_relative": 0.01
+  }
+}
