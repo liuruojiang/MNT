@@ -1,0 +1,62 @@
+{
+  "status": "EXACT_EVENTS_CONFIRMED_CASH_REFERENCE_ONLY",
+  "sources": "Archived original Vanguard post-year-end tax workbooks; exact CDX digest match; independent second reading passed",
+  "cases": [
+    {
+      "id": "VGIT_2013-12-24",
+      "status": "CONFIRMED_CASH_EVENT",
+      "cash_usd_per_share": "0.263",
+      "ex_date": "2013-12-24",
+      "record_date": "2013-12-27",
+      "pay_date": "2013-12-31",
+      "income": "0.074",
+      "short_term_gain": "0.015",
+      "long_term_gain": "0.174",
+      "return_of_capital": "0",
+      "estimated_flag": "",
+      "reclass_flag": "",
+      "corrected_flag": "",
+      "ordinary_1099_includes_short_term": true,
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2013_Primary_Layout_archived.xls",
+        "sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+        "CDX_sha1_base32": "RB6XQBLKTJCN3RRMCUEFFBIRTPC5OABF",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "row_1based": 4604
+      },
+      "inference": false,
+      "production_approved": false
+    },
+    {
+      "id": "VGIT_2015-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "cash_usd_per_share": "0.085",
+      "ex_date": "2015-11-02",
+      "record_date": "2015-11-04",
+      "pay_date": "2015-11-06",
+      "income": "0.085",
+      "short_term_gain": "0",
+      "long_term_gain": "0",
+      "return_of_capital": "0",
+      "estimated_flag": null,
+      "reclass_flag": null,
+      "corrected_flag": null,
+      "ordinary_1099_includes_short_term": true,
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2015_Primary_Layout_archived.xlsx",
+        "sha256": "ddfd0a53569c54acf5e2ac66459e7dfac8dca641a0db1eba35e681905661cd85",
+        "CDX_sha1_base32": "BLGGDB6FQL5IJU35XWWNHCLAEFHZVPPF",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "row_1based": 5561
+      },
+      "inference": false,
+      "production_approved": false
+    }
+  ],
+  "scope": "Two unresolved VGIT events only; old period constraints and full strategy replays not repeated",
+  "production_approved": false,
+  "strategy_backtests_run": 0,
+  "field_rule": "Total=income+ST+LT+ROC+cash liquidation+exempt; 1099 ordinary already contains ST, not summed again"
+}

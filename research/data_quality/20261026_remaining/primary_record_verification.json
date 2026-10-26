@@ -1,0 +1,143 @@
+{
+  "status": "PASS",
+  "network_requests": 0,
+  "records": [
+    {
+      "id": "VGIT_2013-12-24",
+      "status": "CONFIRMED_CASH_EVENT",
+      "cash_usd_per_share": "0.263",
+      "ex_date": "2013-12-24",
+      "record_date": "2013-12-27",
+      "pay_date": "2013-12-31",
+      "income": "0.074",
+      "short_term_gain": "0.015",
+      "long_term_gain": "0.174",
+      "return_of_capital": "0",
+      "estimated_flag": "",
+      "reclass_flag": "",
+      "corrected_flag": "",
+      "ordinary_1099_includes_short_term": true,
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2013_Primary_Layout_archived.xls",
+        "sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+        "CDX_sha1_base32": "RB6XQBLKTJCN3RRMCUEFFBIRTPC5OABF",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "row_1based": 4604
+      },
+      "inference": false,
+      "production_approved": false
+    },
+    {
+      "id": "VGIT_2015-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "cash_usd_per_share": "0.085",
+      "ex_date": "2015-11-02",
+      "record_date": "2015-11-04",
+      "pay_date": "2015-11-06",
+      "income": "0.085",
+      "short_term_gain": "0",
+      "long_term_gain": "0",
+      "return_of_capital": "0",
+      "estimated_flag": null,
+      "reclass_flag": null,
+      "corrected_flag": null,
+      "ordinary_1099_includes_short_term": true,
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2015_Primary_Layout_archived.xlsx",
+        "sha256": "ddfd0a53569c54acf5e2ac66459e7dfac8dca641a0db1eba35e681905661cd85",
+        "CDX_sha1_base32": "BLGGDB6FQL5IJU35XWWNHCLAEFHZVPPF",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "row_1based": 5561
+      },
+      "inference": false,
+      "production_approved": false
+    },
+    {
+      "id": "QQQ_2010-06-25",
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "cash_usd_per_share": "0",
+      "ex_date": "2010-06-25",
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2010.bin",
+        "sha256": "933625ae123393ce6cf4bf3d38f8ddedc8261df6a323b2b170bd9b1c2cf54256",
+        "CDX_sha1_base32": "BEIUQUTG7AJSJ3HR5VJC32SKMSIFD7TI",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "event_rows_1based": [
+          648,
+          649,
+          650,
+          651
+        ],
+        "total_row_1based": 652
+      },
+      "actual_distribution_dates": [
+        "2010-03-19",
+        "2010-06-18",
+        "2010-09-17",
+        "2010-12-17"
+      ],
+      "annual_total_usd": "0.36063",
+      "estimated_flags": [
+        "",
+        "",
+        "",
+        ""
+      ],
+      "reclass_flags": [
+        "",
+        "",
+        "",
+        ""
+      ],
+      "inference": true,
+      "basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+      "production_approved": false
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "cash_usd_per_share": "0",
+      "ex_date": "2011-12-27",
+      "source": {
+        "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2011.bin",
+        "sha256": "cc22eb1ce5b5f878138bf451601178f9bcd52a3520716fe7ee1dcc1d4e4192de",
+        "CDX_sha1_base32": "MUGL3S6RSZLDHVVOOMH6TNTBJE4UDK5J",
+        "CDX_digest_matches": true,
+        "sheet": "Primary Layout",
+        "event_rows_1based": [
+          747,
+          748,
+          749,
+          750
+        ],
+        "total_row_1based": 751
+      },
+      "actual_distribution_dates": [
+        "2011-03-18",
+        "2011-06-17",
+        "2011-09-16",
+        "2011-12-16"
+      ],
+      "annual_total_usd": "0.46252",
+      "estimated_flags": [
+        "",
+        "",
+        "",
+        ""
+      ],
+      "reclass_flags": [
+        "R",
+        "R",
+        "R",
+        "R"
+      ],
+      "inference": true,
+      "basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+      "production_approved": false
+    }
+  ],
+  "strategy_backtests_run": 0
+}

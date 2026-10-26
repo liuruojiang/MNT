@@ -1,0 +1,19 @@
+{
+  "id": "EFA_2003-12-16",
+  "status": "BLOCK",
+  "canonical_cash": null,
+  "new_path": "Internet Archive CDX, two actual known issuer prefixes, no captured2003 tax-summary candidates returned",
+  "results": [
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\efa_archive\\current_tax_prefix_receipt.json",
+      "sha256": "8b51ea156c3f49adf4af0140ff551807c289fda702020ac90ae997d064688ae4"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\efa_archive\\legacy_content_prefix_receipt.json",
+      "sha256": "aea60d91685387332e79335fdc6cdaae258b915b49e1bffcdad7af00e5d2f4dd"
+    }
+  ],
+  "already_completed_reused": "Issuer XML daily dash/distribution sheet and fiscal-total bound; no repeat download or annual recalculation",
+  "minimum_missing": "Final 2003 issuer/trustee complete distribution/tax statement with EFA share basis and explicit complete year total, or an exact no-event correction for Dec16; current daily -- is not numeric0",
+  "production_approved": false
+}

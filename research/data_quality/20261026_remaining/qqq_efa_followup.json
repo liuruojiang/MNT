@@ -1,0 +1,296 @@
+{
+  "schema_version": "1.0",
+  "as_of": "2026-10-26",
+  "mode": "READ_ONLY_REMAINING_EVENT_ORIGINALS_FOLLOWUP",
+  "scope": [
+    "QQQ_2010-06-25",
+    "QQQ_2011-12-27",
+    "EFA_2003-12-16"
+  ],
+  "summary": {
+    "new_exact_cash_resolutions": 0,
+    "still_blocked": 3,
+    "new_specific_yahoo_amount_rejections": 2,
+    "new_primary_document": 1,
+    "wind_calls": 0,
+    "credits_spent": 0
+  },
+  "cases": [
+    {
+      "id": "QQQ_2010-06-25",
+      "status": "UNRESOLVED_EXACT_CASH",
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "block_released": false,
+      "new_finding": "YAHOO_SPECIFIC_EXTRA_AMOUNT_INCOMPATIBLE_WITH_KNOWN_ISSUER_CASH_AND_FISCAL_BOUND",
+      "fiscal_year_end": "2010-09-30",
+      "reported_two_decimal_distribution": "0.33",
+      "rounding_assumption": "Nearest 0.01 per-share rounding; conservative strict upper bound reported amount +0.005. This bounds cash; it does not establish exact zero.",
+      "fiscal_cash_strict_upper_bound": "0.335",
+      "exact_known_issuer_events": [
+        {
+          "Ex-date": "12/18/2009",
+          "Record date": "12/22/2009",
+          "Pay date": "12/31/2009",
+          "$/Share": "0.07760",
+          "Ordinary income": "0.07760",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "03/19/2010",
+          "Record date": "03/23/2010",
+          "Pay date": "04/30/2010",
+          "$/Share": "0.05146",
+          "Ordinary income": "0.05146",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "06/18/2010",
+          "Record date": "06/22/2010",
+          "Pay date": "07/30/2010",
+          "$/Share": "0.08930",
+          "Ordinary income": "0.08930",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "09/17/2010",
+          "Record date": "09/21/2010",
+          "Pay date": "10/29/2010",
+          "$/Share": "0.11155",
+          "Ordinary income": "0.11155",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        }
+      ],
+      "known_cash_lower_bound": "0.32991",
+      "unallocated_cash_strict_upper_bound": "0.00509",
+      "rejected_vendor_amount": {
+        "provider": "yahoo",
+        "amount": "0.089",
+        "basis": "Extra event cannot fit after independently confirmed issuer distributions in the same fiscal period"
+      },
+      "adjacent_regular_event": {
+        "Ex-date": "06/18/2010",
+        "Record date": "06/22/2010",
+        "Pay date": "07/30/2010",
+        "$/Share": "0.08930",
+        "Ordinary income": "0.08930",
+        "Short term gains": "0.00000",
+        "Long term gains": "0.00000",
+        "Return of capital": "0.00000",
+        "Liquidation distribution": "--"
+      },
+      "simple_ex_record_pay_date_alias_of_adjacent_regular_event": false,
+      "duplicate_or_misdate_root_cause": "UNPROVEN: equality after rounding in 2010 is suggestive only; no data lineage proof",
+      "additional_limits": [
+        "No exact zero inferred from a missing event row",
+        "Ordinary-income tax category may include short-term gains; long-term-gain exclusion is not an all-cash exclusion",
+        "No event repair or adjusted-price promotion authorized"
+      ],
+      "minimum_remaining_material": "Contemporaneous final 2010/2011 QQQ(Q) 1099/ICI Primary event table or Bank of New York Mellon trustee distribution register identifying all ordinary, ST, LT, ROC and special cash ex/record/pay events and corrections, or explicit no-event/cancellation for this date."
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "status": "UNRESOLVED_EXACT_CASH",
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "block_released": false,
+      "new_finding": "YAHOO_SPECIFIC_EXTRA_AMOUNT_INCOMPATIBLE_WITH_KNOWN_ISSUER_CASH_AND_FISCAL_BOUND",
+      "fiscal_year_end": "2012-09-30",
+      "reported_two_decimal_distribution": "0.62",
+      "rounding_assumption": "Nearest 0.01 per-share rounding; conservative strict upper bound reported amount +0.005. This bounds cash; it does not establish exact zero.",
+      "fiscal_cash_strict_upper_bound": "0.625",
+      "exact_known_issuer_events": [
+        {
+          "Ex-date": "12/16/2011",
+          "Record date": "12/20/2011",
+          "Pay date": "12/30/2011",
+          "$/Share": "0.16052",
+          "Ordinary income": "0.16052",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "03/16/2012",
+          "Record date": "03/20/2012",
+          "Pay date": "04/30/2012",
+          "$/Share": "0.11283",
+          "Ordinary income": "0.11283",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "06/15/2012",
+          "Record date": "06/19/2012",
+          "Pay date": "07/31/2012",
+          "$/Share": "0.14312",
+          "Ordinary income": "0.14312",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        {
+          "Ex-date": "09/21/2012",
+          "Record date": "09/25/2012",
+          "Pay date": "10/31/2012",
+          "$/Share": "0.20020",
+          "Ordinary income": "0.20020",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        }
+      ],
+      "known_cash_lower_bound": "0.61667",
+      "unallocated_cash_strict_upper_bound": "0.00833",
+      "rejected_vendor_amount": {
+        "provider": "yahoo",
+        "amount": "0.049",
+        "basis": "Extra event cannot fit after independently confirmed issuer distributions in the same fiscal period"
+      },
+      "adjacent_regular_event": {
+        "Ex-date": "12/16/2011",
+        "Record date": "12/20/2011",
+        "Pay date": "12/30/2011",
+        "$/Share": "0.16052",
+        "Ordinary income": "0.16052",
+        "Short term gains": "0.00000",
+        "Long term gains": "0.00000",
+        "Return of capital": "0.00000",
+        "Liquidation distribution": "--"
+      },
+      "simple_ex_record_pay_date_alias_of_adjacent_regular_event": false,
+      "duplicate_or_misdate_root_cause": "UNPROVEN: equality after rounding in 2010 is suggestive only; no data lineage proof",
+      "additional_limits": [
+        "No exact zero inferred from a missing event row",
+        "Ordinary-income tax category may include short-term gains; long-term-gain exclusion is not an all-cash exclusion",
+        "No event repair or adjusted-price promotion authorized"
+      ],
+      "minimum_remaining_material": "Contemporaneous final 2010/2011 QQQ(Q) 1099/ICI Primary event table or Bank of New York Mellon trustee distribution register identifying all ordinary, ST, LT, ROC and special cash ex/record/pay events and corrections, or explicit no-event/cancellation for this date."
+    },
+    {
+      "id": "EFA_2003-12-16",
+      "status": "UNRESOLVED_EXACT_CASH",
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "block_released": false,
+      "new_exact_source_found": false,
+      "reused_finding": "Yahoo split-adjusted 0.156667 is incompatible with FY2004 upper bound 0.525 less issuer confirmed Dec22 cash0.52251, leaving less than0.00249. Exact zero remains unproven.",
+      "current_issuer_daily_field": "--",
+      "dash_is_zero": false,
+      "known_final_issuer_event": {
+        "ex": "2003-12-22",
+        "record": "2003-12-24",
+        "pay": "2004-01-02",
+        "cash_latest_share_basis": "0.52251"
+      },
+      "minimum_remaining_material": "Barclays Global Investors/iShares Trust final December2003 distribution notice or 2003/2004 transfer-agent/DTC corporate-action register for EFA CUSIP464287465, with ex/record/pay dates and final per-share ordinary/ST/LT/ROC cash or explicit cancellation/no-event. State 2005 3:1 split basis. A schedule showing the final December22 event alone must explicitly be exhaustive to establish no extra Dec16 event."
+    }
+  ],
+  "new_attempts_do_not_repeat": [
+    {
+      "path": "Historical PowerShares1099 index discovered through2021/2015 tax-document link directories",
+      "url": "https://ribtw.blogspot.com/2021/03/2020-ETF-Tax-Documents.html",
+      "role": "NAVIGATION_ONLY_SECONDARY",
+      "result": "Legacy tax-center link redirects current tax center; indexed2020contentId c932ff54-4c47-41d5-8494-a0d59d2f682b redirects country-splash404. No2010/2011 file discovered. Search2010/2011 1099/ICI Primary exactterms returned no original."
+    },
+    {
+      "path": "Contemporaneous issuer definitive capital-gain announcement",
+      "url": "https://www.advfn.com/stock-market/NASDAQ/XLES/stock-news/50566520/invesco-powershares-provides-definitive-long-term",
+      "role": "SYNDICATED_ISSUER_ANNOUNCEMENT_NOT_ORIGIN_AUTHENTICATED",
+      "result": "Dec29,2011 statement says113/116ETFszeroLT; lists onlyPSR.0801/PCEF.0142/PBP.10978 forDec27ex. QQQ notlisted, but coverage universe not explicitly enumerated; does not exclude extra ordinary/ST/ROC cash. Not an exact QQQ cash proof. Original Marketwire/Invesco-hosted version not found."
+    },
+    {
+      "path": "Independent contemporary QQQ annual report, SEC N-30B-2",
+      "url": "https://www.sec.gov/Archives/edgar/data/1067839/000110465913005075/a12-24340_1n30b2.htm",
+      "role": "PRIMARY_REGULATORY_ISSUER_DOCUMENT",
+      "result": "FY2010/2011/2012 ordinary distributions123414558/166193995/299643847; per-share.33/.41/.62. No fund dividend reinvestment program. Distributions policy quarterly income/atleastannual realizedcapitalgain. Supports category/period constraints, not exactcashdates."
+    },
+    {
+      "path": "EFA Barclays/iShares2003 final-distribution notice searches",
+      "queries": [
+        "iShares2003 distributions December22",
+        "EFA2003 0.47 dividend",
+        "iShares2003 year-end distributions",
+        "iShares December2003 distributions Barclays"
+      ],
+      "result": "No contemporaneous original final event calendar located. Modern aggregators repeat both .47presplit/.156667postsplit and .52251Dec22; rejected as non-independent source voting. SEC structured-note references are price descriptions, not dividend records."
+    },
+    {
+      "path": "QQQ(Q) Nasdaq/OCC/exact date andamount searches",
+      "queries": [
+        "QQQQ June2010 distribution .08930 trustee",
+        "QQQ2011 December27 .049 distribution",
+        "QQQQ2010 dividend site:nasdaqtrader.com",
+        "QQQ2011 .049 site:infomemo.theocc.com"
+      ],
+      "result": "No exact final QQQ event or cancellation notice located. Nasdaq weekly-option launch/expiryJune25 is not dividend evidence. ModernAI article repeats same two extraevent findings but cites current issuer table, so not independent proof and not used."
+    }
+  ],
+  "reused_evidence": [
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\qqq_issuer_browser_table.csv",
+      "sha256": "19f1511e9fdcdda8e3bd427e67623f24e6f62fcef3f6e391a536b7b5f9d6188f",
+      "refetched": false
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\efa_issuer_export.xml",
+      "sha256": "3531a7bc2a710af3ccb592f933b7f53fa70e880009bb831567d3ed70a31ab77f",
+      "refetched": false
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\us_event_followup.json",
+      "sha256": "70920891e3a0d99f36dad5b54ee6a4835ed1c5519ff5354baa7fe2dccd7d42b8",
+      "refetched": false
+    },
+    {
+      "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261026_followup\\qqq_followup.json",
+      "sha256": "be5093011ab8dd0350ce8cbc617914f23d2c39b6beaaacbaa46707cc9686c47a",
+      "refetched": false
+    },
+    {
+      "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261026_followup\\efa_followup.json",
+      "sha256": "a750097e3a2dbff8da7e083b05168e468f96dd8a575702ded25f90c30c769aba",
+      "refetched": false
+    }
+  ],
+  "new_primary_evidence": {
+    "receipt": "sec_2012_report_web_receipt.json",
+    "extract": "sec_2012_report_web_extract.txt",
+    "extract_sha256": "6d623f6e220479c0fc6ada094f48ac1ab3f36f65998f2f3cd2b0d9daefebb86c",
+    "not_original_html": true
+  },
+  "canonical_ledger": {
+    "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261026_source_service\\us_adjudications.json",
+    "sha256_before": "77031de855663b8bbf8b352e047993205324f44c61245ba218657cadf04be980",
+    "sha256_after": "77031de855663b8bbf8b352e047993205324f44c61245ba218657cadf04be980",
+    "modified": false
+  },
+  "guardrails": {
+    "annual_bound_not_exact_zero": true,
+    "absent_or_dash_not_zero": true,
+    "production_changed": false,
+    "parameters_changed": false,
+    "poe_deployed": false,
+    "backtests_run": false,
+    "vendor_apis_called": false,
+    "credentials_accessed": false,
+    "external_messages_sent": false
+  }
+}

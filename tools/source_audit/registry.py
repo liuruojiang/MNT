@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+CASH_REFERENCE_STATUSES = frozenset({'CONFIRMED_CASH_EVENT', 'CONFIRMED_NO_CASH_EVENT'})
+
 
 def completed_work(repo):
     repo = Path(repo)
@@ -42,9 +44,10 @@ def annotate_us(report, store, repo):
                         'tiingo_cash':event['tiingo_cash'],'yahoo_cash':event['yahoo_cash'],
                         'tiingo_split':event['tiingo_split'],'yahoo_split':event['yahoo_split']}
             issue_id = 'US:' + key[0] + ':' + key[1]
-            state = 'KNOWN_ADJUDICATED_UPSTREAM_CONFLICT' if known else ('CASH_REFERENCE_CONFIRMED_PRICE_GATE_REMAINS' if adjudication and adjudication.get('status')=='CONFIRMED_CASH_EVENT' else 'UNRESOLVED_DATA_CONFLICT')
+            resolved = bool(adjudication and adjudication.get('status') in CASH_REFERENCE_STATUSES)
+            state = 'KNOWN_ADJUDICATED_UPSTREAM_CONFLICT' if known else ('CASH_REFERENCE_CONFIRMED_PRICE_GATE_REMAINS' if resolved else 'UNRESOLVED_DATA_CONFLICT')
             changed = store.issue(issue_id,state,evidence)
-            event['work_status'] = 'COMPLETED_DO_NOT_REPEAT' if known else ('CASH_ADJUDICATION_COMPLETED' if adjudication and adjudication.get('status')=='CONFIRMED_CASH_EVENT' else 'UNRESOLVED_EVIDENCE_BLOCKED')
+            event['work_status'] = 'COMPLETED_DO_NOT_REPEAT' if known else ('CASH_ADJUDICATION_COMPLETED' if resolved else 'UNRESOLVED_EVIDENCE_BLOCKED')
             if adjudication: event['adjudication_id']=adjudication['id']
             if known:
                 event['existing_evidence'] = known['evidence']

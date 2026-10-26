@@ -389,7 +389,7 @@
             "H11077.SH / CSI H11077": {
               "required_fields": ["session_date", "close"],
               "not_required_by_formal_bond_leg": ["open", "high", "low", "share_volume", "turnover"],
-              "mapping_status": "CSI market-data indexCode=H11077; 931077 only detail-page/Referer; earlier full history and independent current close not fully certified"
+              "mapping_status": "CSI market-data indexCode=H11077; 931077 only detail-page/Referer; 2026 close-only and Oct26 independent close verified; pre-2026 full history not certified"
             }
           },
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",

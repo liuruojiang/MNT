@@ -1,0 +1,458 @@
+{
+  "scope": "Actual archived native four-session QQQ seams; no fetched or fabricated prices",
+  "source_objects": {
+    "tiingo": "8a608c63eb59e0cdf956a57b477fd7c6c8d2fa366ce59bd1f851b19cfdc625c4",
+    "yahoo": "539f4c7f6337a75192c4ea9cc630344822740456cad7563cf7f070b314e412a3",
+    "metadata": "1a8452cec39309a0a6c8812a2970f42f5ee31f2e70242aea3210c64c5d27afd0"
+  },
+  "dates": [
+    "2010-06-24",
+    "2010-06-25",
+    "2011-12-23",
+    "2011-12-27"
+  ],
+  "tiingo": [
+    {
+      "date": "2010-06-24T00:00:00.000Z",
+      "close": 45.35,
+      "high": 45.99,
+      "low": 45.2,
+      "open": 45.84,
+      "volume": 114145900,
+      "adjClose": 39.4481516025,
+      "adjHigh": 40.004862011,
+      "adjLow": 39.3176726005,
+      "adjOpen": 39.874383009,
+      "adjVolume": 114145900,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2010-06-25T00:00:00.000Z",
+      "close": 45.27,
+      "high": 45.66,
+      "low": 44.95,
+      "open": 45.51,
+      "volume": 88740300,
+      "adjClose": 39.3785628014,
+      "adjHigh": 39.7178082066,
+      "adjLow": 39.1002075972,
+      "adjOpen": 39.5873292046,
+      "adjVolume": 88740300,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2011-12-23T00:00:00.000Z",
+      "close": 56.08,
+      "high": 56.08,
+      "low": 55.581,
+      "open": 55.68,
+      "volume": 26594600,
+      "adjClose": 49.4064124309,
+      "adjHigh": 49.4064124309,
+      "adjLow": 48.9667940322,
+      "adjOpen": 49.0540129129,
+      "adjVolume": 26594600,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    },
+    {
+      "date": "2011-12-27T00:00:00.000Z",
+      "close": 56.24,
+      "high": 56.42,
+      "low": 55.93,
+      "open": 56.01,
+      "volume": 21443500,
+      "adjClose": 49.5473722382,
+      "adjHigh": 49.7059520213,
+      "adjLow": 49.2742626117,
+      "adjOpen": 49.3447425153,
+      "adjVolume": 21443500,
+      "divCash": 0.0,
+      "splitFactor": 1.0
+    }
+  ],
+  "yahoo": {
+    "chart": {
+      "result": [
+        {
+          "meta": {
+            "currency": "USD",
+            "symbol": "QQQ",
+            "exchangeName": "NGM",
+            "fullExchangeName": "NasdaqGM",
+            "instrumentType": "ETF",
+            "firstTradeDate": 921076200,
+            "regularMarketTime": 1792785600,
+            "hasPrePostMarketData": true,
+            "gmtoffset": -14400,
+            "timezone": "EDT",
+            "exchangeTimezoneName": "America/New_York",
+            "regularMarketPrice": 704.4,
+            "regularMarketChangePercent": -0.01,
+            "fulldayPrice": 704.4,
+            "fulldayChange": 0.41,
+            "fulldayChangePercent": 0.058,
+            "fiftyTwoWeekHigh": 762.86,
+            "fiftyTwoWeekLow": 555.6,
+            "regularMarketDayHigh": 709.3,
+            "regularMarketDayLow": 701.16,
+            "regularMarketVolume": 29960981,
+            "longName": "Invesco QQQ Trust",
+            "shortName": "Invesco QQQ Trust, Series 1",
+            "chartPreviousClose": 24.37,
+            "priceHint": 2,
+            "currentTradingPeriod": {
+              "pre": {
+                "timezone": "EDT",
+                "start": 1792742400,
+                "end": 1792762200,
+                "gmtoffset": -14400
+              },
+              "regular": {
+                "timezone": "EDT",
+                "start": 1792762200,
+                "end": 1792785600,
+                "gmtoffset": -14400
+              },
+              "post": {
+                "timezone": "EDT",
+                "start": 1792785600,
+                "end": 1792800000,
+                "gmtoffset": -14400
+              }
+            },
+            "dataGranularity": "1d",
+            "range": "",
+            "validRanges": [
+              "1d",
+              "5d",
+              "1mo",
+              "3mo",
+              "6mo",
+              "1y",
+              "2y",
+              "5y",
+              "10y",
+              "ytd",
+              "max"
+            ]
+          },
+          "timestamp": [
+            1277386200,
+            1277472600,
+            1324650600,
+            1324996200
+          ],
+          "events": {
+            "dividends": {
+              "1277472600": {
+                "amount": 0.089,
+                "date": 1277472600
+              },
+              "1324996200": {
+                "amount": 0.049,
+                "date": 1324996200
+              }
+            }
+          },
+          "indicators": {
+            "quote": [
+              {
+                "volume": [
+                  114145900,
+                  88740300,
+                  26594600,
+                  21443500
+                ],
+                "high": [
+                  45.9900016784668,
+                  45.65999984741211,
+                  56.08000183105469,
+                  56.41999816894531
+                ],
+                "close": [
+                  45.349998474121094,
+                  45.27000045776367,
+                  56.08000183105469,
+                  56.2400016784668
+                ],
+                "open": [
+                  45.849998474121094,
+                  45.5099983215332,
+                  55.709999084472656,
+                  55.9900016784668
+                ],
+                "low": [
+                  45.20000076293945,
+                  44.95000076293945,
+                  55.58000183105469,
+                  55.93000030517578
+                ]
+              }
+            ],
+            "adjclose": [
+              {
+                "adjclose": [
+                  39.394378662109375,
+                  39.40221405029297,
+                  49.438262939453125,
+                  49.62266159057617
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "error": null
+    }
+  },
+  "metadata": {
+    "ticker": "QQQ",
+    "name": "Invesco QQQ Trust Series 1",
+    "description": "PowerShares QQQ™, formerly known as \"QQQ\" or the \"NASDAQ- 100 Index Tracking Stock®\", is an exchange-traded fund based on the Nasdaq-100 Index®. The Fund will, under most circumstances, consist of all of stocks in the Index. The Index includes 100 of the largest domestic and international nonfinancial companies listed on the Nasdaq Stock Market based on market capitalization. The Fund and the Index are rebalanced quarterly and reconstituted annually.",
+    "startDate": "1999-03-10",
+    "endDate": "2026-10-23",
+    "exchangeCode": "NASDAQ"
+  },
+  "references": [
+    {
+      "id": "QQQ_2010-06-25",
+      "symbol": "QQQ",
+      "ex_date": "2010-06-25",
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0",
+        "ex_date": "2010-06-25",
+        "cash_basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "inference": true,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2010-06-25"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "actual_distribution_dates": [
+          "2010-03-19",
+          "2010-06-18",
+          "2010-09-17",
+          "2010-12-17"
+        ],
+        "annual_total_usd": "0.36063",
+        "reclass_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "estimated_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "event_exists": false
+      },
+      "evidence": [
+        {
+          "url": "https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2010.xls",
+          "archive_url": "https://web.archive.org/web/20200506143220id_/https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2010.xls",
+          "archive_timestamp": "20200506143220",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\workbook_2010.bin",
+          "sha256": "933625ae123393ce6cf4bf3d38f8ddedc8261df6a323b2b170bd9b1c2cf54256",
+          "CDX_sha1_base32": "BEIUQUTG7AJSJ3HR5VJC32SKMSIFD7TI",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2010.bin",
+            "sha256": "933625ae123393ce6cf4bf3d38f8ddedc8261df6a323b2b170bd9b1c2cf54256",
+            "CDX_sha1_base32": "BEIUQUTG7AJSJ3HR5VJC32SKMSIFD7TI",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "event_rows_1based": [
+              648,
+              649,
+              650,
+              651
+            ],
+            "total_row_1based": 652
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2010-06-25",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.089,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.0017640573328050468,
+          "yahoo": 0.00019889609760825877
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 45.51,
+            "close": 45.27,
+            "volume": 88740300.0
+          },
+          "yahoo": {
+            "open": 45.5099983215332,
+            "close": 45.27000045776367,
+            "volume": 88740300.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "symbol": "QQQ",
+      "ex_date": "2011-12-27",
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0",
+        "ex_date": "2011-12-27",
+        "cash_basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "inference": true,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2011-12-27"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "actual_distribution_dates": [
+          "2011-03-18",
+          "2011-06-17",
+          "2011-09-16",
+          "2011-12-16"
+        ],
+        "annual_total_usd": "0.46252",
+        "reclass_flags": [
+          "R",
+          "R",
+          "R",
+          "R"
+        ],
+        "estimated_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "event_exists": false
+      },
+      "evidence": [
+        {
+          "url": "https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2011.xls",
+          "archive_url": "https://web.archive.org/web/20200506135935id_/https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2011.xls",
+          "archive_timestamp": "20200506135935",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\workbook_2011.bin",
+          "sha256": "cc22eb1ce5b5f878138bf451601178f9bcd52a3520716fe7ee1dcc1d4e4192de",
+          "CDX_sha1_base32": "MUGL3S6RSZLDHVVOOMH6TNTBJE4UDK5J",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2011.bin",
+            "sha256": "cc22eb1ce5b5f878138bf451601178f9bcd52a3520716fe7ee1dcc1d4e4192de",
+            "CDX_sha1_base32": "MUGL3S6RSZLDHVVOOMH6TNTBJE4UDK5J",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "event_rows_1based": [
+              747,
+              748,
+              749,
+              750
+            ],
+            "total_row_1based": 751
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2011-12-27",
+        "flags": [
+          "raw_open",
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.049,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.0028530670486781595,
+          "yahoo": 0.003729877227864664
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 56.01,
+            "close": 56.24,
+            "volume": 21443500.0
+          },
+          "yahoo": {
+            "open": 55.9900016784668,
+            "close": 56.2400016784668,
+            "volume": 21443500.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    }
+  ]
+}

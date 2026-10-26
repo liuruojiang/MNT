@@ -257,3 +257,44 @@ def test_persistent_credit_hold_prevents_daily_live_collection(store,tmp_path,mo
     result=service.cn_run({'store_root':str(store.root),'legacy_wind_archive':'unused','credentials':{'wind':'unused'},'local_hourly_budgets':{'wind':30}},output,'tail','2026-10-27')
     assert len(calls)==1 and result['status']=='BLOCKED_PROVIDER_QUOTA' and result['requested_mode']=='tail'
     assert result['requests']==0 and result['provider_stops']['wind']['failure_class']=='ACCOUNT_CREDITS_EXHAUSTED'
+
+
+def no_cash_oracle(monkeypatch, mutate_tiingo=False):
+    import source_audit.us_service as service
+    fixture=json.loads((ROOT/'tests/fixtures/us_source_audit/qqq_verified_no_cash_seams.json').read_text(encoding='utf-8'))
+    if mutate_tiingo:
+        # Adversarial mutation of actual archived quotes: both caches now
+        # repeat Yahoo's spurious event. Agreement must not defeat the oracle.
+        for row in fixture['tiingo']:
+            if row['date'][:10]=='2011-12-27': row['divCash']=0.049
+    class FrozenHeads:
+        def head(self,provider,symbol,kind='prices'):
+            assert symbol=='QQQ'
+            return {'payload':fixture['metadata'] if kind=='metadata' else fixture[provider]}
+    monkeypatch.setattr(service,'completed_work',lambda _:[])
+    monkeypatch.setattr(service,'load_additional',lambda _:fixture['references'])
+    return service.known_action_checks(FrozenHeads(),ROOT,'QQQ','2011-12-27')
+
+
+def test_verified_zero_cash_is_not_skipped_in_real_cached_qqq_seams(monkeypatch):
+    result=no_cash_oracle(monkeypatch)
+    assert result['tiingo']==[]
+    for day in ['2010-06-25','2011-12-27']:
+        assert 'KNOWN_ACTION_CASH_CONFLICT:'+day in result['yahoo']
+        assert 'KNOWN_ACTION_FACTOR_CONFLICT:'+day in result['yahoo']
+
+
+def test_two_wrong_caches_cannot_hide_a_confirmed_no_cash_event(monkeypatch):
+    result=no_cash_oracle(monkeypatch,mutate_tiingo=True)
+    for provider in ['tiingo','yahoo']:
+        assert 'KNOWN_ACTION_CASH_CONFLICT:2011-12-27' in result[provider]
+
+
+def test_no_cash_adjudication_is_completed_but_does_not_accept_prices(store):
+    report={'assets':[{'symbol':'QQQ','details':[{'date':'2010-06-25','flags':['cash'],
+        'tiingo_cash':0,'yahoo_cash':0.089,'tiingo_split':1,'yahoo_split':1}]}]}
+    result=annotate_us(copy.deepcopy(report),store,ROOT)
+    assert result['assets'][0]['details'][0]['work_status']=='CASH_ADJUDICATION_COMPLETED'
+    assert result['new_or_changed_issues'][0]['status']=='CASH_REFERENCE_CONFIRMED_PRICE_GATE_REMAINS'
+    with pytest.raises(DataNotAccepted): store.accepted('yahoo','QQQ','2026-10-23')
+    assert not annotate_us(copy.deepcopy(report),store,ROOT)['new_or_changed_issues']

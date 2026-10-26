@@ -1,0 +1,87 @@
+{
+  "status": "NO_EXACT_2008_EVENT_ARCHIVE_FOUND",
+  "created_at_utc": "2026-10-26T12:01:06.549662+00:00",
+  "target": {
+    "ticker": "VEA",
+    "event_date": "2008-03-12",
+    "exact_cash_amount": null,
+    "ordinary_income": null,
+    "short_term_gain": null,
+    "long_term_gain": null,
+    "qualified_event_record": false
+  },
+  "identity_verification": {
+    "ticker": "VEA",
+    "CUSIP": "921943858",
+    "fund_name_in_later_official_table": "Vanguard FTSE Developed Markets ETF Shares",
+    "source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2013_Primary_Layout_archived.xls",
+    "source_sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+    "archive_receipt": {
+      "url": "https://web.archive.org/web/20170303004429id_/https://advisors.vanguard.com/iwe/pdf/2013_Primary_Layout.xls",
+      "original_url": "https://advisors.vanguard.com/iwe/pdf/2013_Primary_Layout.xls",
+      "archive_timestamp": "20170303004429",
+      "status": 200,
+      "content_type": "application/vnd.ms-excel",
+      "bytes": 1881088,
+      "sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+      "retrieved_at_utc": "2026-10-26T11:54:23.698908+00:00"
+    },
+    "sheet": "Primary Layout",
+    "example_row_1based": 1969,
+    "ticker_column_1based": 3,
+    "CUSIP_column_1based": 2,
+    "exact_ticker_rows": 14,
+    "scope": "Actual CUSIP verified from an already downloaded2013 issuer table; no direct2008 identity/event inference or annual-constraint rerun"
+  },
+  "actual_requests": {
+    "Wayback_CDX": 3,
+    "actual_original_downloads": 0,
+    "Wind": 0,
+    "paid": 0
+  },
+  "CDX_results": [
+    {
+      "purpose": "New broader observed official prefix search; year anywhere in filename instead of2008prefix",
+      "url": "https://web.archive.org/cdx/search/cdx?url=advisors.vanguard.com%2Fiwe%2Fpdf%2F%2A&output=json&fl=timestamp%2Coriginal%2Cmimetype%2Cstatuscode%2Cdigest%2Clength&filter=statuscode%3A200&filter=original%3A.%2A2008.%2A&filter=original%3A.%2A%28Primary%7CPRIMARY%7Cprimary%7CNRA%7Cnra%7CICI%7Cici%7C%5C.xls%7C%5C.xlsx%29.%2A&collapse=urlkey&limit=500",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:57:43.145867+00:00",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "public_CDX_GET_count": 1,
+      "result_rows": 0
+    },
+    {
+      "url": "https://web.archive.org/cdx/search/cdx?url=advisors.vanguard.com%2FVGApp%2Fiip%2F%2A&output=json&fl=timestamp%2Coriginal%2Cmimetype%2Cstatuscode%2Cdigest%2Clength&filter=statuscode%3A200&filter=original%3A.%2A2008.%2A&filter=original%3A.%2A%28Tax%7Ctax%7CICI%7Cici%7CNRA%7Cnra%29.%2A&collapse=urlkey&limit=500",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:59:00.795263+00:00",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "purpose": "Third and finalCDX query; observed officialVGApp tax-center branch, original contains2008",
+      "result_rows": 0
+    },
+    {
+      "url": "https://web.archive.org/cdx/search/cdx?url=advisors.vanguard.com%2Fiwe%2Fpdf%2F%2A&output=json&fl=timestamp%2Coriginal%2Cmimetype%2Cstatuscode%2Cdigest%2Clength&filter=statuscode%3A200&filter=original%3A.%2A%5C.%5BxX%5D%5BlL%5D%5BsS%5D.%2A&collapse=urlkey&limit=1000",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:58:37.585153+00:00",
+      "bytes": 4363,
+      "sha256": "5d84b67f424c2d8e77a066d352237b94af8e67d1d341b68708fb206c7ea63721",
+      "purpose": "Observe actual official Excel names without year/name assumptions; second boundedCDX query",
+      "result_rows": 24
+    }
+  ],
+  "findings": [
+    "Year-anywhere plus Primary/NRA/ICI/Excel filtering under the observed officialiwe/pdf prefix returned no2008 records.",
+    "The same officialiwe/pdf prefix without any year/name assumption returned24 actual uniqueExcel URLs, earliest2013; none contained2007/2008/2009.",
+    "The already observed officialVGApp tax-center branch with2008 returned no records.",
+    "No real2008 candidate URL was available for an allowed original download; no unobserved filename or internalAPI was guessed."
+  ],
+  "boundaries": [
+    "CDX absence is limited to the queried official prefixes/index coverage, not proof that a2008 issuer tax file or event never existed.",
+    "No2008 exact row obtained; null is not zero and later issuer identity does not adjudicate2008 cash.",
+    "No old yearbookPDF or previously completed annual-period constraints were reread/recomputed.",
+    "No canonical override, shared source edit, fixed index change, production change, commit, push or supplier message."
+  ],
+  "newly_available_exact_event": null,
+  "canonical_change_recommended": false,
+  "remaining_minimal_evidence": "A real issuer2008 distribution/tax original with CUSIP921943858/VEA and exact2008-03-12 event row, obtained through an observed available archive or a user-provided official copy. Existing period-level constraints remain separate."
+}

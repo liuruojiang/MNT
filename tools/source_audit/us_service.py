@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import os
 
 from .calendar import confirmed_cutoff, sessions
-from .registry import annotate_us, completed_work, load_additional
+from .registry import annotate_us, completed_work, load_additional, CASH_REFERENCE_STATUSES
 from .store import DataNotAccepted
 from .transport import decrypt_dpapi, fetch, sha256
 from .compare import tiingo_rows, yahoo_rows, split_comparison_basis
@@ -138,7 +138,7 @@ def refresh(store,config,output,cutoff,*,probe_only=False):
 def known_action_checks(store, repo, symbol, cutoff):
     references = [r for r in completed_work(repo) if r.get('symbol')==symbol and 'verified_cash' in r]
     references += [{'symbol':r['symbol'],'date':r['ex_date'],'verified_cash':float(r['resolution']['cash_usd_per_share'])}
-                   for r in load_additional(repo) if r.get('symbol')==symbol and r.get('status')=='CONFIRMED_CASH_EVENT']
+                   for r in load_additional(repo) if r.get('symbol')==symbol and r.get('status') in CASH_REFERENCE_STATUSES]
     if not references: return {'tiingo':[],'yahoo':[]}
     th,yh,mh = store.head('tiingo',symbol),store.head('yahoo',symbol),store.head('tiingo',symbol,'metadata')
     if not all([th,yh,mh]): return {'tiingo':['KNOWN_ACTION_ANCHORS_UNAVAILABLE'],'yahoo':['KNOWN_ACTION_ANCHORS_UNAVAILABLE']}

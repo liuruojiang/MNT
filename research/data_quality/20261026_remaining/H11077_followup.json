@@ -1,0 +1,163 @@
+{
+  "status": "INDEPENDENT_CURRENT_CLOSE_CONFIRMED_RESEARCH_CANDIDATE_READY",
+  "created_at_utc": "2026-10-26T11:48:39.701471+00:00",
+  "code": "H11077.SH",
+  "official_indexCode": "H11077",
+  "official_full_name": "SSE 10-Year China Treasury Note Index (Futures Deliverables)",
+  "session": "2026-10-26",
+  "official_close": 192.94,
+  "Wind_close": "192.9357",
+  "absolute_difference": "0.0043",
+  "price_abs_tolerance": ".011",
+  "official_new_receipt": {
+    "provider": "CSI official",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H11077&startDate=20261026&endDate=20261026",
+    "status": 200,
+    "retrieved_at_utc": "2026-10-26T11:47:15.398184+00:00",
+    "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\H11077_official_followup_20261026T114713Z\\H11077_20261026_official_raw.json",
+    "sha256": "f7d46fea70b189d69558386f7506a26ec5c71a466be3505a1df3aa9108117a7d",
+    "bytes": 444,
+    "requests": 1,
+    "Wind_requests": 0,
+    "business_code": "200",
+    "data": [
+      {
+        "tradeDate": "20261026",
+        "indexCode": "H11077",
+        "indexNameCnAll": "上证10年期国债指数",
+        "indexNameCn": "10年国债",
+        "indexNameEnAll": "SSE 10-Year China Treasury Note Index (Futures Deliverables)",
+        "indexNameEn": "10-Year China Treasury Note",
+        "open": null,
+        "high": null,
+        "low": null,
+        "close": 192.94,
+        "change": 0.07,
+        "changePct": 0.04,
+        "tradingVol": 0.0,
+        "tradingValue": 0.0,
+        "consNumber": 17.0,
+        "peg": null
+      }
+    ]
+  },
+  "wind_observations_reused": {
+    "long": {
+      "parsed_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\H11077_probes\\001_H11077_SH_long_parsed.json",
+      "parsed_sha256": "843f762e22553a9aea1905293627348000a6d749b65fd7ed81099db69217b7f7",
+      "raw_sha256": "78deaffd6584069320d07cd6b999b2330557076d071bc258321e586a8cd79f7d",
+      "request_id": 179301278436701,
+      "request_arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-01-01",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "value": "192.9357",
+      "official_difference": "0.0043"
+    },
+    "short": {
+      "parsed_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\H11077_probes\\002_H11077_SH_short_parsed.json",
+      "parsed_sha256": "8595203d526bfee9339ab90afe97e18b35d927ff12fe7c6715776a28b650a762",
+      "raw_sha256": "e090cf82ed5cca826c1c4dab51ce78382155d2579bcb21b67148adb5cfc1fcec",
+      "request_id": 179301278662602,
+      "request_arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-10-20",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "value": "192.9357",
+      "official_difference": "0.0043"
+    }
+  },
+  "previous_acceptance_reused": {
+    "path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\close_only_integration.json",
+    "sha256": "d7fbb8200af5453626902f2df4dc7e04012ccb7343374abb6463926ded854988",
+    "scope": "Prior194-session calendar/long-short acceptance and193-session official close reference; not rerun in this followup",
+    "previous_report": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\close_only_integration_runs\\20261026T112204Z_122839c4\\report.json"
+  },
+  "new_tail_acceptance": {
+    "code": "H11077.SH",
+    "kind": "index",
+    "gate": "INDEPENDENT_CLOSE_OVERLAP_CHECKED",
+    "required_fields": [
+      "TIME",
+      "MATCH(close)"
+    ],
+    "production_approved": false,
+    "amount_gate": "NOT_REQUIRED_BY_FORMAL_BOND_LEG",
+    "field_gaps": [],
+    "calendar_source": "https://www.sse.com.cn/disclosure/dealinstruc/closed/",
+    "independent_calendar": true,
+    "requested_start": "2026-10-20",
+    "required_end": "2026-10-26",
+    "history_before_start_certified": false,
+    "identity": "Wind H11077.SH / CSI market-data indexCode H11077; 931077 is the detail-page/Referer code only",
+    "rows": 5,
+    "first": "2026-10-20",
+    "last": "2026-10-26",
+    "close_only_candidate": true,
+    "long_short_close_checked": true,
+    "long_short_max_abs_difference": 0.0,
+    "independent_close_validation": {
+      "provider": "csindex",
+      "market_data_indexCode": "H11077",
+      "available_checked_sessions": 5,
+      "max_abs_difference": 0.004300000000000637,
+      "required_recent_dates": [
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-26"
+      ],
+      "missing_recent_dates": [],
+      "current_day_present": true,
+      "tolerance": 0.011,
+      "authentication": "caller responsibility"
+    },
+    "acceptance_scope": "Full requested date coverage and available official closes; recent independent closes complete; research only"
+  },
+  "derived_official_reference": {
+    "kind": "DERIVED_OFFICIAL_RESPONSE_UNION",
+    "old_response": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\H11077.json",
+    "old_response_sha256": "0adfac13b4f83c3f958546a2c5614156dea8f347616f9afe65407e39b0ec8dd8",
+    "new_response": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\H11077_official_followup_20261026T114713Z\\H11077_20261026_official_raw.json",
+    "new_response_sha256": "f7d46fea70b189d69558386f7506a26ec5c71a466be3505a1df3aa9108117a7d",
+    "added_dates": [
+      "20261026"
+    ],
+    "values_modified": false,
+    "derived_sha256": "759f345af14aba1e1cb314f35857e6b8d4979df91ed9f1d39dce00b254704b70"
+  },
+  "reference_dir_for_root": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\H11077_official_followup_20261026T114713Z",
+  "research_candidate_eligible": true,
+  "fixed_indexes_modified": false,
+  "shared_code_modified": false,
+  "production_changed": false,
+  "production_approved": false,
+  "actual_requests": {
+    "CSI_exact_single_day_GET": 1,
+    "Wind": 0,
+    "other_new_sources": 0
+  },
+  "publication_boundary": {
+    "previous_CSI_observation": "2026-10-26T11:06:38.545513+00:00",
+    "current_retrieved_at_utc": "2026-10-26T11:47:15.398184+00:00",
+    "statement": "Oct26 official close is available by this collection time; exact publication time not established",
+    "previous_CSI_raw_sha256": "957f9f20967b1b842437c9fe22c88d6a2db8f82999270d679eba8755945c4471"
+  },
+  "not_repeated": [
+    "194/193-day historical audit",
+    "strategy backtest",
+    "old000852 adjudication",
+    "Wind requests",
+    "account refresh",
+    "paid action",
+    "supplier message"
+  ],
+  "root_next_action": "Integrate the hash-verified derived official H11077.json reference and run existing close-only candidate gate before any research-index promotion; no production promotion implied."
+}

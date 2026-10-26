@@ -1,0 +1,204 @@
+{
+  "status": "BLOCKED_RANGE_UNSUPPORTED_AND_OFFICIAL_API403",
+  "created_at_utc": "2026-10-26T11:56:47.107605+00:00",
+  "scope": "Only incomplete2015HB2/2013HB resume and new official single-security route; no complete2008 documents reread, no supplier or financial-source substitution",
+  "actual_requests": {
+    "public_GETs": 2,
+    "read_only_POSTs": 1,
+    "securityHtml_POSTs": 0,
+    "Wind": 0,
+    "paid": 0,
+    "whole_file_redownloads": 0,
+    "retries_after403": 0
+  },
+  "download_integrity": [
+    {
+      "file": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\vanguard_evidence\\2015_KURSLISTE_HB_2.pdf",
+      "official_url": "https://www.ictax.admin.ch/extern/api/download/78213/d70015d6dc16ec5eea82b192fa64e175/Kursliste%20HB_Band%202_2015_Druckversion.pdf",
+      "official_expected_bytes": 19033087,
+      "existing_partial_bytes": 8003202,
+      "missing_bytes": 11029885,
+      "source_sha256": "6c5cf9c046be217543215458c255dfd237f57362ae00bf6cce2fa9a0c4d4e405",
+      "matches_previous_source_sha256": true,
+      "eof_present": false,
+      "complete": false,
+      "parser_reopened_or_repaired": false,
+      "eligible_for_content_or_absence_claim": false,
+      "resume_result": "RANGE_IGNORED_THIS_ATTEMPT_NO206_NO_CONTENT_RANGE_NO_ETAG",
+      "range_request": "bytes=8003170-8003201",
+      "response_status": 200,
+      "content_length_header": "19033087",
+      "assembled_pdf_created": false,
+      "full_response_body_consumed": false
+    },
+    {
+      "file": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\vanguard_evidence\\2013_KURSLISTE_HB.pdf",
+      "official_url": "https://www.ictax.admin.ch/extern/api/download/41922/305cc34e180799a6d688e9f58e85de4c/Kursliste%20HB_2013%20%28Druckversion%29.pdf",
+      "official_expected_bytes": 45146021,
+      "existing_partial_bytes": 12164743,
+      "missing_bytes": 32981278,
+      "source_sha256": "14829f3810e03a113b21724fc34de893182fdc9e0e76d16fa2391bbc7e4e6ae2",
+      "matches_previous_source_sha256": true,
+      "eof_present": false,
+      "complete": false,
+      "parser_reopened_or_repaired": false,
+      "eligible_for_content_or_absence_claim": false,
+      "resume_result": "RANGE_IGNORED_THIS_ATTEMPT_NO206_NO_CONTENT_RANGE_NO_ETAG",
+      "range_request": "bytes=12164711-12164742",
+      "response_status": 200,
+      "content_length_header": "45146021",
+      "assembled_pdf_created": false,
+      "full_response_body_consumed": false
+    }
+  ],
+  "range_receipts": [
+    {
+      "file": "2015_KURSLISTE_HB_2.pdf",
+      "purpose": "Existing partial boundary/ETag verification before suffix resume",
+      "url": "https://www.ictax.admin.ch/extern/api/download/78213/d70015d6dc16ec5eea82b192fa64e175/Kursliste%20HB_Band%202_2015_Druckversion.pdf",
+      "retrieved_at_utc": "2026-10-26T11:51:48.517221+00:00",
+      "request_headers": {
+        "Range": "bytes=8003170-8003201",
+        "Accept-Encoding": "identity",
+        "User-Agent": "ReadOnlyPublicationResume/1.0"
+      },
+      "status": 200,
+      "response_headers": {
+        "content-disposition": "attachment; filename=\"Kursliste HB_Band 2_2015_Druckversion.pdf\"",
+        "x-content-type-options": "nosniff",
+        "x-xss-protection": "0",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "pragma": "no-cache",
+        "expires": "0",
+        "x-frame-options": "DENY",
+        "content-type": "application/pdf;charset=UTF-8",
+        "content-length": "19033087",
+        "date": "Mon, 26 Oct 2026 11:51:48 GMT",
+        "Strict-Transport-Security": "max-age=15552000"
+      },
+      "expected_total_bytes": 19033087,
+      "old_bytes": 8003202,
+      "old_sha256": "6c5cf9c046be217543215458c255dfd237f57362ae00bf6cce2fa9a0c4d4e405",
+      "old_source_unchanged": true,
+      "public_GET_count": 1,
+      "body_not_downloaded": true,
+      "range_supported": false,
+      "reason": "No206; full200 response deliberately closed without download"
+    },
+    {
+      "file": "2013_KURSLISTE_HB.pdf",
+      "purpose": "Existing partial boundary/ETag verification before suffix resume",
+      "url": "https://www.ictax.admin.ch/extern/api/download/41922/305cc34e180799a6d688e9f58e85de4c/Kursliste%20HB_2013%20%28Druckversion%29.pdf",
+      "retrieved_at_utc": "2026-10-26T11:52:12.577420+00:00",
+      "request_headers": {
+        "Range": "bytes=12164711-12164742",
+        "Accept-Encoding": "identity",
+        "User-Agent": "ReadOnlyPublicationResume/1.0"
+      },
+      "status": 200,
+      "response_headers": {
+        "content-disposition": "attachment; filename=\"Kursliste HB_2013 (Druckversion).pdf\"",
+        "x-content-type-options": "nosniff",
+        "x-xss-protection": "0",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "pragma": "no-cache",
+        "expires": "0",
+        "x-frame-options": "DENY",
+        "content-type": "application/pdf;charset=UTF-8",
+        "content-length": "45146021",
+        "date": "Mon, 26 Oct 2026 11:52:12 GMT",
+        "Strict-Transport-Security": "max-age=15552000"
+      },
+      "expected_total_bytes": 45146021,
+      "old_bytes": 12164743,
+      "old_sha256": "14829f3810e03a113b21724fc34de893182fdc9e0e76d16fa2391bbc7e4e6ae2",
+      "old_source_unchanged": true,
+      "public_GET_count": 1,
+      "body_not_downloaded": true,
+      "range_supported": false,
+      "reason": "No206; full200 response deliberately closed without download"
+    }
+  ],
+  "new_official_api_path": {
+    "source_client": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\qqq_evidence\\ictax_client.js",
+    "source_client_sha256": "4277d2fcbabbf3fd829894565e175a7c04045d40bed4952bec2f1448a8026572",
+    "discovered_methods": {
+      "/extern/api/security/search.json": "POST read-only search",
+      "/extern/api/security/securityHtml.json": "POST read-only detail by real returned identifier"
+    },
+    "attempt": {
+      "url": "https://www.ictax.admin.ch/extern/api/security/search.json",
+      "method": "POST",
+      "purpose": "Read-only official single-security search, exact ISIN/year; first use of this route",
+      "request": {
+        "isin": "US92206C7062",
+        "year": 2015,
+        "referenceDate": "2015-12-31",
+        "language": "en"
+      },
+      "status": 403,
+      "retrieved_at_utc": "2026-10-26T11:55:48.771840+00:00",
+      "raw_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\ictax\\VGIT_2015_security_search_raw.txt",
+      "bytes": 5633,
+      "sha256": "2e3fa58513b8cd62650298de0d0e2026a2cf71d517135ca5027cb234f5ba4003",
+      "headers": {
+        "x-content-type-options": "nosniff",
+        "x-xss-protection": "0",
+        "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
+        "pragma": "no-cache",
+        "expires": "0",
+        "x-frame-options": "DENY",
+        "content-type": "text/html;charset=UTF-8",
+        "content-length": "5633",
+        "date": "Mon, 26 Oct 2026 11:55:48 GMT",
+        "Strict-Transport-Security": "max-age=15552000"
+      },
+      "external_message_sent": false,
+      "account_or_cookie_override": false
+    },
+    "result": "403 before obtaining a real VGIT valor; detail request not sent; no method/identity/credential workaround attempted"
+  },
+  "event_results": [
+    {
+      "isin": "US92206C7062",
+      "ticker": "VGIT",
+      "date": "2015-11-02",
+      "exact_event_record_obtained": false,
+      "amount_verified": false,
+      "ordinary_income_verified": false,
+      "short_term_gain_verified": false,
+      "long_term_gain_verified": false,
+      "status": "UNCHANGED_UNRESOLVED",
+      "note": "The2015HB2 partial cannot establish an event or absence. Prior period-level evidence is reused by reference only, not promoted to exact event."
+    },
+    {
+      "isin": "US92206C7062",
+      "ticker": "VGIT",
+      "date": "2013-12-24",
+      "exact_event_record_obtained": false,
+      "total_0263_verified_by_this_followup": false,
+      "ordinary_short_long_classification_verified_by_this_followup": false,
+      "status": "UNCHANGED_UNRESOLVED_IN_THIS_ICTAX_PATH",
+      "note": "Root independently obtained a new Vanguard issuer2013XLS; no duplicate2013 API lookup or adjudication performed here."
+    }
+  ],
+  "prior_research_reference": {
+    "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\vanguard_evidence\\vanguard_followup.json",
+    "sha256": "66cb4d77ad51298dbcb3fbc892d16800db3723175d113284bb107cad8733a782",
+    "values_recomputed": false
+  },
+  "material_boundaries": [
+    "No206 response means no suffix was accepted or concatenated. Content-Length alone does not validate a resume.",
+    "Both old PDFs remain incomplete and are not used to claim absent rows or zero distribution.",
+    "Official client route visibility is not successful API access; HTTP403 is an observed access block, not proof that no event data exist.",
+    "No valid complete PDF was produced, so no text/render content acceptance is claimed.",
+    "No automatic account refresh, paid download, proxy or identity workaround."
+  ],
+  "next_minimal_input": "A complete official2015HB2 attachment obtained through an allowed download, or actual access to the official read-only securities response. Do not repeat the same403 or ignoredRange requests without a changed access condition.",
+  "old_files_changed": false,
+  "canonical_changed": false,
+  "shared_code_changed": false,
+  "production_changed": false,
+  "committed": false,
+  "pushed": false
+}

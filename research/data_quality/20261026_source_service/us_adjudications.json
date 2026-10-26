@@ -12,10 +12,11 @@
   "evidence_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications",
   "summary": {
     "events": 11,
-    "confirmed_cash_events": 5,
-    "unresolved_events": 6,
-    "unresolved_with_exchange_corroboration": 1,
-    "global_gate": "REVIEW_REQUIRED"
+    "confirmed_cash_events": 7,
+    "unresolved_events": 2,
+    "unresolved_with_exchange_corroboration": 0,
+    "global_gate": "REVIEW_REQUIRED",
+    "confirmed_no_cash_events": 2
   },
   "policy": {
     "unknown_is_not_zero": true,
@@ -25,7 +26,8 @@
     "no_forward_fill_of_unresolved_actions": true,
     "all_repairs_require_idempotency_and_factor_checks": true,
     "lookback_scope": "Consumers must map the actual model input window, including warmup and normalization endpoints. Old events are not declared irrelevant by calendar date alone.",
-    "retrospective_evidence_is_not_PIT_certification": true
+    "retrospective_evidence_is_not_PIT_certification": true,
+    "no_event_requires_complete_final_issuer_statement_and_explicit_total": true
   },
   "completed_preexisting": [
     {
@@ -384,8 +386,37 @@
       "id": "VGIT_2013-12-24",
       "symbol": "VGIT",
       "ex_date": "2013-12-24",
-      "status": "UNRESOLVED",
-      "resolution": null,
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.263",
+        "ex_date": "2013-12-24",
+        "cash_basis": "Exact issuer post-year-end Primary Layout total, with E/R/C flags retained and classification reconciled",
+        "supports_provider": "yahoo",
+        "conflicting_provider": "tiingo",
+        "inference": false,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "VGIT",
+          "ex_dates": [
+            "2013-12-24"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "record_date": "2013-12-27",
+        "pay_date": "2013-12-31",
+        "income": "0.074",
+        "short_term_gain": "0.015",
+        "long_term_gain": "0.174",
+        "return_of_capital": "0"
+      },
       "evidence": [
         {
           "url": "https://infomemo.theocc.com/infomemos?date=201312&lastModifiedDate=12%2F23%2F2013+18%3A14%3A14&number=33831",
@@ -394,6 +425,27 @@
           "kind": "web_extracted_record",
           "page_1based": 3,
           "original_pdf_archived": false
+        },
+        {
+          "url": "https://advisors.vanguard.com/iwe/pdf/2013_Primary_Layout.xls",
+          "archive_url": "https://web.archive.org/web/20170303004429id_/https://advisors.vanguard.com/iwe/pdf/2013_Primary_Layout.xls",
+          "archive_timestamp": "20170303004429",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\2013_Primary_Layout_archived.xls",
+          "sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+          "CDX_sha1_base32": "RB6XQBLKTJCN3RRMCUEFFBIRTPC5OABF",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2013_Primary_Layout_archived.xls",
+            "sha256": "cce4efbea08111ac31daf8edb22267c9beb33d1c4e54735f0d1b1490a136e79c",
+            "CDX_sha1_base32": "RB6XQBLKTJCN3RRMCUEFFBIRTPC5OABF",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "row_1based": 4604
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
         }
       ],
       "frozen_observation": {
@@ -429,7 +481,7 @@
       ],
       "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
       "source_audit_cutoff": "2026-10-23",
-      "data_gate": "BLOCK",
+      "data_gate": "CASH_REFERENCE_ONLY",
       "allows_price_repair": false,
       "allows_series_promotion": false,
       "strategy_replayed_this_task": false,
@@ -438,17 +490,66 @@
         "provider": "yahoo",
         "cash_reference": "0.2630",
         "basis": "contemporaneous OneChicago futures adjustment communicated by OCC; not yet issuer final cash amount"
-      },
-      "unresolved_reason": "Exchange record corroborates Yahoo, but final ETF distribution amount and any estimate/revision distinction remain unproven; no canonical replacement authorized.",
-      "required_evidence": "Vanguard final 2013-12-24 ETF distribution record and any amendment, with explicit ETF share class and ex-date."
+      }
     },
     {
       "id": "VGIT_2015-11-02",
       "symbol": "VGIT",
       "ex_date": "2015-11-02",
-      "status": "UNRESOLVED",
-      "resolution": null,
-      "evidence": [],
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.085",
+        "ex_date": "2015-11-02",
+        "cash_basis": "Exact issuer post-year-end Primary Layout total, with E/R/C flags retained and classification reconciled",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "inference": false,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "VGIT",
+          "ex_dates": [
+            "2015-11-02"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "record_date": "2015-11-04",
+        "pay_date": "2015-11-06",
+        "income": "0.085",
+        "short_term_gain": "0",
+        "long_term_gain": "0",
+        "return_of_capital": "0"
+      },
+      "evidence": [
+        {
+          "url": "https://advisors.vanguard.com/iwe/pdf/2015_Primary_Layout.xlsx",
+          "archive_url": "https://web.archive.org/web/20170302074640id_/https://advisors.vanguard.com/iwe/pdf/2015_Primary_Layout.xlsx",
+          "archive_timestamp": "20170302074640",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\2015_Primary_Layout_archived.xlsx",
+          "sha256": "ddfd0a53569c54acf5e2ac66459e7dfac8dca641a0db1eba35e681905661cd85",
+          "CDX_sha1_base32": "BLGGDB6FQL5IJU35XWWNHCLAEFHZVPPF",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\vanguard\\2015_Primary_Layout_archived.xlsx",
+            "sha256": "ddfd0a53569c54acf5e2ac66459e7dfac8dca641a0db1eba35e681905661cd85",
+            "CDX_sha1_base32": "BLGGDB6FQL5IJU35XWWNHCLAEFHZVPPF",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "row_1based": 5561
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
       "frozen_observation": {
         "date": "2015-11-02",
         "flags": [
@@ -482,13 +583,11 @@
       ],
       "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
       "source_audit_cutoff": "2026-10-23",
-      "data_gate": "BLOCK",
+      "data_gate": "CASH_REFERENCE_ONLY",
       "allows_price_repair": false,
       "allows_series_promotion": false,
       "strategy_replayed_this_task": false,
-      "production_approved": false,
-      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
-      "required_evidence": "Vanguard final distribution notice for 2015-11-02, with amount and ex/record/pay dates."
+      "production_approved": false
     },
     {
       "id": "VEA_2008-03-12",
@@ -705,9 +804,80 @@
       "id": "QQQ_2010-06-25",
       "symbol": "QQQ",
       "ex_date": "2010-06-25",
-      "status": "UNRESOLVED",
-      "resolution": null,
-      "evidence": [],
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0",
+        "ex_date": "2010-06-25",
+        "cash_basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "inference": true,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2010-06-25"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "actual_distribution_dates": [
+          "2010-03-19",
+          "2010-06-18",
+          "2010-09-17",
+          "2010-12-17"
+        ],
+        "annual_total_usd": "0.36063",
+        "reclass_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "estimated_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "event_exists": false
+      },
+      "evidence": [
+        {
+          "url": "https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2010.xls",
+          "archive_url": "https://web.archive.org/web/20200506143220id_/https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2010.xls",
+          "archive_timestamp": "20200506143220",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\workbook_2010.bin",
+          "sha256": "933625ae123393ce6cf4bf3d38f8ddedc8261df6a323b2b170bd9b1c2cf54256",
+          "CDX_sha1_base32": "BEIUQUTG7AJSJ3HR5VJC32SKMSIFD7TI",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2010.bin",
+            "sha256": "933625ae123393ce6cf4bf3d38f8ddedc8261df6a323b2b170bd9b1c2cf54256",
+            "CDX_sha1_base32": "BEIUQUTG7AJSJ3HR5VJC32SKMSIFD7TI",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "event_rows_1based": [
+              648,
+              649,
+              650,
+              651
+            ],
+            "total_row_1based": 652
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
       "frozen_observation": {
         "date": "2010-06-25",
         "flags": [
@@ -742,21 +912,90 @@
       ],
       "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
       "source_audit_cutoff": "2026-10-23",
-      "data_gate": "BLOCK",
+      "data_gate": "CASH_REFERENCE_ONLY",
       "allows_price_repair": false,
       "allows_series_promotion": false,
       "strategy_replayed_this_task": false,
-      "production_approved": false,
-      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
-      "required_evidence": "Issuer final 2010 Q2 event calendar and amount; distinguish ex-date 06-18 from potential duplicate or payment-date record 06-25."
+      "production_approved": false
     },
     {
       "id": "QQQ_2011-12-27",
       "symbol": "QQQ",
       "ex_date": "2011-12-27",
-      "status": "UNRESOLVED",
-      "resolution": null,
-      "evidence": [],
+      "status": "CONFIRMED_NO_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0",
+        "ex_date": "2011-12-27",
+        "cash_basis": "Retrospective inference from complete final annual tax statement and explicit reconciled Total; not an explicit zero row, not PIT certification",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "inference": true,
+        "point_in_time_certified": false,
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2011-12-27"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ],
+        "actual_distribution_dates": [
+          "2011-03-18",
+          "2011-06-17",
+          "2011-09-16",
+          "2011-12-16"
+        ],
+        "annual_total_usd": "0.46252",
+        "reclass_flags": [
+          "R",
+          "R",
+          "R",
+          "R"
+        ],
+        "estimated_flags": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "event_exists": false
+      },
+      "evidence": [
+        {
+          "url": "https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2011.xls",
+          "archive_url": "https://web.archive.org/web/20200506135935id_/https://www.invesco.com/static/sf/us/files/Excel/1099-workbook-2011.xls",
+          "archive_timestamp": "20200506135935",
+          "artifact": "D:\\动量策略\\_data_source_service\\issuer_evidence\\remaining_20261026\\workbook_2011.bin",
+          "sha256": "cc22eb1ce5b5f878138bf451601178f9bcd52a3520716fe7ee1dcc1d4e4192de",
+          "CDX_sha1_base32": "MUGL3S6RSZLDHVVOOMH6TNTBJE4UDK5J",
+          "CDX_digest_matches": true,
+          "kind": "archived_issuer_original_workbook",
+          "locator": {
+            "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\qqq_efa\\wayback\\workbook_2011.bin",
+            "sha256": "cc22eb1ce5b5f878138bf451601178f9bcd52a3520716fe7ee1dcc1d4e4192de",
+            "CDX_sha1_base32": "MUGL3S6RSZLDHVVOOMH6TNTBJE4UDK5J",
+            "CDX_digest_matches": true,
+            "sheet": "Primary Layout",
+            "event_rows_1based": [
+              747,
+              748,
+              749,
+              750
+            ],
+            "total_row_1based": 751
+          },
+          "independent_verification": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_remaining_20261026\\primary_record_verification.json",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
       "frozen_observation": {
         "date": "2011-12-27",
         "flags": [
@@ -792,13 +1031,11 @@
       ],
       "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
       "source_audit_cutoff": "2026-10-23",
-      "data_gate": "BLOCK",
+      "data_gate": "CASH_REFERENCE_ONLY",
       "allows_price_repair": false,
       "allows_series_promotion": false,
       "strategy_replayed_this_task": false,
-      "production_approved": false,
-      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
-      "required_evidence": "Issuer final 2011 Q4 ordinary/special distribution calendar; establish whether 12-27 is an ex-date or a duplicate/non-ex-date."
+      "production_approved": false
     }
   ],
   "strategy_replayed": false,

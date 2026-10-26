@@ -62,8 +62,9 @@ def cn_run(config, output, mode, cutoff):
     # Frozen follow-up inputs carry their own code/cutoff/hash checks. They are
     # evidence, never a fallback for a future date or a failed live request.
     resumed=root/'wind_capability_evidence/cn_free_resume_20261026T110255Z'
+    reference_dir=Path(config.get('wind_reference_dir',resumed/'independent'))
     for flag, path in [('--candidate-archive',resumed/'H11077_probes'),
-                       ('--reference-dir',resumed/'independent'),
+                       ('--reference-dir',reference_dir),
                        ('--independent-attestation',resumed/'sina_overlap_attestation_20261026.json')]:
         if path.exists(): command += [flag,str(path)]
     proc=subprocess.run(command,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=1500)
@@ -116,7 +117,7 @@ def render(report, output):
 <p>万得区间结果：{html.escape(str(cgates))}。历史成交额统计口径、PIT-ST/股本/退市与期货期权字段按实际返回判定；HTTP 200 或能发现工具都不等于字段可用。BTC 保留 UTC 日历和独立成交量口径。</p>
 <p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077只需日期和收盘，实际行情代码仍为H11077，931077只用于详情页与Referer；按收盘专用校验报告判断，缺独立参考日期时保持隔离。</p>
 <p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口 aftype=0 为前复权，aftype=2 为不复权；已确认价格序列不同，不能把前复权数据再次复权，具体资产仍按证据限制使用。</p>
-<h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
+<h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成正现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条、无现金事件裁定 {sum(x.get('status')=='CONFIRMED_NO_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。现金为0也必须核对上游现金与因子，不能跳过。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
 <p>新增或改变的问题 {len(report['new_or_changed_issues'])} 项；已知问题不变时每日任务保持静默。</p><details><summary>查看本轮变化</summary><pre>{html.escape(json.dumps(report['new_or_changed_issues'],ensure_ascii=False,indent=2))}</pre></details>
 <p><a href="report.json">完整机器报告</a> · <a href="US_report.json">美股逐日检查</a> · <a href="project_readiness.json">逐项目字段要求</a></p>
 <p>所有冻结证据保留原采集时间。接口失败或额度不足将隔离该源并拒绝旧快照；不会将旧缓存包装成正常信号。未开展参数扫描或已有策略回测。</p></html>'''
