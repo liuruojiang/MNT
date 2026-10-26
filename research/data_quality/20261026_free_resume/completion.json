@@ -1,0 +1,62 @@
+{
+  "captured_at_utc": "2026-10-26T11:18:54.428692+00:00",
+  "production_before": {
+    "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+    "D:\\动量策略\\美股多头策略\\poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py": "4019a8902dd3c6d113d69d1bdc8ebaead9071848821fc06e8896f58dc7ea4ab2"
+  },
+  "free_only": true,
+  "paid_actions": 0,
+  "runtime_check_not_before": "2026-10-26T11:22:31.203797+00:00",
+  "tests": {
+    "status": "PASS",
+    "passed": 95,
+    "command": "python -B -m pytest tests/test_us_source_audit.py tests/test_data_source_service.py tests/test_data_source_daily_acceptance.py tests/test_cn_source_audit.py -q -p no:cacheprovider"
+  },
+  "production_after": {
+    "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+    "D:\\动量策略\\美股多头策略\\poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py": "4019a8902dd3c6d113d69d1bdc8ebaead9071848821fc06e8896f58dc7ea4ab2"
+  },
+  "production_unchanged": true,
+  "actual_requests": {
+    "Wind": 7,
+    "CSI": 3,
+    "Sina": 2,
+    "service_first_US": 0,
+    "service_first_CN": 0,
+    "service_repeat_US": 0,
+    "service_repeat_CN": 0
+  },
+  "strategy_backtests_run": 0,
+  "poe_deployed": false,
+  "completed_at_utc": "2026-10-26T11:25:32.864354+00:00",
+  "runtime": {
+    "status": "RUNTIME_CHECKS_PASS",
+    "checks": {
+      "distinct_completed_runs": true,
+      "execution_after_checkpoint": true,
+      "independent_market_cutoffs": true,
+      "provider_transport_not_failed": true,
+      "request_receipts_complete": true,
+      "same_cutoff_repeat_no_network": true,
+      "unchanged_problems_no_repeat_alert": true,
+      "CN_gates_stable_on_same_cutoff_repeat": true,
+      "production_and_parameters_unchanged": true,
+      "no_stale_or_quarantined_snapshot": true
+    },
+    "first_run_id": "20261026T112311Z_e91f7c6c",
+    "repeat_run_id": "20261026T112410Z_9927814d",
+    "cutoffs": {
+      "US": "2026-10-23",
+      "CN": "2026-10-26"
+    },
+    "scheduler_execution_verified_by_this_script": false,
+    "scheduler_evidence_required": "An actual app-scheduled thread execution; CLI/manual execution cannot certify a clock trigger",
+    "blocked_project_contracts": [],
+    "data_quality_status": "REVIEW_REQUIRED",
+    "production_approved": false,
+    "checked_at_utc": "2026-10-26T11:25:13.910490+00:00"
+  },
+  "remaining_quality_status": "REVIEW_REQUIRED",
+  "new_exact_cash_confirmations": 1,
+  "remaining_exact_cash_events": 6
+}

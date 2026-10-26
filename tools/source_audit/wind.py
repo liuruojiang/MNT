@@ -198,6 +198,148 @@ def amount_frame(payload, *, kind, start=None, end=None):
     return s, 'UNVERIFIED_CONSTITUENT_AGGREGATION' if kind == 'index' else 'DECLARED_CNY_PER_FUND_NOT_INDEPENDENTLY_VALIDATED'
 
 
+def parse_index_close(payload):
+    """Bond leg needs TIME/MATCH only; never invent equity volume or OHLC."""
+    data = nested_data(payload)
+    names = [c['name'] for c in data['columns']]
+    if len(names) != len(set(names)) or not {'TIME', 'MATCH'} <= set(names):
+        raise WindIntervalConflict('Missing/duplicate bond close columns')
+    frame = pd.DataFrame(data['rows'], columns=names)
+    if frame.empty or frame['MATCH'].map(lambda x: isinstance(x, (bool, np.bool_))).any():
+        raise WindIntervalConflict('Empty/boolean bond close')
+    dates = frame['TIME']
+    if not dates.map(lambda x: isinstance(x, str) and re.fullmatch(
+            r'\d{4}-\d{2}-\d{2}T00:00:00(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)', x) is not None).all():
+        raise WindIntervalConflict('Invalid daily bond labels')
+    pd.to_datetime(dates, utc=True, errors='raise')
+    values = pd.to_numeric(frame['MATCH'], errors='raise')
+    out = pd.DataFrame({'close': values.to_numpy()}, index=pd.to_datetime(dates.str[:10], format='%Y-%m-%d'))
+    if out.index.has_duplicates or not out.index.is_monotonic_increasing or not np.isfinite(out.close).all() or (out.close <= 0).any():
+        raise WindIntervalConflict('Invalid bond close dates/values')
+    out.attrs['_response_request_id'] = payload.get('result', {}).get('_meta', {}).get('requestId')
+    return out
+
+
+def audit_bond_close(code, long_payload, short_payload, *, sessions, start, end, calendar_source,
+                     independent_calendar=False, reference_payload=None, tail_sessions=5):
+    """Return no consumable candidate until every recent independent close exists."""
+    report = {'code': code, 'kind': 'index', 'gate': 'BLOCKED', 'required_fields': ['TIME', 'MATCH(close)'],
+              'production_approved': False, 'amount_gate': 'NOT_REQUIRED_BY_FORMAL_BOND_LEG', 'field_gaps': [],
+              'calendar_source': calendar_source, 'independent_calendar': bool(independent_calendar),
+              'requested_start': start, 'required_end': end, 'history_before_start_certified': False,
+              'identity': 'Wind H11077.SH / CSI market-data indexCode H11077; 931077 is the detail-page/Referer code only'}
+    try:
+        if code != 'H11077.SH':
+            raise WindIntervalConflict('Close-only path restricted to verified H11077 bond leg')
+        s = pd.DatetimeIndex(pd.to_datetime(sessions))
+        lo, hi = pd.Timestamp(start), pd.Timestamp(end)
+        if not independent_calendar or s.empty or s.tz is not None or s.hasnans or s.has_duplicates or not s.is_monotonic_increasing or not s.equals(s.normalize()) or s.max() != hi or s.min() < lo:
+            raise WindIntervalConflict('Invalid/missing independent bond calendar or cutoff')
+        if isinstance(tail_sessions, bool) or not isinstance(tail_sessions, int) or tail_sessions < 1:
+            raise WindIntervalConflict('Invalid close-only tail window')
+        if long_payload is short_payload or (long_payload.get('id') is not None and long_payload.get('id') == short_payload.get('id')):
+            raise WindIntervalConflict('Bond long/short reused the same response identity')
+        long, short = parse_index_close(long_payload), parse_index_close(short_payload)
+        if long.attrs.get('_response_request_id') and long.attrs.get('_response_request_id') == short.attrs.get('_response_request_id'):
+            raise WindIntervalConflict('Bond long/short reused the same response receipt')
+        long = long.loc[(long.index >= lo) & (long.index <= hi)]
+        recent = s[-tail_sessions:]
+        if not long.index.equals(s) or not short.index.equals(recent):
+            raise WindIntervalConflict('Bond close dates incomplete or contain extra sessions')
+        delta = (long.loc[recent, 'close'] - short.close).abs()
+        if (delta > .011).any():
+            raise WindIntervalConflict('Bond long/short close conflict')
+        report.update(rows=len(long), first=str(s.min().date()), last=str(s.max().date()),
+                      close_only_candidate=True, long_short_close_checked=True, long_short_max_abs_difference=float(delta.max()))
+        ref = pd.Series(dtype=float)
+        if reference_payload is not None:
+            if str(reference_payload.get('code')) != '200' or not isinstance(reference_payload.get('data'), list):
+                raise WindIntervalConflict('Official bond reference error/schema')
+            rows = reference_payload['data']
+            if any(r.get('indexCode') != 'H11077' or isinstance(r.get('close'), (bool, np.bool_)) for r in rows):
+                raise WindIntervalConflict('Official bond reference identity/boolean close')
+            ref = pd.Series([pd.to_numeric(r['close'], errors='raise') for r in rows],
+                            index=pd.to_datetime([r['tradeDate'] for r in rows], format='%Y%m%d', errors='raise'), dtype=float)
+            if ref.index.has_duplicates or not ref.index.is_monotonic_increasing or not np.isfinite(ref).all() or (ref <= 0).any():
+                raise WindIntervalConflict('Invalid official bond reference dates/close')
+            ref = ref.loc[(ref.index >= lo) & (ref.index <= hi)]
+            if len(ref.index.difference(s)):
+                raise WindIntervalConflict('Official bond reference contains unexpected sessions')
+        common = long.index.intersection(ref.index)
+        ref_delta = (long.loc[common, 'close'] - ref.loc[common]).abs()
+        if (ref_delta > .011).any():
+            raise WindIntervalConflict('Bond independent close conflict')
+        missing = recent.difference(ref.index).strftime('%Y-%m-%d').tolist()
+        report['independent_close_validation'] = {'provider': 'csindex', 'market_data_indexCode': 'H11077',
+            'available_checked_sessions': len(common), 'max_abs_difference': float(ref_delta.max()) if len(common) else None,
+            'required_recent_dates': recent.strftime('%Y-%m-%d').tolist(), 'missing_recent_dates': missing,
+            'current_day_present': hi in ref.index, 'tolerance': .011, 'authentication': 'caller responsibility'}
+        if missing:
+            report.update(gate='PARTIAL_INDEPENDENT_REFERENCE', reason='Official close missing required recent sessions',
+                          field_gaps=['INDEPENDENT_CLOSE_MISSING:' + ','.join(missing)])
+            return report, None
+        report.update(gate='INDEPENDENT_CLOSE_OVERLAP_CHECKED', acceptance_scope='Full requested date coverage and available official closes; recent independent closes complete; research only')
+        return report, long.copy(deep=True)
+    except Exception as exc:
+        report.update(gate='BLOCKED', reason=str(exc)[:400], error_type=type(exc).__name__)
+        return report, None
+
+
+def check_sina_attestation(code, long_payload, short_payload, long_source, short_source, *,
+                           attestation_path, sessions, cutoff):
+    """Bind current immutable archives and recompute; never masquerade as CSI."""
+    result = {'status': 'NOT_APPLICABLE', 'applicable': False, 'provider': 'sina', 'official_CSI': False, 'production_approved': False}
+    try:
+        attestation = json.loads(Path(attestation_path).read_text(encoding='utf-8'))
+        if attestation.get('cutoff') != cutoff:
+            result['reason'] = 'Attestation cutoff differs; no independent acceptance for this cutoff'
+            return result
+        entry = attestation.get('entries', {}).get(code)
+        if entry is None:
+            return result
+        result['applicable'] = True
+        for label, source, payload in [('long', long_source, long_payload), ('short', short_source, short_payload)]:
+            path = Path(source['parsed_path'])
+            if source.get('raw_sha256') != entry[label + '_raw_sha256'] or hashlib.sha256(path.read_bytes()).hexdigest() != entry[label + '_parsed_sha256'] or json.loads(path.read_text(encoding='utf-8')) != payload:
+                raise ValueError('Attestation Wind archive binding differs')
+        from urllib.parse import urlsplit, parse_qs
+        url = urlsplit(entry['reference_url'])
+        if url.scheme != 'https' or url.hostname != 'money.finance.sina.com.cn' or url.path != '/quotes_service/api/json_v2.php/CN_MarketData.getKLineData' or parse_qs(url.query).get('symbol') != ['sh' + code.split('.')[0]] or parse_qs(url.query).get('scale') != ['240']:
+            raise ValueError('Attestation independent provider/identity differs')
+        raw_path = Path(entry['reference_raw_path'])
+        if hashlib.sha256(raw_path.read_bytes()).hexdigest() != entry['reference_raw_sha256']:
+            raise ValueError('Attestation independent raw hash differs')
+        raw = pd.DataFrame(json.loads(raw_path.read_text(encoding='utf-8')))
+        fields = ['open', 'high', 'low', 'close', 'volume']
+        if raw[fields].map(lambda x: isinstance(x, (bool, np.bool_))).any().any():
+            raise ValueError('Boolean independent OHLCV')
+        raw.index = pd.to_datetime(raw['day'], format='%Y-%m-%d', errors='raise')
+        if raw.index.has_duplicates or not raw.index.is_monotonic_increasing:
+            raise ValueError('Duplicate/unsorted independent sessions')
+        recent = pd.DatetimeIndex(sessions)[-5:]
+        ref = raw[fields].apply(pd.to_numeric, errors='raise').loc[recent]
+        from wind_interval_guard import _validate
+        _validate(ref, recent[0], pd.Timestamp(cutoff), recent, 'Sina independent reference')
+        comparisons = {}
+        for label, payload in [('long', long_payload), ('short', short_payload)]:
+            frame = parse_index_kline(payload)
+            values = {}
+            for field in fields:
+                delta = (frame.loc[recent, field] - ref[field]).abs()
+                tolerance = 100 if field == 'volume' else .011
+                if not np.isfinite(delta).all() or (delta > tolerance).any():
+                    raise ValueError('Sina ' + label + '/' + field + ' conflict')
+                values[field] = {'max_abs_difference': float(delta.max()), 'tolerance': tolerance}
+            comparisons[label] = values
+        result.update(status='THIRD_PARTY_INDEPENDENT_OVERLAP_CHECKED', cutoff=cutoff,
+            dates=recent.strftime('%Y-%m-%d').tolist(), comparisons=comparisons,
+            bindings=entry, attestation_sha256=hashlib.sha256(Path(attestation_path).read_bytes()).hexdigest(),
+            scope='Exact bound raw/parsed responses and cutoff only; original numeric volume retained, no amount certification')
+    except Exception as exc:
+        result.update(status='FAILED', applicable=True, reason=str(exc)[:400])
+    return result
+
+
 def audit_asset(code, kind, long_payload, short_payload, *, sessions, start, end, calendar_source,
                 independent_calendar=False, reference_payload=None, tail_sessions=5, aftype='0'):
     """Return a report and a checked OHLCV copy, or report+None on any failure.

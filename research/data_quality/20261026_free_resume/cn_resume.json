@@ -1,0 +1,759 @@
+{
+  "status": "PARTIAL_RESEARCH_ACCEPTANCE",
+  "created_at_utc": "2026-10-26T11:07:31.025943+00:00",
+  "cutoff": "2026-10-26",
+  "credit_recovery": {
+    "minimal_API_success": true,
+    "free_credit_policy_evidence": "D:\\动量策略\\_data_source_service\\evidence\\wind_free_credit_policy_20261026.json",
+    "paid_actions": 0
+  },
+  "actual_requests": {
+    "Wind": 7,
+    "CSI_official_GETs": 3,
+    "Sina_fallback_GETs": 2,
+    "tools_list": 0,
+    "retries": 0
+  },
+  "results": [
+    {
+      "code": "000300.SH",
+      "kind": "index",
+      "gate": "THIRD_PARTY_INDEPENDENT_OVERLAP_CHECKED",
+      "production_approved": false,
+      "requested_start": "2026-01-01",
+      "required_end": "2026-10-26",
+      "adjustment_basis": "price_index",
+      "calendar_source": "https://www.sse.com.cn/disclosure/dealinstruc/closed/",
+      "independent_calendar": true,
+      "amount_gate": "BLOCKED",
+      "field_gaps": [
+        "UNVERIFIED_CONSTITUENT_AGGREGATION",
+        "VOLUME_UNIT_NOT_EXPLICITLY_DECLARED"
+      ],
+      "history_before_start_certified": false,
+      "rows": 194,
+      "first": "2026-01-05",
+      "last": "2026-10-26",
+      "validation": {
+        "required_end": "2026-10-26",
+        "tail_sessions": 5,
+        "independent_reference": false,
+        "reference_origin": null,
+        "reference_authentication": "caller responsibility",
+        "long_rows": 194,
+        "price_abs_tolerance": 0.011,
+        "volume_abs_tolerance": 100,
+        "checked_value_dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-26"
+        ],
+        "unchecked_historical_value_sessions": 189,
+        "intervals_distinct": true,
+        "coverage": "recent overlap OHLCV plus full date coverage; not all-history value certification"
+      },
+      "amount_basis": "UNVERIFIED_CONSTITUENT_AGGREGATION",
+      "amount_range_consistent": true,
+      "original_interval_gate": "INTERVAL_COHERENT_ONLY",
+      "sina_independent_comparison": {
+        "dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-26"
+        ],
+        "days": 5,
+        "fields": {
+          "open": {
+            "max_abs_difference": 0.0039999999999054126,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "high": {
+            "max_abs_difference": 0.0039999999999054126,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "low": {
+            "max_abs_difference": 0.005000000000109139,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "close": {
+            "max_abs_difference": 0.003000000000156433,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "volume": {
+            "max_abs_difference": 0.0,
+            "tolerance": 100,
+            "passed": true
+          }
+        },
+        "passed": true
+      },
+      "independent_reference": {
+        "provider": "Sina third-party (existing formal endpoint; not CSI official)",
+        "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000300&scale=240&ma=no&datalen=10",
+        "raw_sha256": "de4a44af24f174db892c62045522e12952c2233a0f20631532b67c50dbb73e42",
+        "retrieved_at_utc": "2026-10-26T11:04:11.567598+00:00",
+        "scope": "Five current daily OHLCV values; third-party Sina, not CSI official. Numeric volume agreement is not an explicit vendor-unit declaration. No TURNOVER field supplied by Sina."
+      },
+      "official_CSI_partial_comparison": {
+        "dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23"
+        ],
+        "days": 4,
+        "fields": {
+          "open": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "high": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "low": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "close": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "volume": {
+            "max_abs_difference": 0.0,
+            "tolerance": 100,
+            "passed": true
+          }
+        },
+        "passed": true
+      },
+      "official_CSI_required_day_present": false,
+      "minimal_single_day_reused_as_additional_observation": {
+        "dates": [
+          "2026-10-26"
+        ],
+        "days": 1,
+        "fields": {
+          "open": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "high": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "low": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "close": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "volume": {
+            "max_abs_difference": 0.0,
+            "tolerance": 100,
+            "passed": true
+          }
+        },
+        "passed": true
+      },
+      "research_only": true,
+      "formal_official_current_day_certified": false,
+      "acceptance_scope": "194 verified 2026 session labels; recent five-day long/short/Sina OHLCV agreement. Official CSI confirms four available days but has not published Oct26. Earlier history values and turnover definition are not certified."
+    },
+    {
+      "code": "000852.SH",
+      "kind": "index",
+      "gate": "THIRD_PARTY_INDEPENDENT_OVERLAP_CHECKED",
+      "production_approved": false,
+      "requested_start": "2026-01-01",
+      "required_end": "2026-10-26",
+      "adjustment_basis": "price_index",
+      "calendar_source": "https://www.sse.com.cn/disclosure/dealinstruc/closed/",
+      "independent_calendar": true,
+      "amount_gate": "BLOCKED",
+      "field_gaps": [
+        "UNVERIFIED_CONSTITUENT_AGGREGATION",
+        "VOLUME_UNIT_NOT_EXPLICITLY_DECLARED"
+      ],
+      "history_before_start_certified": false,
+      "rows": 194,
+      "first": "2026-01-05",
+      "last": "2026-10-26",
+      "validation": {
+        "required_end": "2026-10-26",
+        "tail_sessions": 5,
+        "independent_reference": false,
+        "reference_origin": null,
+        "reference_authentication": "caller responsibility",
+        "long_rows": 194,
+        "price_abs_tolerance": 0.011,
+        "volume_abs_tolerance": 100,
+        "checked_value_dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-26"
+        ],
+        "unchecked_historical_value_sessions": 189,
+        "intervals_distinct": true,
+        "coverage": "recent overlap OHLCV plus full date coverage; not all-history value certification"
+      },
+      "amount_basis": "UNVERIFIED_CONSTITUENT_AGGREGATION",
+      "amount_range_consistent": true,
+      "original_interval_gate": "INTERVAL_COHERENT_ONLY",
+      "sina_independent_comparison": {
+        "dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-26"
+        ],
+        "days": 5,
+        "fields": {
+          "open": {
+            "max_abs_difference": 0.0039999999999054126,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "high": {
+            "max_abs_difference": 0.0029999999997016857,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "low": {
+            "max_abs_difference": 0.005000000000109139,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "close": {
+            "max_abs_difference": 0.005000000000109139,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "volume": {
+            "max_abs_difference": 0.0,
+            "tolerance": 100,
+            "passed": true
+          }
+        },
+        "passed": true
+      },
+      "independent_reference": {
+        "provider": "Sina third-party (existing formal endpoint; not CSI official)",
+        "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000852&scale=240&ma=no&datalen=10",
+        "raw_sha256": "22dca71c95160f8c9b8caf50024922e56c323e365cf2b7a8590b1c7616326eed",
+        "retrieved_at_utc": "2026-10-26T11:04:18.419703+00:00",
+        "scope": "Five current daily OHLCV values; third-party Sina, not CSI official. Numeric volume agreement is not an explicit vendor-unit declaration. No TURNOVER field supplied by Sina."
+      },
+      "official_CSI_partial_comparison": {
+        "dates": [
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23"
+        ],
+        "days": 4,
+        "fields": {
+          "open": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "high": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "low": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "close": {
+            "max_abs_difference": 0.0,
+            "tolerance": 0.011,
+            "passed": true
+          },
+          "volume": {
+            "max_abs_difference": 0.0,
+            "tolerance": 100,
+            "passed": true
+          }
+        },
+        "passed": true
+      },
+      "official_CSI_required_day_present": false,
+      "research_only": true,
+      "formal_official_current_day_certified": false,
+      "acceptance_scope": "194 verified 2026 session labels; recent five-day long/short/Sina OHLCV agreement. Official CSI confirms four available days but has not published Oct26. Earlier history values and turnover definition are not certified."
+    }
+  ],
+  "promoted_research_index_codes": [
+    "000300.SH",
+    "000852.SH"
+  ],
+  "research_index_backup": "D:\\动量策略\\_data_source_service\\state_backups\\cn_free_resume_20261026T110255Z",
+  "stable_evidence": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z",
+  "production_changed": false,
+  "production_approved": false,
+  "code_changed": false,
+  "remaining_limits": [
+    "CSI has not published Oct26 in the requested window; independent current-day acceptance uses Sina third-party.",
+    "VOLUME units are not explicitly declared by Wind; numeric five-day volume matches independent reference.",
+    "TURNOVER statistical scope remains blocked.",
+    "No full-history value certification or strategy backtest.",
+    "H11077 close-only candidate has all194 sessions and matching long/short, but independent Oct26 close absent; fixed H11077 index unchanged."
+  ],
+  "wind_receipts": [
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301257559501,
+      "retrieved_at_utc": "2026-10-26T11:02:55.595343+00:00",
+      "authenticated": true,
+      "attempt": 1,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "000300.SH",
+        "begin_date": "2026-10-26",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 851,
+      "sha256": "0c62399ac1e05bfff78ee352d001e6c2f44eda927c1a161a281de96300d68ce3",
+      "raw_file": "001_000300_SH_20261026_credit_and_day_probe_response.txt",
+      "parsed_file": "001_000300_SH_20261026_credit_and_day_probe_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301262128501,
+      "retrieved_at_utc": "2026-10-26T11:03:41.286224+00:00",
+      "authenticated": true,
+      "attempt": 1,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "000300.SH",
+        "begin_date": "2026-01-01",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 29618,
+      "sha256": "62d1890118637651a96c95eabf4960b9d9c86ebf9846e3be3d6b61987e807a80",
+      "raw_file": "001_000300_SH_long_response.txt",
+      "parsed_file": "001_000300_SH_long_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301262392502,
+      "retrieved_at_utc": "2026-10-26T11:03:43.925200+00:00",
+      "authenticated": true,
+      "attempt": 2,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "000300.SH",
+        "begin_date": "2026-10-20",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 1447,
+      "sha256": "c16f86abc638d67e79453beea05b7a2dc08530b1820472f601fda998418fcb17",
+      "raw_file": "002_000300_SH_short_response.txt",
+      "parsed_file": "002_000300_SH_short_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301262648503,
+      "retrieved_at_utc": "2026-10-26T11:03:46.485299+00:00",
+      "authenticated": true,
+      "attempt": 3,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "000852.SH",
+        "begin_date": "2026-01-01",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 29608,
+      "sha256": "cb323b3a8b6a9e39c161abaccbe97719b3a5ee49659f96144c687cc3e7b7f080",
+      "raw_file": "003_000852_SH_long_response.txt",
+      "parsed_file": "003_000852_SH_long_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301262863704,
+      "retrieved_at_utc": "2026-10-26T11:03:48.638006+00:00",
+      "authenticated": true,
+      "attempt": 4,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "000852.SH",
+        "begin_date": "2026-10-20",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 1447,
+      "sha256": "921f642272f2d4a2316795b6399ca03450f45531594aebbf0e7d66bb1f153ae8",
+      "raw_file": "004_000852_SH_short_response.txt",
+      "parsed_file": "004_000852_SH_short_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301278436701,
+      "retrieved_at_utc": "2026-10-26T11:06:24.367751+00:00",
+      "authenticated": true,
+      "attempt": 1,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-01-01",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 23277,
+      "sha256": "78deaffd6584069320d07cd6b999b2330557076d071bc258321e586a8cd79f7d",
+      "raw_file": "001_H11077_SH_long_response.txt",
+      "parsed_file": "001_H11077_SH_long_parsed.json"
+    },
+    {
+      "provider": "wind",
+      "server": "index_data",
+      "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+      "method": "tools/call",
+      "request_id": 179301278662602,
+      "retrieved_at_utc": "2026-10-26T11:06:26.626620+00:00",
+      "authenticated": true,
+      "attempt": 2,
+      "transport": "curl/Windows HTTPS",
+      "dns_override_used": false,
+      "source_mode": "LIVE_FRESH",
+      "tool": "get_index_kline",
+      "arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-10-20",
+        "end_date": "2026-10-26",
+        "period": "10",
+        "count": 0
+      },
+      "status": 200,
+      "bytes": 1164,
+      "sha256": "e090cf82ed5cca826c1c4dab51ce78382155d2579bcb21b67148adb5cfc1fcec",
+      "raw_file": "002_H11077_SH_short_response.txt",
+      "parsed_file": "002_H11077_SH_short_parsed.json"
+    }
+  ],
+  "independent_receipts": [
+    {
+      "provider": "CSI official",
+      "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000300&startDate=20261020&endDate=20261026",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:04:08.119170+00:00",
+      "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\000300_csi_raw.json",
+      "sha256": "604df2ffc9144b11118804045537d65587b84fd54a123095b82190ca4d2c3723",
+      "bytes": 1405,
+      "dates": [
+        "20261020",
+        "20261021",
+        "20261022",
+        "20261023"
+      ],
+      "required_day_present": false
+    },
+    {
+      "provider": "Sina third-party (existing formal endpoint; not CSI official)",
+      "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000300&scale=240&ma=no&datalen=10",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:04:11.567598+00:00",
+      "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\000300_sina_raw.json",
+      "sha256": "de4a44af24f174db892c62045522e12952c2233a0f20631532b67c50dbb73e42",
+      "bytes": 1161,
+      "basis": "daily price index OHLC; native provider volume retained; no monetary amount field inferred",
+      "dates": [
+        "2026-10-13",
+        "2026-10-14",
+        "2026-10-15",
+        "2026-10-16",
+        "2026-10-19",
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-26"
+      ],
+      "required_day_present": true
+    },
+    {
+      "provider": "CSI official",
+      "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000852&startDate=20261020&endDate=20261026",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:04:17.094319+00:00",
+      "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\000852_csi_raw.json",
+      "sha256": "277914aa72b0bcb46d1a2e6431ecd6d12886300d4b6c85cec69558c1b72eeded",
+      "bytes": 1421,
+      "dates": [
+        "20261020",
+        "20261021",
+        "20261022",
+        "20261023"
+      ],
+      "required_day_present": false
+    },
+    {
+      "provider": "Sina third-party (existing formal endpoint; not CSI official)",
+      "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000852&scale=240&ma=no&datalen=10",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:04:18.419703+00:00",
+      "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\000852_sina_raw.json",
+      "sha256": "22dca71c95160f8c9b8caf50024922e56c323e365cf2b7a8590b1c7616326eed",
+      "bytes": 1161,
+      "basis": "daily price index OHLC; native provider volume retained; no monetary amount field inferred",
+      "dates": [
+        "2026-10-13",
+        "2026-10-14",
+        "2026-10-15",
+        "2026-10-16",
+        "2026-10-19",
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-26"
+      ],
+      "required_day_present": true
+    },
+    {
+      "provider": "CSI official",
+      "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H11077&startDate=20261020&endDate=20261026",
+      "status": 200,
+      "retrieved_at_utc": "2026-10-26T11:06:38.545513+00:00",
+      "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\H11077_csi_raw.json",
+      "sha256": "957f9f20967b1b842437c9fe22c88d6a2db8f82999270d679eba8755945c4471",
+      "bytes": 1615,
+      "dates": [
+        "20261020",
+        "20261021",
+        "20261022",
+        "20261023"
+      ],
+      "required_day_present": false
+    }
+  ],
+  "H11077_close_only": {
+    "code": "H11077.SH",
+    "gate": "PARTIAL_INDEPENDENT_REFERENCE",
+    "required_fields": [
+      "TIME",
+      "MATCH(close)"
+    ],
+    "stock_OHLCV_guard_used": false,
+    "long_date_coverage": {
+      "expected_sessions": 194,
+      "observed": 194,
+      "first": "2026-01-05",
+      "last": "2026-10-26",
+      "missing": [],
+      "passed": true
+    },
+    "long_short_close": {
+      "days": 5,
+      "dates": [
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23",
+        "2026-10-26"
+      ],
+      "max_abs_difference": 0.0,
+      "tolerance": 0.011,
+      "passed": true
+    },
+    "new_official_reference": {
+      "days": 4,
+      "dates": [
+        "2026-10-20",
+        "2026-10-21",
+        "2026-10-22",
+        "2026-10-23"
+      ],
+      "max_abs_close_difference": 0.0028,
+      "passed_on_available_days": true,
+      "current_day_present": false,
+      "missing_days": [
+        "2026-10-26"
+      ],
+      "receipt": {
+        "provider": "CSI official",
+        "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H11077&startDate=20261020&endDate=20261026",
+        "status": 200,
+        "retrieved_at_utc": "2026-10-26T11:06:38.545513+00:00",
+        "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\H11077_csi_raw.json",
+        "sha256": "957f9f20967b1b842437c9fe22c88d6a2db8f82999270d679eba8755945c4471",
+        "bytes": 1615,
+        "dates": [
+          "20261020",
+          "20261021",
+          "20261022",
+          "20261023"
+        ],
+        "required_day_present": false
+      }
+    },
+    "old_official_reference_reused": {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\conflict_investigation\\independent\\csi_H11077_full.json",
+      "sha256": "0adfac13b4f83c3f958546a2c5614156dea8f347616f9afe65407e39b0ec8dd8",
+      "days": 193,
+      "max_abs_close_difference": 0.005,
+      "passed": true
+    },
+    "old_Wind_98day_sample_reused": {
+      "days": 98,
+      "max_abs_close_difference": 0.0,
+      "passed": true
+    },
+    "latest_close": "192.9357",
+    "mapping_correction": {
+      "source": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+      "source_sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+      "first_line": 1568,
+      "last_line": 1585,
+      "snippet": "def _csindex_detail_page_code(index_code):\n    special = {'H20955': '930955', 'H30269': '930769', 'H11077': '931077'}\n    if index_code in special:\n        return special[index_code]\n    if index_code.startswith('H'):\n        body = index_code[1:]\n        if body.isdigit():\n            return body.zfill(6)\n    return index_code\n\ndef _fetch_cn_csindex(index_code, _max_retries=3):\n    effective_retries = 1 if _get_csindex_consecutive_fails() >= 2 else _max_retries\n    detail_code = _csindex_detail_page_code(index_code)\n    detail_url = f'https://www.csindex.com.cn/indices/index-detail/{detail_code}'\n    url = f\"https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={index_code}&startDate=20050101&endDate={(datetime.now() + timedelta(days=30)).strftime('%Y%m%d')}\"\n    doc_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8', 'sec-ch-ua': '\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '\"Windows\"', 'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1', 'Upgrade-Insecure-Requests': '1'}\n    api_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Referer': detail_url, 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8', 'sec-ch-ua': '\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '\"Windows\"', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Site': 'same-origin', 'X-Requested-With': 'XMLHttpRequest'}\n    last_err = None",
+      "conclusion": "H11077->931077 applies to detail_url/Referer only; actual perf API indexCode remains original H11077."
+    },
+    "prior_statement_corrected": "Earlier claim that formal market-data API replaces H11077 with931077 was incorrect. Only the detail page and Referer use931077. Perf API remains indexCode=H11077.",
+    "index_updated": false,
+    "production_approved": false,
+    "remaining": "Independent official Oct26 close is absent; no stale fill or current-day independent certification. Root owns close-only checker/integration.",
+    "wind_attempts": [
+      {
+        "window": "long",
+        "receipt": {
+          "provider": "wind",
+          "server": "index_data",
+          "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+          "method": "tools/call",
+          "request_id": 179301278436701,
+          "retrieved_at_utc": "2026-10-26T11:06:24.367751+00:00",
+          "authenticated": true,
+          "attempt": 1,
+          "transport": "curl/Windows HTTPS",
+          "dns_override_used": false,
+          "source_mode": "LIVE_FRESH",
+          "tool": "get_index_kline",
+          "arguments": {
+            "windcode": "H11077.SH",
+            "begin_date": "2026-01-01",
+            "end_date": "2026-10-26",
+            "period": "10",
+            "count": 0
+          },
+          "status": 200,
+          "bytes": 23277,
+          "sha256": "78deaffd6584069320d07cd6b999b2330557076d071bc258321e586a8cd79f7d",
+          "raw_file": "001_H11077_SH_long_response.txt",
+          "parsed_file": "001_H11077_SH_long_parsed.json"
+        },
+        "rows": 194,
+        "first": "2026-01-05T00:00:00.000+08:00",
+        "last": "2026-10-26T00:00:00.000+08:00"
+      },
+      {
+        "window": "short",
+        "receipt": {
+          "provider": "wind",
+          "server": "index_data",
+          "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+          "method": "tools/call",
+          "request_id": 179301278662602,
+          "retrieved_at_utc": "2026-10-26T11:06:26.626620+00:00",
+          "authenticated": true,
+          "attempt": 2,
+          "transport": "curl/Windows HTTPS",
+          "dns_override_used": false,
+          "source_mode": "LIVE_FRESH",
+          "tool": "get_index_kline",
+          "arguments": {
+            "windcode": "H11077.SH",
+            "begin_date": "2026-10-20",
+            "end_date": "2026-10-26",
+            "period": "10",
+            "count": 0
+          },
+          "status": 200,
+          "bytes": 1164,
+          "sha256": "e090cf82ed5cca826c1c4dab51ce78382155d2579bcb21b67148adb5cfc1fcec",
+          "raw_file": "002_H11077_SH_short_response.txt",
+          "parsed_file": "002_H11077_SH_short_parsed.json"
+        },
+        "rows": 5,
+        "first": "2026-10-20T00:00:00.000+08:00",
+        "last": "2026-10-26T00:00:00.000+08:00"
+      }
+    ]
+  }
+}

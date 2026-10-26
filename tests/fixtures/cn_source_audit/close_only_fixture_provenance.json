@@ -1,0 +1,32 @@
+{
+  "h11077_long_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\H11077_probes\\001_H11077_SH_long_parsed.json",
+    "sha256": "843f762e22553a9aea1905293627348000a6d749b65fd7ed81099db69217b7f7"
+  },
+  "h11077_short_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\H11077_probes\\002_H11077_SH_short_parsed.json",
+    "sha256": "8595203d526bfee9339ab90afe97e18b35d927ff12fe7c6715776a28b650a762"
+  },
+  "hs300_long_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\range_probes\\001_000300_SH_long_parsed.json",
+    "sha256": "7be187a326ee3fbffd5c3f676bbef67705bb3d8650d9416cd632c8d26e56c7fa"
+  },
+  "hs300_short_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\range_probes\\002_000300_SH_short_parsed.json",
+    "sha256": "f154b83485bd65a026ede769908f07de5225fff79d8e380708256a5c3dc5aaf7"
+  },
+  "h11077_official_193days_20261023.json": {
+    "source": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\conflict_investigation\\independent\\csi_H11077_full.json",
+    "source_sha256": "0adfac13b4f83c3f958546a2c5614156dea8f347616f9afe65407e39b0ec8dd8",
+    "transformation": "Only original 2026 records selected; no values changed",
+    "subset_sha256": "e8449dd5b2ab97e54066c8daf4d6b0b6e2a812ce31e2f42bab076ad8fb02acd5"
+  },
+  "hs300_sina_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\000300_sina_raw.json",
+    "sha256": "de4a44af24f174db892c62045522e12952c2233a0f20631532b67c50dbb73e42"
+  },
+  "sessions_through_20261026.json": {
+    "source": "D:\\动量策略\\_data_source_service\\calendars\\xshg_2026_sessions.json",
+    "transformation": "Official SSE rule calendar filtered through cutoff only"
+  }
+}

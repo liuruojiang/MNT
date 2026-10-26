@@ -374,7 +374,7 @@
             "000852",
             "000905",
             "000300",
-            "H11077.SH / CSI 931077"
+            "H11077.SH / CSI H11077"
           ],
           "fields": [
             "session_date",
@@ -386,10 +386,10 @@
           ],
           "unit_basis": "Price-index points; bond-index points; shares for volume, not monetary turnover",
           "instrument_field_overrides": {
-            "H11077.SH / CSI 931077": {
+            "H11077.SH / CSI H11077": {
               "required_fields": ["session_date", "close"],
               "not_required_by_formal_bond_leg": ["open", "high", "low", "share_volume", "turnover"],
-              "mapping_status": "H11077/931077 equivalence and full history remain uncertified"
+              "mapping_status": "CSI market-data indexCode=H11077; 931077 only detail-page/Referer; earlier full history and independent current close not fully certified"
             }
           },
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",

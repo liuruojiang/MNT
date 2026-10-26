@@ -11,7 +11,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 from source_audit.wind import (WindClient, WindIntervalConflict, archive_payload,
-                               audit_asset, amount_frame, validate_option_chain_result, merge_incremental)
+                               audit_asset, audit_bond_close, check_sina_attestation,
+                               amount_frame, validate_option_chain_result, merge_incremental)
 
 FIX = ROOT / 'tests/fixtures/v80_verified_data_20261025'
 LONG = json.loads((FIX / 'wind_bad_long_tail.json').read_text(encoding='utf-8'))
@@ -299,3 +300,181 @@ def test_known_interval_conflict_cannot_clear_on_a_new_same_provider_agreement(t
     report=json.loads(next((tmp_path/'outputs').glob('*/report.json')).read_text(encoding='utf-8'))
     assert report['assets'][0]['gate']=='BLOCKED' and report['assets'][0]['known_quarantine']
     assert not list((tmp_path/'outputs').glob('*/*research_only_ohlcv.csv'))
+
+
+CLOSE_FIX = ROOT / 'tests/fixtures/cn_source_audit'
+BOND_LONG = json.loads((CLOSE_FIX / 'h11077_long_20261026.json').read_text(encoding='utf-8'))
+BOND_SHORT = json.loads((CLOSE_FIX / 'h11077_short_20261026.json').read_text(encoding='utf-8'))
+BOND_REF = json.loads((CLOSE_FIX / 'h11077_official_193days_20261023.json').read_text(encoding='utf-8'))
+BOND_SESSIONS = pd.to_datetime(json.loads((CLOSE_FIX / 'sessions_through_20261026.json').read_text(encoding='utf-8'))['sessions'])
+
+
+def bond_audit(long=None, short=None, reference=None, **kwargs):
+    return audit_bond_close('H11077.SH', BOND_LONG if long is None else long,
+        BOND_SHORT if short is None else short, sessions=kwargs.pop('sessions', BOND_SESSIONS),
+        start='2026-01-01', end=kwargs.pop('end', '2026-10-26'),
+        calendar_source='https://www.sse.com.cn/disclosure/dealinstruc/closed/',
+        independent_calendar=kwargs.pop('independent_calendar', True),
+        reference_payload=BOND_REF if reference is None else reference, **kwargs)
+
+
+def test_real_bond_close_without_equity_volume_is_partial_not_unsupported():
+    result, data = bond_audit()
+    assert data is None and result['gate'] == 'PARTIAL_INDEPENDENT_REFERENCE'
+    assert result['rows'] == 194 and result['last'] == '2026-10-26'
+    assert result['independent_close_validation']['available_checked_sessions'] == 193
+    assert result['independent_close_validation']['missing_recent_dates'] == ['2026-10-26']
+    assert result['amount_gate'] == 'NOT_REQUIRED_BY_FORMAL_BOND_LEG'
+    assert result['production_approved'] is False
+
+
+def mutate_bond(payload, mutate):
+    value = copy.deepcopy(payload)
+    body = json.loads(value['result']['content'][0]['text'])
+    mutate(body['data'])
+    value['result']['content'][0]['text'] = json.dumps(body)
+    return value
+
+
+@pytest.mark.parametrize('case', ['boolean', 'zero', 'nan', 'duplicate', 'missing_day', 'conflict'])
+def test_close_only_rejects_invalid_or_conflicting_real_candidate_mutations(case):
+    def mutate(data):
+        col = [c['name'] for c in data['columns']].index('MATCH')
+        if case == 'duplicate': data['rows'].append(copy.deepcopy(data['rows'][-1]))
+        elif case == 'missing_day': data['rows'].pop()
+        else: data['rows'][-1][col] = {'boolean': True, 'zero': '0', 'nan': 'NaN', 'conflict': '999'}[case]
+    result, data = bond_audit(short=mutate_bond(BOND_SHORT, mutate))
+    assert result['gate'] == 'BLOCKED' and data is None
+
+
+def test_close_only_rejects_same_receipt_and_missing_calendar():
+    short = copy.deepcopy(BOND_SHORT)
+    short['result']['_meta']['requestId'] = BOND_LONG['result']['_meta']['requestId']
+    assert bond_audit(short=short)[0]['gate'] == 'BLOCKED'
+    assert bond_audit(independent_calendar=False)[0]['gate'] == 'BLOCKED'
+
+
+def test_close_only_rejects_wrong_reference_identity_and_old_value_revision():
+    ref = copy.deepcopy(BOND_REF)
+    ref['data'][0]['indexCode'] = '931077'  # Detail-page code cannot become market-data identity.
+    assert bond_audit(reference=ref)[0]['gate'] == 'BLOCKED'
+    ref = copy.deepcopy(BOND_REF)
+    ref['data'][0]['close'] += 1
+    assert bond_audit(reference=ref)[0]['gate'] == 'BLOCKED'
+
+
+def test_close_only_never_reuses_oct26_candidate_for_future_cutoff():
+    sessions = BOND_SESSIONS.append(pd.DatetimeIndex(['2026-10-27']))
+    result, data = bond_audit(sessions=sessions, end='2026-10-27')
+    assert result['gate'] == 'BLOCKED' and data is None
+
+
+def test_complete_real_previous_cutoff_close_reference_can_return_research_candidate():
+    long = mutate_bond(BOND_LONG, lambda d: d['rows'].pop())
+    short = mutate_bond(BOND_SHORT, lambda d: d['rows'].pop())
+    result, data = bond_audit(long=long, short=short, sessions=BOND_SESSIONS[:-1], end='2026-10-23', tail_sessions=4)
+    assert result['gate'] == 'INDEPENDENT_CLOSE_OVERLAP_CHECKED'
+    assert data is not None and list(data.columns) == ['close']
+    assert result['production_approved'] is False
+
+
+def test_partial_bond_candidate_does_not_leak_into_later_asset_index_persistence(tmp_path, monkeypatch):
+    import audit_cn_sources as cli
+    candidate = tmp_path / 'candidate'; candidate.mkdir()
+    for name, payload, begin in [('long', BOND_LONG, '2026-01-01'), ('short', BOND_SHORT, '2026-10-20')]:
+        folder = tmp_path / name; folder.mkdir(); path = create_archive(folder, payload)
+        for suffix in ['parsed.json', 'response.txt', 'receipt.json']:
+            (candidate / (name + '_' + suffix)).write_bytes((folder / ('test_' + suffix)).read_bytes())
+        receipt = candidate / (name + '_receipt.json')
+        value = json.loads(receipt.read_text()); value['arguments'] = {'windcode': 'H11077.SH', 'begin_date': begin, 'end_date': '2026-10-26'}
+        receipt.write_text(json.dumps(value))
+    long_index, short_index = tmp_path / 'long_index.json', tmp_path / 'short_index.json'
+    long_index.write_text(json.dumps({'schema': 1, 'kind': 'long', 'entries': {}}))
+    short_index.write_text(json.dumps({'schema': 1, 'kind': 'short', 'entries': {}}))
+    refdir = tmp_path / 'ref'; refdir.mkdir(); (refdir / 'H11077.json').write_text(json.dumps(BOND_REF))
+    monkeypatch.setattr(cli, 'ASSETS', [a for a in cli.ASSETS if a['code'] == 'H11077.SH'] + [{'code': '000300.SH', 'kind': 'index', 'archive': 'missing_after_partial'}])
+    monkeypatch.setattr(cli, 'WindClient', lambda *a, **k: pytest.fail('No new network calls'))
+    args = type('Args', (), {'output': tmp_path / 'outputs', 'sessions': CLOSE_FIX / 'sessions_through_20261026.json',
+        'start': '2026-01-01', 'cutoff': '2026-10-26', 'symbols': '', 'mode': 'archive', 'credential': None,
+        'candidate_archive': candidate, 'max_requests': 1, 'dns_override': None, 'offline_archive': tmp_path,
+        'short_archive': None, 'short_index': short_index, 'long_index': long_index, 'reference_dir': refdir, 'tail_sessions': 5})()
+    assert cli.run(args) == 2
+    assert json.loads(short_index.read_text())['entries'] == {}
+    assert json.loads(long_index.read_text())['entries'] == {}
+    report = json.loads(next((tmp_path / 'outputs').glob('*/report.json')).read_text(encoding='utf-8'))
+    assert report['requests'] == 0 and report['assets'][0]['gate'] == 'PARTIAL_INDEPENDENT_REFERENCE'
+    assert not list((tmp_path / 'outputs').glob('*/*research_only_close.csv'))
+
+
+def sina_case(tmp_path):
+    paths, payloads, sources = {}, {}, {}
+    attestation = {'cutoff': '2026-10-26', 'entries': {'000300.SH': {}}}
+    entry = attestation['entries']['000300.SH']
+    for label in ['long', 'short']:
+        directory = tmp_path / label; directory.mkdir()
+        payload = json.loads((CLOSE_FIX / ('hs300_' + label + '_20261026.json')).read_text(encoding='utf-8'))
+        paths[label] = create_archive(directory, payload)
+        payloads[label], sources[label] = archive_payload(paths[label])
+        entry[label + '_raw_sha256'] = sources[label]['raw_sha256']
+        entry[label + '_parsed_sha256'] = hashlib.sha256(paths[label].read_bytes()).hexdigest()
+    raw = tmp_path / 'sina.json'; raw.write_bytes((CLOSE_FIX / 'hs300_sina_20261026.json').read_bytes())
+    entry.update(reference_url='https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000300&scale=240&datalen=10',
+        reference_raw_path=str(raw), reference_raw_sha256=hashlib.sha256(raw.read_bytes()).hexdigest())
+    path = tmp_path / 'attestation.json'; path.write_text(json.dumps(attestation))
+    return path, paths, payloads, sources, raw
+
+
+def test_real_sina_attestation_recomputes_five_days_and_preserves_provider(tmp_path):
+    path, _, payloads, sources, _ = sina_case(tmp_path)
+    result = check_sina_attestation('000300.SH', payloads['long'], payloads['short'], sources['long'], sources['short'],
+        attestation_path=path, sessions=BOND_SESSIONS, cutoff='2026-10-26')
+    assert result['status'] == 'THIRD_PARTY_INDEPENDENT_OVERLAP_CHECKED'
+    assert result['provider'] == 'sina' and result['official_CSI'] is False
+    assert len(result['dates']) == 5 and result['comparisons']['long']['volume']['max_abs_difference'] == 0
+
+
+@pytest.mark.parametrize('change', ['cutoff', 'independent_raw', 'wind_parsed', 'provider_url', 'value_conflict'])
+def test_sina_attestation_cannot_follow_changed_responses_or_future_cutoff(tmp_path, change):
+    path, paths, payloads, sources, raw = sina_case(tmp_path)
+    cutoff = '2026-10-26'
+    if change == 'cutoff': cutoff = '2026-10-27'
+    elif change == 'independent_raw': raw.write_text('[]')
+    elif change == 'wind_parsed': paths['long'].write_text('{}')
+    elif change == 'provider_url':
+        data = json.loads(path.read_text()); data['entries']['000300.SH']['reference_url'] = 'https://www.csindex.com.cn/fake'
+        path.write_text(json.dumps(data))
+    else:
+        rows = json.loads(raw.read_text()); rows[-1]['close'] = str(float(rows[-1]['close']) + 1)
+        raw.write_text(json.dumps(rows))
+        data = json.loads(path.read_text()); data['entries']['000300.SH']['reference_raw_sha256'] = hashlib.sha256(raw.read_bytes()).hexdigest()
+        path.write_text(json.dumps(data))
+    result = check_sina_attestation('000300.SH', payloads['long'], payloads['short'], sources['long'], sources['short'],
+        attestation_path=path, sessions=BOND_SESSIONS, cutoff=cutoff)
+    assert result['status'] == ('NOT_APPLICABLE' if change == 'cutoff' else 'FAILED')
+
+
+@pytest.mark.parametrize('corruption', ['hash_mismatch', 'self_consistent_close_conflict'])
+def test_applicable_independent_failure_blocks_cli_csv_and_both_index_promotions(tmp_path, monkeypatch, corruption):
+    import audit_cn_sources as cli
+    path, paths, _, _, raw = sina_case(tmp_path)
+    rows = json.loads(raw.read_text()); rows[-1]['close'] = str(float(rows[-1]['close']) + 1)
+    raw.write_text(json.dumps(rows))
+    if corruption == 'self_consistent_close_conflict':
+        value = json.loads(path.read_text()); value['entries']['000300.SH']['reference_raw_sha256'] = hashlib.sha256(raw.read_bytes()).hexdigest()
+        path.write_text(json.dumps(value))
+    long_index, short_index = tmp_path / 'long_index.json', tmp_path / 'short_index.json'
+    long_index.write_text(json.dumps({'schema': 1, 'kind': 'long', 'entries': {'000300.SH': {'kind': 'index', 'parsed_path': str(paths['long']), 'marker': 'DO_NOT_REPLACE_ON_FAILED_ACCEPTANCE'}}}))
+    short_index.write_text(json.dumps({'schema': 1, 'kind': 'short', 'entries': {'000300.SH': {'kind': 'index', 'cutoff': '2026-10-26', 'short_start': '2026-10-20', 'parsed_path': str(paths['short']), 'marker': 'DO_NOT_REPLACE_ON_FAILED_ACCEPTANCE'}}}))
+    before = long_index.read_bytes(), short_index.read_bytes()
+    monkeypatch.setattr(cli, 'WindClient', lambda *a, **k: pytest.fail('No new network requests'))
+    args = type('Args', (), {'output': tmp_path / 'outputs', 'sessions': CLOSE_FIX / 'sessions_through_20261026.json',
+        'start': '2026-01-01', 'cutoff': '2026-10-26', 'symbols': '000300.SH', 'mode': 'archive', 'credential': None,
+        'max_requests': 1, 'dns_override': None, 'offline_archive': None, 'short_archive': None,
+        'short_index': short_index, 'long_index': long_index, 'reference_dir': None, 'tail_sessions': 5,
+        'independent_attestation': path})()
+    assert cli.run(args) == 2
+    report = json.loads(next((tmp_path / 'outputs').glob('*/report.json')).read_text(encoding='utf-8'))
+    assert report['assets'][0]['gate'] == 'BLOCKED'
+    assert report['assets'][0]['independent_followup']['status'] == 'FAILED'
+    assert not list((tmp_path / 'outputs').glob('*/*research_only_ohlcv.csv'))
+    assert (long_index.read_bytes(), short_index.read_bytes()) == before

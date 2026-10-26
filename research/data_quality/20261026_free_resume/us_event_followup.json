@@ -1,0 +1,247 @@
+{
+  "schema_version": "1.0",
+  "mode": "FREE_PUBLIC_ISSUER_EXACT_EVENT_FOLLOWUP",
+  "as_of": "2026-10-26",
+  "summary": {
+    "events": 7,
+    "new_direct_cash_confirmations": 1,
+    "still_blocked_events": 6,
+    "wind_api_calls": 0,
+    "credits_spent": 0,
+    "paid_purchase": false
+  },
+  "qqq_evidence": {
+    "url": "https://www.invesco.com/us/en/financial-products/etfs/invesco-qqq-trust-series-1.html",
+    "method": "Edge public DOM read; Individual Investor role; View since inception then View all opens Distributions dialog",
+    "artifact": "qqq_issuer_browser_table.csv",
+    "sha256": "19f1511e9fdcdda8e3bd427e67623f24e6f62fcef3f6e391a536b7b5f9d6188f",
+    "events": 89,
+    "unique_ex_dates": 89,
+    "first_ex_date": "2003-12-24",
+    "last_ex_date": "2026-09-21",
+    "raw_table_cells_preserved": true,
+    "whole_page_html_archived": false,
+    "observed_date": "2026-10-26",
+    "exact_2009_record": {
+      "Ex-date": "12/18/2009",
+      "Record date": "12/22/2009",
+      "Pay date": "12/31/2009",
+      "$/Share": "0.07760",
+      "Ordinary income": "0.07760",
+      "Short term gains": "0.00000",
+      "Long term gains": "0.00000",
+      "Return of capital": "0.00000",
+      "Liquidation distribution": "--"
+    },
+    "other_disputed_rows_present": {
+      "06/25/2010": false,
+      "12/27/2011": false
+    },
+    "absence_is_not_explicit_zero": true,
+    "generic_issuer_tax_characterization_disclaimer_retained": true
+  },
+  "efa_evidence": {
+    "url": "https://www.blackrock.com/varnish-api/blk-one01-product-data/product-data/api/v1/get-fund-document?appType=PRODUCT_PAGE&appSubType=ISHARES&targetSite=us-ishares&locale=en_US&portfolioId=239623&component=fundDownload&userType=individual",
+    "artifact": "efa_issuer_export.xml",
+    "sha256": "3531a7bc2a710af3ccb592f933b7f53fa70e880009bb831567d3ed70a31ab77f",
+    "status": 200,
+    "strict_parse_after_escaping_bare_ampersands": 6,
+    "original_bytes_unmodified": true,
+    "sheets": {
+      "Historical": {
+        "row_count": 6342,
+        "header": [
+          "As Of",
+          "NAV per Share",
+          "Ex-Dividends",
+          "Shares Outstanding",
+          "Non-FV NAV"
+        ],
+        "records": [
+          [
+            "Dec 22, 2003",
+            "43.672146",
+            "0.52251",
+            "115800000",
+            "--"
+          ],
+          [
+            "Dec 16, 2003",
+            "43.577526",
+            "--",
+            "114000000",
+            "--"
+          ]
+        ]
+      },
+      "Distributions": {
+        "row_count": 47,
+        "header": [
+          "Record Date",
+          "Ex-Date",
+          "Payable Date",
+          "Total Distribution",
+          "Income",
+          "ST Cap Gains",
+          "LT Cap Gains",
+          "Return of Capital"
+        ],
+        "records": [
+          [
+            "Dec 24, 2003",
+            "Dec 22, 2003",
+            "Jan 02, 2004",
+            "0.52251",
+            "--",
+            "0",
+            "0",
+            "0"
+          ]
+        ]
+      }
+    },
+    "daily_dash_not_interpreted_as_zero": true,
+    "issuer_fiscal_total_upper_bound_usd": "0.525",
+    "confirmed_dec22_cash_usd": "0.52251",
+    "remaining_fiscal_cash_upper_bound_usd": "0.00249",
+    "yahoo_dec16_amount_usd": "0.156667",
+    "yahoo_dec16_specific_amount_disproven_by_bound": true,
+    "canonical_dec16_amount": null,
+    "bound_source": "research/data_quality/20261026_followup/efa_followup.json"
+  },
+  "vanguard_scope": {
+    "method": "Read-only Edge Price & distributions UI; no serviceAPI or credentials",
+    "verified_ui_fields": [
+      "TYPE",
+      "$/SHARE",
+      "PAYABLE DATE",
+      "RECORD DATE",
+      "EX-DIVIDEND DATE"
+    ],
+    "explicit_limit": "view or export up to ten years of distributions for this fund",
+    "VGIT": {
+      "url": "https://advisors.vanguard.com/investments/products/vgit/vanguard-intermediate-term-treasury-etf",
+      "earliest_ui_start": "2016-11-07",
+      "end": "2026-10-05",
+      "displayed_events": 125
+    },
+    "VEA": {
+      "url": "https://advisors.vanguard.com/investments/products/vea/vanguard-ftse-developed-markets-etf",
+      "earliest_ui_start": "2016-12-29",
+      "end": "2026-09-22"
+    },
+    "target_events_outside_verified_range": [
+      "VEA_2008-03-12",
+      "VGIT_2013-12-24",
+      "VGIT_2015-11-02"
+    ],
+    "export_attempt": "Download wait timed out; no inspectable CSV path returned; export success not claimed",
+    "direct_static_chunk_404": "Browser page loaded; old static chunk URLs returned404 and were not retried",
+    "evidence_extending_coverage_before_2016": false
+  },
+  "cases": [
+    {
+      "id": "QQQ_2009-12-18",
+      "block_released": true,
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "canonical_cash_usd_per_share": "0.07760",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Issuer full-history89event DOM table; exact2009 row0.07760;2010-06-25 and2011-12-27 absent, not automatically zero",
+      "verified_field_service": "Invesco current public product Distributions: ex/record/pay dates,total per-share cash,ordinary income,ST/LT gains,ROC,liquidation",
+      "minimum_remaining_material": null
+    },
+    {
+      "id": "QQQ_2010-06-25",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Issuer full-history89event DOM table; exact2009 row0.07760;2010-06-25 and2011-12-27 absent, not automatically zero",
+      "verified_field_service": "Invesco current public product Distributions: ex/record/pay dates,total per-share cash,ordinary income,ST/LT gains,ROC,liquidation",
+      "minimum_remaining_material": "Final issuer/trustee complete distribution statement explicitly resolving the disputed extra event, including special distributions and corrections; current-table absence alone is not explicit zero"
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Issuer full-history89event DOM table; exact2009 row0.07760;2010-06-25 and2011-12-27 absent, not automatically zero",
+      "verified_field_service": "Invesco current public product Distributions: ex/record/pay dates,total per-share cash,ordinary income,ST/LT gains,ROC,liquidation",
+      "minimum_remaining_material": "Final issuer/trustee complete distribution statement explicitly resolving the disputed extra event, including special distributions and corrections; current-table absence alone is not explicit zero"
+    },
+    {
+      "id": "EFA_2003-12-16",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Direct issuer original XML daily2003-12-16 Ex-Dividends-- and2003-12-22 .52251; Yahoo.156667 specifically disproven by issuer fiscal upperbound .525 minus known .52251",
+      "vendor_amount_rejected": {
+        "provider": "yahoo",
+        "amount": "0.156667",
+        "basis": "exceeds remaining fiscal cash upperbound0.00249"
+      },
+      "verified_field_service": "BlackRock/iShares official Excel export: dated NAV/Ex-Dividends and ex/record/pay/total/income/ST/LT/ROC distribution sheet, full history to2001",
+      "minimum_remaining_material": "Issuer/trustee explicit Dec16 cash/no-event record, with final status and pre/post2005 split basis; -- is not numeric0"
+    },
+    {
+      "id": "VEA_2008-03-12",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Vanguard public UI/CSV documented ten-year window starts2016; target outside coverage; prior SEC period constraints reused, not rerun",
+      "verified_field_service": "Vanguard public Price & distributions supplies type,per-share amount,pay/record/ex dates, but verified historical coverage only2016 onward",
+      "minimum_remaining_material": "Final issuer/trustee or DTC/broker event statement for VEA_2008-03-12, explicit ETF class/CUSIP92206C706 for VGIT, dates,cash and income/ST/LT/ROC breakdown; no estimates"
+    },
+    {
+      "id": "VGIT_2013-12-24",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Vanguard public UI/CSV documented ten-year window starts2016; target outside coverage; prior SEC period constraints reused, not rerun",
+      "verified_field_service": "Vanguard public Price & distributions supplies type,per-share amount,pay/record/ex dates, but verified historical coverage only2016 onward",
+      "minimum_remaining_material": "Final issuer/trustee or DTC/broker event statement for VGIT_2013-12-24, explicit ETF class/CUSIP92206C706 for VGIT, dates,cash and income/ST/LT/ROC breakdown; no estimates"
+    },
+    {
+      "id": "VGIT_2015-11-02",
+      "block_released": false,
+      "data_gate": "BLOCK",
+      "canonical_cash_usd_per_share": null,
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "new_evidence": "Vanguard public UI/CSV documented ten-year window starts2016; target outside coverage; prior SEC period constraints reused, not rerun",
+      "verified_field_service": "Vanguard public Price & distributions supplies type,per-share amount,pay/record/ex dates, but verified historical coverage only2016 onward",
+      "minimum_remaining_material": "Final issuer/trustee or DTC/broker event statement for VGIT_2015-11-02, explicit ETF class/CUSIP92206C706 for VGIT, dates,cash and income/ST/LT/ROC breakdown; no estimates"
+    }
+  ],
+  "canonical_update": {
+    "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261026_source_service\\us_adjudications.json",
+    "backup": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\us_adjudications_before_qqq2009.json",
+    "before_sha256": "1da139cb50a0136fe8f0034764205f6618fb6d166b45764d3ee1df9081d7c194",
+    "after_sha256": "77031de855663b8bbf8b352e047993205324f44c61245ba218657cadf04be980",
+    "changed_ids": [
+      "QQQ_2009-12-18"
+    ]
+  },
+  "future_wind_work": "No Wind tool/field capability was invented or called; root must verify real official tool schemas and approve bounded free calls before use",
+  "guardrails": {
+    "dash_or_absence_not_zero": true,
+    "no_annual_constraint_self_promotion": true,
+    "no_vendor_market_requests": true,
+    "no_backtest": true,
+    "strategy_parameters_changed": false,
+    "production_changed": false,
+    "poe_deployed": false,
+    "credentials_accessed": false,
+    "external_messages_sent": false
+  }
+}

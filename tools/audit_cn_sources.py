@@ -11,7 +11,8 @@ from uuid import uuid4
 
 import pandas as pd
 
-from source_audit.wind import WindClient, audit_asset, archive_payload, write_json, merge_incremental, nested_data
+from source_audit.wind import (WindClient, audit_asset, audit_bond_close, check_sina_attestation,
+                               archive_payload, write_json, merge_incremental, nested_data)
 
 REPO = Path(__file__).resolve().parents[1]
 ASSETS = [
@@ -26,7 +27,7 @@ ASSETS = [
     {'code': '930955.CSI', 'kind': 'index', 'archive': 'lowvol_dividend_recent', 'requires_amount': False,
      'known_interval_quarantine': 'Known 2026-10-23 range-dependent OHLC/amount conflict: a new agreeing Wind probe alone cannot certify correction; independent resolution required'},
     {'code': 'H11077.SH', 'kind': 'index', 'archive': 'bond_H11077_SH_verified_code', 'requires_amount': False,
-     'unsupported_reason': 'Required recent close is available; earlier coverage and H11077/931077 formal identity equivalence remain uncertified. Equity volume is not required by this bond leg.'},
+     'close_only': True},
     {'code': '159915.SZ', 'kind': 'fund', 'archive': '159915_SZ_aftype0'},
     {'code': '159941.SZ', 'kind': 'fund', 'archive': '159941_SZ_aftype0'},
     {'code': '513030.SH', 'kind': 'fund', 'archive': 'germany_chunk_b'},
@@ -79,7 +80,7 @@ def reused_short(directory, cfg, end, begin):
         if args.get('windcode') == cfg['code'] and args.get('begin_date') == begin and args.get('end_date') == end:
             candidates.append((value.get('retrieved_at_utc', ''), path))
     if not candidates:
-        raise ValueError('No independent short-window attempt matches the requested code/dates')
+        raise ValueError('No archived range attempt matches requested code/dates; candidate missing or expired')
     receipt = max(candidates, key=lambda r: r[0])[1]
     # Selecting the latest attempt includes failed attempts; never silently
     # pick an earlier successful response after a newer failure.
@@ -194,7 +195,10 @@ def run(args):
         try:
             if cfg.get('unsupported_reason'):
                 raise ValueError(cfg['unsupported_reason'])
-            if args.mode == 'live':
+            candidate_archive = getattr(args, 'candidate_archive', None) if cfg.get('close_only') and args.mode != 'live' else None
+            if candidate_archive:
+                long, long_source = reused_short(candidate_archive, cfg, args.cutoff, args.start)
+            elif args.mode == 'live':
                 long = get_client().kline(code, cfg['kind'], args.start, args.cutoff, label=code + '_long')
                 long_source = live_provenance(client)
             elif code in long_index['entries']:
@@ -209,7 +213,10 @@ def run(args):
             short_start = str(sessions[-args.tail_sessions:].min().date())
             record = short_index['entries'].get(code)
             reused = False
-            if args.mode != 'live' and record and record.get('cutoff') == args.cutoff and record.get('short_start') == short_start and record.get('kind') == cfg['kind']:
+            if candidate_archive:
+                short, short_source = reused_short(candidate_archive, cfg, args.cutoff, short_start)
+                reused = True
+            elif args.mode != 'live' and record and record.get('cutoff') == args.cutoff and record.get('short_start') == short_start and record.get('kind') == cfg['kind']:
                 short, short_source = archive_payload(Path(record['parsed_path']))
                 reused = True
             elif args.mode != 'live' and args.short_archive:
@@ -230,22 +237,35 @@ def run(args):
                 raise ValueError('Independent short-window response not yet collected; long response cannot verify itself')
             if args.short_index:
                 short_source = pin_response(short_source, args.short_index.parent, code)
-            short_index['entries'][code] = {'code': code, 'kind': cfg['kind'], 'cutoff': args.cutoff,
-                                            'short_start': short_start, 'parsed_path': short_source['parsed_path'],
-                                            'raw_sha256': short_source['raw_sha256'], 'retrieved_at_utc': short_source.get('retrieved_at_utc')}
-            persist_index(args.short_index, short_index)
+            short_record = {'code': code, 'kind': cfg['kind'], 'cutoff': args.cutoff,
+                            'short_start': short_start, 'parsed_path': short_source['parsed_path'],
+                            'raw_sha256': short_source['raw_sha256'], 'retrieved_at_utc': short_source.get('retrieved_at_utc')}
             parent_hashes = {'long': long_source.get('raw_sha256') or long_source.get('derived_sha256'), 'short': short_source['raw_sha256']}
-            long, lineage = merge_incremental(long, short, code=code, kind=cfg['kind'], sessions=sessions,
-                                              start=args.start, end=args.cutoff, parent_hashes=parent_hashes)
             derived_path = None
+            lineage = None
+            if not cfg.get('close_only'):
+                long, lineage = merge_incremental(long, short, code=code, kind=cfg['kind'], sessions=sessions,
+                                                  start=args.start, end=args.cutoff, parent_hashes=parent_hashes)
             if lineage:
                 derived_path = output / (code.replace('.', '_') + '_derived_long.json')
                 write_json(derived_path, long)
-            result, checked = audit_asset(code, cfg['kind'], long, short, sessions=sessions, start=args.start, end=args.cutoff,
-                                           calendar_source=source, independent_calendar=independent,
-                                           reference_payload=reference_for(args.reference_dir, code), tail_sessions=args.tail_sessions)
+            if cfg.get('close_only'):
+                result, checked = audit_bond_close(code, long, short, sessions=sessions, start=args.start, end=args.cutoff,
+                    calendar_source=source, independent_calendar=independent,
+                    reference_payload=reference_for(args.reference_dir, code), tail_sessions=args.tail_sessions)
+            else:
+                result, checked = audit_asset(code, cfg['kind'], long, short, sessions=sessions, start=args.start, end=args.cutoff,
+                    calendar_source=source, independent_calendar=independent,
+                    reference_payload=reference_for(args.reference_dir, code), tail_sessions=args.tail_sessions)
             result.update(long_source=long_source, short_source=short_source, reused_completed_short=reused,
-                          derivation=lineage, needs_full_refresh=checked is None)
+                          derivation=lineage, needs_full_refresh=checked is None and result['gate'] != 'PARTIAL_INDEPENDENT_REFERENCE')
+            if not cfg.get('close_only') and getattr(args, 'independent_attestation', None):
+                result['independent_followup'] = check_sina_attestation(code, long, short, long_source, short_source,
+                    attestation_path=args.independent_attestation, sessions=sessions, cutoff=args.cutoff)
+                if result['independent_followup']['status'] == 'FAILED':
+                    result.update(observed_interval_gate=result['gate'], gate='BLOCKED',
+                                  reason='Applicable independent evidence failed: ' + result['independent_followup'].get('reason', 'unknown failure'))
+                    checked = None
             if (lineage or long_source.get('derived_path')) and checked is not None:
                 result['gate'] = 'INCREMENTAL_OVERLAP_CHECKED'
                 result['new_rows_second_independent_quote'] = False
@@ -261,7 +281,9 @@ def run(args):
                 result['acceptance_scope'] = 'Archived long range versus fresh short probe; not a newly downloaded full history'
             if checked is not None:
                 # Named as research data to prevent accidental production promotion.
-                checked.to_csv(output / (code.replace('.', '_') + '_research_only_ohlcv.csv'), index_label='date', encoding='utf-8-sig')
+                checked.to_csv(output / (code.replace('.', '_') + ('_research_only_close.csv' if cfg.get('close_only') else '_research_only_ohlcv.csv')), index_label='date', encoding='utf-8-sig')
+                short_index['entries'][code] = short_record
+                persist_index(args.short_index, short_index)
                 if derived_path:
                     if args.long_index:
                         stable = args.long_index.parent / 'wind_derived' / code.replace('.', '_') / (hashlib.sha256(derived_path.read_bytes()).hexdigest() + '.json')
@@ -306,6 +328,8 @@ def main():
     p.add_argument('--output', type=Path, default=REPO / 'data/cn_source_audit')
     p.add_argument('--offline-archive', type=Path)
     p.add_argument('--short-archive', type=Path, help='Explicit earlier short-probe response directory; original retrieval dates retained')
+    p.add_argument('--candidate-archive', type=Path, help='Explicit H11077 close-only long/short candidate receipts; partial references do not promote indexes')
+    p.add_argument('--independent-attestation', type=Path, help='Hash-bound Sina evidence; recomputed only for the matching responses and cutoff')
     p.add_argument('--short-index', type=Path, help='Persistent code/cutoff index; reuses completed probes without another request')
     p.add_argument('--long-index', type=Path, help='Persistent original/derived long datasets, each with source lineage')
     p.add_argument('--cutoff', required=True)

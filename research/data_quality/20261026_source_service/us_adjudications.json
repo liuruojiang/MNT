@@ -12,8 +12,8 @@
   "evidence_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications",
   "summary": {
     "events": 11,
-    "confirmed_cash_events": 4,
-    "unresolved_events": 7,
+    "confirmed_cash_events": 5,
+    "unresolved_events": 6,
     "unresolved_with_exchange_corroboration": 1,
     "global_gate": "REVIEW_REQUIRED"
   },
@@ -614,9 +614,56 @@
       "id": "QQQ_2009-12-18",
       "symbol": "QQQ",
       "ex_date": "2009-12-18",
-      "status": "UNRESOLVED",
-      "resolution": null,
-      "evidence": [],
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.07760",
+        "ex_date": "2009-12-18",
+        "record_date": "2009-12-22",
+        "pay_date": "2009-12-31",
+        "cash_basis": "direct issuer current historical $/Share; ordinary income0.07760; ST/LT/ROC displayed0.00000; liquidation displayed-- preserved as unspecified",
+        "source_record": {
+          "Ex-date": "12/18/2009",
+          "Record date": "12/22/2009",
+          "Pay date": "12/31/2009",
+          "$/Share": "0.07760",
+          "Ordinary income": "0.07760",
+          "Short term gains": "0.00000",
+          "Long term gains": "0.00000",
+          "Return of capital": "0.00000",
+          "Liquidation distribution": "--"
+        },
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "date_evidence": "explicit issuer ex/record/pay columns",
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2009-12-18"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "other dates",
+          "raw OHLCV",
+          "full adjusted series",
+          "strategy impact",
+          "PIT certification"
+        ]
+      },
+      "evidence": [
+        {
+          "url": "https://www.invesco.com/us/en/financial-products/etfs/invesco-qqq-trust-series-1.html",
+          "artifact": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\qqq_issuer_browser_table.csv",
+          "sha256": "19f1511e9fdcdda8e3bd427e67623f24e6f62fcef3f6e391a536b7b5f9d6188f",
+          "kind": "issuer_browser_dom_table",
+          "capture_record": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_source_free_resume_20261026\\us_events\\qqq_issuer_browser_record.json",
+          "capture_record_sha256": "a481f033ff729c4ac5806f22c788420029336ad547bb275355dca0474a6dbe65",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
       "frozen_observation": {
         "date": "2009-12-18",
         "flags": [
@@ -648,13 +695,11 @@
       ],
       "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
       "source_audit_cutoff": "2026-10-23",
-      "data_gate": "BLOCK",
+      "data_gate": "CASH_REFERENCE_ONLY",
       "allows_price_repair": false,
       "allows_series_promotion": false,
       "strategy_replayed_this_task": false,
-      "production_approved": false,
-      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
-      "required_evidence": "Contemporaneous Invesco/PowerShares final distribution notice or primary broker record, separating estimate/final amount."
+      "production_approved": false
     },
     {
       "id": "QQQ_2010-06-25",

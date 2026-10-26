@@ -1,0 +1,44 @@
+{
+  "status": "IMPLEMENTED_AND_VERIFIED_REVIEW_REQUIRED",
+  "created_at_utc": "2026-10-26T11:22:48.988997+00:00",
+  "new_network_requests": 0,
+  "new_shared_source_changes": [
+    "tools/source_audit/wind.py",
+    "tools/audit_cn_sources.py",
+    "tools/source_audit/project_requirements.json",
+    "tests/test_cn_source_audit.py"
+  ],
+  "tests": {
+    "command": "python -B -m pytest tests/test_cn_source_audit.py -q -p no:cacheprovider",
+    "passed": 41,
+    "counterexamples": [
+      "Partial independent reference returns no candidate and leaves both indexes unchanged",
+      "Boolean/nonpositive/NaN close, duplicate/missing sessions, reused receipt, wrong CSI code and old reference conflict reject",
+      "Future cutoff cannot use Oct26 H candidate",
+      "Sina attestation future cutoff is NOT_APPLICABLE",
+      "Current matching evidence with corrupted hash is FAILED and CLI BLOCKED with no CSV/index update",
+      "Self-consistent hashes with independent close+1 is FAILED and CLI BLOCKED with no CSV/index update"
+    ]
+  },
+  "latest_offline_integration_report": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\close_only_integration_runs\\20261026T112204Z_122839c4\\report.json",
+  "latest_offline_integration_requests": 0,
+  "code_sha256": {
+    "tools/source_audit/wind.py": "282638a5a097a56cc433b9b25a948b66a7a0c969b9512c49229c00da410fce1b",
+    "tools/audit_cn_sources.py": "c55826948d6231dd9c8b51257b9fb5d37cca99833b6e9adeaf2ea39ce54807f2",
+    "tools/source_audit/project_requirements.json": "5e396c647a591c9ef1b5c13b0969da26ab8c8076845d2130803a3fd48cae0787",
+    "tests/test_cn_source_audit.py": "1ea3dafaff8efde03c658bee5eb855d690ca211a58cbb39eaa9ba5962a586ff6"
+  },
+  "candidate_archive": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\H11077_probes",
+  "reference_dir": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent",
+  "independent_attestation": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\sina_overlap_attestation_20261026.json",
+  "stable_official_reference": {
+    "path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\H11077.json",
+    "sha256": "0adfac13b4f83c3f958546a2c5614156dea8f347616f9afe65407e39b0ec8dd8",
+    "original_receipt": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_free_resume_20261026T110255Z\\independent\\H11077_original_full_receipt.json",
+    "reference_scope": "Old unmodified official archive;193 sessions within requested2026 scope; missing Oct26"
+  },
+  "H11077_fixed_index_promoted": false,
+  "production_changed": false,
+  "committed": false,
+  "pushed": false
+}

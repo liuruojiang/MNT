@@ -59,6 +59,13 @@ def cn_run(config, output, mode, cutoff):
              '--start','2026-01-01','--sessions',str(calendar),'--max-requests',str(config['local_hourly_budgets']['wind'])]
     command += ['--short-index',str(root/'wind_short_index.json'),'--long-index',str(root/'wind_long_index.json')]
     command += ['--budget-store',str(root)]
+    # Frozen follow-up inputs carry their own code/cutoff/hash checks. They are
+    # evidence, never a fallback for a future date or a failed live request.
+    resumed=root/'wind_capability_evidence/cn_free_resume_20261026T110255Z'
+    for flag, path in [('--candidate-archive',resumed/'H11077_probes'),
+                       ('--reference-dir',resumed/'independent'),
+                       ('--independent-attestation',resumed/'sina_overlap_attestation_20261026.json')]:
+        if path.exists(): command += [flag,str(path)]
     proc=subprocess.run(command,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=1500)
     (output/'cn_runner.log').write_text(proc.stdout+'\n'+proc.stderr,encoding='utf-8')
     runs=sorted((output/'cn').glob('*/report.json'))
@@ -92,7 +99,7 @@ def render(report, output):
         rows+='<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in [p['name'],p['status'],p['entrypoint_scope'],len(p['requirements'])])+'</tr>'
     complete=''.join('<li>'+html.escape(w['work_id'])+'：已完成，复用证据，不重复取数或回测。</li>' for w in report['completed_work_reused'])
     cn=report.get('CN') or {}
-    cgates={v:sum(a.get('gate')==v for a in cn.get('assets',[])) for v in ('BLOCKED','INTERVAL_COHERENT_ONLY','INDEPENDENT_OVERLAP_CHECKED','INCREMENTAL_OVERLAP_CHECKED')}
+    cgates={v:sum(a.get('gate')==v for a in cn.get('assets',[])) for v in sorted({a.get('gate','BLOCKED') for a in cn.get('assets',[])})}
     probes=report.get('field_probes') or {}
     probe_text='；'.join(str(p.get('probe'))+'：'+str(p.get('status')) for p in probes.get('probes',[]))
     hold_notice='<aside>万得已明确返回账户积分不足。新采集已暂停，仅检查存档；恢复额度后需重新验证新数据，不能把现有样本视为当前全量合格。Tiingo/Yahoo仍独立检查。</aside>' if cn.get('collection_hold') else ''
@@ -107,8 +114,8 @@ def render(report, output):
 <h2>研究快照与项目覆盖</h2><p>通过价格字段核验的研究快照：Tiingo {counts['tiingo']}，Yahoo {counts['yahoo']}。这是逐资产研究资格，成交量、整套策略和生产资格单列，不能据此全源晋级。</p>
 <table><tr><th>项目</th><th>完整项目状态</th><th>入口版本</th><th>字段组数</th></tr>{rows}</table>
 <p>万得区间结果：{html.escape(str(cgates))}。历史成交额统计口径、PIT-ST/股本/退市与期货期权字段按实际返回判定；HTTP 200 或能发现工具都不等于字段可用。BTC 保留 UTC 日历和独立成交量口径。</p>
-<p>增量重叠一致仅说明本次尾部与已存历史相容，新增交易日仍没有第二独立行情认证。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077的正式国债腿只需要日期和收盘，其历史范围及代码等价尚待核实，不把缺股票成交量当作缺收盘价。</p>
-<p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口声明 aftype=0 为前复权，但尚未完成历史序列的独立口径核对。</p>
+<p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077只需日期和收盘，实际行情代码仍为H11077，931077只用于详情页与Referer；按收盘专用校验报告判断，缺独立参考日期时保持隔离。</p>
+<p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口 aftype=0 为前复权，aftype=2 为不复权；已确认价格序列不同，不能把前复权数据再次复权，具体资产仍按证据限制使用。</p>
 <h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
 <p>新增或改变的问题 {len(report['new_or_changed_issues'])} 项；已知问题不变时每日任务保持静默。</p><details><summary>查看本轮变化</summary><pre>{html.escape(json.dumps(report['new_or_changed_issues'],ensure_ascii=False,indent=2))}</pre></details>
 <p><a href="report.json">完整机器报告</a> · <a href="US_report.json">美股逐日检查</a> · <a href="project_readiness.json">逐项目字段要求</a></p>
@@ -152,6 +159,14 @@ def _run_locked(args):
                 evidence={k:hold.get(k) for k in ['provider','status','reason','recovery']}
                 if store.issue('PROVIDER:wind','BLOCKED_PROVIDER_QUOTA',evidence):
                     changes.append({'issue_id':'PROVIDER:wind','status':'BLOCKED_PROVIDER_QUOTA','evidence':evidence})
+            else:
+                # Acquisition recovery is distinct from every asset's quality gate.
+                hold_path=root/'provider_holds/wind.json'
+                resolved=json.loads(hold_path.read_text(encoding='utf-8')) if hold_path.exists() else {}
+                if resolved.get('status')=='RESOLVED':
+                    evidence={k:resolved.get(k) for k in ['provider','status','recovery_verification_sha256']}
+                    if store.issue('PROVIDER:wind','ACQUISITION_RECOVERED_QUALITY_GATES_REMAIN',evidence):
+                        changes.append({'issue_id':'PROVIDER:wind','status':'ACQUISITION_RECOVERED_QUALITY_GATES_REMAIN','evidence':evidence})
             for asset in cn.get('assets',[]):
                 issue_id='CN:'+asset['code']
                 evidence={k:asset.get(k) for k in ['code','gate','amount_gate','reason','field_gaps']}
