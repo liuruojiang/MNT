@@ -14,9 +14,9 @@ from source_audit.wind import (WindClient, WindIntervalConflict, archive_payload
                                audit_asset, amount_frame, validate_option_chain_result, merge_incremental)
 
 FIX = ROOT / 'tests/fixtures/v80_verified_data_20261025'
-LONG = json.loads((FIX / 'wind_bad_long_tail.json').read_text())
-SHORT = json.loads((FIX / 'wind_short.json').read_text())
-REFERENCE = json.loads((FIX / 'csi_zz1000_reference.json').read_text())
+LONG = json.loads((FIX / 'wind_bad_long_tail.json').read_text(encoding='utf-8'))
+SHORT = json.loads((FIX / 'wind_short.json').read_text(encoding='utf-8'))
+REFERENCE = json.loads((FIX / 'csi_zz1000_reference.json').read_text(encoding='utf-8'))
 SESSION = pd.date_range('2026-10-19', '2026-10-23', freq='B')
 
 
@@ -135,7 +135,7 @@ def test_client_does_not_send_secret_in_argv_or_logs(tmp_path, monkeypatch):
     client = WindClient(tmp_path / 'unused', tmp_path / 'run', max_requests=1)
     client.rpc('stock_data', 'tools/list')
     assert len(calls) == 1
-    assert 'TEST_SECRET_SENTINEL' not in ''.join(p.read_text() for p in (tmp_path / 'run').iterdir())
+    assert 'TEST_SECRET_SENTINEL' not in ''.join(p.read_text(encoding='utf-8') for p in (tmp_path / 'run').iterdir())
     with pytest.raises(RuntimeError): client.rpc('stock_data', 'tools/list')
 
 
@@ -163,7 +163,7 @@ def test_non_json_auth_failure_stops_every_wind_server(tmp_path,monkeypatch):
 
 
 def test_actual_wrong_option_product_and_intraday_date_are_hard_rejected():
-    payload = json.loads((ROOT / 'tests/fixtures/cn_source_audit/wind_wrong_option_chain.json').read_text())
+    payload = json.loads((ROOT / 'tests/fixtures/cn_source_audit/wind_wrong_option_chain.json').read_text(encoding='utf-8'))
     result, rows = validate_option_chain_result(payload, product='MO', underlying_code='000852.SH', date='2026-10-23', expiry_month='2026-12')
     assert rows is None and result['status'] == 'BLOCKED'
     assert {'CONTRACT_PRODUCT_MISMATCH', 'UNDERLYING_MISMATCH', 'REQUIRED_DATE_MISMATCH', 'MISSING_CONTRACT_MULTIPLIER'} <= set(result['issues'])
@@ -227,7 +227,7 @@ def test_completed_same_cutoff_short_index_avoids_even_credential_loading(tmp_pa
         'offline_archive': long_dir, 'short_archive': None, 'short_index': index, 'long_index': None,
         'reference_dir': None, 'tail_sessions': 5})()
     assert cli.run(args) == 2  # The known real long-range conflict remains blocked.
-    report = json.loads(next((tmp_path / 'outputs').glob('*/report.json')).read_text())
+    report = json.loads(next((tmp_path / 'outputs').glob('*/report.json')).read_text(encoding='utf-8'))
     assert report['requests'] == 0
     assert report['assets'][0]['gate'] == 'BLOCKED'
 
@@ -255,7 +255,7 @@ def test_reusing_incremental_long_does_not_promote_single_origin_rows_or_change_
     args=type('Args',(),{'output':tmp_path/'outputs','sessions':calendar,'start':'2026-10-16','cutoff':'2026-10-23','symbols':'000852.SH','mode':'tail','credential':None,'max_requests':1,'dns_override':None,'offline_archive':None,'short_archive':None,'short_index':short_index,'long_index':long_index,'reference_dir':None,'tail_sessions':5})()
     for _ in range(2):
         assert cli.run(args)==2
-    reports=[json.loads(p.read_text()) for p in (tmp_path/'outputs').glob('*/report.json')]
+    reports=[json.loads(p.read_text(encoding='utf-8')) for p in (tmp_path/'outputs').glob('*/report.json')]
     assert len(reports)==2
     assert all(p['requests']==0 and p['assets'][0]['gate']=='INCREMENTAL_OVERLAP_CHECKED' and p['assets'][0]['new_rows_second_independent_quote'] is False for p in reports)
 
@@ -276,6 +276,6 @@ def test_known_interval_conflict_cannot_clear_on_a_new_same_provider_agreement(t
     monkeypatch.setattr(cli,'WindClient',lambda *a,**k:pytest.fail('No new requests'))
     args=type('Args',(),{'output':tmp_path/'outputs','sessions':calendar,'start':'2026-10-19','cutoff':'2026-10-23','symbols':'930955.CSI','mode':'tail','credential':None,'max_requests':1,'dns_override':None,'offline_archive':None,'short_archive':None,'short_index':idx,'long_index':long_idx,'reference_dir':None,'tail_sessions':5})()
     assert cli.run(args)==2
-    report=json.loads(next((tmp_path/'outputs').glob('*/report.json')).read_text())
+    report=json.loads(next((tmp_path/'outputs').glob('*/report.json')).read_text(encoding='utf-8'))
     assert report['assets'][0]['gate']=='BLOCKED' and report['assets'][0]['known_quarantine']
     assert not list((tmp_path/'outputs').glob('*/*research_only_ohlcv.csv'))
