@@ -17,13 +17,16 @@ REPO = Path(__file__).resolve().parents[1]
 ASSETS = [
     {'code': '000852.SH', 'kind': 'index', 'archive': 'zz1000_full_kline', 'short': 'zz1000_recent_conflict_check', 'requires_amount': False},
     {'code': '000905.SH', 'kind': 'index', 'archive': 'zz500_full_kline', 'requires_amount': False},
-    {'code': '399006.SZ', 'kind': 'index', 'archive': 'cyb_code_full', 'requires_amount': True},
+    {'code': '399006.SZ', 'kind': 'index', 'archive': 'cyb_code_full', 'requires_amount': True,
+     'known_amount_conflict': 'Archived 2018-12-10..20 TURNOVER conflicts with independent CNI; statistical scope unresolved'},
     {'code': '000688.SH', 'kind': 'index', 'archive': 'kcb50_full_kline', 'requires_amount': False},
     {'code': '000300.SH', 'kind': 'index', 'archive': 'hs300_full_kline', 'requires_amount': False},
     {'code': '000016.SH', 'kind': 'index', 'archive': 'sse50_chunk_b', 'requires_amount': True},
     {'code': '932000.CSI', 'kind': 'index', 'archive': 'zz2000_amount_recent', 'requires_amount': True},
-    {'code': '930955.CSI', 'kind': 'index', 'archive': 'lowvol_dividend_recent', 'requires_amount': False},
-    {'code': 'H11077.SH', 'kind': 'index', 'archive': 'bond_H11077_SH_verified_code', 'requires_amount': False},
+    {'code': '930955.CSI', 'kind': 'index', 'archive': 'lowvol_dividend_recent', 'requires_amount': False,
+     'known_interval_quarantine': 'Known 2026-10-23 range-dependent OHLC/amount conflict: a new agreeing Wind probe alone cannot certify correction; independent resolution required'},
+    {'code': 'H11077.SH', 'kind': 'index', 'archive': 'bond_H11077_SH_verified_code', 'requires_amount': False,
+     'unsupported_reason': 'Required recent close is available; earlier coverage and H11077/931077 formal identity equivalence remain uncertified. Equity volume is not required by this bond leg.'},
     {'code': '159915.SZ', 'kind': 'fund', 'archive': '159915_SZ_aftype0'},
     {'code': '159941.SZ', 'kind': 'fund', 'archive': '159941_SZ_aftype0'},
     {'code': '513030.SH', 'kind': 'fund', 'archive': 'germany_chunk_b'},
@@ -243,9 +246,17 @@ def run(args):
                                            reference_payload=reference_for(args.reference_dir, code), tail_sessions=args.tail_sessions)
             result.update(long_source=long_source, short_source=short_source, reused_completed_short=reused,
                           derivation=lineage, needs_full_refresh=checked is None)
-            if lineage and checked is not None:
+            if (lineage or long_source.get('derived_path')) and checked is not None:
                 result['gate'] = 'INCREMENTAL_OVERLAP_CHECKED'
                 result['new_rows_second_independent_quote'] = False
+            if cfg.get('known_amount_conflict'):
+                result['amount_gate']='BLOCKED'
+                result['known_independent_amount_conflict']=cfg['known_amount_conflict']
+                result.setdefault('field_gaps',[]).append('KNOWN_OFFICIAL_AMOUNT_CONFLICT')
+            if cfg.get('known_interval_quarantine') and checked is not None:
+                result['observed_interval_gate']=result['gate']
+                result.update(gate='BLOCKED',reason=cfg['known_interval_quarantine'],known_quarantine=True)
+                checked=None
             if args.mode == 'tail':
                 result['acceptance_scope'] = 'Archived long range versus fresh short probe; not a newly downloaded full history'
             if checked is not None:

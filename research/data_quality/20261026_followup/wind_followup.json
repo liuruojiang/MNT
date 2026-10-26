@@ -1,0 +1,462 @@
+{
+  "status": "REVIEW_REQUIRED",
+  "production_approved": false,
+  "created_at_utc": "2026-10-26T07:58:35.050030+00:00",
+  "request_counts": {
+    "prior": 25,
+    "new_market_data_requests": 2,
+    "total": 27,
+    "new_public_document_GETs": 6,
+    "new_tools_list": 0
+  },
+  "permission_denial_observed": false,
+  "scope": "Only two newly authorized full windows and old/public-document evidence; no 000852 adjudication, DBMF/KMLM, full strategy replay, index replacement or production changes.",
+  "count_contract": "Official count=0 means all rows within explicit begin/end, positive from begin, negative from end. Original September/June request starts explain old sample starts. Both new Jan-start index requests return 193 sessions from Jan5, so early-2026 provider history is available.",
+  "checks": {
+    "932000": {
+      "fresh_window": {
+        "rows": 193,
+        "first": "2026-01-05",
+        "last": "2026-10-23"
+      },
+      "fresh_vs_official_OHLC": {
+        "days": 193,
+        "first": "2026-01-05",
+        "last": "2026-10-23",
+        "fields": {
+          "OPEN": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "MATCH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "HIGH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "LOW": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          }
+        }
+      },
+      "fresh_vs_official_amount": {
+        "days": 193,
+        "max_abs_CNY": 486400.0,
+        "within_CSI_half_rounding_unit": true,
+        "scale_basis": "Existing formal CSI parser multiplies tradingValue by 1e8; official definition not newly certified here.",
+        "CSI_rounding_bound_CNY": 500000
+      },
+      "fresh_vs_prior_explicit_short": {
+        "days": 5,
+        "first": "2026-10-19",
+        "last": "2026-10-23",
+        "fields": {
+          "OPEN": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "MATCH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "HIGH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "LOW": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "TURNOVER": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "VOLUME": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          }
+        }
+      },
+      "old_name_sample_vs_official_close": {
+        "days": 33,
+        "first": "2026-09-01",
+        "last": "2026-10-23",
+        "fields": {
+          "MATCH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          }
+        }
+      },
+      "gate": "REFERENCE_SAMPLE_CONSISTENT_SCOPE_UNCERTIFIED"
+    },
+    "930955": {
+      "fresh_window": {
+        "rows": 193,
+        "first": "2026-01-05",
+        "last": "2026-10-23"
+      },
+      "fresh_vs_official_OHLC": {
+        "days": 193,
+        "first": "2026-01-05",
+        "last": "2026-10-23",
+        "fields": {
+          "OPEN": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "MATCH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "HIGH": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "LOW": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          }
+        }
+      },
+      "fresh_vs_official_amount": {
+        "days": 193,
+        "max_abs_CNY": 499600.0,
+        "within_CSI_half_rounding_unit": true,
+        "scale_basis": "Existing formal CSI parser multiplies tradingValue by 1e8; official definition not newly certified here.",
+        "CSI_rounding_bound_CNY": 500000
+      },
+      "fresh_vs_prior_explicit_short": {
+        "days": 5,
+        "first": "2026-10-19",
+        "last": "2026-10-23",
+        "fields": {
+          "OPEN": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "MATCH": {
+            "different_days": 1,
+            "max_abs_difference": 21.07,
+            "first_difference": "2026-10-23",
+            "example": {
+              "date": "2026-10-23",
+              "left": "11292.06",
+              "right": "11270.99"
+            }
+          },
+          "HIGH": {
+            "different_days": 1,
+            "max_abs_difference": 39.81,
+            "first_difference": "2026-10-23",
+            "example": {
+              "date": "2026-10-23",
+              "left": "11351.29",
+              "right": "11311.48"
+            }
+          },
+          "LOW": {
+            "different_days": 0,
+            "max_abs_difference": 0.0,
+            "first_difference": null,
+            "example": null
+          },
+          "TURNOVER": {
+            "different_days": 1,
+            "max_abs_difference": 48758313900.0,
+            "first_difference": "2026-10-23",
+            "example": {
+              "date": "2026-10-23",
+              "left": "80579667800",
+              "right": "31821353900"
+            }
+          },
+          "VOLUME": {
+            "different_days": 1,
+            "max_abs_difference": 4721404200.0,
+            "first_difference": "2026-10-23",
+            "example": {
+              "date": "2026-10-23",
+              "left": "7751131700",
+              "right": "3029727500"
+            }
+          }
+        }
+      },
+      "old_name_sample_vs_official_close": {
+        "days": 33,
+        "first": "2026-09-01",
+        "last": "2026-10-23",
+        "fields": {
+          "MATCH": {
+            "different_days": 33,
+            "max_abs_difference": 345.44,
+            "first_difference": "2026-09-01",
+            "example": {
+              "date": "2026-10-23",
+              "left": "10952.98",
+              "right": 11292.06
+            }
+          }
+        }
+      },
+      "gate": "BLOCKED_INTERVAL_AND_OLD_NAME_SAMPLE_CONFLICT"
+    },
+    "H11077": {
+      "existing_close_vs_official": {
+        "days": 98,
+        "first": "2026-06-01",
+        "last": "2026-10-23",
+        "fields": {
+          "MATCH": {
+            "different_days": 98,
+            "max_abs_difference": 0.005,
+            "first_difference": "2026-06-01",
+            "example": {
+              "date": "2026-10-23",
+              "left": "192.8684",
+              "right": 192.87
+            }
+          }
+        }
+      },
+      "required_field": "close only for formal V8 bond leg; missing VOLUME/TURNOVER alone is not evidence that required close is absent",
+      "existing_request": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-06-01",
+        "end_date": "2026-10-23",
+        "period": "10",
+        "count": 0
+      },
+      "range_diagnosis": "June start explicitly requested; not a demonstrated provider cutoff",
+      "mapping_caveat": "Frozen official response indexCode=H11077 and name SSE 10-Year China Treasury Note Index (Futures Deliverables). Formal code has special H11077->931077 mapping; that separate formal source path has not been certified identical.",
+      "gate": "SAMPLE_CLOSE_WITHIN_0_005_ROUNDING_FULL_RANGE_AND_FORMAL_MAPPING_UNCERTIFIED"
+    },
+    "399006_amount": {
+      "days": 9,
+      "first": "2018-12-10",
+      "last": "2018-12-20",
+      "fields": {
+        "TURNOVER": {
+          "different_days": 9,
+          "max_abs_difference": 34509544607.96,
+          "first_difference": "2018-12-10",
+          "example": {
+            "date": "2018-12-20",
+            "left": "38526496900",
+            "right": 12713218584.83
+          }
+        }
+      },
+      "max_relative_difference": 2.1581995003961225,
+      "gate": "BLOCKED_INDEPENDENT_AMOUNT_CONFLICT",
+      "note": "Previously captured official CNI 2018 sample reused. No new quote collection; numerical discrepancy is established, aggregation/root cause is not."
+    },
+    "159941_adjustment": {
+      "days": 2739,
+      "first": "2015-07-13",
+      "last": "2026-10-23",
+      "fields": {
+        "OPEN": {
+          "different_days": 1697,
+          "max_abs_difference": 2.482,
+          "first_difference": "2015-07-13",
+          "example": {
+            "date": "2022-07-04",
+            "left": "0.594",
+            "right": "2.375"
+          }
+        },
+        "MATCH": {
+          "different_days": 1697,
+          "max_abs_difference": 2.472,
+          "first_difference": "2015-07-13",
+          "example": {
+            "date": "2022-07-04",
+            "left": "0.596",
+            "right": "2.384"
+          }
+        },
+        "HIGH": {
+          "different_days": 1697,
+          "max_abs_difference": 2.482,
+          "first_difference": "2015-07-13",
+          "example": {
+            "date": "2022-07-04",
+            "left": "0.597",
+            "right": "2.387"
+          }
+        },
+        "LOW": {
+          "different_days": 1697,
+          "max_abs_difference": 2.472,
+          "first_difference": "2015-07-13",
+          "example": {
+            "date": "2022-07-04",
+            "left": "0.594",
+            "right": "2.374"
+          }
+        },
+        "TURNOVER": {
+          "different_days": 0,
+          "max_abs_difference": 0.0,
+          "first_difference": null,
+          "example": null
+        },
+        "VOLUME": {
+          "different_days": 0,
+          "max_abs_difference": 0.0,
+          "first_difference": null,
+          "example": null
+        }
+      },
+      "OHLC_different_days": 1697,
+      "first_difference": "2015-07-13",
+      "last_difference": "2022-07-04",
+      "official_contract": {
+        "0": "前复权",
+        "1": "后复权",
+        "2": "不复权"
+      },
+      "gate": "CONTRACT_AND_RUNTIME_DIFFERENCE_VERIFIED_EVENT_FACTORS_AND_PIT_BASE_UNCERTIFIED",
+      "note": "Aftype0 is forward-adjusted. Raw turnover and volume match all 2739 paired days. Do not apply a second adjustment; no fixed historical factor/afdate or independent event ledger has been certified."
+    }
+  },
+  "findings": [
+    "932000.CSI new 193-day OHLC equals archived CSI; existing explicit short overlap agrees. Amount agrees within CSI rounded output precision but definition remains uncertified.",
+    "930955.CSI new 193-day OHLC equals archived CSI. Its prior explicit short response conflicts in close/high/turnover/volume. Old Chinese-name long sample also differs. Keep original archives and fail closed; do not replace short/long indexes automatically.",
+    "399006 TURNOVER disagrees materially with archived official CNI amount on all nine 2018 overlap dates; no unit-only or constituent-scope explanation is yet proven.",
+    "H11077.SH existing close matches archived official H11077 within rounding, but earlier full coverage and formal 931077 mapping remain unverified. Bond leg needs close, not mandatory equity trading volume.",
+    "159941 old OHLC demonstrates adjustment: 1697 of 2739 dates differ between aftype0 and2. aftype0 is forward-adjusted by contract, with raw turnover/volume unchanged. Event factor and fixed historical adjustment base need independent acceptance."
+  ],
+  "not_retried": [
+    "5 combined field probes",
+    "2 narrowed stock field probes",
+    "000852 conflict",
+    "existing short windows",
+    "DBMF/KMLM",
+    "full strategy backtests"
+  ],
+  "next_steps_unexecuted": [
+    {
+      "id": "index_scope_and_interval_supplier_diagnosis",
+      "action": "Supply paired receipt hashes/arguments for 930955 Jan-window vs Oct-window and 399006 official discrepancy. Ask for exact security identity, index type, TURNOVER aggregation/unit/session scope and interval-dependent cache/revision behavior. Do not issue another blind quote retry."
+    },
+    {
+      "id": "fund_event_ledger",
+      "server": "fund_data",
+      "tool": "get_fund_financials",
+      "arguments": {
+        "question": "查询159941.SZ在2022年报告期的分红次数、单位分红和分红条款，逐项标明基金代码、报告期及实际事件日期；没有字段则明确缺失，不用净值收益替代。"
+      },
+      "status": "UNEXECUTED_DIFFERENT_DISCOVERED_READONLY_PATH",
+      "limitation": "Tool promises report-period dividends, not split/factor history; cannot by itself certify split date or adjustment factor. Require issuer event announcement/official adjustment specification before event acceptance."
+    },
+    {
+      "id": "H11077_scope",
+      "action": "Clarify H11077.SH versus production special mapping 931077 and price/total-return definition before requesting a new non-overlapping earlier window. Current task deliberately made no H11077 call."
+    }
+  ],
+  "supplier_questions_unsent": [
+    "同一930955.CSI、period10、count0、相同end_date=2026-10-23，begin=2026-01-01与2026-10-19为何返回不同10-23 close/high/TURNOVER/VOLUME？正确值、证券完整身份、数据日、修订时间和接口缓存/区间处理规则分别是什么？请给已修复版本与可复现响应。",
+    "399006.SZ K线TURNOVER到底是指数成分股逐日合计、创业板全市场、双边或其他范围？是否使用历史成分？币种、单位、是否含大宗/盘后以及2018-12-10的正确值是什么？为何44,109,259,000元与国证官方15,690,475,534.36元不符？932000.CSI的同字段是否采用相同定义？",
+    "H11077.SH与931077分别对应何种完整名称、发布机构、价格/全收益指数及回溯历史？现有H11077 close已有98日样本，缺VOLUME不代表缺close；请给代码等价关系和可用历史起点。",
+    "基金aftype=0前复权的计算是否以最近交易日或afdate为锚？是否支持固定历史基准、拆分/合并/分红事件及因子追溯修订记录？哪些事件影响OHLC，VOLUME/TURNOVER是否始终原始？请说明159941在2022-07-04之前与aftype2的差异及事件依据。",
+    "get_stock_fundamentals的000001.SZ 2026-10-23单字段总市值及get_stock_events的600518.SH 2019历史ST事件均HTTP200但没找到数据。请给该账号可执行的精确字段/历史参数及最小成功示例；仅在确有权限拒绝时说明所缺权限。期货/期权专用字段仍需实际工具/精确返回代码日期验证，不能用错误IO链替代MO。"
+  ],
+  "field_blockers": [
+    {
+      "field": "932000 history",
+      "status": "2026_FULL_SAMPLE_RETURNED",
+      "remaining": "earlier formal history/publication boundary and amount statistical definition not accepted"
+    },
+    {
+      "field": "930955 history/identity",
+      "status": "2026_FULL_SAMPLE_RETURNED_BUT_INTERVAL_CONFLICT",
+      "remaining": "different interval responses conflict; no automatic data promotion"
+    },
+    {
+      "field": "399006/932000 TURNOVER scope",
+      "status": "NOT_CERTIFIED",
+      "remaining": "399006 independent conflict; 932000 rounded numeric consistency does not define statistical scope"
+    },
+    {
+      "field": "H11077 required close",
+      "status": "RECENT_CLOSE_AVAILABLE",
+      "remaining": "earlier coverage and formal source mapping not certified; no account-rights refusal"
+    },
+    {
+      "field": "six ETF adjustment",
+      "status": "AFTYPE0_FORWARD_ADJUSTED",
+      "remaining": "159941 runtime difference confirmed; other ETFs lack paired event-anchored factor/PIT acceptance"
+    },
+    {
+      "field": "PIT historical ST/marketcap/share counts",
+      "status": "NO_QUALIFIED_RETURN",
+      "remaining": "combined and narrowed probes already exhausted; no permission denial, do not repeat"
+    },
+    {
+      "field": "futures settlement/OI and MO chain",
+      "status": "NO_QUALIFIED_RETURN_OR_WRONG_UNDERLYING_DATE",
+      "remaining": "no verified dedicated structured path; prior incorrect IO response rejected"
+    }
+  ],
+  "public_document_receipts": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\wind_evidence\\public_document_receipts.json",
+  "fresh_archive": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\full_range_followup_20261026",
+  "evidence_hashes": {
+    "D:\\动量策略\\_data_source_service\\wind_short_index.json": "6a25d225b856cbc6043bdd5e3f7184dfa5c6b897d0bec2d13defc3be8aff8227",
+    "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\full_range_followup_20261026\\001_932000_CSI_new_2026_window_parsed.json": "bed5829a18dc90a3155b6edca279476e086d70874f69f4902ef55f8d171c1d89",
+    "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\conflict_investigation\\independent\\csi_932000_full.json": "0aecfd1f0d9376b28decb298de308c3164e14794a989768877de7290dd821ffe",
+    "D:\\动量策略\\_data_source_service\\wind_response_archive\\932000_CSI\\4700ef0d480c16a756a8\\001_932000_CSI_parsed.json": "864f3641450868627de29e345c3f85e1a6b19f09ee0e61e97de605004b78390f",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\zz2000_amount_recent_parsed.json": "6f64aff4556e179fb22b8f453568b184a47559724d5d537c6a7b93c97a549dd9",
+    "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\full_range_followup_20261026\\002_930955_CSI_new_2026_window_parsed.json": "f0de905e3d4e5854e32e9f4be85e8b8b48ce72d25078db7acc9a73b2081c508c",
+    "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\conflict_investigation\\independent\\csi_930955_full.json": "315893f6e088b3ccec7130d75e0a11995c5bf9e92ffa7fc4c246114016232a30",
+    "D:\\动量策略\\_data_source_service\\wind_response_archive\\930955_CSI\\e1afd477361dad0ae449\\002_930955_CSI_parsed.json": "54d96756ab5a10bf7036537154c219b416a928eb12f8a01bbb2dda07cac44555",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\lowvol_dividend_recent_parsed.json": "db1756d5b1fc2d040146194a58f11f514311e653645a522ac42f4020fa0d56d1",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\bond_H11077_SH_verified_code_parsed.json": "a7ed5cf5276d6551578e4ac3c17ae5e1f650a43801391a227274579fe89a296b",
+    "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\conflict_investigation\\independent\\csi_H11077_full.json": "0adfac13b4f83c3f958546a2c5614156dea8f347616f9afe65407e39b0ec8dd8",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\cyb_code_full_parsed.json": "af05b58308867e3d0cab11c3dfebde4354042f52efbd4e9f8f8cd08865fb2d96",
+    "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\v80_full_replay\\independent\\cni_cyb_overlap.json": "51e8396e93c6eb803d01c6c48c6bc416e776234a6dade288ad74eac88521140d",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\159941_SZ_aftype0_parsed.json": "9bb6010ef4d1ec85d1146fdb80eb25e4dabf7cf1d15f4653d14eb6d8ed30fecf",
+    "D:\\动量策略\\_data_source_service\\wind_archive\\159941_SZ_aftype2_parsed.json": "4ec2eca915e886959ad973dcd389d38b4b08b280c55cc12a7f44cbcd59d3043e"
+  },
+  "code_changed": false,
+  "indexes_replaced": false,
+  "committed": false,
+  "pushed": false
+}

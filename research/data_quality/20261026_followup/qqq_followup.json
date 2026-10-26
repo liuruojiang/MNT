@@ -1,0 +1,504 @@
+{
+  "schema_version": "1.0",
+  "mode": "NEW_EVIDENCE_FOLLOWUP",
+  "as_of": "2026-10-26",
+  "previous_adjudication": {
+    "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications\\us_adjudications.json",
+    "sha256": "1da139cb50a0136fe8f0034764205f6618fb6d166b45764d3ee1df9081d7c194",
+    "overwritten": false
+  },
+  "evidence_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\qqq_evidence",
+  "source_audit_cutoff": "2026-10-23",
+  "scope": "Only three unresolved QQQ cash events; no new Tiingo/Yahoo downloads, backtests, DBMF/KMLM or four previously confirmed events.",
+  "summary": {
+    "new_fiscal_constraints": 2,
+    "new_exact_event_resolutions": 0,
+    "still_blocked_events": 3,
+    "finding": "YAHOO_FISCAL_EVENT_COLLECTION_INCONSISTENT",
+    "production_approved": false
+  },
+  "primary_issuer_evidence": {
+    "url": "https://www.hwataibank.com.tw/wp-content/uploads/2018/10/PowerShares_nasdaq_100_indexETF.pdf",
+    "artifact": "qqq_bank_hosted_issuer_prospectus.pdf",
+    "sha256": "662c57ff1cec26a8c20369339711b6ebf772bf3785ef21df3ee626faa692831b",
+    "source_type": "issuer prospectus reproduced on official bank website",
+    "document_title": "PowerShares QQQ Trust, Series 1 statutory prospectus",
+    "physical_page_1based": 28,
+    "printed_page": 26,
+    "pdf_pages": 104,
+    "verified_pdf_complete": true,
+    "visual_check": true,
+    "scope": "annual per-share distributions; no event-by-event final distribution table"
+  },
+  "fiscal_constraints": [
+    {
+      "fiscal_start": "2009-10-01",
+      "fiscal_end": "2010-09-30",
+      "issuer_displayed_distribution_usd": "0.33",
+      "illustrative_two_decimal_rounding_interval": [
+        "0.325",
+        "0.335"
+      ],
+      "interval_upper_exclusive": true,
+      "period_mapping": "sum vendor ex-dates in the issuer fiscal NAV interval; issuer financial highlights measure per-share distributions in that interval, not cash payment-date totals",
+      "cash_basis": "USD per US QQQ/QQQQ share, with no split events in either frozen source inside this fiscal interval; no net-yield, foreign currency or underlying-company dividends",
+      "official_sec_url": "https://www.sec.gov/Archives/edgar/data/1067839/000110465911003685/a10-18718_1485bpos.htm",
+      "bank_issuer_source": {
+        "url": "https://www.hwataibank.com.tw/wp-content/uploads/2018/10/PowerShares_nasdaq_100_indexETF.pdf",
+        "artifact": "qqq_bank_hosted_issuer_prospectus.pdf",
+        "sha256": "662c57ff1cec26a8c20369339711b6ebf772bf3785ef21df3ee626faa692831b",
+        "source_type": "issuer prospectus reproduced on official bank website",
+        "document_title": "PowerShares QQQ Trust, Series 1 statutory prospectus",
+        "physical_page_1based": 28,
+        "printed_page": 26,
+        "pdf_pages": 104,
+        "verified_pdf_complete": true,
+        "visual_check": true,
+        "scope": "annual per-share distributions; no event-by-event final distribution table"
+      },
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2009-12-18",
+              "amount": "0.0776"
+            },
+            {
+              "ex_date": "2010-03-19",
+              "amount": "0.05146"
+            },
+            {
+              "ex_date": "2010-06-18",
+              "amount": "0.0893"
+            },
+            {
+              "ex_date": "2010-09-17",
+              "amount": "0.11155"
+            }
+          ],
+          "sum_usd": "0.32991",
+          "compatible_with_issuer_display_precision": true
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2009-12-18",
+              "amount": "0.073"
+            },
+            {
+              "ex_date": "2010-03-19",
+              "amount": "0.051"
+            },
+            {
+              "ex_date": "2010-06-18",
+              "amount": "0.089"
+            },
+            {
+              "ex_date": "2010-06-25",
+              "amount": "0.089"
+            },
+            {
+              "ex_date": "2010-09-17",
+              "amount": "0.112"
+            }
+          ],
+          "sum_usd": "0.414",
+          "compatible_with_issuer_display_precision": false
+        }
+      },
+      "counterfactual_remove_disputed_yahoo_event": {
+        "ex_date": "2010-06-25",
+        "sum_usd": "0.325",
+        "compatible_with_issuer_display_precision": true,
+        "is_authorized_repair": false,
+        "limitation": "compatibility after removal is not unique identification; other compensating event errors can produce the same annual total"
+      }
+    },
+    {
+      "fiscal_start": "2011-10-01",
+      "fiscal_end": "2012-09-30",
+      "issuer_displayed_distribution_usd": "0.62",
+      "illustrative_two_decimal_rounding_interval": [
+        "0.615",
+        "0.625"
+      ],
+      "interval_upper_exclusive": true,
+      "period_mapping": "sum vendor ex-dates in the issuer fiscal NAV interval; issuer financial highlights measure per-share distributions in that interval, not cash payment-date totals",
+      "cash_basis": "USD per US QQQ/QQQQ share, with no split events in either frozen source inside this fiscal interval; no net-yield, foreign currency or underlying-company dividends",
+      "official_sec_url": "https://www.sec.gov/Archives/edgar/data/1067839/000110465913007507/a12-28280_1497.htm",
+      "bank_issuer_source": {
+        "url": "https://www.hwataibank.com.tw/wp-content/uploads/2018/10/PowerShares_nasdaq_100_indexETF.pdf",
+        "artifact": "qqq_bank_hosted_issuer_prospectus.pdf",
+        "sha256": "662c57ff1cec26a8c20369339711b6ebf772bf3785ef21df3ee626faa692831b",
+        "source_type": "issuer prospectus reproduced on official bank website",
+        "document_title": "PowerShares QQQ Trust, Series 1 statutory prospectus",
+        "physical_page_1based": 28,
+        "printed_page": 26,
+        "pdf_pages": 104,
+        "verified_pdf_complete": true,
+        "visual_check": true,
+        "scope": "annual per-share distributions; no event-by-event final distribution table"
+      },
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2011-12-16",
+              "amount": "0.16052"
+            },
+            {
+              "ex_date": "2012-03-16",
+              "amount": "0.11283"
+            },
+            {
+              "ex_date": "2012-06-15",
+              "amount": "0.14312"
+            },
+            {
+              "ex_date": "2012-09-21",
+              "amount": "0.2002"
+            }
+          ],
+          "sum_usd": "0.61667",
+          "compatible_with_issuer_display_precision": true
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2011-12-16",
+              "amount": "0.161"
+            },
+            {
+              "ex_date": "2011-12-27",
+              "amount": "0.049"
+            },
+            {
+              "ex_date": "2012-03-16",
+              "amount": "0.113"
+            },
+            {
+              "ex_date": "2012-06-15",
+              "amount": "0.143"
+            },
+            {
+              "ex_date": "2012-09-21",
+              "amount": "0.2"
+            }
+          ],
+          "sum_usd": "0.666",
+          "compatible_with_issuer_display_precision": false
+        }
+      },
+      "counterfactual_remove_disputed_yahoo_event": {
+        "ex_date": "2011-12-27",
+        "sum_usd": "0.617",
+        "compatible_with_issuer_display_precision": true,
+        "is_authorized_repair": false,
+        "limitation": "compatibility after removal is not unique identification; other compensating event errors can produce the same annual total"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "QQQ_2009-12-18",
+      "symbol": "QQQ",
+      "ex_date": "2009-12-18",
+      "status": "UNRESOLVED_EVENT",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "frozen_observation": {
+        "date": "2009-12-18",
+        "flags": [
+          "raw_open",
+          "cash"
+        ],
+        "tiingo_cash": 0.0776,
+        "yahoo_cash": 0.073,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": null,
+        "comparison_values": {
+          "tiingo": {
+            "open": 44.14,
+            "close": 44.46,
+            "volume": 96442600.0
+          },
+          "yahoo": {
+            "open": 44.15999984741211,
+            "close": 44.459999084472656,
+            "volume": 96442600.0
+          }
+        }
+      },
+      "new_finding": "Yahoo fiscal-year cash event collection conflicts with issuer per-share annual distributions; Tiingo collection is compatible with reporting precision.",
+      "annual_constraint_fiscal_end": "2010-09-30",
+      "event_specific_limit": "2009 amount difference is smaller than issuer annual rounding precision.",
+      "minimum_external_material": "Issuer/trustee final 2009-12-18 QQQQ distribution statement showing USD per share, ex/record/pay dates, and any estimate/final revision.",
+      "alternatives": "An authenticated historical broker/DTC corporate-action statement for the exact security and interval is acceptable if it distinguishes entitlement date, cash date, original share basis and final amount; redact account identity.",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false
+    },
+    {
+      "id": "QQQ_2010-06-25",
+      "symbol": "QQQ",
+      "ex_date": "2010-06-25",
+      "status": "UNRESOLVED_EVENT",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "frozen_observation": {
+        "date": "2010-06-25",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.089,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.0017640573328050468,
+          "yahoo": 0.00019889609760825877
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 45.51,
+            "close": 45.27,
+            "volume": 88740300.0
+          },
+          "yahoo": {
+            "open": 45.5099983215332,
+            "close": 45.27000045776367,
+            "volume": 88740300.0
+          }
+        }
+      },
+      "new_finding": "Yahoo fiscal-year cash event collection conflicts with issuer per-share annual distributions; Tiingo collection is compatible with reporting precision.",
+      "annual_constraint_fiscal_end": "2010-09-30",
+      "event_specific_limit": "Removing this Yahoo entry restores fiscal-total compatibility but is not a unique event-level proof.",
+      "minimum_external_material": "Issuer/trustee complete final 2010 Q2 QQQQ distribution calendar, including special distributions, with ex/record/pay dates and amounts.",
+      "alternatives": "An authenticated historical broker/DTC corporate-action statement for the exact security and interval is acceptable if it distinguishes entitlement date, cash date, original share basis and final amount; redact account identity.",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "symbol": "QQQ",
+      "ex_date": "2011-12-27",
+      "status": "UNRESOLVED_EVENT",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "frozen_observation": {
+        "date": "2011-12-27",
+        "flags": [
+          "raw_open",
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.049,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.0028530670486781595,
+          "yahoo": 0.003729877227864664
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 56.01,
+            "close": 56.24,
+            "volume": 21443500.0
+          },
+          "yahoo": {
+            "open": 55.9900016784668,
+            "close": 56.2400016784668,
+            "volume": 21443500.0
+          }
+        }
+      },
+      "new_finding": "Yahoo fiscal-year cash event collection conflicts with issuer per-share annual distributions; Tiingo collection is compatible with reporting precision.",
+      "annual_constraint_fiscal_end": "2012-09-30",
+      "event_specific_limit": "Removing this Yahoo entry restores fiscal-total compatibility but is not a unique event-level proof.",
+      "minimum_external_material": "Issuer/trustee complete final 2011 Q4 QQQ distribution calendar, including special distributions, with ex/record/pay dates and amounts.",
+      "alternatives": "An authenticated historical broker/DTC corporate-action statement for the exact security and interval is acceptable if it distinguishes entitlement date, cash date, original share basis and final amount; redact account identity.",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false
+    }
+  ],
+  "new_attempts": [
+    {
+      "path": "Prior exact issuer/amount web searches",
+      "status": "REUSED_NOT_REPEATED",
+      "details": "Prior failed or aggregator-only searches were not used as event decisions."
+    },
+    {
+      "path": "SEC contemporaneous issuer prospectus, 2010/2012 fiscal tables",
+      "status": "NEW_AGGREGATE_CONSTRAINT",
+      "details": "Official SEC pages expose annual per-share distribution rows. Direct request bodies are HTTP403, not successful original HTML."
+    },
+    {
+      "path": "Official bank hosted original issuer prospectus PDF",
+      "status": "COMPLETE_EVIDENCE",
+      "details": "104-page intact issuer document, physical page28 matches SEC annual values; no exact disputed cash events listed."
+    },
+    {
+      "path": "ICTax public client script and historical annual publication directories",
+      "status": "NEW_PUBLIC_DISCOVERY",
+      "urls": [
+        "https://www.ictax.admin.ch/extern/api/publication/years.json",
+        "https://www.ictax.admin.ch/extern/api/publication/publicationCategories/2009.json",
+        "https://www.ictax.admin.ch/extern/api/publication/publicationCategories/2010.json",
+        "https://www.ictax.admin.ch/extern/api/publication/publicationCategories/2011.json"
+      ],
+      "details": "Client script defines paths and file ids/hashes; no authentication or vendor credentials used."
+    },
+    {
+      "path": "ICTax Band2 original yearbooks 2009/2010/2011",
+      "status": "COMPLETE_WRONG_CATEGORY",
+      "details": "These editions contain structured products. QQQ mentions can identify derivative underlyings, not the US ETF distribution record."
+    },
+    {
+      "path": "ICTax 2010 original HB yearbook",
+      "status": "COMPLETE_NO_QUALIFYING_EVENT_EVIDENCE",
+      "details": "No identified exact US QQQ event record; this does not prove zero."
+    },
+    {
+      "path": "ICTax 2011 HB and 2009/2010/2011 HB supplements",
+      "status": "INCOMPLETE_DOWNLOAD",
+      "details": "HTTP200 bodies shorter than official fileSize, missing EOF; parser repair/zero pages. Do not infer absence. 2011 partial HB EQQQ match is Irish fund, not US QQQ."
+    },
+    {
+      "path": "ICTax 2009 original HB",
+      "status": "REQUEST_CANCELLED_WITHOUT_COMPLETED_BODY",
+      "details": "Long request cancelled; no completed body or absence conclusion."
+    },
+    {
+      "path": "ICTax single security POST",
+      "status": "HTTP403_STOPPED",
+      "details": "Read-only public-client route attempted once and stopped on failure."
+    },
+    {
+      "path": "ICTax bounded tail Range probe",
+      "status": "SERVER_IGNORES_RANGE",
+      "details": "Requested final1MiB; server returned HTTP200 full content length. Closed without repeating bulk download."
+    }
+  ],
+  "download_integrity": {
+    "ictax_2009_band2.pdf": {
+      "expected_bytes": 8872523,
+      "actual_bytes": 8872523,
+      "sha256": "1b3fa9eb2b5c6e7ac67c85b89bd2b0f10112f416883ba2e5f4db7603867a58d5",
+      "pdf_pages": 569,
+      "parser_repaired": false,
+      "eof_present": true,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2009_hb_extensions.pdf": {
+      "expected_bytes": 30468246,
+      "actual_bytes": 14473437,
+      "sha256": "cce6cad85ab24d25c7c9fb17b0c514efea327343de6c86c451e45b4ec127cd6f",
+      "pdf_pages": 0,
+      "parser_repaired": true,
+      "eof_present": false,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2010_band2.pdf": {
+      "expected_bytes": 10514145,
+      "actual_bytes": 10514145,
+      "sha256": "eb76a1be4b4ad33e54aa1b19c1e5a7f8ee03f2ce7282d3ca9a8797e8987316cf",
+      "pdf_pages": 435,
+      "parser_repaired": false,
+      "eof_present": true,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2010_hb.pdf": {
+      "expected_bytes": 10752079,
+      "actual_bytes": 10752079,
+      "sha256": "8ddc319baa1343a037e7351a0920230a5e2f351dbe201a83bc3cadb60f13ae6c",
+      "pdf_pages": 490,
+      "parser_repaired": false,
+      "eof_present": true,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2010_hb_extensions.pdf": {
+      "expected_bytes": 28984904,
+      "actual_bytes": 14768349,
+      "sha256": "bf02f6ea3698dc8d14e3b893385302a50be94c33bf7e12c7f3885312a4d8d1bd",
+      "pdf_pages": 0,
+      "parser_repaired": true,
+      "eof_present": false,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2011_band2.pdf": {
+      "expected_bytes": 26466599,
+      "actual_bytes": 26466599,
+      "sha256": "c56f1b49396e99ce47d770d1897275482aeaa999e1f0362e87d82e3271821564",
+      "pdf_pages": 495,
+      "parser_repaired": false,
+      "eof_present": true,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2011_hb.pdf": {
+      "expected_bytes": 28358463,
+      "actual_bytes": 19037832,
+      "sha256": "22d680167a02f7042aa399ba88debeda7246ae55553cfcb0d0f0374630ce2f44",
+      "pdf_pages": 614,
+      "parser_repaired": true,
+      "eof_present": false,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    },
+    "ictax_2011_hb_extensions.pdf": {
+      "expected_bytes": 32550703,
+      "actual_bytes": 16268937,
+      "sha256": "f36626927b830c881391c10ade9893c3d461402ddddb3fc27e47d0333cec64ed",
+      "pdf_pages": 0,
+      "parser_repaired": true,
+      "eof_present": false,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    },
+    "qqq_bank_hosted_issuer_prospectus.pdf": {
+      "expected_bytes": null,
+      "actual_bytes": 409778,
+      "sha256": "662c57ff1cec26a8c20369339711b6ebf772bf3785ef21df3ee626faa692831b",
+      "pdf_pages": 104,
+      "parser_repaired": false,
+      "eof_present": true,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    }
+  },
+  "frozen_inputs": [
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\tiingo_QQQ.json",
+      "sha256": "8a608c63eb59e0cdf956a57b477fd7c6c8d2fa366ce59bd1f851b19cfdc625c4"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\yahoo_QQQ.json",
+      "sha256": "539f4c7f6337a75192c4ea9cc630344822740456cad7563cf7f070b314e412a3"
+    }
+  ],
+  "guardrails": {
+    "event_absence_is_not_zero": true,
+    "aggregate_match_is_not_unique_event_resolution": true,
+    "truncated_pdf_is_not_evidence": true,
+    "irish_EQQQ_is_not_US_QQQ": true,
+    "new_vendor_requests": false,
+    "strategy_replayed": false,
+    "production_changed": false,
+    "external_contacts_made": false,
+    "point_in_time_certified": false
+  }
+}

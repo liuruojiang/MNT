@@ -1,0 +1,741 @@
+{
+  "schema_version": "1.0",
+  "mode": "VANGUARD_REMAINING_EVENT_FOLLOWUP",
+  "as_of": "2026-10-26",
+  "previous_adjudication": {
+    "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications\\us_adjudications.json",
+    "sha256": "1da139cb50a0136fe8f0034764205f6618fb6d166b45764d3ee1df9081d7c194",
+    "overwritten": false
+  },
+  "evidence_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\vanguard_evidence",
+  "source_audit_cutoff": "2026-10-23",
+  "scope": "3 unresolved VEA/VGIT events only; no market dataAPI, backtest, external contact, parameter or production edits",
+  "summary": {
+    "events": 3,
+    "new_period_constraints": 4,
+    "new_complete_public_pdf_downloads": 2,
+    "exact_event_final_records": 0,
+    "events_still_blocked": 3,
+    "independent_direction": {
+      "VEA_2008-03-12": "supports Yahoo0.016 against Tiingo0.032",
+      "VGIT_2013-12-24": "supports Yahoo total0.263 against Tiingo0.1064",
+      "VGIT_2015-11-02": "supports Tiingo0.085 against Yahoo0"
+    },
+    "production_approved": false
+  },
+  "sources": [
+    {
+      "id": "VEA_H1_2008",
+      "url": "https://www.sec.gov/Archives/edgar/data/923202/000093247108001828/taxmngd_final.htm",
+      "issuer": "Vanguard Tax-Managed Funds",
+      "fund": "Vanguard Tax-Managed International Fund, Europe Pacific ETF Shares (VEA)",
+      "section": "Your Fund Performance at a Glance; December 31, 2007 through June 30, 2008",
+      "income_dividends_usd_per_share": "0.016",
+      "capital_gains_usd_per_share": "0.000",
+      "total_cash_usd_per_share": "0.016",
+      "quote": "Europe Pacific ETF | 47.92 | 42.83 | 0.016 | 0.000",
+      "evidence_method": "official SEC search extraction; direct HTML GET403; full web open exceeds4MiB",
+      "full_original_archived": false,
+      "precision_decimals": 3
+    },
+    {
+      "id": "VEA_FY_2008",
+      "url": "https://www.sec.gov/Archives/edgar/data/923202/000093247109000863/taxmanagedfinal.htm",
+      "issuer": "Vanguard Tax-Managed Funds",
+      "fund": "Vanguard Tax-Managed International Fund, Europe Pacific ETF Shares (VEA)",
+      "section": "Your Fund Performance at a Glance; December 31, 2007 through December 31, 2008",
+      "income_dividends_usd_per_share": "0.930",
+      "capital_gains_usd_per_share": "0.000",
+      "total_cash_usd_per_share": "0.930",
+      "quote": "Europe Pacific ETF Shares | 47.92 | 27.18 | 0.930 | 0.000",
+      "evidence_method": "official SEC search extraction; direct HTML GET403",
+      "full_original_archived": false,
+      "precision_decimals": 3
+    },
+    {
+      "id": "VGIT_FY_2014",
+      "url": "https://www.sec.gov/Archives/edgar/data/1021882/000093247115009468/scottsdalefundsn1a.htm",
+      "issuer": "Vanguard Scottsdale Funds",
+      "fund": "Intermediate-Term Government Bond Index Fund ETF Shares",
+      "cusip": "92206C706",
+      "issuer_fund_number": 3143,
+      "section": "Financial Highlights, ETF Shares, year ended August31,2014; Additional Information identifies ETF CUSIP",
+      "income_dividends_usd_per_share": "0.843",
+      "capital_gains_usd_per_share": "0.189",
+      "total_cash_usd_per_share": "1.032",
+      "quote": "Total Distributions | (1.043) | (1.032) | (1.541) | (1.218) | (1.920)",
+      "evidence_method": "official SEC search extraction of the exact ETF class; no successful original HTML archive",
+      "full_original_archived": false,
+      "precision_decimals": 3
+    },
+    {
+      "id": "VGIT_FY_2016",
+      "url": "https://www.sec.gov/Archives/edgar/data/1021882/000168386320015345/scottsdale-20201222.htm",
+      "issuer": "Vanguard Scottsdale Funds",
+      "fund": "Intermediate-Term Treasury Index Fund ETF Shares, formerly Intermediate-Term Government Bond Index Fund",
+      "cusip": "92206C706",
+      "section": "Financial Highlights, ETF Shares, year ended August31,2016, printed page64",
+      "income_dividends_usd_per_share": "1.038",
+      "capital_gains_usd_per_share": "0.027",
+      "total_cash_usd_per_share": "1.065",
+      "quote": "Total Distributions | (1.287) | (1.477) | (1.179) | (1.092) | (1.065)",
+      "evidence_method": "official SEC search extraction of exact ETF Shares table; no successful original HTML archive",
+      "full_original_archived": false,
+      "precision_decimals": 3,
+      "identity_corroboration": [
+        "https://advisors.vanguard.com/investments/products/vgit/vanguard-intermediate-term-treasury-etf",
+        "https://www.sec.gov/Archives/edgar/data/1021882/000093247117005512/merged485a.htm"
+      ],
+      "identity_note": "Current issuer VGIT page identifies CUSIP92206C706; 2017 amendment records name change. Do not substitute standalone Intermediate-Term Treasury Fund or Admiral/Institutional classes."
+    }
+  ],
+  "period_constraints": [
+    {
+      "symbol": "VEA",
+      "start": "2008-01-01",
+      "end": "2008-06-30",
+      "source_id": "VEA_H1_2008",
+      "issuer_total_cash_usd_per_share": "0.016",
+      "issuer_precision_decimals": 3,
+      "period_basis": "frozen vendor ex-date cash sums in issuer per-share financial reporting period; total cash includes income and realized capital-gain distributions",
+      "no_split_inside_period_verified": true,
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2008-03-12",
+              "amount": "0.032"
+            }
+          ],
+          "sum_usd": "0.032",
+          "difference_to_issuer_total_usd": "0.016",
+          "compatible_with_issuer_precision": false
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2008-03-12",
+              "amount": "0.016"
+            }
+          ],
+          "sum_usd": "0.016",
+          "difference_to_issuer_total_usd": "0.000",
+          "compatible_with_issuer_precision": true
+        }
+      }
+    },
+    {
+      "symbol": "VEA",
+      "start": "2008-01-01",
+      "end": "2008-12-31",
+      "source_id": "VEA_FY_2008",
+      "issuer_total_cash_usd_per_share": "0.930",
+      "issuer_precision_decimals": 3,
+      "period_basis": "frozen vendor ex-date cash sums in issuer per-share financial reporting period; total cash includes income and realized capital-gain distributions",
+      "no_split_inside_period_verified": true,
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2008-03-12",
+              "amount": "0.032"
+            },
+            {
+              "ex_date": "2008-12-24",
+              "amount": "0.914"
+            }
+          ],
+          "sum_usd": "0.946",
+          "difference_to_issuer_total_usd": "0.016",
+          "compatible_with_issuer_precision": false
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2008-03-12",
+              "amount": "0.016"
+            },
+            {
+              "ex_date": "2008-12-24",
+              "amount": "0.914"
+            }
+          ],
+          "sum_usd": "0.930",
+          "difference_to_issuer_total_usd": "0.000",
+          "compatible_with_issuer_precision": true
+        }
+      }
+    },
+    {
+      "symbol": "VGIT",
+      "start": "2013-09-01",
+      "end": "2014-08-31",
+      "source_id": "VGIT_FY_2014",
+      "issuer_total_cash_usd_per_share": "1.032",
+      "issuer_precision_decimals": 3,
+      "period_basis": "frozen vendor ex-date cash sums in issuer per-share financial reporting period; total cash includes income and realized capital-gain distributions",
+      "no_split_inside_period_verified": true,
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2013-09-30",
+              "amount": "0.066"
+            },
+            {
+              "ex_date": "2013-10-31",
+              "amount": "0.071"
+            },
+            {
+              "ex_date": "2013-11-29",
+              "amount": "0.074"
+            },
+            {
+              "ex_date": "2013-12-24",
+              "amount": "0.1064"
+            },
+            {
+              "ex_date": "2014-02-03",
+              "amount": "0.079"
+            },
+            {
+              "ex_date": "2014-03-03",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-04-01",
+              "amount": "0.069"
+            },
+            {
+              "ex_date": "2014-05-01",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-06-02",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-07-01",
+              "amount": "0.085"
+            },
+            {
+              "ex_date": "2014-08-01",
+              "amount": "0.082"
+            }
+          ],
+          "sum_usd": "0.8754",
+          "difference_to_issuer_total_usd": "-0.1566",
+          "compatible_with_issuer_precision": false
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2013-09-30",
+              "amount": "0.066"
+            },
+            {
+              "ex_date": "2013-10-31",
+              "amount": "0.071"
+            },
+            {
+              "ex_date": "2013-11-29",
+              "amount": "0.074"
+            },
+            {
+              "ex_date": "2013-12-24",
+              "amount": "0.263"
+            },
+            {
+              "ex_date": "2014-02-03",
+              "amount": "0.079"
+            },
+            {
+              "ex_date": "2014-03-03",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-04-01",
+              "amount": "0.069"
+            },
+            {
+              "ex_date": "2014-05-01",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-06-02",
+              "amount": "0.081"
+            },
+            {
+              "ex_date": "2014-07-01",
+              "amount": "0.085"
+            },
+            {
+              "ex_date": "2014-08-01",
+              "amount": "0.082"
+            }
+          ],
+          "sum_usd": "1.032",
+          "difference_to_issuer_total_usd": "0.000",
+          "compatible_with_issuer_precision": true
+        }
+      }
+    },
+    {
+      "symbol": "VGIT",
+      "start": "2015-09-01",
+      "end": "2016-08-31",
+      "source_id": "VGIT_FY_2016",
+      "issuer_total_cash_usd_per_share": "1.065",
+      "issuer_precision_decimals": 3,
+      "period_basis": "frozen vendor ex-date cash sums in issuer per-share financial reporting period; total cash includes income and realized capital-gain distributions",
+      "no_split_inside_period_verified": true,
+      "vendors": {
+        "tiingo": {
+          "events": [
+            {
+              "ex_date": "2015-09-01",
+              "amount": "0.085"
+            },
+            {
+              "ex_date": "2015-10-01",
+              "amount": "0.092"
+            },
+            {
+              "ex_date": "2015-11-02",
+              "amount": "0.085"
+            },
+            {
+              "ex_date": "2015-12-01",
+              "amount": "0.088"
+            },
+            {
+              "ex_date": "2015-12-23",
+              "amount": "0.136"
+            },
+            {
+              "ex_date": "2016-02-01",
+              "amount": "0.075"
+            },
+            {
+              "ex_date": "2016-03-01",
+              "amount": "0.088"
+            },
+            {
+              "ex_date": "2016-04-01",
+              "amount": "0.078"
+            },
+            {
+              "ex_date": "2016-05-02",
+              "amount": "0.086"
+            },
+            {
+              "ex_date": "2016-06-01",
+              "amount": "0.084"
+            },
+            {
+              "ex_date": "2016-07-01",
+              "amount": "0.084"
+            },
+            {
+              "ex_date": "2016-08-01",
+              "amount": "0.084"
+            }
+          ],
+          "sum_usd": "1.065",
+          "difference_to_issuer_total_usd": "0.000",
+          "compatible_with_issuer_precision": true
+        },
+        "yahoo": {
+          "events": [
+            {
+              "ex_date": "2015-09-01",
+              "amount": "0.085"
+            },
+            {
+              "ex_date": "2015-10-01",
+              "amount": "0.092"
+            },
+            {
+              "ex_date": "2015-12-01",
+              "amount": "0.088"
+            },
+            {
+              "ex_date": "2015-12-23",
+              "amount": "0.136"
+            },
+            {
+              "ex_date": "2016-02-01",
+              "amount": "0.075"
+            },
+            {
+              "ex_date": "2016-03-01",
+              "amount": "0.088"
+            },
+            {
+              "ex_date": "2016-04-01",
+              "amount": "0.078"
+            },
+            {
+              "ex_date": "2016-05-02",
+              "amount": "0.086"
+            },
+            {
+              "ex_date": "2016-06-01",
+              "amount": "0.084"
+            },
+            {
+              "ex_date": "2016-07-01",
+              "amount": "0.084"
+            },
+            {
+              "ex_date": "2016-08-01",
+              "amount": "0.084"
+            }
+          ],
+          "sum_usd": "0.980",
+          "difference_to_issuer_total_usd": "-0.085",
+          "compatible_with_issuer_precision": false
+        }
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "VEA_2008-03-12",
+      "symbol": "VEA",
+      "ex_date": "2008-03-12",
+      "status": "PERIOD_CORROBORATED_EVENT_STILL_BLOCKED",
+      "frozen_observation": {
+        "date": "2008-03-12",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.032,
+        "yahoo_cash": 0.016,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.0014181152768686367,
+          "yahoo": 0.0010521172576507531
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 44.02,
+            "close": 43.75,
+            "volume": 366300.0
+          },
+          "yahoo": {
+            "open": 44.02000045776367,
+            "close": 43.75,
+            "volume": 366300.0
+          }
+        }
+      },
+      "supported_reference_cash_usd_per_share": "0.016",
+      "supported_provider_for_reference": "yahoo",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "period_constraints": [
+        "VEA_H1_2008",
+        "VEA_FY_2008"
+      ],
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false,
+      "event_specific_final_record_archived": false,
+      "limitation": "Issuer period totals identify a problem in one vendor cash collection; event date and final breakdown are not proven by a complete independently archived ex/record/pay record.",
+      "new_conclusion": "Tiingo March event0.032 exceeds issuer entire first-half distribution0.016. Yahoo0.016 matches the half-year; its annual0.930 also matches issuer. Do not assume Tiingo is universally superior.",
+      "minimum_external_material": "Vanguard Tax-Managed International Fund Europe Pacific ETF(VEA) final March2008 distribution statement or broker/DTC corporate-action record; explicit ETF class, ex/record/pay dates and amount, not mutual fund/Irish class."
+    },
+    {
+      "id": "VGIT_2013-12-24",
+      "symbol": "VGIT",
+      "ex_date": "2013-12-24",
+      "status": "PERIOD_CORROBORATED_EVENT_STILL_BLOCKED",
+      "frozen_observation": {
+        "date": "2013-12-24",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.1064,
+        "yahoo_cash": 0.263,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.004348996689764628,
+          "yahoo": -0.0018610309181300577
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 62.85,
+            "close": 62.76,
+            "volume": 25500.0
+          },
+          "yahoo": {
+            "open": 62.849998474121094,
+            "close": 62.7599983215332,
+            "volume": 25500.0
+          }
+        }
+      },
+      "supported_reference_cash_usd_per_share": "0.263",
+      "supported_provider_for_reference": "yahoo",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "period_constraints": [
+        "VGIT_FY_2014"
+      ],
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false,
+      "event_specific_final_record_archived": false,
+      "limitation": "Issuer period totals identify a problem in one vendor cash collection; event date and final breakdown are not proven by a complete independently archived ex/record/pay record.",
+      "preexisting_exchange_corroboration": {
+        "artifact": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications\\vgit_occ_33831_web_capture.json",
+        "sha256": "275dedd322f2e34abfba11f7a689638e49a0ed3b3b5d3f18c4d0a42d10703ead",
+        "cash_reference_usd_per_share": "0.2630",
+        "requeried": false
+      },
+      "new_conclusion": "Yahoo FY2014 total1.032 matches final issuer total; Tiingo0.8754 omits0.1566 relative to total cash, matching the disputed event difference. Prior contemporaneous OCC0.263 supports Yahoo date-specific total.",
+      "cash_type_warning": "Issuer FY2014 distinguishes income0.843 and realized capital gains0.189. Missing long-term gain coverage is a plausible field-basis explanation, not yet established as the exact event breakdown; never add0.189 again to Yahoo consolidated total.",
+      "minimum_external_material": "Final Vanguard fund3143, CUSIP92206C706, ex2013-12-24 distribution statement with income, short-term gain, long-term gain, return-of-capital components and ex/record/pay dates; distinguish estimates and amendments."
+    },
+    {
+      "id": "VGIT_2015-11-02",
+      "symbol": "VGIT",
+      "ex_date": "2015-11-02",
+      "status": "PERIOD_CORROBORATED_EVENT_STILL_BLOCKED",
+      "frozen_observation": {
+        "date": "2015-11-02",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.085,
+        "yahoo_cash": 0.0,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.0020762842203148058,
+          "yahoo": -0.003383035715311733
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 64.84,
+            "close": 64.8,
+            "volume": 289715.0
+          },
+          "yahoo": {
+            "open": 64.83999633789062,
+            "close": 64.80000305175781,
+            "volume": 289700.0
+          }
+        }
+      },
+      "supported_reference_cash_usd_per_share": "0.085",
+      "supported_provider_for_reference": "tiingo",
+      "canonical_cash_usd_per_share": null,
+      "data_gate": "BLOCK",
+      "period_constraints": [
+        "VGIT_FY_2016"
+      ],
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "production_approved": false,
+      "event_specific_final_record_archived": false,
+      "limitation": "Issuer period totals identify a problem in one vendor cash collection; event date and final breakdown are not proven by a complete independently archived ex/record/pay record.",
+      "new_conclusion": "Tiingo FY2016 total1.065 matches issuer; Yahoo0.980 is short0.085, exactly the omitted November entry. Annual match alone does not uniquely certify the event.",
+      "minimum_external_material": "Final Vanguard fund3143, CUSIP92206C706, November2015 distribution notice or broker/DTC corporate-action record identifying ex2015-11-02, pay/record dates and amount."
+    }
+  ],
+  "download_integrity": [
+    {
+      "file": "2008_EXTENSIONS_HB.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/2865/ffa728fbb2403eb14f67fa79e1fc0e36/Ergaenzungen_HB_2008%2820091006%29.pdf",
+      "official_file_metadata": {
+        "id": 2865,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Ergaenzungen_HB_2008(20091006).pdf",
+        "fileSize": 1093177,
+        "fileHash": "ffa728fbb2403eb14f67fa79e1fc0e36"
+      },
+      "expected_bytes": 1093177,
+      "actual_bytes": 1093177,
+      "sha256": "83647cf3e30b49232a5761f4cf3691815beb98f224224436a2cd1191a4a9ece8",
+      "eof_present": true,
+      "parser_repaired": false,
+      "pages": 118,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    {
+      "file": "2008_KURSLISTE_HB.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/2856/28e8034ea7aa2588986d4a659c247284/Kursliste_HB_2008%2820091006%29.pdf",
+      "official_file_metadata": {
+        "id": 2856,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Kursliste_HB_2008(20091006).pdf",
+        "fileSize": 3745489,
+        "fileHash": "28e8034ea7aa2588986d4a659c247284"
+      },
+      "expected_bytes": 3745489,
+      "actual_bytes": 3745489,
+      "sha256": "2d4e2b7571347977d0c563e53e65f612cb7a1b43f7d80abf060c73d6b7883314",
+      "eof_present": true,
+      "parser_repaired": false,
+      "pages": 391,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    {
+      "file": "2013_KURSLISTE_HB.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/41922/305cc34e180799a6d688e9f58e85de4c/Kursliste%20HB_2013%20%28Druckversion%29.pdf",
+      "official_file_metadata": {
+        "id": 41922,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Kursliste HB_2013 (Druckversion).pdf",
+        "fileSize": 45146021,
+        "fileHash": "305cc34e180799a6d688e9f58e85de4c"
+      },
+      "expected_bytes": 45146021,
+      "actual_bytes": 12164743,
+      "sha256": "14829f3810e03a113b21724fc34de893182fdc9e0e76d16fa2391bbc7e4e6ae2",
+      "eof_present": false,
+      "parser_repaired": true,
+      "pages": 0,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    },
+    {
+      "file": "2015_CORRECTIONS_HB_2.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/577152/9fef894935ab6f79d62bb232143a6b3e/Korrekturen%20HB%20-%20Band%202_2015.pdf",
+      "official_file_metadata": {
+        "id": 577152,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Korrekturen HB - Band 2_2015.pdf",
+        "fileSize": 9489434,
+        "fileHash": "9fef894935ab6f79d62bb232143a6b3e"
+      },
+      "expected_bytes": 9489434,
+      "actual_bytes": 9489434,
+      "sha256": "e643f7502f4b7ade5711119f6eed71ba725aa02b2917902154ce9f7f97e42c68",
+      "eof_present": true,
+      "parser_repaired": false,
+      "pages": 199,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    {
+      "file": "2015_KURSLISTE_HB_1.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/78212/8a356c41563ad6b36663fd258a800a0e/Kursliste%20HB_Band%201_2015_Druckversion.pdf",
+      "official_file_metadata": {
+        "id": 78212,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Kursliste HB_Band 1_2015_Druckversion.pdf",
+        "fileSize": 17007322,
+        "fileHash": "8a356c41563ad6b36663fd258a800a0e"
+      },
+      "expected_bytes": 17007322,
+      "actual_bytes": 17007322,
+      "sha256": "b5a9128c3b58a6024e7d70e5aef187ad87a67ab7f0fe0fcb1a1852dc8ccc9d33",
+      "eof_present": true,
+      "parser_repaired": false,
+      "pages": 669,
+      "status": "COMPLETE",
+      "eligible_for_event_absence_claim": false
+    },
+    {
+      "file": "2015_KURSLISTE_HB_2.pdf",
+      "url": "https://www.ictax.admin.ch/extern/api/download/78213/d70015d6dc16ec5eea82b192fa64e175/Kursliste%20HB_Band%202_2015_Druckversion.pdf",
+      "official_file_metadata": {
+        "id": 78213,
+        "deleted": false,
+        "complete": false,
+        "checked": false,
+        "fileName": "Kursliste HB_Band 2_2015_Druckversion.pdf",
+        "fileSize": 19033087,
+        "fileHash": "d70015d6dc16ec5eea82b192fa64e175"
+      },
+      "expected_bytes": 19033087,
+      "actual_bytes": 8003202,
+      "sha256": "6c5cf9c046be217543215458c255dfd237f57362ae00bf6cce2fa9a0c4d4e405",
+      "eof_present": false,
+      "parser_repaired": true,
+      "pages": 0,
+      "status": "INCOMPLETE_DOWNLOAD",
+      "eligible_for_event_absence_claim": false
+    }
+  ],
+  "new_attempts": [
+    {
+      "path": "Reused parent ICTax original yearbooks and categories",
+      "status": "NO_DUPLICATE_DOWNLOAD",
+      "details": "2013HB and2015HB2 are explicitly incomplete; no absence conclusion taken."
+    },
+    {
+      "path": "New2008HB supplement",
+      "status": "COMPLETE_NO_TARGET_EVENT",
+      "file": "2008_EXTENSIONS_HB.pdf",
+      "details": "Irish Vanguard mutual fund classes do not establish US Europe Pacific ETF2008 distribution."
+    },
+    {
+      "path": "New2015HB2 correction",
+      "status": "COMPLETE_NO_TARGET_EVENT",
+      "file": "2015_CORRECTIONS_HB_2.pdf",
+      "details": "Intermediate-Term Bond Index Fund is not Intermediate-Term Government Bond Index Fund; 2015Developed Markets ETF rows cannot resolve2008VEA."
+    },
+    {
+      "path": "New2008HB correction and2015HB2 supplement",
+      "status": "REQUESTS_CANCELLED_NO_COMPLETED_BODY",
+      "details": "Stopped when meaningful independent period evidence was obtained; no successful receipt or absence claim."
+    },
+    {
+      "path": "Official SEC issuer half-year/year financial reporting tables",
+      "status": "NEW_PERIOD_CASH_CONSTRAINTS",
+      "details": "4 exact ETF-class period constraints. Full原始HTML unavailable; source excerpt records are labelled accordingly."
+    }
+  ],
+  "frozen_inputs": [
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\tiingo_VEA.json",
+      "sha256": "f4bc36f92163a4b12b0c85db7b1b689a0802c5f5d65de424a02a9eb99fd4ca61"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\tiingo_VGIT.json",
+      "sha256": "74177d9e4cbd62fe45f77c9ddcc82088d906f983dc9c32fba88b44b580d9d96f"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\yahoo_VEA.json",
+      "sha256": "2ba70c6e0b599653b53b8b4aea72bea988c8e908cdae558810687addd33e905f"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\raw\\yahoo_VGIT.json",
+      "sha256": "244d929658b16ca31aa2d831cecefd220894e3ee06a7040ca995cd2c0d20bc45"
+    }
+  ],
+  "guardrails": {
+    "aggregate_match_is_not_unique_event_proof": true,
+    "truncated_pdf_is_ineligible": true,
+    "ordinary_income_is_not_total_cash": true,
+    "avoid_double_counting_consolidated_capital_gains": true,
+    "ETF_share_class_identity_required": true,
+    "production_changed": false,
+    "new_vendor_data_requests": false,
+    "point_in_time_certified": false
+  }
+}

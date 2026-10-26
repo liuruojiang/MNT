@@ -1,0 +1,53 @@
+{
+  "status": "ADDITIONAL_FISCAL_CASH_SET_CONSTRAINT_EVENT_STILL_BLOCKED",
+  "event_id": "EFA_2003-12-16",
+  "canonical_cash": null,
+  "data_gate": "BLOCK",
+  "fiscal_window": {
+    "start": "2003-08-01",
+    "end": "2004-07-31"
+  },
+  "issuer_total": 0.52,
+  "share_basis": "split-adjusted same basis as issuer 2005 three-for-one restatement",
+  "source_evidence": {
+    "url": "https://www.sec.gov/Archives/edgar/data/1100663/000119312506241198/d485bpos.htm",
+    "artifact": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_followup_20261026\\efa_evidence\\sec_financial_highlights_web_record.json",
+    "sha256": "4821eda0c88aeba2b805c2c3630f01dad30e5e03f478dce85eb4e1295605ac76",
+    "original_file_archived": false
+  },
+  "provider_comparison": {
+    "tiingo": {
+      "events": [
+        {
+          "ex_date": "2003-12-22",
+          "cash": 0.5225101441565225
+        }
+      ],
+      "sum": 0.5225101441565225,
+      "compatible_with_issuer_two_decimal_rounding": true
+    },
+    "yahoo": {
+      "events": [
+        {
+          "ex_date": "2003-12-16",
+          "cash": 0.156667
+        },
+        {
+          "ex_date": "2003-12-22",
+          "cash": 0.522667
+        }
+      ],
+      "sum": 0.679334,
+      "compatible_with_issuer_two_decimal_rounding": false
+    }
+  },
+  "raw_parents": {
+    "tiingo": "b04cd62115c6144492f360661341967344c593419eb3ce1663cce890d99aadb9",
+    "yahoo": "e3f17d5f46ebebb5b4382d37b1e19f470ae940d12ac21b17292d88d90f4781ea",
+    "metadata": "39179f8f8c318dc2c9df5029921fa90f442fca553e01d018b67af707ee02be37"
+  },
+  "new_market_requests": 0,
+  "conclusion": "Yahoo fiscal cash-event collection is inconsistent with issuer total; Tiingo total is compatible. Annual amount alone does not uniquely certify an individual ex-date or authorize a zero replacement.",
+  "required_external_evidence": "Issuer/trustee/DTC cash event record for December 2003 with actual ex/record/pay dates and explicit pre/post 2005 split share basis.",
+  "production_approved": false
+}

@@ -2,6 +2,8 @@
 
 更新：2026-10-26。服务只读核验数据，不调用策略、不修改正式参数、不自动接入生产或部署 Poe。
 
+后续进展：[每日运行验收、万得范围纠正与发行人财年补证](../research/data_quality/20261026_followup/README.md)。下列首轮数据结果保留当时口径；供应商“缺早期历史”已被新范围请求纠正，不作为当前结论。
+
 ## 本次完成与复用边界
 
 - DBMF、KMLM、Sub-A 旧成交额缺口的裁定、修复研究与完整回测已完成，本次直接复用。DBMF 隔离候选仍未应用于正式脚本；不能把“研究完成”解释为生产修复已上线。
@@ -41,7 +43,7 @@ python -B tools/run_data_source_service.py --config D:\动量策略\_data_source
 
 2026-10-25 已完成的“六指数 vs 新浪、六境内 ETF vs 腾讯”真实全历史核对同样复用，不重新下载：`work/source_validation/authenticated_analysis.json` 位于原任务工作区，交付报告保留其摘要和哈希。其科创50高低价、ETF 量单位及空值等未决项继续阻断；新的长短一致结果不会覆盖旧跨源异常。旧报告中 DBMF“待裁定”状态已被 2026-10-25 后续独立研究取代。
 
-15 个指数/ETF 中 11 个长短区间一致，4 个阻断：000852.SH 已知长短冲突；932000.CSI/930955.CSI 历史覆盖不足（930955 另有重叠冲突）；H11077.SH 缺需用列。区间一致不是独立来源全历史认证。基金接口声明 aftype=0 前复权，独立历史 parity 尚未完成，不能仅凭参数名就替代正式 qfq。
+首轮15个指数/ETF中11个长短区间一致、4个阻断，反映当时已有样本。后续新范围请求已补齐932000/930955的2026年早期样本；930955保留已知区间冲突隔离。H11077已有近期所需收盘，未验收更早覆盖和正式代码等价，不能把缺股票量额视作缺国债收盘。区间一致不是独立来源全历史认证。基金接口声明aftype=0前复权，独立历史parity尚未完成，不能仅凭参数名就替代正式qfq。
 
 指数成交额虽有“元”的单位声明，成分股聚合范围仍未证明，不能接管 Sub-A；PIT-ST、历史股本/市值、退市信息与具体期货结算/OI/到期字段仍未取得合格返回。MO 请求实际返回 IO 合约和另一日期并缺乘数/报价，已拒绝。单字段市值及历史 ST 追问也返回“没找到数据”。**没有观察到 401/403 权限拒绝，不能据此断言需要升级账号。**后续应由供应商明确可用接口、字段、范围和授权；不重复试探相同失败。
 
@@ -49,12 +51,12 @@ python -B tools/run_data_source_service.py --config D:\动量策略\_data_source
 
 ## 日常任务与验收
 
-Codex 本聊天已创建 `automation-5`：工作日北京时间 17:40 执行增量核验，无可操作变化保持静默。创建成功及查看已确认；首次定时触发尚未发生，不能当作定时执行验收。任务依赖本机应用可运行及网络可达。
+Codex本聊天已创建并更新`automation-5`：工作日北京时间17:40执行增量核验，无可操作变化保持静默；首次验收完成或失败单独回报一次。创建/更新及查看已确认，手动跨交易日运行已完成；首次真实定时触发仍待运行记录，不能据手动成功标完成。任务依赖本机应用可运行及网络可达。首次状态保存在`first_schedule_acceptance.json`；运行核对入口为`tools/verify_data_source_daily.py`，该工具本身不会证明调度来源。
 
 测试覆盖独立日历、错误/过期快照拒绝、跨进程额度、并发锁、归档篡改、项目字段边界、重复复权、上游修正、非 JSON 认证故障和真实万得错误品种/日期反例。测试命令：
 
 ```powershell
-python -B -m pytest tests/test_data_source_service.py tests/test_us_source_audit.py tests/test_cn_source_audit.py tests/test_action_factors.py -q -p no:cacheprovider
+python -B -m pytest tests/test_data_source_service.py tests/test_us_source_audit.py tests/test_cn_source_audit.py tests/test_action_factors.py tests/test_data_source_daily_acceptance.py -q -p no:cacheprovider
 ```
 
 正式策略脚本不在本次改动范围。服务代码可以回退 Git 提交；运营存储保留原始响应和运行记录，不清理用户旧文件。

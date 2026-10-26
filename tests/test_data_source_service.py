@@ -165,12 +165,27 @@ def test_completed_dbmf_is_not_created_as_a_new_task_and_alerts_deduplicate(stor
     assert first['no_strategy_backtests_repeated']
 
 
-def test_adapter_rejects_unqualified_volume_and_substring_symbol(store):
+def test_adapter_rejects_unqualified_volume_and_substring_symbol(store,monkeypatch):
+    import source_audit.adapters as adapter
+    monkeypatch.setattr(adapter,'project_scope',lambda project:{'requirements':[{'instruments':['SPY']}]})
     publish(store)
     result=read_asset(store,'us_long_v16','tiingo','SPY','2026-10-23',fields=['close'])
     assert result['records']==[{'date':'2026-10-23','close':100}]
     with pytest.raises(DataNotAccepted): read_asset(store,'us_long_v16','tiingo','SPY','2026-10-23',fields=['volume'])
     with pytest.raises(DataNotAccepted): read_asset(store,'us_long_v16','tiingo','SP','2026-10-23')
+
+
+def test_changed_entrypoint_cannot_consume_old_project_contract(store,tmp_path,monkeypatch):
+    import hashlib
+    import source_audit.adapters as adapter
+    entry=tmp_path/'explicit_test_entry.py'; entry.write_bytes(b'old reviewed test entry')
+    contract={'project_id':'test_project','entrypoints':[{'path':str(entry),'sha256_lf':hashlib.sha256(entry.read_bytes()).hexdigest()}],'requirements':[{'instruments':['SPY']}]}
+    monkeypatch.setattr(adapter,'requirements',lambda:{'projects':[contract]})
+    publish(store)
+    assert adapter.read_asset(store,'test_project','tiingo','SPY','2026-10-23',fields=['close'])
+    entry.write_bytes(b'changed unreviewed test entry')
+    with pytest.raises(DataNotAccepted,match='entrypoint changed'):
+        adapter.read_asset(store,'test_project','tiingo','SPY','2026-10-23',fields=['close'])
 
 
 def test_failed_service_run_revokes_prior_provider_snapshot_and_updates_latest(store,tmp_path,monkeypatch):

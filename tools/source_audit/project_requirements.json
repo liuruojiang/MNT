@@ -385,6 +385,13 @@
             "share_volume"
           ],
           "unit_basis": "Price-index points; bond-index points; shares for volume, not monetary turnover",
+          "instrument_field_overrides": {
+            "H11077.SH / CSI 931077": {
+              "required_fields": ["session_date", "close"],
+              "not_required_by_formal_bond_leg": ["open", "high", "low", "share_volume", "turnover"],
+              "mapping_status": "H11077/931077 equivalence and full history remain uncertified"
+            }
+          },
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
           "adjustment": "Price index vs total-return index must remain distinct; H11077 cannot silently become broad bond index",
           "point_in_time": "No pre-publication backfilled index history for formal samples",

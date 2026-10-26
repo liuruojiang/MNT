@@ -82,7 +82,7 @@ def render(report, output):
         rows+='<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in [p['name'],p['status'],p['entrypoint_scope'],len(p['requirements'])])+'</tr>'
     complete=''.join('<li>'+html.escape(w['work_id'])+'：已完成，复用证据，不重复取数或回测。</li>' for w in report['completed_work_reused'])
     cn=report.get('CN') or {}
-    cgates={v:sum(a.get('gate')==v for a in cn.get('assets',[])) for v in ('BLOCKED','INTERVAL_COHERENT_ONLY','INDEPENDENT_OVERLAP_CHECKED')}
+    cgates={v:sum(a.get('gate')==v for a in cn.get('assets',[])) for v in ('BLOCKED','INTERVAL_COHERENT_ONLY','INDEPENDENT_OVERLAP_CHECKED','INCREMENTAL_OVERLAP_CHECKED')}
     probes=report.get('field_probes') or {}
     probe_text='；'.join(str(p.get('probe'))+'：'+str(p.get('status')) for p in probes.get('probes',[]))
     text=f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>策略共享数据源服务</title>
@@ -95,6 +95,7 @@ def render(report, output):
 <h2>研究快照与项目覆盖</h2><p>通过价格字段核验的研究快照：Tiingo {counts['tiingo']}，Yahoo {counts['yahoo']}。这是逐资产研究资格，成交量、整套策略和生产资格单列，不能据此全源晋级。</p>
 <table><tr><th>项目</th><th>完整项目状态</th><th>入口版本</th><th>字段组数</th></tr>{rows}</table>
 <p>万得区间结果：{html.escape(str(cgates))}。历史成交额统计口径、PIT-ST/股本/退市与期货期权字段按实际返回判定；HTTP 200 或能发现工具都不等于字段可用。BTC 保留 UTC 日历和独立成交量口径。</p>
+<p>增量重叠一致仅说明本次尾部与已存历史相容，新增交易日仍没有第二独立行情认证。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077的正式国债腿只需要日期和收盘，其历史范围及代码等价尚待核实，不把缺股票成交量当作缺收盘价。</p>
 <p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口声明 aftype=0 为前复权，但尚未完成历史序列的独立口径核对。</p>
 <h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
 <p>新增或改变的问题 {len(report['new_or_changed_issues'])} 项；已知问题不变时每日任务保持静默。</p><details><summary>查看本轮变化</summary><pre>{html.escape(json.dumps(report['new_or_changed_issues'],ensure_ascii=False,indent=2))}</pre></details>
@@ -129,6 +130,9 @@ def _run_locked(args):
         followup=root/'wind_capability_evidence/narrow_single_field_followup_20261026/followup.json'
         if probes is not None and followup.exists():
             probes['narrow_single_field_followup']=json.loads(followup.read_text(encoding='utf-8'))
+        latest_followup=root/'evidence/wind_followup_20261026.json'
+        if probes is not None and latest_followup.exists():
+            probes['additional_scope_and_reference_evidence']=json.loads(latest_followup.read_text(encoding='utf-8'))
         changes=list(us.get('new_or_changed_issues',[]))
         if cn:
             for asset in cn.get('assets',[]):
@@ -137,10 +141,18 @@ def _run_locked(args):
                 prior=store.db.execute('SELECT 1 FROM known_issues WHERE issue_id=?',(issue_id,)).fetchone()
                 changed=store.issue(issue_id,asset.get('gate','BLOCKED'),evidence)
                 if changed and (prior or asset['code']!='000852.SH'): changes.append({'issue_id':issue_id,'evidence':evidence})
+        project_readiness=adapters.readiness(us,cn,probes)
+        for project in project_readiness:
+            issue_id='PROJECT_SCOPE:'+project['project_id']
+            prior=store.db.execute('SELECT 1 FROM known_issues WHERE issue_id=?',(issue_id,)).fetchone()
+            evidence={k:project.get(k) for k in ['project_id','entrypoint_scope','status']}
+            changed=store.issue(issue_id,project['entrypoint_scope'],evidence)
+            if changed and (prior or project['entrypoint_scope']=='BLOCKED_SOURCE_SCOPE'):
+                changes.append({'issue_id':issue_id,'status':'PROJECT_CONTRACT_CHANGED','evidence':evidence})
         report={'schema_version':1,'run_id':run_id,'status':'REVIEW_REQUIRED','purpose':'research_only',
                 'cutoffs':{'US':cutoff_us,'CN':cutoff_cn},'bootstrap':bootstrap,
                 'US':us,'CN':cn,'crypto':crypto_boundary(config),'field_probes':probes,
-                'projects':adapters.readiness(us,cn,probes),'completed_work_reused':completed_work(REPO),
+                'projects':project_readiness,'completed_work_reused':completed_work(REPO),
                 'new_or_changed_issues':changes,'production_changed':False,'poe_deployed':False,'strategy_backtests_run':0}
         write(output/'US_report.json',us)
         write(output/'project_readiness.json',report['projects'])

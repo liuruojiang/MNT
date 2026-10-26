@@ -230,3 +230,52 @@ def test_completed_same_cutoff_short_index_avoids_even_credential_loading(tmp_pa
     report = json.loads(next((tmp_path / 'outputs').glob('*/report.json')).read_text())
     assert report['requests'] == 0
     assert report['assets'][0]['gate'] == 'BLOCKED'
+
+
+def test_reusing_incremental_long_does_not_promote_single_origin_rows_or_change_gate(tmp_path,monkeypatch):
+    import audit_cn_sources as cli
+    old_dir,new_dir=tmp_path/'old',tmp_path/'new'
+    old_dir.mkdir(); new_dir.mkdir()
+    old_payload=truncated_payload(slice(0,3))
+    old_payload['result'].setdefault('_meta',{})['requestId']='TEST_OLDER_DISTINCT_RESPONSE'
+    body=json.loads(old_payload['result']['content'][0]['text'])
+    extra=copy.deepcopy(body['data']['rows'][0])
+    extra[0]=extra[0].replace('2026-10-19','2026-10-16')  # Explicit synthetic prefix row for range topology.
+    body['data']['rows'].insert(0,extra)
+    old_payload['result']['content'][0]['text']=json.dumps(body)
+    old=create_archive(old_dir,old_payload)
+    short=create_archive(new_dir,SHORT)
+    calendar=tmp_path/'calendar.json'
+    calendar.write_text(json.dumps({'source':'https://www.sse.com.cn/disclosure/dealinstruc/closed/','sessions':['2026-10-16']+SESSION.strftime('%Y-%m-%d').tolist()}))
+    short_index=tmp_path/'short_index.json'
+    short_index.write_text(json.dumps({'schema':1,'kind':'short','entries':{'000852.SH':{'kind':'index','cutoff':'2026-10-23','short_start':'2026-10-19','parsed_path':str(short)}}}))
+    long_index=tmp_path/'long_index.json'
+    long_index.write_text(json.dumps({'schema':1,'kind':'long','entries':{'000852.SH':{'kind':'index','parsed_path':str(old)}}}))
+    monkeypatch.setattr(cli,'WindClient',lambda *a,**k:pytest.fail('No repeat network request'))
+    args=type('Args',(),{'output':tmp_path/'outputs','sessions':calendar,'start':'2026-10-16','cutoff':'2026-10-23','symbols':'000852.SH','mode':'tail','credential':None,'max_requests':1,'dns_override':None,'offline_archive':None,'short_archive':None,'short_index':short_index,'long_index':long_index,'reference_dir':None,'tail_sessions':5})()
+    for _ in range(2):
+        assert cli.run(args)==2
+    reports=[json.loads(p.read_text()) for p in (tmp_path/'outputs').glob('*/report.json')]
+    assert len(reports)==2
+    assert all(p['requests']==0 and p['assets'][0]['gate']=='INCREMENTAL_OVERLAP_CHECKED' and p['assets'][0]['new_rows_second_independent_quote'] is False for p in reports)
+
+
+def test_known_interval_conflict_cannot_clear_on_a_new_same_provider_agreement(tmp_path,monkeypatch):
+    import audit_cn_sources as cli
+    old_dir,new_dir=tmp_path/'old',tmp_path/'new'
+    old_dir.mkdir(); new_dir.mkdir()
+    old=create_archive(old_dir,good_long()); short=create_archive(new_dir,SHORT)
+    calendar=tmp_path/'calendar.json'
+    calendar.write_text(json.dumps({'source':'https://www.sse.com.cn/disclosure/dealinstruc/closed/','sessions':SESSION.strftime('%Y-%m-%d').tolist()}))
+    idx=tmp_path/'short_index.json'
+    idx.write_text(json.dumps({'schema':1,'kind':'short','entries':{'930955.CSI':{'kind':'index','cutoff':'2026-10-23','short_start':'2026-10-19','parsed_path':str(short)}}}))
+    long_idx=tmp_path/'long_index.json'
+    long_idx.write_text(json.dumps({'schema':1,'kind':'long','entries':{'930955.CSI':{'parsed_path':str(old)}}}))
+    # Isolate the quarantine decision from the separately tested field validator.
+    monkeypatch.setattr(cli,'audit_asset',lambda *a,**k:({'code':'930955.CSI','kind':'index','gate':'INTERVAL_COHERENT_ONLY','amount_gate':'BLOCKED','field_gaps':[]},pd.DataFrame({'close':[1]})))
+    monkeypatch.setattr(cli,'WindClient',lambda *a,**k:pytest.fail('No new requests'))
+    args=type('Args',(),{'output':tmp_path/'outputs','sessions':calendar,'start':'2026-10-19','cutoff':'2026-10-23','symbols':'930955.CSI','mode':'tail','credential':None,'max_requests':1,'dns_override':None,'offline_archive':None,'short_archive':None,'short_index':idx,'long_index':long_idx,'reference_dir':None,'tail_sessions':5})()
+    assert cli.run(args)==2
+    report=json.loads(next((tmp_path/'outputs').glob('*/report.json')).read_text())
+    assert report['assets'][0]['gate']=='BLOCKED' and report['assets'][0]['known_quarantine']
+    assert not list((tmp_path/'outputs').glob('*/*research_only_ohlcv.csv'))

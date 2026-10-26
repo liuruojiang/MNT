@@ -1,0 +1,19 @@
+{
+  "before_sha256": "74055729fd28f1bc5d93f3ff696c6fb9643ff67a1626d88914c06c460f46a209",
+  "backup_path": "D:\\动量策略\\_data_source_service\\state_backups\\20261026_before_full_range_candidates\\wind_long_index.json",
+  "after_sha256": "11cf397e5a467189641875cd452d793ea8c4e5335d6166e909dabb71c9676188",
+  "candidate_changes": [
+    {
+      "code": "932000.CSI",
+      "raw_sha256": "94c2d010d20813d991a51c29481f61e3eb127b3791e73a028e51202e31470d1b",
+      "production_approved": false
+    },
+    {
+      "code": "930955.CSI",
+      "raw_sha256": "73f75e615fb37c9056a41b3e7c2ce390dff4fed200b262e0db1e3177c026d82d",
+      "production_approved": false
+    }
+  ],
+  "old_short_responses_retained": true,
+  "production_changed": false
+}
