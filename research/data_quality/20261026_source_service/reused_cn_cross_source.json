@@ -1,0 +1,553 @@
+{
+  "status": "REUSED_COMPLETED_CROSS_SOURCE_COMPARISON",
+  "source_sha256": "5875bc4cc611e7e140193945792aedca2a2648c67b67e1fd4cae9df38c27f720",
+  "original_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\source_validation\\authenticated_analysis.json",
+  "cutoff": "2026-10-23",
+  "indices": [
+    {
+      "name": "中证1000",
+      "formal_period_comparison": {
+        "candidate_rows": 2921,
+        "baseline_rows": 2921,
+        "common_rows": 2921,
+        "candidate_first": "2014-10-17",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2014-10-17",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2014-10-17",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000001018634,
+            "worst_date": "2015-04-24",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 0.005000000001018634,
+            "worst_date": "2015-03-23",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 35.52100000000064,
+            "worst_date": "2026-10-21",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 1,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 40.36999999999989,
+            "worst_date": "2026-10-21",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 2,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 1.0,
+          "min": 0.6498364807722302,
+          "max": 1.0000000546691499
+        }
+      }
+    },
+    {
+      "name": "中证500",
+      "formal_period_comparison": {
+        "candidate_rows": 4804,
+        "baseline_rows": 4804,
+        "common_rows": 4804,
+        "candidate_first": "2007-01-15",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2007-01-15",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2007-01-15",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000001018634,
+            "worst_date": "2026-02-12",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 0.026000000000294676,
+            "worst_date": "2009-07-27",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 1,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 0.005000000001018634,
+            "worst_date": "2026-01-16",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 0.005000000001018634,
+            "worst_date": "2015-04-24",
+            "median_abs": 0.0029999999997016857,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 1.0,
+          "min": 0.9999999405324439,
+          "max": 1.0000000594294722
+        }
+      }
+    },
+    {
+      "name": "创业板",
+      "formal_period_comparison": {
+        "candidate_rows": 3980,
+        "baseline_rows": 3980,
+        "common_rows": 3980,
+        "candidate_first": "2010-06-01",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2010-06-01",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2010-06-01",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2010-06-10",
+            "median_abs": 0.0029999999997016857,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 0.006000000000312866,
+            "worst_date": "2016-11-09",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2010-06-08",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 0.5099999999999909,
+            "worst_date": "2016-02-29",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 2,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 0.9999999962365077,
+          "min": 0.9999999418200548,
+          "max": 1.0061950108203446
+        }
+      }
+    },
+    {
+      "name": "科创50",
+      "formal_period_comparison": {
+        "candidate_rows": 1515,
+        "baseline_rows": 1515,
+        "common_rows": 1515,
+        "candidate_first": "2020-07-23",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2020-07-23",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2020-07-23",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2020-08-04",
+            "median_abs": 0.00200000000018008,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 13.043000000000006,
+            "worst_date": "2024-10-25",
+            "median_abs": 0.834999999999809,
+            "over_one_display_tick": 1090,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 25.81600000000003,
+            "worst_date": "2021-07-28",
+            "median_abs": 0.5510000000000446,
+            "over_one_display_tick": 1053,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2020-09-25",
+            "median_abs": 0.0029999999999290594,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    {
+      "name": "沪深300",
+      "formal_period_comparison": {
+        "candidate_rows": 5233,
+        "baseline_rows": 5233,
+        "common_rows": 5233,
+        "candidate_first": "2005-04-08",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2005-04-08",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2005-04-08",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2005-07-01",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2005-07-01",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2006-01-13",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2006-02-22",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 1.0,
+          "min": 0.999999940546883,
+          "max": 1.000000059540651
+        }
+      }
+    },
+    {
+      "name": "上证50",
+      "formal_period_comparison": {
+        "candidate_rows": 5537,
+        "baseline_rows": 5537,
+        "common_rows": 5537,
+        "candidate_first": "2004-01-02",
+        "candidate_last": "2026-10-23",
+        "baseline_first": "2004-01-02",
+        "baseline_last": "2026-10-23",
+        "candidate_missing_volume_dates": [],
+        "candidate_missing_price_dates": [],
+        "common_first": "2004-01-02",
+        "common_last": "2026-10-23",
+        "missing_vs_baseline_in_overlap": [],
+        "missing_candidate_dates_in_baseline_span": [],
+        "fields": {
+          "open": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2004-01-14",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "high": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2004-04-08",
+            "median_abs": 0.0029999999997016857,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "low": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2004-01-29",
+            "median_abs": 0.0020000000004074536,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          },
+          "close": {
+            "max_abs": 0.005000000000109139,
+            "worst_date": "2004-02-27",
+            "median_abs": 0.0029999999997016857,
+            "over_one_display_tick": 0,
+            "tick_used_for_screening_only": 0.01
+          }
+        },
+        "volume_ratio_candidate_over_baseline": {
+          "median": 1.0,
+          "min": 0.9999999404954445,
+          "max": 100.0
+        }
+      }
+    }
+  ],
+  "funds": [
+    {
+      "code": "159915.SZ",
+      "labels": [
+        "159915_SZ_aftype0"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "qfqday",
+      "candidate_rows": 3608,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2011-12-09",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-04",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [
+        "2021-02-08"
+      ],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-04",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.0,
+          "worst_date": "2024-03-04",
+          "median_abs": 0.0,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99999024048553,
+        "max": 100.00001014800033
+      }
+    },
+    {
+      "code": "159941.SZ",
+      "labels": [
+        "159941_SZ_aftype0"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "qfqday",
+      "candidate_rows": 2739,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2015-07-13",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-04",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-04",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.0,
+          "worst_date": "2024-03-04",
+          "median_abs": 0.0,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99998807870813,
+        "max": 100.00001138636229
+      }
+    },
+    {
+      "code": "513030.SH",
+      "labels": [
+        "germany_recent",
+        "germany_chunk_a",
+        "germany_chunk_b"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "day",
+      "candidate_rows": 2945,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2014-09-05",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-01",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [
+        "2025-01-23"
+      ],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-01",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.0,
+          "worst_date": "2024-03-01",
+          "median_abs": 0.0,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99981597891855,
+        "max": 100.0001871664737
+      }
+    },
+    {
+      "code": "513520.SH",
+      "labels": [
+        "513520_SH_aftype0"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "day",
+      "candidate_rows": 1778,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2019-06-25",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-04",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-04",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.001000000000000334,
+          "worst_date": "2026-02-13",
+          "median_abs": 0.0009999999999998899,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99991755741117,
+        "max": 100.00010368562519
+      }
+    },
+    {
+      "code": "159985.SZ",
+      "labels": [
+        "159985_SZ_aftype0"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "day",
+      "candidate_rows": 1666,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2019-12-05",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-04",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-04",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.0,
+          "worst_date": "2024-03-04",
+          "median_abs": 0.0,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99988134033329,
+        "max": 100.00012015379686
+      }
+    },
+    {
+      "code": "518880.SH",
+      "labels": [
+        "518880_SH_aftype0"
+      ],
+      "merge_conflicts": [],
+      "baseline": "fresh_Tencent_recent_640_rows",
+      "baseline_payload_key": "qfqday",
+      "candidate_rows": 3217,
+      "baseline_rows": 640,
+      "common_rows": 640,
+      "candidate_first": "2013-07-29",
+      "candidate_last": "2026-10-23",
+      "baseline_first": "2024-03-04",
+      "baseline_last": "2026-10-23",
+      "candidate_missing_volume_dates": [],
+      "candidate_missing_price_dates": [],
+      "common_first": "2024-03-04",
+      "common_last": "2026-10-23",
+      "missing_vs_baseline_in_overlap": [],
+      "missing_candidate_dates_in_baseline_span": [],
+      "fields": {
+        "close": {
+          "max_abs": 0.0,
+          "worst_date": "2024-03-04",
+          "median_abs": 0.0,
+          "over_one_display_tick": 0,
+          "tick_used_for_screening_only": 0.001
+        }
+      },
+      "volume_ratio_candidate_over_baseline": {
+        "median": 100.0,
+        "min": 99.99995709384605,
+        "max": 100.00005534034311
+      }
+    }
+  ],
+  "superseded_status": "DBMF old pending adjudication superseded by completed 20261025 study",
+  "new_requests": 0,
+  "production_approved": false
+}

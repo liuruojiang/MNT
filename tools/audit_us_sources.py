@@ -82,7 +82,7 @@ def render(report, output):
         handle.write(text)
 
 
-def build_report(profile, snapshot, output, scope):
+def build_report(profile, snapshot, output, scope, calendar_override=None):
     receipts = snapshot["receipts"]
     def load(name):
         receipt = receipts.get(name, {})
@@ -97,7 +97,7 @@ def build_report(profile, snapshot, output, scope):
     assets = []
     try:
         spy = yahoo_rows(load("yahoo_SPY"), "SPY", start, end)
-        calendar = sorted(spy)
+        calendar = sorted(calendar_override) if calendar_override is not None else sorted(spy)
         if not calendar or calendar[-1] != end:
             raise ValueError("Reference calendar not fresh")
     except Exception as exc:

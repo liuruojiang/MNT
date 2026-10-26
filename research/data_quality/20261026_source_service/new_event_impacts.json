@@ -1,0 +1,1652 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-26",
+  "mode": "NEW_EVENTS_FACTOR_DIAGNOSIS_AND_JOINT_FROZEN_COUNTERFACTUAL",
+  "source_cutoff": "2026-10-23",
+  "cash_adjudication_reference": "research/data_quality/20261026_source_service/us_adjudications.json",
+  "cash_adjudication_sha256": "1da139cb50a0136fe8f0034764205f6618fb6d166b45764d3ee1df9081d7c194",
+  "action_factor_module_sha256_lf": "ca87f90c4c0ad613afea7b37e6b6b212b8d7e50e6eb19fc78db0f5793333b459",
+  "event_factor_diagnostics": [
+    {
+      "symbol": "QQQ",
+      "event": {
+        "ex_date": "2020-09-21",
+        "prior_date": "2020-09-18",
+        "expected_cash": 0.38824
+      },
+      "cash_reference": {
+        "id": "QQQ_2020-09-21",
+        "symbol": "QQQ",
+        "ex_date": "2020-09-21",
+        "status": "CONFIRMED_CASH_EVENT",
+        "resolution": {
+          "cash_usd_per_share": "0.38824",
+          "ex_date": "2020-09-21",
+          "pay_date": "2020-10-30",
+          "record_date": null,
+          "cash_basis": "2020 Swiss Federal Tax Administration gross USD income per QQQ share; exclude CHF taxable-income conversion",
+          "date_evidence": "explicit ex. and pay. columns; annual table title identifies 2020",
+          "supports_provider": "tiingo",
+          "conflicting_provider": "yahoo",
+          "usable_scope": {
+            "symbol": "QQQ",
+            "ex_dates": [
+              "2020-09-21"
+            ],
+            "fields": [
+              "cash_distribution"
+            ]
+          },
+          "not_resolved": [
+            "other dates",
+            "full adjusted series",
+            "strategy impact"
+          ]
+        },
+        "evidence": [
+          {
+            "url": "https://www.ictax.admin.ch/extern/api/download/1965377/2d68057143f0d84058d1b4d0b7268ed9/Ergaenzungen_HB_Band_2_2020%2820210326%29.pdf",
+            "artifact": "qqq_swiss_tax_2020.pdf",
+            "sha256": "c10b9db052db217b2e7c28b4583e8112987d520bb8b80a6e3cdc2a7c7248f678",
+            "kind": "pdf",
+            "page_1based": 12,
+            "retrieved": "2026-10-26",
+            "retrospective_evidence": true,
+            "point_in_time_certified": false
+          }
+        ],
+        "frozen_observation": {
+          "date": "2020-09-21",
+          "flags": [
+            "raw_open",
+            "cash",
+            "adjusted_return"
+          ],
+          "tiingo_cash": 0.38824,
+          "yahoo_cash": 0.0,
+          "yahoo_capital_gain": 0.0,
+          "tiingo_split": 1.0,
+          "yahoo_split": 1.0,
+          "returns": {
+            "tiingo": 0.003852962116526859,
+            "yahoo": 0.0023982207253840926
+          },
+          "comparison_values": {
+            "tiingo": {
+              "open": 262.52,
+              "close": 267.51,
+              "volume": 57168570.0
+            },
+            "yahoo": {
+              "open": 262.4700012207031,
+              "close": 267.510009765625,
+              "volume": 57168600.0
+            }
+          }
+        },
+        "projects": [
+          "V1.6",
+          "V8.0"
+        ],
+        "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+        "source_audit_cutoff": "2026-10-23",
+        "data_gate": "CASH_REFERENCE_ONLY",
+        "allows_price_repair": false,
+        "allows_series_promotion": false,
+        "strategy_replayed_this_task": false,
+        "production_approved": false
+      },
+      "diagnostics": {
+        "source_audit": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T140250Z_9fbc8f46\\raw\\yahoo_QQQ.json",
+          "sha256": "539f4c7f6337a75192c4ea9cc630344822740456cad7563cf7f070b314e412a3",
+          "inspection": {
+            "symbol": "QQQ",
+            "ex_date": "2020-09-21",
+            "prior_date": "2020-09-18",
+            "expected_cash": 0.38824,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": -1.491587107931827e-06,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 266.8699951171875,
+            "ex_raw_close": 267.510009765625,
+            "prior_adjusted_close": 257.6322021484375,
+            "ex_adjusted_close": 258.25006103515625,
+            "observed_factor_ratio": 1.00000000558919,
+            "yahoo_adjusted_return_before": 0.0023982207253840926,
+            "yahoo_basis_reference_return": 0.0038586305767360773,
+            "counterfactual_prefix_scale": 0.998545203670249,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "QQQ",
+              "ex_date": "2020-09-21",
+              "prior_date": "2020-09-18",
+              "expected_cash": 0.38824,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": -1.491587107931827e-06,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 266.8699951171875,
+              "ex_raw_close": 267.510009765625,
+              "prior_adjusted_close": 257.6322021484375,
+              "ex_adjusted_close": 258.25006103515625,
+              "observed_factor_ratio": 1.00000000558919,
+              "yahoo_adjusted_return_before": 0.0023982207253840926,
+              "yahoo_basis_reference_return": 0.0038586305767360773,
+              "counterfactual_prefix_scale": 0.998545203670249,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "QQQ",
+              "ex_date": "2020-09-21",
+              "prior_date": "2020-09-18",
+              "expected_cash": 0.38824,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.38824,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.3882400000000029,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 266.8699951171875,
+              "ex_raw_close": 267.510009765625,
+              "prior_adjusted_close": 257.2573997663263,
+              "ex_adjusted_close": 258.25006103515625,
+              "observed_factor_ratio": 0.9985452092513079,
+              "yahoo_adjusted_return_before": 0.0038586305767360773,
+              "yahoo_basis_reference_return": 0.0038586305767360773,
+              "counterfactual_prefix_scale": 1.0,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        },
+        "native_baseline": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\source_validation\\tiingo_authenticated\\yahoo_current\\QQQ.json",
+          "sha256": "d413a0613533e18141b3aca568b32c90dc1c68076c837913380cba8d5f76da8f",
+          "inspection": {
+            "symbol": "QQQ",
+            "ex_date": "2020-09-21",
+            "prior_date": "2020-09-18",
+            "expected_cash": 0.38824,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": 3.0271514211795033e-05,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 266.8699951171875,
+            "ex_raw_close": 267.510009765625,
+            "prior_adjusted_close": 257.6321105957031,
+            "ex_adjusted_close": 258.25,
+            "observed_factor_ratio": 0.9999998865683113,
+            "yahoo_adjusted_return_before": 0.0023983400317149073,
+            "yahoo_basis_reference_return": 0.0038586305767360773,
+            "counterfactual_prefix_scale": 0.99854532251799,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "QQQ",
+              "ex_date": "2020-09-21",
+              "prior_date": "2020-09-18",
+              "expected_cash": 0.38824,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": 3.0271514211795033e-05,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 266.8699951171875,
+              "ex_raw_close": 267.510009765625,
+              "prior_adjusted_close": 257.6321105957031,
+              "ex_adjusted_close": 258.25,
+              "observed_factor_ratio": 0.9999998865683113,
+              "yahoo_adjusted_return_before": 0.0023983400317149073,
+              "yahoo_basis_reference_return": 0.0038586305767360773,
+              "counterfactual_prefix_scale": 0.99854532251799,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "QQQ",
+              "ex_date": "2020-09-21",
+              "prior_date": "2020-09-18",
+              "expected_cash": 0.38824,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.38824,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.38824000000003256,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 266.8699951171875,
+              "ex_raw_close": 267.510009765625,
+              "prior_adjusted_close": 257.25733896577685,
+              "ex_adjusted_close": 258.25,
+              "observed_factor_ratio": 0.9985452092513077,
+              "yahoo_adjusted_return_before": 0.0038586305767362994,
+              "yahoo_basis_reference_return": 0.0038586305767360773,
+              "counterfactual_prefix_scale": 1.0000000000000002,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        }
+      },
+      "tiingo_basis": {
+        "prior_raw_close": 266.87,
+        "ex_raw_close": 267.51,
+        "declared_cash": 0.38824,
+        "adjusted_return": 0.003852962116526859,
+        "cash_total_return_reference": 0.0038529621163860828,
+        "cash_total_return_reference_abs_error": 1.4077627952246985e-13,
+        "note": "Do not evaluate Tiingo total-return factors with Yahoo backward-factor formula."
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "price_counterfactual_eligible_for_study": true,
+      "full_series_integrity_certified": false,
+      "production_approved": false
+    },
+    {
+      "symbol": "AGG",
+      "event": {
+        "ex_date": "2018-11-01",
+        "prior_date": "2018-10-31",
+        "expected_cash": 0.25634
+      },
+      "cash_reference": {
+        "id": "AGG_2018-11-01",
+        "symbol": "AGG",
+        "ex_date": "2018-11-01",
+        "status": "CONFIRMED_CASH_EVENT",
+        "resolution": {
+          "cash_usd_per_share": "0.256340",
+          "cash_basis": "issuer displayed historical total distribution per ETF share",
+          "source_record": {
+            "recordDate": "Nov 02, 2018",
+            "exDate": "Nov 01, 2018",
+            "payableDate": "Nov 07, 2018",
+            "totalDistribution": "0.256340",
+            "incomeAmount": "0.256340",
+            "shortTermCapitalGain": "0.000000",
+            "longTermCapitalGain": "0.000000",
+            "returnOnCapital": "0.000000"
+          },
+          "supports_provider": "tiingo",
+          "conflicting_provider": "yahoo",
+          "date_evidence": "explicit ex/record/pay table columns",
+          "usable_scope": {
+            "symbol": "AGG",
+            "ex_dates": [
+              "2018-11-01"
+            ],
+            "fields": [
+              "cash_distribution"
+            ]
+          },
+          "not_resolved": [
+            "raw OHLCV conflicts",
+            "other dates",
+            "full adjusted series",
+            "strategy impact"
+          ]
+        },
+        "evidence": [
+          {
+            "url": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+            "artifact": "agg_issuer.html",
+            "sha256": "7f4d786b84fef64d32a5de45db15c9a1dfe8e9cdcc942b0d282491aef46ae483",
+            "kind": "html",
+            "page_1based": null,
+            "retrieved": "2026-10-26",
+            "retrospective_evidence": true,
+            "point_in_time_certified": false
+          }
+        ],
+        "frozen_observation": {
+          "date": "2018-11-01",
+          "flags": [
+            "cash",
+            "adjusted_return"
+          ],
+          "tiingo_cash": 0.25634,
+          "yahoo_cash": 0.513,
+          "yahoo_capital_gain": 0.0,
+          "tiingo_split": 1.0,
+          "yahoo_split": 1.0,
+          "returns": {
+            "tiingo": 6.061764962983496e-05,
+            "yahoo": 0.002527442421514481
+          },
+          "comparison_values": {
+            "tiingo": {
+              "open": 104.22,
+              "close": 104.34,
+              "volume": 7918997.0
+            },
+            "yahoo": {
+              "open": 104.22000122070312,
+              "close": 104.33999633789062,
+              "volume": 7919000.0
+            }
+          }
+        },
+        "projects": [
+          "V1.6",
+          "V8.0"
+        ],
+        "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+        "source_audit_cutoff": "2026-10-23",
+        "data_gate": "CASH_REFERENCE_ONLY",
+        "allows_price_repair": false,
+        "allows_series_promotion": false,
+        "strategy_replayed_this_task": false,
+        "production_approved": false
+      },
+      "diagnostics": {
+        "source_audit": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T140250Z_9fbc8f46\\raw\\yahoo_AGG.json",
+          "sha256": "40b636c2a4852f8042155774ec002a7aadaa9279b9b5798706c99c54e931981e",
+          "inspection": {
+            "symbol": "AGG",
+            "ex_date": "2018-11-01",
+            "prior_date": "2018-10-31",
+            "expected_cash": 0.25634,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": 0.513,
+            "yahoo_cash_event_present": true,
+            "yahoo_factor_implied_cash": 0.5130484930847028,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 104.58999633789062,
+            "ex_raw_close": 104.33999633789062,
+            "prior_adjusted_close": 82.51404571533203,
+            "ex_adjusted_close": 82.72259521484375,
+            "observed_factor_ratio": 0.9950946695568548,
+            "yahoo_adjusted_return_before": 0.002527442421514481,
+            "yahoo_basis_reference_return": 6.076658503628707e-05,
+            "counterfactual_prefix_scale": 1.002466525954119,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "AGG",
+              "ex_date": "2018-11-01",
+              "prior_date": "2018-10-31",
+              "expected_cash": 0.25634,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.513,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.5130484930847028,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 104.58999633789062,
+              "ex_raw_close": 104.33999633789062,
+              "prior_adjusted_close": 82.51404571533203,
+              "ex_adjusted_close": 82.72259521484375,
+              "observed_factor_ratio": 0.9950946695568548,
+              "yahoo_adjusted_return_before": 0.002527442421514481,
+              "yahoo_basis_reference_return": 6.076658503628707e-05,
+              "counterfactual_prefix_scale": 1.002466525954119,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "AGG",
+              "ex_date": "2018-11-01",
+              "prior_date": "2018-10-31",
+              "expected_cash": 0.25634,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.25634,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.25634000000000057,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 104.58999633789062,
+              "ex_raw_close": 104.33999633789062,
+              "prior_adjusted_close": 82.71756875066826,
+              "ex_adjusted_close": 82.72259521484375,
+              "observed_factor_ratio": 0.9975490963861222,
+              "yahoo_adjusted_return_before": 6.076658503628707e-05,
+              "yahoo_basis_reference_return": 6.076658503628707e-05,
+              "counterfactual_prefix_scale": 1.0,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        },
+        "native_baseline": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\source_validation\\tiingo_authenticated\\yahoo_current\\AGG.json",
+          "sha256": "283c24c42db8104b3cc3f9419a75bd8e53fd6b435c11f5d1091f56c87826fa25",
+          "inspection": {
+            "symbol": "AGG",
+            "ex_date": "2018-11-01",
+            "prior_date": "2018-10-31",
+            "expected_cash": 0.25634,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": 0.5130483960422894,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 104.58999633789062,
+            "ex_raw_close": 104.33999633789062,
+            "prior_adjusted_close": 82.51407623291016,
+            "ex_adjusted_close": 82.72262573242188,
+            "observed_factor_ratio": 0.9950946704846912,
+            "yahoo_adjusted_return_before": 0.0025274414867477724,
+            "yahoo_basis_reference_return": 6.076658503628707e-05,
+            "counterfactual_prefix_scale": 1.002466525019409,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "AGG",
+              "ex_date": "2018-11-01",
+              "prior_date": "2018-10-31",
+              "expected_cash": 0.25634,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": 0.5130483960422894,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 104.58999633789062,
+              "ex_raw_close": 104.33999633789062,
+              "prior_adjusted_close": 82.51407623291016,
+              "ex_adjusted_close": 82.72262573242188,
+              "observed_factor_ratio": 0.9950946704846912,
+              "yahoo_adjusted_return_before": 0.0025274414867477724,
+              "yahoo_basis_reference_return": 6.076658503628707e-05,
+              "counterfactual_prefix_scale": 1.002466525019409,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "AGG",
+              "ex_date": "2018-11-01",
+              "prior_date": "2018-10-31",
+              "expected_cash": 0.25634,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.25634,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.25634000000001217,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 104.58999633789062,
+              "ex_raw_close": 104.33999633789062,
+              "prior_adjusted_close": 82.71759926639204,
+              "ex_adjusted_close": 82.72262573242188,
+              "observed_factor_ratio": 0.9975490963861221,
+              "yahoo_adjusted_return_before": 6.076658503650911e-05,
+              "yahoo_basis_reference_return": 6.076658503628707e-05,
+              "counterfactual_prefix_scale": 1.0000000000000002,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        }
+      },
+      "tiingo_basis": {
+        "prior_raw_close": 104.59,
+        "ex_raw_close": 104.34,
+        "declared_cash": 0.25634,
+        "adjusted_return": 6.061764962983496e-05,
+        "cash_total_return_reference": 6.06176498709754e-05,
+        "cash_total_return_reference_abs_error": 2.41140440948584e-13,
+        "note": "Do not evaluate Tiingo total-return factors with Yahoo backward-factor formula."
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "price_counterfactual_eligible_for_study": true,
+      "full_series_integrity_certified": false,
+      "production_approved": false
+    },
+    {
+      "symbol": "TLT",
+      "event": {
+        "ex_date": "2012-11-01",
+        "prior_date": "2012-10-31",
+        "expected_cash": 0.269553
+      },
+      "cash_reference": {
+        "id": "TLT_2012-11-01",
+        "symbol": "TLT",
+        "ex_date": "2012-11-01",
+        "status": "CONFIRMED_CASH_EVENT",
+        "resolution": {
+          "cash_usd_per_share": "0.269553",
+          "cash_basis": "issuer displayed historical total distribution per ETF share",
+          "source_record": {
+            "recordDate": "Nov 05, 2012",
+            "exDate": "Nov 01, 2012",
+            "payableDate": "Nov 07, 2012",
+            "totalDistribution": "0.269553",
+            "incomeAmount": "0.269553",
+            "shortTermCapitalGain": "0.000000",
+            "longTermCapitalGain": "0.000000",
+            "returnOnCapital": "0.000000"
+          },
+          "supports_provider": "tiingo",
+          "conflicting_provider": "yahoo",
+          "date_evidence": "explicit ex/record/pay table columns",
+          "usable_scope": {
+            "symbol": "TLT",
+            "ex_dates": [
+              "2012-11-01"
+            ],
+            "fields": [
+              "cash_distribution"
+            ]
+          },
+          "not_resolved": [
+            "raw OHLCV conflicts",
+            "other dates",
+            "full adjusted series",
+            "strategy impact"
+          ]
+        },
+        "evidence": [
+          {
+            "url": "https://www.ishares.com/us/products/239454/ishares-20-year-treasury-bond-etf",
+            "artifact": "tlt_issuer.html",
+            "sha256": "9a25ecd1253d1f16e3ce9730fe974bfea9c45323d8242621405b665ab2a0d06f",
+            "kind": "html",
+            "page_1based": null,
+            "retrieved": "2026-10-26",
+            "retrospective_evidence": true,
+            "point_in_time_certified": false
+          }
+        ],
+        "frozen_observation": {
+          "date": "2012-11-01",
+          "flags": [
+            "cash",
+            "adjusted_return"
+          ],
+          "tiingo_cash": 0.269553,
+          "yahoo_cash": 0.0,
+          "yahoo_capital_gain": 0.0,
+          "tiingo_split": 1.0,
+          "yahoo_split": 1.0,
+          "returns": {
+            "tiingo": -0.006002326524704449,
+            "yahoo": -0.00818769364445282
+          },
+          "comparison_values": {
+            "tiingo": {
+              "open": 122.77,
+              "close": 122.35,
+              "volume": 3659628.0
+            },
+            "yahoo": {
+              "open": 122.7699966430664,
+              "close": 122.3499984741211,
+              "volume": 3659700.0
+            }
+          }
+        },
+        "projects": [
+          "V8.0"
+        ],
+        "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+        "source_audit_cutoff": "2026-10-23",
+        "data_gate": "CASH_REFERENCE_ONLY",
+        "allows_price_repair": false,
+        "allows_series_promotion": false,
+        "strategy_replayed_this_task": false,
+        "production_approved": false
+      },
+      "diagnostics": {
+        "source_audit": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T140250Z_9fbc8f46\\raw\\yahoo_TLT.json",
+          "sha256": "61fc2bf201a133e2532090594fc12e1e65ca5433f361e83d9a6819bde27490b2",
+          "inspection": {
+            "symbol": "TLT",
+            "ex_date": "2012-11-01",
+            "prior_date": "2012-10-31",
+            "expected_cash": 0.269553,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": -3.2018907619827145e-05,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 123.36000061035156,
+            "ex_raw_close": 122.3499984741211,
+            "prior_adjusted_close": 83.25743865966797,
+            "ex_adjusted_close": 82.57575225830078,
+            "observed_factor_ratio": 1.0000002595566428,
+            "yahoo_adjusted_return_before": -0.00818769364445282,
+            "yahoo_basis_reference_return": -0.006015488208917619,
+            "counterfactual_prefix_scale": 0.9978146486089395,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "TLT",
+              "ex_date": "2012-11-01",
+              "prior_date": "2012-10-31",
+              "expected_cash": 0.269553,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": -3.2018907619827145e-05,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 123.36000061035156,
+              "ex_raw_close": 122.3499984741211,
+              "prior_adjusted_close": 83.25743865966797,
+              "ex_adjusted_close": 82.57575225830078,
+              "observed_factor_ratio": 1.0000002595566428,
+              "yahoo_adjusted_return_before": -0.00818769364445282,
+              "yahoo_basis_reference_return": -0.006015488208917619,
+              "counterfactual_prefix_scale": 0.9978146486089395,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "TLT",
+              "ex_date": "2012-11-01",
+              "prior_date": "2012-10-31",
+              "expected_cash": 0.269553,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.269553,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.2695529999999985,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 123.36000061035156,
+              "ex_raw_close": 122.3499984741211,
+              "prior_adjusted_close": 83.07549190027693,
+              "ex_adjusted_close": 82.57575225830078,
+              "observed_factor_ratio": 0.9978149075983599,
+              "yahoo_adjusted_return_before": -0.006015488208917619,
+              "yahoo_basis_reference_return": -0.006015488208917619,
+              "counterfactual_prefix_scale": 1.0,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        },
+        "native_baseline": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\source_validation\\tiingo_authenticated\\yahoo_current\\TLT.json",
+          "sha256": "26d9f71d4d61945aaa715631330b016412a3fa6e942ccef4bdaf384b34f4ce97",
+          "inspection": {
+            "symbol": "TLT",
+            "ex_date": "2012-11-01",
+            "prior_date": "2012-10-31",
+            "expected_cash": 0.269553,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": -9.97510424829763e-05,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 123.36000061035156,
+            "ex_raw_close": 122.3499984741211,
+            "prior_adjusted_close": 83.25749206542969,
+            "ex_adjusted_close": 82.57575988769531,
+            "observed_factor_ratio": 1.0000008086173962,
+            "yahoo_adjusted_return_before": -0.008188238209224763,
+            "yahoo_basis_reference_return": -0.006015488208917619,
+            "counterfactual_prefix_scale": 0.99781410074852,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "TLT",
+              "ex_date": "2012-11-01",
+              "prior_date": "2012-10-31",
+              "expected_cash": 0.269553,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": -9.97510424829763e-05,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 123.36000061035156,
+              "ex_raw_close": 122.3499984741211,
+              "prior_adjusted_close": 83.25749206542969,
+              "ex_adjusted_close": 82.57575988769531,
+              "observed_factor_ratio": 1.0000008086173962,
+              "yahoo_adjusted_return_before": -0.008188238209224763,
+              "yahoo_basis_reference_return": -0.006015488208917619,
+              "counterfactual_prefix_scale": 0.99781410074852,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "TLT",
+              "ex_date": "2012-11-01",
+              "prior_date": "2012-10-31",
+              "expected_cash": 0.269553,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 0.269553,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 0.2695529999999574,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 123.36000061035156,
+              "ex_raw_close": 122.3499984741211,
+              "prior_adjusted_close": 83.07549957584376,
+              "ex_adjusted_close": 82.57575988769531,
+              "observed_factor_ratio": 0.9978149075983602,
+              "yahoo_adjusted_return_before": -0.006015488208917952,
+              "yahoo_basis_reference_return": -0.006015488208917619,
+              "counterfactual_prefix_scale": 0.9999999999999997,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        }
+      },
+      "tiingo_basis": {
+        "prior_raw_close": 123.36,
+        "ex_raw_close": 122.35,
+        "declared_cash": 0.269553,
+        "adjusted_return": -0.006002326524704449,
+        "cash_total_return_reference": -0.006002326523994794,
+        "cash_total_return_reference_abs_error": 7.096545573404001e-13,
+        "note": "Do not evaluate Tiingo total-return factors with Yahoo backward-factor formula."
+      },
+      "projects": [
+        "V8.0"
+      ],
+      "price_counterfactual_eligible_for_study": true,
+      "full_series_integrity_certified": false,
+      "production_approved": false
+    },
+    {
+      "symbol": "SPY",
+      "event": {
+        "ex_date": "2021-12-17",
+        "prior_date": "2021-12-16",
+        "expected_cash": 1.636431
+      },
+      "cash_reference": {
+        "id": "SPY_2021-12-17",
+        "symbol": "SPY",
+        "ex_date": "2021-12-17",
+        "status": "CONFIRMED_CASH_EVENT",
+        "resolution": {
+          "cash_usd_per_share": "1.636431",
+          "record_date": "2021-12-20",
+          "pay_date": "2022-01-31",
+          "ex_date": "2021-12-17",
+          "ex_date_derivation": "inferred from issuer defined third Friday of December, matching frozen vendor event date; row itself states record/pay dates",
+          "cash_basis": "issuer regulatory filing, USD distribution per SPDR S&P 500 ETF Trust unit; not JPY conversion or aggregate distribution",
+          "supports_provider": "tiingo",
+          "conflicting_provider": "yahoo",
+          "usable_scope": {
+            "symbol": "SPY",
+            "ex_dates": [
+              "2021-12-17"
+            ],
+            "fields": [
+              "cash_distribution"
+            ]
+          },
+          "not_resolved": [
+            "other dates",
+            "full adjusted series",
+            "strategy impact"
+          ]
+        },
+        "evidence": [
+          {
+            "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100VGRO.pdf",
+            "artifact": "spy_edinet_filing.pdf",
+            "sha256": "08c0171ace2c8f8b5d7a5c51353f29ea9952542a1f276609b37996dfcf149250",
+            "kind": "pdf",
+            "page_1based": 47,
+            "retrieved": "2026-10-26",
+            "retrospective_evidence": true,
+            "point_in_time_certified": false
+          }
+        ],
+        "frozen_observation": {
+          "date": "2021-12-17",
+          "flags": [
+            "cash"
+          ],
+          "tiingo_cash": 1.636431,
+          "yahoo_cash": 1.633,
+          "yahoo_capital_gain": 0.0,
+          "tiingo_split": 1.0,
+          "yahoo_split": 1.0,
+          "returns": null,
+          "comparison_values": {
+            "tiingo": {
+              "open": 461.55,
+              "close": 459.87,
+              "volume": 135636510.0
+            },
+            "yahoo": {
+              "open": 461.54998779296875,
+              "close": 459.8699951171875,
+              "volume": 135511600.0
+            }
+          }
+        },
+        "projects": [
+          "V1.6",
+          "V8.0"
+        ],
+        "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+        "source_audit_cutoff": "2026-10-23",
+        "data_gate": "CASH_REFERENCE_ONLY",
+        "allows_price_repair": false,
+        "allows_series_promotion": false,
+        "strategy_replayed_this_task": false,
+        "production_approved": false
+      },
+      "diagnostics": {
+        "source_audit": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T140250Z_9fbc8f46\\raw\\yahoo_SPY.json",
+          "sha256": "6a141ff947287d1ac980f276df6e0b73617ede810b23d920c3c3e43d06e8586a",
+          "inspection": {
+            "symbol": "SPY",
+            "ex_date": "2021-12-17",
+            "prior_date": "2021-12-16",
+            "expected_cash": 1.636431,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": 1.633,
+            "yahoo_cash_event_present": true,
+            "yahoo_factor_implied_cash": 1.633059057626152,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 466.45001220703125,
+            "ex_raw_close": 459.8699951171875,
+            "prior_adjusted_close": 436.2718505859375,
+            "ex_adjusted_close": 431.6286926269531,
+            "observed_factor_ratio": 0.996498962343469,
+            "yahoo_adjusted_return_before": -0.01064280895672809,
+            "yahoo_basis_reference_return": -0.010635631766623965,
+            "counterfactual_prefix_scale": 0.9999927456553575,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "SPY",
+              "ex_date": "2021-12-17",
+              "prior_date": "2021-12-16",
+              "expected_cash": 1.636431,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 1.633,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 1.633059057626152,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 466.45001220703125,
+              "ex_raw_close": 459.8699951171875,
+              "prior_adjusted_close": 436.2718505859375,
+              "ex_adjusted_close": 431.6286926269531,
+              "observed_factor_ratio": 0.996498962343469,
+              "yahoo_adjusted_return_before": -0.01064280895672809,
+              "yahoo_basis_reference_return": -0.010635631766623965,
+              "counterfactual_prefix_scale": 0.9999927456553575,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "SPY",
+              "ex_date": "2021-12-17",
+              "prior_date": "2021-12-16",
+              "expected_cash": 1.636431,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 1.636431,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 1.6364309999999798,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 466.45001220703125,
+              "ex_raw_close": 459.8699951171875,
+              "prior_adjusted_close": 436.2686857195755,
+              "ex_adjusted_close": 431.6286926269531,
+              "observed_factor_ratio": 0.9964917333965603,
+              "yahoo_adjusted_return_before": -0.010635631766623854,
+              "yahoo_basis_reference_return": -0.010635631766623965,
+              "counterfactual_prefix_scale": 1.0,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        },
+        "native_baseline": {
+          "input_path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\work\\source_validation\\tiingo_authenticated\\yahoo_current\\SPY.json",
+          "sha256": "1c1ecaf69a846896fa17c7c002b8079f0901e092a7b077eaf758435ab85dc31d",
+          "inspection": {
+            "symbol": "SPY",
+            "ex_date": "2021-12-17",
+            "prior_date": "2021-12-16",
+            "expected_cash": 1.636431,
+            "cash_tolerance": 0.0001,
+            "yahoo_event_cash": null,
+            "yahoo_cash_event_present": false,
+            "yahoo_factor_implied_cash": 1.6329936791917488,
+            "cash_event_matches_reference": false,
+            "price_factor_matches_exact_reference": false,
+            "price_factor_matches_recognized_complete_basis": false,
+            "classification": "PRICE_FACTOR_ERROR",
+            "prior_raw_close": 466.45001220703125,
+            "ex_raw_close": 459.8699951171875,
+            "prior_adjusted_close": 436.2718811035156,
+            "ex_adjusted_close": 431.628662109375,
+            "observed_factor_ratio": 0.9964991025051856,
+            "yahoo_adjusted_return_before": -0.010642948113905426,
+            "yahoo_basis_reference_return": -0.010635631766623965,
+            "counterfactual_prefix_scale": 0.9999926050022456,
+            "price_repair_needed_at_local_seam": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "counterfactual_proof": {
+            "before": {
+              "symbol": "SPY",
+              "ex_date": "2021-12-17",
+              "prior_date": "2021-12-16",
+              "expected_cash": 1.636431,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": null,
+              "yahoo_cash_event_present": false,
+              "yahoo_factor_implied_cash": 1.6329936791917488,
+              "cash_event_matches_reference": false,
+              "price_factor_matches_exact_reference": false,
+              "price_factor_matches_recognized_complete_basis": false,
+              "classification": "PRICE_FACTOR_ERROR",
+              "prior_raw_close": 466.45001220703125,
+              "ex_raw_close": 459.8699951171875,
+              "prior_adjusted_close": 436.2718811035156,
+              "ex_adjusted_close": 431.628662109375,
+              "observed_factor_ratio": 0.9964991025051856,
+              "yahoo_adjusted_return_before": -0.010642948113905426,
+              "yahoo_basis_reference_return": -0.010635631766623965,
+              "counterfactual_prefix_scale": 0.9999926050022456,
+              "price_repair_needed_at_local_seam": true,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "after": {
+              "symbol": "SPY",
+              "ex_date": "2021-12-17",
+              "prior_date": "2021-12-16",
+              "expected_cash": 1.636431,
+              "cash_tolerance": 0.0001,
+              "yahoo_event_cash": 1.636431,
+              "yahoo_cash_event_present": true,
+              "yahoo_factor_implied_cash": 1.6364309999999278,
+              "cash_event_matches_reference": true,
+              "price_factor_matches_exact_reference": true,
+              "price_factor_matches_recognized_complete_basis": true,
+              "classification": "PRICE_FACTOR_EXACT",
+              "prior_raw_close": 466.45001220703125,
+              "ex_raw_close": 459.8699951171875,
+              "prior_adjusted_close": 436.26865487393457,
+              "ex_adjusted_close": 431.628662109375,
+              "observed_factor_ratio": 0.9964917333965604,
+              "yahoo_adjusted_return_before": -0.010635631766624076,
+              "yahoo_basis_reference_return": -0.010635631766623965,
+              "counterfactual_prefix_scale": 0.9999999999999999,
+              "price_repair_needed_at_local_seam": false,
+              "full_series_integrity_certified": false,
+              "production_approved": false
+            },
+            "mode": "FROZEN_UPSTREAM_COUNTERFACTUAL_ONLY",
+            "raw_quotes_unchanged": true,
+            "post_ex_adjusted_prices_unchanged": true,
+            "full_series_integrity_certified": false,
+            "production_approved": false
+          },
+          "idempotency_exact": true
+        }
+      },
+      "tiingo_basis": {
+        "prior_raw_close": 466.45,
+        "ex_raw_close": 459.87,
+        "declared_cash": 1.636431,
+        "adjusted_return": -0.010598282774198275,
+        "cash_total_return_reference": -0.010598282774145096,
+        "cash_total_return_reference_abs_error": 5.3179682879545e-14,
+        "note": "Do not evaluate Tiingo total-return factors with Yahoo backward-factor formula."
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "price_counterfactual_eligible_for_study": true,
+      "full_series_integrity_certified": false,
+      "production_approved": false
+    }
+  ],
+  "local_invariants": {
+    "idempotency": true,
+    "raw_OHLCV_unchanged": true,
+    "post_exdate_adjusted_prices_unchanged": true,
+    "duplicate_timestamp_rejected": true
+  },
+  "strategy_impacts": {
+    "V1.6": {
+      "status": "NATIVE_SCENARIO_COMPLETE",
+      "baseline_rerun": false,
+      "new_scenario_runs": 1,
+      "baseline_nav": 2.6137840090065203,
+      "scenario_nav": 2.614091028454665,
+      "relative_nav_change": 0.00011746167513715378,
+      "cutoff": "2026-10-23",
+      "rows": 2585,
+      "meta_changes": {
+        "return": {
+          "count": 405,
+          "first": "2019-09-26",
+          "last": "2023-01-03",
+          "max_abs_difference": 0.00011618309957429906
+        },
+        "gross_return": {
+          "count": 405,
+          "first": "2019-09-26",
+          "last": "2023-01-03",
+          "max_abs_difference": 0.00011618309957429906
+        },
+        "overnight_return": {
+          "count": 351,
+          "first": "2019-09-27",
+          "last": "2023-01-03",
+          "max_abs_difference": 0.00011459731412170014
+        },
+        "intraday_return": {
+          "count": 388,
+          "first": "2019-09-26",
+          "last": "2022-12-30",
+          "max_abs_difference": 1.5563857604999833e-06
+        },
+        "combo_turnover": {
+          "count": 4,
+          "first": "2020-01-02",
+          "last": "2023-01-03",
+          "max_abs_difference": 5.673966852901002e-06
+        },
+        "combo_cost": {
+          "count": 1,
+          "first": "2021-01-04",
+          "last": "2021-01-04",
+          "max_abs_difference": 2.836983426455895e-09
+        },
+        "start_weight_v13": {
+          "count": 1185,
+          "first": "2019-09-27",
+          "last": "2023-01-02",
+          "max_abs_difference": 5.128106951524103e-06
+        },
+        "end_weight_v13": {
+          "count": 1190,
+          "first": "2019-09-26",
+          "last": "2023-01-02",
+          "max_abs_difference": 5.156886161872265e-06
+        },
+        "start_weight_v14": {
+          "count": 1185,
+          "first": "2019-09-27",
+          "last": "2023-01-02",
+          "max_abs_difference": 5.12810695091348e-06
+        },
+        "end_weight_v14": {
+          "count": 1190,
+          "first": "2019-09-26",
+          "last": "2023-01-02",
+          "max_abs_difference": 5.156886161483687e-06
+        },
+        "nav": {
+          "count": 2582,
+          "first": "2019-09-26",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.0003142839034784295
+        },
+        "v13_return": {
+          "count": 418,
+          "first": "2019-09-26",
+          "last": "2023-01-03",
+          "max_abs_difference": 0.00010965524961140116
+        },
+        "v14_return": {
+          "count": 69,
+          "first": "2020-09-21",
+          "last": "2022-01-03",
+          "max_abs_difference": 0.00012285541887789922
+        },
+        "v13_nav": {
+          "count": 2582,
+          "first": "2019-09-26",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.0002675575458783719
+        },
+        "v14_nav": {
+          "count": 2224,
+          "first": "2020-09-21",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.0003673463614028982
+        },
+        "buyhold_return": {
+          "count": 118,
+          "first": "2020-09-21",
+          "last": "2022-01-03",
+          "max_abs_difference": 0.00017762988830140151
+        },
+        "buyhold_nav": {
+          "count": 2224,
+          "first": "2020-09-21",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.0005330628381705615
+        }
+      },
+      "latest_allocations_equal": true,
+      "latest_allocations_before": {
+        "current": {
+          "SPY": 0.2072562950014501,
+          "QQQ": 0.1008590079403597,
+          "GLD": 0.0485888958433105,
+          "VEA": 0.0950527930948035,
+          "AGG": 0.049323765210962,
+          "DBC": 0.0585139177702955,
+          "BTC": 0.0337691001728163,
+          "AVUV": 0.1079158305290166,
+          "AVDV": 0.1012842793992592,
+          "KMLM": 0.01303447881395,
+          "DBMF": 0.0257255893305773,
+          "BIL": 0.1727625354669285,
+          "CASH": 0.0
+        },
+        "target": {
+          "SPY": 0.2072562950014501,
+          "QQQ": 0.1008590079403597,
+          "GLD": 0.0485888958433105,
+          "VEA": 0.0950527930948035,
+          "AGG": 0.049323765210962,
+          "DBC": 0.0585139177702955,
+          "BTC": 0.0337691001728163,
+          "AVUV": 0.1079158305290166,
+          "AVDV": 0.1012842793992592,
+          "KMLM": 0.01303447881395,
+          "DBMF": 0.0257255893305773,
+          "BIL": 0.1727625354669285,
+          "CASH": 0.0
+        }
+      },
+      "latest_allocations_after": {
+        "current": {
+          "SPY": 0.2072562950014504,
+          "QQQ": 0.1008590079403602,
+          "GLD": 0.0485888958433104,
+          "VEA": 0.0950527930948036,
+          "AGG": 0.049323765210962,
+          "DBC": 0.0585139177702955,
+          "BTC": 0.0337691001728164,
+          "AVUV": 0.1079158305290165,
+          "AVDV": 0.1012842793992592,
+          "KMLM": 0.01303447881395,
+          "DBMF": 0.0257255893305773,
+          "BIL": 0.1727625354669283,
+          "CASH": 0.0
+        },
+        "target": {
+          "SPY": 0.2072562950014504,
+          "QQQ": 0.1008590079403602,
+          "GLD": 0.0485888958433104,
+          "VEA": 0.0950527930948036,
+          "AGG": 0.049323765210962,
+          "DBC": 0.0585139177702955,
+          "BTC": 0.0337691001728164,
+          "AVUV": 0.1079158305290165,
+          "AVDV": 0.1012842793992592,
+          "KMLM": 0.01303447881395,
+          "DBMF": 0.0257255893305773,
+          "BIL": 0.1727625354669283,
+          "CASH": 0.0
+        }
+      },
+      "latest_signal_report_text_equal": true,
+      "included_new_events": [
+        "QQQ-2020-09-21",
+        "AGG-2018-11-01",
+        "SPY-2021-12-17"
+      ],
+      "not_a_required_instrument": [
+        "TLT"
+      ],
+      "DBMF_new_repair_applied": false,
+      "signal_attribution_limit": "Native latest signal and allocation reports available; no per-event reruns and no assertion of individual-event signal attribution",
+      "baseline_meta_sha256": "997dbf76084187a73169489fdd1b2b68c6890547475170b984071bfeb60cb2ca",
+      "new_meta_sha256": "c4358e4929441e30f34a9bf62cb1704b9ee0607f8a58f4c92db0936bf583cbe1",
+      "baseline_strategy_sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13",
+      "scenario_strategy_sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13"
+    },
+    "V8.0": {
+      "status": "NATIVE_SCENARIO_COMPLETE",
+      "baseline_rerun": false,
+      "new_scenario_runs": 1,
+      "baseline_nav": 3.385312189109106,
+      "scenario_nav": 3.3870865478395267,
+      "relative_nav_change": 0.0005241344464859132,
+      "cutoff": "2026-10-23",
+      "combined_rows": 1529,
+      "return_changes": {
+        "B7.8": {
+          "count": 377,
+          "first": "2018-11-23",
+          "last": "2026-06-11",
+          "max_abs_difference": 0.0031562551711749
+        },
+        "B7.9": {
+          "count": 429,
+          "first": "2020-09-21",
+          "last": "2026-02-05",
+          "max_abs_difference": 0.0004339334670739013
+        },
+        "Combined": {
+          "count": 1522,
+          "first": "2020-12-03",
+          "last": "2026-10-23",
+          "max_abs_difference": 0.00022732575939294513
+        }
+      },
+      "latest_signal_report_text_equal": true,
+      "decision_or_weight_changes": {
+        "B7.8": {
+          "target_w_AGG": {
+            "count": 39,
+            "first": "2018-11-21",
+            "last": "2020-10-21",
+            "max_abs_difference": 0.2173564604075059
+          },
+          "target_w_BIL": {
+            "count": 55,
+            "first": "2018-11-21",
+            "last": "2026-06-25",
+            "max_abs_difference": 0.11158714403271758
+          },
+          "target_w_DBC": {
+            "count": 9,
+            "first": "2021-04-01",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.020171307678102712
+          },
+          "target_w_EFA": {
+            "count": 19,
+            "first": "2020-09-24",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.1252758005539767
+          },
+          "target_w_EMXC": {
+            "count": 34,
+            "first": "2019-04-04",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.05657070932358929
+          },
+          "target_w_GLD": {
+            "count": 432,
+            "first": "2019-02-28",
+            "last": "2026-04-29",
+            "max_abs_difference": 0.036731421601762876
+          },
+          "target_w_QQQ": {
+            "count": 401,
+            "first": "2018-11-29",
+            "last": "2026-10-21",
+            "max_abs_difference": 0.11407357748567482
+          },
+          "target_w_UUP": {
+            "count": 19,
+            "first": "2018-11-21",
+            "last": "2019-04-10",
+            "max_abs_difference": 0.0540985780959716
+          },
+          "model_target_w_AGG": {
+            "count": 39,
+            "first": "2018-11-21",
+            "last": "2020-10-21",
+            "max_abs_difference": 0.2173564604075059
+          },
+          "model_target_w_BIL": {
+            "count": 48,
+            "first": "2018-11-21",
+            "last": "2025-04-23",
+            "max_abs_difference": 0.11158714403271758
+          },
+          "model_target_w_DBC": {
+            "count": 9,
+            "first": "2021-04-01",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.020171307678102712
+          },
+          "model_target_w_EFA": {
+            "count": 19,
+            "first": "2020-09-24",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.1252758005539767
+          },
+          "model_target_w_EMXC": {
+            "count": 34,
+            "first": "2019-04-04",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.05657070932358929
+          },
+          "model_target_w_GLD": {
+            "count": 432,
+            "first": "2019-02-28",
+            "last": "2026-04-29",
+            "max_abs_difference": 0.036731421601762876
+          },
+          "model_target_w_QQQ": {
+            "count": 408,
+            "first": "2018-11-29",
+            "last": "2026-10-21",
+            "max_abs_difference": 0.11407357748567482
+          },
+          "model_target_w_UUP": {
+            "count": 19,
+            "first": "2018-11-21",
+            "last": "2019-04-10",
+            "max_abs_difference": 0.0540985780959716
+          },
+          "execution_target_w_AGG": {
+            "count": 61,
+            "first": "2018-11-21",
+            "last": "2025-04-16",
+            "max_abs_difference": 0.21769037448124087
+          },
+          "execution_target_w_BIL": {
+            "count": 63,
+            "first": "2018-11-21",
+            "last": "2026-06-25",
+            "max_abs_difference": 0.11248592603480378
+          },
+          "execution_target_w_BTC-USD": {
+            "count": 91,
+            "first": "2024-08-12",
+            "last": "2025-09-03",
+            "max_abs_difference": 9.926685029526539e-10
+          },
+          "execution_target_w_DBC": {
+            "count": 35,
+            "first": "2018-11-23",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.020171307678102823
+          },
+          "execution_target_w_EFA": {
+            "count": 84,
+            "first": "2020-09-24",
+            "last": "2026-02-02",
+            "max_abs_difference": 0.12611933033232692
+          },
+          "execution_target_w_EMXC": {
+            "count": 112,
+            "first": "2018-11-23",
+            "last": "2026-02-02",
+            "max_abs_difference": 0.0569149553666473
+          },
+          "execution_target_w_GLD": {
+            "count": 477,
+            "first": "2019-02-28",
+            "last": "2026-04-29",
+            "max_abs_difference": 0.036731421601762876
+          },
+          "execution_target_w_KMLM": {
+            "count": 7,
+            "first": "2021-04-05",
+            "last": "2021-06-16",
+            "max_abs_difference": 0.00014824990837059016
+          },
+          "execution_target_w_QQQ": {
+            "count": 411,
+            "first": "2018-11-23",
+            "last": "2026-10-21",
+            "max_abs_difference": 0.115428995667083
+          },
+          "execution_target_w_UUP": {
+            "count": 25,
+            "first": "2018-11-21",
+            "last": "2025-04-16",
+            "max_abs_difference": 0.0547522074495079
+          }
+        },
+        "B7.9": {
+          "target_w_BIL": {
+            "count": 7,
+            "first": "2024-08-15",
+            "last": "2026-06-25",
+            "max_abs_difference": 1.2785219410949011e-07
+          },
+          "target_w_EMXC": {
+            "count": 38,
+            "first": "2020-11-12",
+            "last": "2021-02-10",
+            "max_abs_difference": 6.210050470001338e-05
+          },
+          "target_w_GLD": {
+            "count": 396,
+            "first": "2020-09-24",
+            "last": "2026-04-08",
+            "max_abs_difference": 0.0004302145124183143
+          },
+          "target_w_QQQ": {
+            "count": 294,
+            "first": "2020-09-24",
+            "last": "2026-07-22",
+            "max_abs_difference": 0.00022823330134352782
+          },
+          "model_target_w_EMXC": {
+            "count": 38,
+            "first": "2020-11-12",
+            "last": "2021-02-10",
+            "max_abs_difference": 6.210050470001338e-05
+          },
+          "model_target_w_GLD": {
+            "count": 396,
+            "first": "2020-09-24",
+            "last": "2026-04-08",
+            "max_abs_difference": 0.0004302145124183143
+          },
+          "model_target_w_QQQ": {
+            "count": 301,
+            "first": "2020-09-24",
+            "last": "2026-07-22",
+            "max_abs_difference": 0.00022823330134352782
+          },
+          "execution_target_w_BIL": {
+            "count": 9,
+            "first": "2024-08-06",
+            "last": "2026-06-25",
+            "max_abs_difference": 1.2785219410949011e-07
+          },
+          "execution_target_w_BTC-USD": {
+            "count": 123,
+            "first": "2024-03-08",
+            "last": "2025-10-15",
+            "max_abs_difference": 2.503376006490754e-09
+          },
+          "execution_target_w_DBC": {
+            "count": 8,
+            "first": "2021-04-09",
+            "last": "2021-04-21",
+            "max_abs_difference": 6.88827084260879e-08
+          },
+          "execution_target_w_EMXC": {
+            "count": 79,
+            "first": "2020-11-06",
+            "last": "2026-02-02",
+            "max_abs_difference": 6.235603527526834e-05
+          },
+          "execution_target_w_GLD": {
+            "count": 475,
+            "first": "2020-09-21",
+            "last": "2026-04-08",
+            "max_abs_difference": 0.00043021571088730504
+          },
+          "execution_target_w_KMLM": {
+            "count": 8,
+            "first": "2021-04-09",
+            "last": "2021-04-21",
+            "max_abs_difference": 3.9179476607476005e-08
+          },
+          "execution_target_w_QQQ": {
+            "count": 335,
+            "first": "2020-09-21",
+            "last": "2026-07-22",
+            "max_abs_difference": 0.0003100528459876739
+          }
+        }
+      },
+      "A_sleeves_unchanged": {
+        "Sub-A": true,
+        "Sub-A-DK": true
+      },
+      "included_new_events": [
+        "QQQ-2020-09-21",
+        "AGG-2018-11-01",
+        "TLT-2012-11-01",
+        "SPY-2021-12-17"
+      ],
+      "DBMF_new_repair_applied": false,
+      "parameters_and_flags_unchanged": true,
+      "baseline_meta_sha256": "5c9698dfb2b97c05c3eeb4b1c407e8190f14851bf3f954ac2ff16606a7527f0a",
+      "new_meta_sha256": "bca81b64e69ed2db7cbb725466984d1269b4c5167b38666af91ac8d5386e9264",
+      "baseline_strategy_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+      "scenario_strategy_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c"
+    }
+  },
+  "scope_limits": [
+    "Only these four events are jointly modified; no per-event attribution runs",
+    "Existing baseline outputs reused; no baseline recomputation",
+    "DBMF remains in the previous baseline state; its independent effect is not repeated",
+    "KMLM prior formal repair remains unchanged; it is not re-adjudicated",
+    "Local seam diagnostics are not certification of the full prefix/suffix, other actions or raw OHLCV",
+    "Counterfactual is research only and does not authorize any source or strategy promotion"
+  ],
+  "production_approved": false,
+  "full_series_integrity_certified": false,
+  "status": "COMPLETE"
+}

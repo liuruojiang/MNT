@@ -1,0 +1,1096 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-26",
+  "generated_at_utc": "2026-10-26T06:35:10.323960+00:00",
+  "purpose": "Project requirements and observed coverage inventory, not API entitlement or production acceptance",
+  "field_names_are_conceptual_not_provider_api_parameter_names": true,
+  "no_external_requests_or_strategy_runs": true,
+  "production_modified": false,
+  "existing_account_evidence": {
+    "observation_date": "2026-10-25",
+    "tiingo": "AUTHENTICATED_REAL_DATA_SUCCESS",
+    "wind_alice": "AUTHENTICATED_REAL_DATA_SUCCESS",
+    "note": "Do not inherit the earlier inventory NO_ACCOUNT labels; no fresh authentication or quota probe was performed by this inventory task."
+  },
+  "completed_work_do_not_repeat": [
+    {
+      "event": "KMLM-2022-12-28",
+      "status": "ADJUDICATED_AND_EXISTING_FORMAL_GUARD_REVIEWED",
+      "reuse": "Existing frozen fixtures/guards; do not re-run original event study"
+    },
+    {
+      "event": "DBMF-2026-09-29",
+      "status": "ADJUDICATED_ISOLATED_CANDIDATE_AND_NATIVE_REPLAYS_COMPLETE",
+      "reuse": "Commit 5a5f89cd research archive; patches remain unapplied"
+    },
+    {
+      "event": "Sub-A-2018-12-14-turnover",
+      "status": "INDEPENDENTLY_PATCHED_AND_REPLAYED_PREVIOUSLY",
+      "reuse": "Do not substitute Wind whole-market turnover for index constituent aggregate"
+    }
+  ],
+  "global_gates": [
+    "Source identity and exact field units",
+    "Complete confirmed independent exchange sessions",
+    "Known conflict cannot fall back to stale or alternate data",
+    "Corporate-action adjustment is idempotent and same-basis",
+    "Publication/inception/PIT boundaries",
+    "Project-entrypoint hash matches the reviewed requirements",
+    "Formal parameters and production remain unchanged until explicit promotion"
+  ],
+  "evidence": [
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\source_validation_authenticated_20261025\\验证证据.json",
+      "role": "existing_authenticated_validation",
+      "sha256": "a6c2620ba612c8a762e371aa2e88b75a674c7a989ab2e0690b7187363d9f3d44",
+      "sha256_lf": "777d952ac978b53e77407a125b5ba3c5e2987613cd8b74c3705db05e247b7c6d"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\us_source_audit_20261025\\20261025T141400Z_8fbb4eca\\report.json",
+      "role": "existing_etf_audit",
+      "sha256": "8cba1a2355ee0607f7d4522852d522b396c271a8ae9786aafdcc3165f00420b6",
+      "sha256_lf": "52b14fce3eebad4831417ca1cd291c3dfe5ee8162fe19f32832c61a2bb2510fd"
+    },
+    {
+      "path": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\dbmf_independent_review_20261025\\交付与远端同步核验.json",
+      "role": "completed_dbmf_delivery",
+      "sha256": "a19b9f86fb2265b1087f919b8ebbe4ada8490b8bf7af0e84136112d75024b392",
+      "sha256_lf": "f1fd8541c05b067cb7d8b3e96e13697fa3f336e680066716a498a31b695da414"
+    }
+  ],
+  "projects": [
+    {
+      "project_id": "us_long_v16",
+      "display_name": "美股多头 V1.6",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\美股多头策略\\poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py",
+          "role": "formal_entrypoint",
+          "sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13",
+          "sha256_lf": "e9fa3ca09e2d559869ed21f65c10fb4d781118dcf85990007964e97dbf2424c5"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\美股多头策略\\README.md",
+          "role": "requirements_contract",
+          "sha256": "a759e18e8cedd5ac0c657455b51cbe6cc0e1f5071396f3ebd94161699402b31f",
+          "sha256_lf": "0ea282ba9d3b3de7d936c46e8ae085175fefd89814e5ba18028a31a24eb2fe2a"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "us_etf_daily",
+          "instruments": [
+            "SPY",
+            "QQQ",
+            "AVUV",
+            "AVDV",
+            "GLD",
+            "AGG",
+            "DBC",
+            "KMLM",
+            "DBMF",
+            "VEA",
+            "BIL"
+          ],
+          "fields": [
+            "session_date",
+            "raw_open",
+            "raw_high",
+            "raw_low",
+            "raw_close",
+            "share_volume",
+            "adjusted_close",
+            "adjusted_open",
+            "cash_distribution_ex_date",
+            "split_factor"
+          ],
+          "unit_basis": "USD per share; shares; split-only comparison basis separate from vendor total-return adjustment",
+          "calendar": "XNYS actual sessions; America/New_York; explicit DST and close confirmation",
+          "adjustment": "Preserve formal Yahoo adjusted-close/adjusted-open convention; do not silently substitute Tiingo convention",
+          "point_in_time": "Daily data dates only; cannot substitute for publication-time/PIT fundamentals",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "AUTHENTICATED_EOD_ARCHIVE_AND_SHADOW_AUDIT_COMPLETE",
+              "asset_count": 11,
+              "scope": [
+                "SPY",
+                "QQQ",
+                "AVUV",
+                "AVDV",
+                "GLD",
+                "AGG",
+                "DBC",
+                "KMLM",
+                "DBMF",
+                "VEA",
+                "BIL"
+              ],
+              "cutoff": "2026-10-23",
+              "production_approved": false,
+              "audit_statuses": {
+                "SPY": "BLOCKED",
+                "QQQ": "BLOCKED",
+                "AVUV": "REVIEW",
+                "AVDV": "REVIEW",
+                "GLD": "REVIEW",
+                "AGG": "BLOCKED",
+                "DBC": "BLOCKED",
+                "KMLM": "BLOCKED",
+                "DBMF": "BLOCKED",
+                "VEA": "BLOCKED",
+                "BIL": "REVIEW"
+              },
+              "known_completed_events": [
+                "KMLM-2022-12-28",
+                "DBMF-2026-09-29"
+              ],
+              "status_note": "Frozen audit statuses predate subsequent adjudications; completed-event references supersede unresolved labels only for those exact events."
+            },
+            "wind_alice": {
+              "status": "NOT_PROBED_FOR_US_ETF_PROJECT_PATH"
+            }
+          }
+        },
+        {
+          "requirement_id": "crypto_daily",
+          "instruments": [
+            "BTC-USD"
+          ],
+          "fields": [
+            "UTC_session_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "aggregation_identity",
+            "confirmation_time"
+          ],
+          "unit_basis": "USD per BTC; provider-specific volume aggregation must be explicit",
+          "calendar": "24/7 UTC daily, not XNYS or China sessions",
+          "adjustment": "No equity corporate-action/splice assumptions",
+          "point_in_time": "Confirmed completed UTC bar only",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "CRYPTO_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED",
+              "issue": "Historical missing days and aggregation/volume differences remain separate"
+            },
+            "wind_alice": {
+              "status": "NOT_PROBED"
+            }
+          },
+          "fallback_requirements": {
+            "hourly_reconstruction": "Existing V1.6 daily-hole path requires 24 exact confirmed UTC hourly OHLCV bars; no partial-day acceptance",
+            "new_provider_hourly_endpoint": "NOT_PROBED; does not follow from the archived daily response"
+          }
+        }
+      ],
+      "gaps": [
+        "ETF price/volume/action differences remain unresolved except exact independently adjudicated events",
+        "BTC daily aggregation, missing-date handling and volume basis are not certified",
+        "No strategy production loader has been switched to either new provider"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "除已裁定的具体公司行动外，ETF 价格、成交量和分配差异仍需逐项处理。",
+        "BTC 的 UTC 边界、历史缺日及成交量聚合口径独立验收。",
+        "现有正式取数路径未切换；DBMF 已有隔离候选，不重复重跑。"
+      ]
+    },
+    {
+      "project_id": "combo_v80",
+      "display_name": "A股美股动量组合 V8.0",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+          "role": "formal_entrypoint",
+          "sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+          "sha256_lf": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\A股美股动量组合策略\\README.md",
+          "role": "requirements_contract",
+          "sha256": "16fd0bcfa5bc1ca9603b5493c0ac94cd4355b6c478f41ff976c08c89b4a1e39a",
+          "sha256_lf": "77efcf0e7c49119f8de99a9f13d784cf3302f25f5fde83666860fa82386bb2c6"
+        },
+        {
+          "path": "D:\\动量策略\\A股美股动量组合策略\\AGENTS.md",
+          "role": "requirements_contract",
+          "sha256": "e89fa475ff7c8bd20a31c843948a9444754cf026bd08e3b7be7927b23a9ab85b",
+          "sha256_lf": "d0e817fae2834aeda4649ffb36f52b3f8239a61b0f0df87380d85f321f87f5a2"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "us_etf_daily",
+          "instruments": [
+            "AGG",
+            "AVDV",
+            "AVUV",
+            "BIL",
+            "DBC",
+            "DBMF",
+            "EEM",
+            "EFA",
+            "EMXC",
+            "GLD",
+            "GLDM",
+            "IBIT",
+            "KMLM",
+            "PDBC",
+            "QQQ",
+            "QQQM",
+            "SPY",
+            "TLT",
+            "UUP",
+            "VEA",
+            "VGIT",
+            "VTI"
+          ],
+          "fields": [
+            "session_date",
+            "raw_open",
+            "raw_high",
+            "raw_low",
+            "raw_close",
+            "share_volume",
+            "adjusted_close",
+            "adjusted_open",
+            "cash_distribution_ex_date",
+            "split_factor"
+          ],
+          "unit_basis": "USD per share; shares; split-only comparison basis separate from vendor total-return adjustment",
+          "calendar": "XNYS actual sessions; America/New_York; explicit DST and close confirmation",
+          "adjustment": "Preserve formal Yahoo adjusted-close/adjusted-open convention; do not silently substitute Tiingo convention",
+          "point_in_time": "Daily data dates only; cannot substitute for publication-time/PIT fundamentals",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "AUTHENTICATED_EOD_ARCHIVE_AND_SHADOW_AUDIT_COMPLETE",
+              "asset_count": 22,
+              "scope": [
+                "AGG",
+                "AVDV",
+                "AVUV",
+                "BIL",
+                "DBC",
+                "DBMF",
+                "EEM",
+                "EFA",
+                "EMXC",
+                "GLD",
+                "GLDM",
+                "IBIT",
+                "KMLM",
+                "PDBC",
+                "QQQ",
+                "QQQM",
+                "SPY",
+                "TLT",
+                "UUP",
+                "VEA",
+                "VGIT",
+                "VTI"
+              ],
+              "cutoff": "2026-10-23",
+              "production_approved": false,
+              "audit_statuses": {
+                "AGG": "BLOCKED",
+                "AVDV": "REVIEW",
+                "AVUV": "REVIEW",
+                "BIL": "REVIEW",
+                "DBC": "BLOCKED",
+                "DBMF": "BLOCKED",
+                "EEM": "BLOCKED",
+                "EFA": "BLOCKED",
+                "EMXC": "REVIEW",
+                "GLD": "REVIEW",
+                "GLDM": "REVIEW",
+                "IBIT": "REVIEW",
+                "KMLM": "BLOCKED",
+                "PDBC": "REVIEW",
+                "QQQ": "BLOCKED",
+                "QQQM": "REVIEW",
+                "SPY": "BLOCKED",
+                "TLT": "BLOCKED",
+                "UUP": "REVIEW",
+                "VEA": "BLOCKED",
+                "VGIT": "BLOCKED",
+                "VTI": "REVIEW"
+              },
+              "known_completed_events": [
+                "KMLM-2022-12-28",
+                "DBMF-2026-09-29"
+              ],
+              "status_note": "Frozen audit statuses predate subsequent adjudications; completed-event references supersede unresolved labels only for those exact events."
+            },
+            "wind_alice": {
+              "status": "NOT_PROBED_FOR_US_ETF_PROJECT_PATH"
+            }
+          }
+        },
+        {
+          "requirement_id": "crypto_daily",
+          "instruments": [
+            "BTC-USD"
+          ],
+          "fields": [
+            "UTC_session_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "aggregation_identity",
+            "confirmation_time"
+          ],
+          "unit_basis": "USD per BTC; provider-specific volume aggregation must be explicit",
+          "calendar": "24/7 UTC daily, not XNYS or China sessions",
+          "adjustment": "No equity corporate-action/splice assumptions",
+          "point_in_time": "Confirmed completed UTC bar only",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "CRYPTO_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED",
+              "issue": "Historical missing days and aggregation/volume differences remain separate"
+            },
+            "wind_alice": {
+              "status": "NOT_PROBED"
+            }
+          },
+          "fallback_requirements": {
+            "hourly_reconstruction": "Existing V1.6 daily-hole path requires 24 exact confirmed UTC hourly OHLCV bars; no partial-day acceptance",
+            "new_provider_hourly_endpoint": "NOT_PROBED; does not follow from the archived daily response"
+          }
+        },
+        {
+          "requirement_id": "cn_index_daily",
+          "instruments": [
+            "930955",
+            "399006",
+            "000016",
+            "000852",
+            "000905",
+            "000300",
+            "H11077.SH / CSI 931077"
+          ],
+          "fields": [
+            "session_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "share_volume"
+          ],
+          "unit_basis": "Price-index points; bond-index points; shares for volume, not monetary turnover",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Price index vs total-return index must remain distinct; H11077 cannot silently become broad bond index",
+          "point_in_time": "No pre-publication backfilled index history for formal samples",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "OUTSIDE_TIINGO_EOD_SCOPE"
+            },
+            "wind_alice": {
+              "status": "PARTIAL_ARCHIVE",
+              "indices": {
+                "zz1000": {
+                  "retrieved_rows": 2921,
+                  "first": "2014-10-17",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2014-10-17",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "zz500": {
+                  "retrieved_rows": 5294,
+                  "first": "2005-01-04",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2007-01-15",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "cyb": {
+                  "retrieved_rows": 3980,
+                  "first": "2010-06-01",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2010-06-01",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "kcb50": {
+                  "retrieved_rows": 1648,
+                  "first": "2020-01-02",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2020-07-23",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "hs300": {
+                  "retrieved_rows": 6015,
+                  "first": "2002-01-04",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2005-04-08",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "sse50": {
+                  "retrieved_rows": 5537,
+                  "first": "2004-01-02",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2004-01-02",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                }
+              },
+              "H11077": {
+                "rows": 98,
+                "first": "2026-06-01",
+                "last": "2026-10-23"
+              },
+              "extra_index_930955": "NOT_CONFIRMED_BY_EXISTING_ARCHIVE"
+            }
+          }
+        },
+        {
+          "requirement_id": "cn_index_turnover",
+          "instruments": [
+            "932000",
+            "399006"
+          ],
+          "fields": [
+            "session_date",
+            "constituent_aggregate_traded_amount",
+            "source_unit",
+            "index_identity"
+          ],
+          "unit_basis": "CNY total monetary turnover of index constituents; not market-wide turnover; not share volume",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "No price adjustment can repair a turnover-scope mismatch",
+          "point_in_time": "932000 no earlier than publication 2023-08-11",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "OUTSIDE_TIINGO_EOD_SCOPE"
+            },
+            "wind_alice": {
+              "status": "NEEDS_FIELD_SCOPE_AND_HISTORY_ACCEPTANCE"
+            }
+          },
+          "active": true,
+          "conditional_disabled_requirements": {
+            "clear_ratio_overlay": [
+              "000016 monetary turnover; current overlay OFF"
+            ]
+          }
+        },
+        {
+          "requirement_id": "macro_risk",
+          "instruments": [
+            "FRED:SP500",
+            "FRED:VIXCLS",
+            "FRED:BAMLH0A0HYM2",
+            "FRED:T10Y2Y",
+            "FRED:CPIAUCSL"
+          ],
+          "fields": [
+            "observation_date",
+            "value",
+            "release_date_or_vintage_when_required",
+            "collection_time"
+          ],
+          "unit_basis": "Series-specific index points/percent/yield spread; CPI monthly frequency",
+          "calendar": "Series-specific FRED publication calendar",
+          "adjustment": "Macro series cannot be replaced by ETF prices",
+          "point_in_time": "Respect publication lag and revision/vintage limitations",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_AND_NOT_A_REPLACEMENT_CLAIM"
+            },
+            "wind_alice": {
+              "status": "NOT_PROBED_AND_NOT_A_REPLACEMENT_CLAIM"
+            }
+          }
+        }
+      ],
+      "gaps": [
+        "ETF price/volume/action differences remain unresolved except exact independently adjudicated events",
+        "BTC daily aggregation, missing-date handling and volume basis are not certified",
+        "No strategy production loader has been switched to either new provider",
+        "Wind 000852 long/short response conflict is known and must remain quarantined",
+        "Wind 930955 full history, H11077 full history and exact constituent-turnover field equivalence remain uncertified",
+        "Existing FRED/risk path is retained; no claim of macro replacement"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "万得中证1000长短区间冲突必须阻断；红利低波100、十年国债全历史及成分成交额尚未完整验收。",
+        "当前启用的成交额腿是中证2000与创业板；上证50成交额比值清仓当前关闭，仅列条件依赖。",
+        "FRED 风险指标继续保留；不能以 ETF 价格替代。",
+        "BTC 和其余 ETF 差异按独立口径处理。"
+      ]
+    },
+    {
+      "project_id": "cn_six_indices_v13",
+      "display_name": "A股六指数朴素动量 V1.3",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\A 股股指多头策略\\poe_cn_four_index_raw_momentum_combo_v1_3_bot.py",
+          "role": "formal_entrypoint",
+          "sha256": "b2f8c238c00084a672331bba5679a566e3726ef8d429fa5c91f45ac2aceddb80",
+          "sha256_lf": "7425f960f155246a735c9a32fc52c37ab850d3f33361fe07c8aad5d8be01e960"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\A 股股指多头策略\\README.md",
+          "role": "requirements_contract",
+          "sha256": "04f2d96c6afd517ce24a669cc719310a329a172727acca26cca879f396c6620a",
+          "sha256_lf": "aae0f5cddedf24462d0f2705d29f8ac33ee28c7bc7410a9a87cc6b4741eb0e71"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "cn_index_daily",
+          "instruments": [
+            "000852",
+            "000905",
+            "399006",
+            "000688",
+            "000300",
+            "000016"
+          ],
+          "fields": [
+            "session_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "share_volume"
+          ],
+          "unit_basis": "Price-index points; source volumes explicitly normalized to shares",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Raw price-index series, not total-return or ETF proxies",
+          "point_in_time": "First usable date constrained by actual index publication",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "OUTSIDE_TIINGO_EOD_SCOPE"
+            },
+            "wind_alice": {
+              "status": "AUTHENTICATED_ARCHIVES_EXIST_NOT_ACCEPTED",
+              "indices": {
+                "zz1000": {
+                  "retrieved_rows": 2921,
+                  "first": "2014-10-17",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2014-10-17",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "zz500": {
+                  "retrieved_rows": 5294,
+                  "first": "2005-01-04",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2007-01-15",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "cyb": {
+                  "retrieved_rows": 3980,
+                  "first": "2010-06-01",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2010-06-01",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "kcb50": {
+                  "retrieved_rows": 1648,
+                  "first": "2020-01-02",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2020-07-23",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "hs300": {
+                  "retrieved_rows": 6015,
+                  "first": "2002-01-04",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2005-04-08",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "sse50": {
+                  "retrieved_rows": 5537,
+                  "first": "2004-01-02",
+                  "last": "2026-10-23",
+                  "formal_publication_start": "2004-01-02",
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "gaps": [
+        "Long/short consistency plus official reference must pass before Wind data is accepted",
+        "Historical close/high/volume differences remain field-level adjudication work",
+        "Do not relabel old archived close data as current intraday quotes"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "六只价格指数已有真实归档和对比，不等于全部字段已通过。",
+        "使用万得前须通过长短区间一致性、独立参考和完整交易日覆盖。",
+        "指数发布日前回填不能进入正式样本，旧收盘数据不能标成当天盘中。"
+      ]
+    },
+    {
+      "project_id": "cn_six_etf_v13",
+      "display_name": "六只境内上市 ETF 朴素动量 V1.3",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\美股A股混合池子动量策略\\poe_subd_six_etf_v1_3_bot.py",
+          "role": "formal_entrypoint",
+          "sha256": "daf96cf4b39ab2919c9e8b7d82e74f96177748a1f4c5a6be2da7b5637e4965ca",
+          "sha256_lf": "daf96cf4b39ab2919c9e8b7d82e74f96177748a1f4c5a6be2da7b5637e4965ca"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\美股A股混合池子动量策略\\AGENTS.md",
+          "role": "requirements_contract",
+          "sha256": "6aa14146253531e5df9925645595eae5539ca0936aa28007fa04dd3edba9c8ec",
+          "sha256_lf": "6aa14146253531e5df9925645595eae5539ca0936aa28007fa04dd3edba9c8ec"
+        },
+        {
+          "path": "D:\\动量策略\\美股A股混合池子动量策略\\README.md",
+          "role": "requirements_contract",
+          "sha256": "1ec148f56b55711b785b6d94529cc49ca5087db196f6f6aa926b68015cba3349",
+          "sha256_lf": "1ec148f56b55711b785b6d94529cc49ca5087db196f6f6aa926b68015cba3349"
+        },
+        {
+          "path": "D:\\动量策略\\美股A股混合池子动量策略\\docs\\subd_six_etf_v1_3_20260904.md",
+          "role": "requirements_contract",
+          "sha256": "c326f55b112c5420ae277ae634daccc26c56cf0750480602be4d9bac5f542d1d",
+          "sha256_lf": "c326f55b112c5420ae277ae634daccc26c56cf0750480602be4d9bac5f542d1d"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "cn_etf_daily",
+          "instruments": [
+            "159915.SZ",
+            "159941.SZ",
+            "513030.SH",
+            "513520.SH",
+            "159985.SZ",
+            "518880.SH"
+          ],
+          "fields": [
+            "session_date",
+            "open",
+            "high",
+            "low",
+            "close",
+            "share_volume",
+            "adjustment_identity",
+            "distribution_and_split_identity"
+          ],
+          "unit_basis": "CNY per ETF share; share volume after explicit source-unit conversion",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Formal path accepts qfq/validated equivalent only; discovered Wind schema declares aftype=0 forward-adjusted, but response history/parity remains unverified",
+          "point_in_time": "Do not splice foreign underlying-session prices into mainland-listed ETF sessions",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_FOR_MAINLAND_LISTED_ETF_REQUIREMENTS"
+            },
+            "wind_alice": {
+              "status": "AUTHENTICATED_ARCHIVES_EXIST_NOT_ACCEPTED",
+              "assets": {
+                "159915.SZ": {
+                  "retrieved_rows": 3608,
+                  "first": "2011-12-09",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "159941.SZ": {
+                  "retrieved_rows": 2739,
+                  "first": "2015-07-13",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "513030.SH": {
+                  "retrieved_rows": 2945,
+                  "first": "2014-09-05",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "513520.SH": {
+                  "retrieved_rows": 1778,
+                  "first": "2019-06-25",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "159985.SZ": {
+                  "retrieved_rows": 1666,
+                  "first": "2019-12-05",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                },
+                "518880.SH": {
+                  "retrieved_rows": 3217,
+                  "first": "2013-07-29",
+                  "last": "2026-10-23",
+                  "comparison_rows": 640,
+                  "status": "AUTHENTICATED_RESPONSE_AND_COMPARISON_ARCHIVED_NOT_ACCEPTED"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "gaps": [
+        "159941 split/adjustment seam has separate prior evidence; other qfq/action paths require exact parity",
+        "Existing recent overlap is roughly 640 rows and does not certify the complete historical qfq path",
+        "Do not substitute older poe_subd_mixed_pool_v1_3_bot.py for this six-ETF family"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "正式路径要求前复权或已证明等值的序列；取得未复权行情不能视为前复权验收。",
+        "已有近期重叠及159941拆股窗口证据，不能推广为完整历史通过。",
+        "该入口与旧混合代理池 V1.3 不同，不能混用。"
+      ]
+    },
+    {
+      "project_id": "microcap_v20_v23_v25",
+      "display_name": "微盘 Top100 正式 V2.0 / V2.3 / V2.5",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_0.py",
+          "role": "formal_entrypoint",
+          "sha256": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1",
+          "sha256_lf": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_3.py",
+          "role": "formal_entrypoint",
+          "sha256": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6",
+          "sha256_lf": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_5.py",
+          "role": "formal_entrypoint",
+          "sha256": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50",
+          "sha256_lf": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\AGENTS.md",
+          "role": "requirements_contract",
+          "sha256": "dc9f048c45dac7022f9909823830283bad2251a6b2721dd29ae8f0f871b64d56",
+          "sha256_lf": "bfe35a8ecb291c66d0812a5193aa75de19dfae48976edd59ecdafca48ac0882e"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\README.md",
+          "role": "requirements_contract",
+          "sha256": "2147d9d84c8c009f0b85c7a8f53a46aebc6647a0d6c3bc67ee3c59a857baea84",
+          "sha256_lf": "df295f7c2a924feb108da1bfce38b48b623caa7cf7bd3097948aa5c6cc3b9a5e"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\top100_data_contracts.py",
+          "role": "requirements_contract",
+          "sha256": "df659bbe5c48874ca45e659699d88a73a036cb624afdb466c60331f307b258ab",
+          "sha256_lf": "df659bbe5c48874ca45e659699d88a73a036cb624afdb466c60331f307b258ab"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "historical_equity_universe",
+          "instruments": [
+            "All historical mainland stocks, including delisted securities"
+          ],
+          "fields": [
+            "security_code",
+            "exchange",
+            "listing_date",
+            "delisting_date",
+            "historical_code_and_name_events",
+            "board_identity"
+          ],
+          "unit_basis": "Security identity, not numeric market data",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Security master must be complete before ranking Top100",
+          "point_in_time": "Use full historical security master, never current listed universe projected backward",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_NOT_REPLACEMENT"
+            },
+            "wind_alice": {
+              "status": "ENTITLEMENT_AND_HISTORY_NOT_PROBED"
+            }
+          }
+        },
+        {
+          "requirement_id": "historical_st_intervals",
+          "instruments": [
+            "All historical mainland stock codes"
+          ],
+          "fields": [
+            "ST_or_starST_or_PT_entry_effective_date",
+            "removal_effective_date",
+            "notice_or_source_provenance"
+          ],
+          "unit_basis": "Dated classification intervals",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Not applicable to price adjustment",
+          "point_in_time": "As-of each historical rebalance; current ST status alone is insufficient",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_NOT_REPLACEMENT"
+            },
+            "wind_alice": {
+              "status": "ENTITLEMENT_AND_PIT_NOT_PROBED"
+            }
+          }
+        },
+        {
+          "requirement_id": "stock_daily_and_share_history",
+          "instruments": [
+            "All eligible historical Top100 universe members"
+          ],
+          "fields": [
+            "date",
+            "symbol",
+            "raw_close",
+            "adjusted_close_or_total_return",
+            "open",
+            "high",
+            "low",
+            "volume",
+            "share_change_effective_date",
+            "historical_total_shares",
+            "suspension_or_trade_eligibility"
+          ],
+          "unit_basis": "CNY; shares; source total_shares_10k must explicitly multiply by 10000",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Market cap uses raw close times historical total shares; adjusted prices/returns cannot silently substitute raw valuation close",
+          "point_in_time": "Historical total-share changes are joined backward as-of; corporate actions/listing/delisting must be dated",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_NOT_REPLACEMENT"
+            },
+            "wind_alice": {
+              "status": "ENTITLEMENT_AND_PIT_NOT_PROBED"
+            }
+          }
+        },
+        {
+          "requirement_id": "microcap_proxy_and_hedge",
+          "instruments": [
+            "Locally rebuilt Top100 proxy",
+            "000852 for V2.0/V2.3 hedge; V2.5 hedge OFF"
+          ],
+          "fields": [
+            "proxy_daily_return",
+            "proxy_price_index",
+            "proxy_turnover",
+            "member_rank_and_weight",
+            "rebalance_date",
+            "execution_date",
+            "hedge_daily_close",
+            "confirmed_intraday_snapshot_if_requested"
+          ],
+          "unit_basis": "Proxy index and CNY/shares; hedge price-index points",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Official Wind 868008.WI is a different object from the current local proxy",
+          "point_in_time": "Exactly 100 ranked unique members; zero ST intersection; metadata fingerprint and version lineage linked",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_NOT_REPLACEMENT"
+            },
+            "wind_alice": {
+              "status": "RECENT_OFFICIAL_INDEX_AVAILABILITY_DOES_NOT_CERTIFY_PROXY_EQUIVALENCE"
+            }
+          }
+        }
+      ],
+      "gaps": [
+        "No historical stock master, PIT-ST, delisted coverage or historical-share entitlement acceptance for Wind has been completed",
+        "Replacing local proxy with 868008.WI would change the formal data object; not a transparent data-source swap",
+        "A later source-lineage change must rebuild and read back all V2.0/V2.3/V2.5 streams; no such rebuild is done in this inventory"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "万得的完整历史证券主表、时点 ST、退市及历史股本权限尚未认证。",
+        "当前 Top100 是本地重建代理，不能直接用官方868008.WI替换。",
+        "后续数据血缘变化须重新生成并读回 V2.0/V2.3/V2.5；本次只盘点，不刷新策略。"
+      ]
+    },
+    {
+      "project_id": "icim_v14",
+      "display_name": "IC/IM 滚动套利 v1.4 当前查询/续账路径",
+      "entrypoints": [
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\poe_ic_im_mainline_v1_4_bot.py",
+          "role": "formal_entrypoint",
+          "sha256": "48a0fd691904a72b83ac0b9ca3506a2e5a4754d82edb72e1aed0937f23e1239c",
+          "sha256_lf": "e8fb66e26c7c0ba8cc023d61565ac9615d56a86a14c7e57b78e88ab5ca24c091"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\poe_ic_im_v1_4_server.py",
+          "role": "formal_entrypoint",
+          "sha256": "98383b69ecfd33dc22e0d9699129d9458b632f4979d75e7f838c50176d6cbd2c",
+          "sha256_lf": "e82914a017b3006c3c58b392af2170f9d04a4093e792d1d2c6145d7253574e0d"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\run_ic_im_v1_4_github_digest.py",
+          "role": "formal_entrypoint",
+          "sha256": "a016c273dbd24acc797ec3d2205abae600af4b1b14ca24969c09a8212bcdea7f",
+          "sha256_lf": "a016c273dbd24acc797ec3d2205abae600af4b1b14ca24969c09a8212bcdea7f"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\capture_ic_im_v1_4_inputs.py",
+          "role": "formal_entrypoint",
+          "sha256": "c0b90df51fd4257aa54ec9dfef200656c662572b0e77d2c74508093e089653b7",
+          "sha256_lf": "7c72fe431b80ed7787f288e2187ff7c5b0b8f36393e167b73467a76bdbd8b78a"
+        }
+      ],
+      "source_evidence": [
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\AGENTS.md",
+          "role": "requirements_contract",
+          "sha256": "e450137c266c61d18ed678b0d4c40f7f576285a36f76417dac7f8ac95c0f8980",
+          "sha256_lf": "e450137c266c61d18ed678b0d4c40f7f576285a36f76417dac7f8ac95c0f8980"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\notes\\mainline_registry.md",
+          "role": "requirements_contract",
+          "sha256": "fb32333a77e877da737bcb14a08765e124b84a6a99680765ed1dc9eaf68365a8",
+          "sha256_lf": "d6e7f7b05ca3386d4eabad520e799a009979e0ec40b6e1ca77f9710dc7ede43f"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\docs\\ic_im_system_mainlines_v1_spec.md",
+          "role": "requirements_contract",
+          "sha256": "a7ed851fdae45a16cd14d05449730221a8a2c804fb2be56efaedafb7ab0eb2fc",
+          "sha256_lf": "a7ed851fdae45a16cd14d05449730221a8a2c804fb2be56efaedafb7ab0eb2fc"
+        },
+        {
+          "path": "D:\\动量策略\\IC和IM滚动套利\\docs\\ic_im_daily_release_20261023_repairs_v3_r3_manifest.json",
+          "role": "requirements_contract",
+          "sha256": "7c61e6506342ade9c23d6c878579cc575490e9f7baaa224db5da02dab2ccb600",
+          "sha256_lf": "5cf2a8beeb6485467639155fcb4c4b998ed822008b15bdaac4759144d67c39b6"
+        }
+      ],
+      "requirements": [
+        {
+          "requirement_id": "listed_futures",
+          "instruments": [
+            "Actual listed IC contracts",
+            "Actual listed IM contracts"
+          ],
+          "fields": [
+            "contract_code",
+            "actual_listing_date",
+            "actual_expiry",
+            "open",
+            "high",
+            "low",
+            "close",
+            "settlement",
+            "volume",
+            "open_interest",
+            "contract_multiplier",
+            "exchange_session"
+          ],
+          "unit_basis": "Index points; contracts; open interest in contracts; contractual CNY multipliers",
+          "calendar": "CFFEX actual sessions; Asia/Shanghai",
+          "adjustment": "Raw actual-contract quotes; continuous futures are not actual-roll accounting evidence",
+          "point_in_time": "Use actual contract availability/expiry, not invented calendar-month shifts",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "OUTSIDE_VALIDATED_TIINGO_EOD_SCOPE"
+            },
+            "wind_alice": {
+              "status": "FUTURES_ENTITLEMENT_AND_FIELDS_NOT_PROBED"
+            }
+          }
+        },
+        {
+          "requirement_id": "listed_options",
+          "instruments": [
+            "510500 ETF Put",
+            "MO Put and Call"
+          ],
+          "fields": [
+            "contract_code",
+            "underlying_identity",
+            "expiry",
+            "strike",
+            "call_put",
+            "adjusted_contract_identity",
+            "contract_multiplier",
+            "open",
+            "close",
+            "settlement_where_required",
+            "bid_ask_if_execution_uses_it",
+            "volume",
+            "open_interest",
+            "IV_and_delta_or_reproducible_inputs"
+          ],
+          "unit_basis": "510500 CNY per share and adjusted ETF option units; MO index points with contractual multiplier; never mix the two",
+          "calendar": "SSE ETF option sessions / CFFEX MO sessions with actual shared execution day",
+          "adjustment": "Handle adjusted ETF option strikes/multipliers and original contract notices explicitly",
+          "point_in_time": "Actual listed future expiries; rescue_next_listed strictly later than the old expiry",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "OUTSIDE_VALIDATED_TIINGO_EOD_SCOPE"
+            },
+            "wind_alice": {
+              "status": "OPTIONS_CHAIN_ENTITLEMENT_AND_FIELDS_NOT_PROBED"
+            }
+          }
+        },
+        {
+          "requirement_id": "index_valuation_and_rates",
+          "instruments": [
+            "CSI500 price and total-return indices",
+            "CSI1000 price and total-return indices",
+            "510500",
+            "PE/PB",
+            "dividend contribution",
+            "risk-free curve"
+          ],
+          "fields": [
+            "price_index_close",
+            "total_return_index_close",
+            "PE",
+            "PB",
+            "earnings_yield",
+            "trailing_actual_dividend_contribution",
+            "rate",
+            "observation_date",
+            "collection_time",
+            "publication_or_asof_date"
+          ],
+          "unit_basis": "Index points, ratios, percent/yield; preserve each field basis",
+          "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+          "adjustment": "Price index is not total-return index; valuation ratios and fear proxies must remain distinct",
+          "point_in_time": "Respect current-day real valuation versus explicitly labelled prior/proxy inputs",
+          "provider_coverage": {
+            "tiingo": {
+              "status": "NOT_PROBED_NOT_REPLACEMENT"
+            },
+            "wind_alice": {
+              "status": "INDEX_PRICE_PARTIAL_ONLY_VALUATION_TR_RATE_FIELDS_NOT_ACCEPTED"
+            }
+          }
+        }
+      ],
+      "gaps": [
+        "Wind real futures/options-chain/valuation/rates permissions and row-level completeness remain unverified",
+        "Current registry explicitly discloses valuation proxy use when actual daily PE/PB is unavailable",
+        "Research-data coverage cannot authorize orders, ledger rewrites, email sending or strategy deployment"
+      ],
+      "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
+      "gaps_zh": [
+        "真实期货、期权链、估值与利率权限及字段完整性尚未认证。",
+        "合约、实际到期和调整后的期权乘数必须逐项核对；连续合约不能替代实际滚动账本。",
+        "登记表仍披露实际日度PE/PB不可用时的代理口径。",
+        "数据覆盖不授权下单、改写账本、发信或部署。"
+      ]
+    }
+  ]
+}

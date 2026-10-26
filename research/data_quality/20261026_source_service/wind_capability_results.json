@@ -1,0 +1,370 @@
+{
+  "status": "REVIEW_REQUIRED",
+  "production_approved": false,
+  "cutoff": "2026-10-23",
+  "request_counts": {
+    "fresh_tools_list": 4,
+    "minimal_field_probes": 5,
+    "missing_short_windows_only": 11,
+    "explicit_additional_index_probes": 3,
+    "total": 23
+  },
+  "permission_denial_observed": false,
+  "probes": [
+    {
+      "probe": "index_identity",
+      "server": "index_data",
+      "tool": "get_index_basicinfo",
+      "status": "NO_DATA_RETURNED_FOR_REQUESTED_PROBE",
+      "isError": false,
+      "response_chars": 5,
+      "permission_denied_observed": false,
+      "fields_verified": false,
+      "note": "A no-data business response does not establish missing account permission or unavailability of every individual requested field."
+    },
+    {
+      "probe": "historical_ST_event",
+      "server": "stock_data",
+      "tool": "get_stock_events",
+      "status": "NO_DATA_RETURNED_FOR_REQUESTED_PROBE",
+      "isError": false,
+      "response_chars": 5,
+      "permission_denied_observed": false,
+      "fields_verified": false,
+      "note": "A no-data business response does not establish missing account permission or unavailability of every individual requested field."
+    },
+    {
+      "probe": "historical_cap_shares",
+      "server": "stock_data",
+      "tool": "get_stock_fundamentals",
+      "status": "NO_DATA_RETURNED_FOR_REQUESTED_PROBE",
+      "isError": false,
+      "response_chars": 5,
+      "permission_denied_observed": false,
+      "fields_verified": false,
+      "note": "A no-data business response does not establish missing account permission or unavailability of every individual requested field."
+    },
+    {
+      "probe": "futures_contract_fields",
+      "server": "analytics_data",
+      "tool": "get_financial_data",
+      "status": "NO_DATA_RETURNED_FOR_REQUESTED_PROBE",
+      "isError": false,
+      "response_chars": 5,
+      "permission_denied_observed": false,
+      "fields_verified": false,
+      "note": "A no-data business response does not establish missing account permission or unavailability of every individual requested field."
+    },
+    {
+      "probe": "options_contract_chain",
+      "server": "analytics_data",
+      "tool": "get_financial_data",
+      "status": "STRUCTURED_RESULT_REJECTED",
+      "isError": false,
+      "response_chars": 7151,
+      "permission_denied_observed": false,
+      "fields_verified": false,
+      "validation": {
+        "status": "BLOCKED",
+        "requested_product": "MO",
+        "requested_underlying": "000852.SH",
+        "requested_date": "2026-10-23",
+        "requested_expiry_month": "2026-12",
+        "production_approved": false,
+        "issues": [
+          "CONTRACT_PRODUCT_MISMATCH",
+          "UNDERLYING_MISMATCH",
+          "REQUIRED_DATE_MISMATCH",
+          "MISSING_CONTRACT_MULTIPLIER",
+          "MISSING_BID",
+          "MISSING_ASK"
+        ],
+        "observed_rows": 32,
+        "observed_codes": [
+          "IO2612-P-3600.CFE",
+          "IO2612-P-3650.CFE",
+          "IO2612-P-3700.CFE"
+        ],
+        "observed_dates": [
+          "20261026"
+        ],
+        "observed_fields": [
+          "Wind代码",
+          "证券简称",
+          "标的WIND代码",
+          "标的简称",
+          "标的品种分类明细",
+          "标的品种分类明细.资产分类级别",
+          "标的品种代码",
+          "交易所中文名称",
+          "期权类型",
+          "行权价格",
+          "最后交易日期",
+          "交易币种",
+          "成交量",
+          "收盘价",
+          "交易时间",
+          "日期",
+          "交易币种_2"
+        ]
+      }
+    }
+  ],
+  "extra_indices": [
+    {
+      "code_requested": "932000.CSI",
+      "rows_returned": 5,
+      "columns": [
+        {
+          "name": "TIME",
+          "type": "string"
+        },
+        {
+          "name": "OPEN",
+          "type": "string"
+        },
+        {
+          "name": "MATCH",
+          "type": "string"
+        },
+        {
+          "name": "HIGH",
+          "type": "string"
+        },
+        {
+          "name": "LOW",
+          "type": "string"
+        },
+        {
+          "name": "TURNOVER",
+          "type": "string"
+        },
+        {
+          "name": "VOLUME",
+          "type": "string"
+        },
+        {
+          "name": "CHANGEHANDRATE",
+          "type": "string"
+        },
+        {
+          "name": "AVPRICE",
+          "type": "string"
+        }
+      ],
+      "units": {
+        "TURNOVER 单位：": "元"
+      },
+      "first_label": "2026-10-19T00:00:00.000+08:00",
+      "last_label": "2026-10-23T00:00:00.000+08:00",
+      "status": "RAW_KLINE_RETURNED_IDENTITY_AND_REFERENCE_NOT_YET_CERTIFIED"
+    },
+    {
+      "code_requested": "930955.CSI",
+      "rows_returned": 5,
+      "columns": [
+        {
+          "name": "TIME",
+          "type": "string"
+        },
+        {
+          "name": "OPEN",
+          "type": "string"
+        },
+        {
+          "name": "MATCH",
+          "type": "string"
+        },
+        {
+          "name": "HIGH",
+          "type": "string"
+        },
+        {
+          "name": "LOW",
+          "type": "string"
+        },
+        {
+          "name": "TURNOVER",
+          "type": "string"
+        },
+        {
+          "name": "VOLUME",
+          "type": "string"
+        },
+        {
+          "name": "CHANGEHANDRATE",
+          "type": "string"
+        },
+        {
+          "name": "AVPRICE",
+          "type": "string"
+        }
+      ],
+      "units": {
+        "TURNOVER 单位：": "元"
+      },
+      "first_label": "2026-10-19T00:00:00.000+08:00",
+      "last_label": "2026-10-23T00:00:00.000+08:00",
+      "status": "RAW_KLINE_RETURNED_IDENTITY_AND_REFERENCE_NOT_YET_CERTIFIED"
+    },
+    {
+      "code_requested": "H11077.SH",
+      "rows_returned": 5,
+      "columns": [
+        {
+          "name": "TIME",
+          "type": "string"
+        },
+        {
+          "name": "OPEN",
+          "type": "string"
+        },
+        {
+          "name": "MATCH",
+          "type": "string"
+        },
+        {
+          "name": "HIGH",
+          "type": "string"
+        },
+        {
+          "name": "LOW",
+          "type": "string"
+        },
+        {
+          "name": "CHANGEHANDRATE",
+          "type": "string"
+        },
+        {
+          "name": "AVPRICE",
+          "type": "string"
+        }
+      ],
+      "units": null,
+      "first_label": "2026-10-19T00:00:00.000+08:00",
+      "last_label": "2026-10-23T00:00:00.000+08:00",
+      "status": "RAW_KLINE_RETURNED_IDENTITY_AND_REFERENCE_NOT_YET_CERTIFIED"
+    }
+  ],
+  "latest_cn_report": "D:\\动量策略\\_data_source_service\\wind_runs\\20261026T070054Z_1079b8c5\\report.json",
+  "latest_cn_manifest": "D:\\动量策略\\_data_source_service\\wind_runs\\20261026T070054Z_1079b8c5\\manifest.json",
+  "interval_coherent_assets": [
+    "000905.SH",
+    "399006.SZ",
+    "000688.SH",
+    "000300.SH",
+    "000016.SH",
+    "159915.SZ",
+    "159941.SZ",
+    "513030.SH",
+    "513520.SH",
+    "159985.SZ",
+    "518880.SH"
+  ],
+  "blocked_assets": [
+    {
+      "code": "000852.SH",
+      "reason": "needs_full_refresh: revised overlap 2026-10-21 LOW"
+    },
+    {
+      "code": "932000.CSI",
+      "reason": "long missing 2026-01-05,2026-01-06,2026-01-07,2026-01-08,2026-01-09"
+    },
+    {
+      "code": "930955.CSI",
+      "reason": "long missing 2026-01-05,2026-01-06,2026-01-07,2026-01-08,2026-01-09; long/short conflict open 2026-10-19,2026-10-20,2026-10-21,2026-10-22,2026-10-23; long/short conflict high 2026-10-19,2026-10-20,2026-10-21,2026-10-22,2026-10-23; long/short conflict low 2026-10-19,2026-10-20,2026-10-21,2026-10-22,2026-10-23; long/short conflict close 2026-10-19,2026-10-20,2026-10-21,2026-10-22,2026-10-23; long/sh"
+    },
+    {
+      "code": "H11077.SH",
+      "reason": "Missing/duplicate Wind columns"
+    }
+  ],
+  "amount_limitations": "Index constituent aggregation remains unverified; no volume-to-money conversion. H11077 returns no VOLUME or TURNOVER.",
+  "historical_scope": "Independent exchange calendar certification only covers requested 2026 window; pre-2026 not certified.",
+  "persistent_short_index": "D:\\动量策略\\_data_source_service\\wind_short_index.json",
+  "persistent_long_index": "D:\\动量策略\\_data_source_service\\wind_long_index.json",
+  "source_evidence_root": "D:\\动量策略\\_data_source_service\\wind_capability_evidence",
+  "tests_passed": 17,
+  "already_completed_work_not_repeated": [
+    "DBMF/KMLM adjudication and full native replays",
+    "CSI1000 conflict investigation",
+    "Previously successful full-history collection"
+  ],
+  "followup": {
+    "status": "SINGLE_FIELD_HISTORICAL_PROBES_REQUIRE_QUALIFIED_DATA",
+    "results": [
+      {
+        "probe": "single_total_market_cap",
+        "tool": "get_stock_fundamentals",
+        "question": "查询000001.SZ在2026-10-23的总市值这一个指标。请返回总市值原始数值、单位和实际数据日期；不查询股本等其他指标，不用其他日期替代。",
+        "raw_result": "没找到数据",
+        "isError": false,
+        "status": "NO_QUALIFIED_RETURN",
+        "permission_denied_observed": false
+      },
+      {
+        "probe": "historical_ST_event_2019",
+        "tool": "get_stock_events",
+        "question": "查询600518.SH在2019年发生的ST风险警示生效事件或名称变更事件，返回当年的事件名称和生效日期。明确查询历史事件，不是当前ST标签；没有数据就明确说明，不用当前状态回填。",
+        "raw_result": "没找到数据",
+        "isError": false,
+        "status": "NO_QUALIFIED_RETURN",
+        "permission_denied_observed": false
+      }
+    ],
+    "receipts": [
+      {
+        "provider": "wind",
+        "server": "stock_data",
+        "url": "https://mcp.wind.com.cn/vserver_stock_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179299860822601,
+        "retrieved_at_utc": "2026-10-26T07:10:08.227049+00:00",
+        "authenticated": true,
+        "attempt": 1,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_stock_fundamentals",
+        "arguments": {
+          "question": "查询000001.SZ在2026-10-23的总市值这一个指标。请返回总市值原始数值、单位和实际数据日期；不查询股本等其他指标，不用其他日期替代。"
+        },
+        "status": 200,
+        "bytes": 201,
+        "sha256": "74157c4263145de4816c23043c72eb662b79643c84441300772db2efa17bb002",
+        "raw_file": "001_single_total_market_cap_response.txt",
+        "parsed_file": "001_single_total_market_cap_parsed.json"
+      },
+      {
+        "provider": "wind",
+        "server": "stock_data",
+        "url": "https://mcp.wind.com.cn/vserver_stock_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179299861302402,
+        "retrieved_at_utc": "2026-10-26T07:10:13.024030+00:00",
+        "authenticated": true,
+        "attempt": 2,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_stock_events",
+        "arguments": {
+          "question": "查询600518.SH在2019年发生的ST风险警示生效事件或名称变更事件，返回当年的事件名称和生效日期。明确查询历史事件，不是当前ST标签；没有数据就明确说明，不用当前状态回填。"
+        },
+        "status": 200,
+        "bytes": 201,
+        "sha256": "f2960f305bf711ff44a7f61eb2065424b7090c8d29641da193c9242aad2981c6",
+        "raw_file": "002_historical_ST_event_2019_response.txt",
+        "parsed_file": "002_historical_ST_event_2019_parsed.json"
+      }
+    ],
+    "additional_requests": 2,
+    "previous_requests": 23,
+    "total_wind_requests": 25,
+    "tools_list_requests_this_followup": 0,
+    "third_round_attempted": false,
+    "previous_field_validation_preserved": "D:\\动量策略\\_data_source_service\\wind_field_validation.json",
+    "production_changed": false
+  },
+  "total_new_requests": 25
+}

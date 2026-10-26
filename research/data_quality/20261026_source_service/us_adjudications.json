@@ -1,0 +1,761 @@
+{
+  "schema_version": "1.0",
+  "mode": "INDEPENDENT_EVENT_ADJUDICATION",
+  "as_of": "2026-10-26",
+  "scope": "11 pre-existing cash conflicts only; no fresh vendor downloads or backtests",
+  "source_audit": {
+    "artifact": "frozen_source_audit_report.json",
+    "sha256": "8cba1a2355ee0607f7d4522852d522b396c271a8ae9786aafdcc3165f00420b6",
+    "cutoff": "2026-10-23",
+    "created_at_utc": "2026-10-25T14:14:02.975026+00:00"
+  },
+  "evidence_root": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_service_20261026\\us_adjudications",
+  "summary": {
+    "events": 11,
+    "confirmed_cash_events": 4,
+    "unresolved_events": 7,
+    "unresolved_with_exchange_corroboration": 1,
+    "global_gate": "REVIEW_REQUIRED"
+  },
+  "policy": {
+    "unknown_is_not_zero": true,
+    "cash_reference_does_not_validate_adjclose": true,
+    "no_provider_wide_promotion": true,
+    "no_raw_OHLCV_mutation": true,
+    "no_forward_fill_of_unresolved_actions": true,
+    "all_repairs_require_idempotency_and_factor_checks": true,
+    "lookback_scope": "Consumers must map the actual model input window, including warmup and normalization endpoints. Old events are not declared irrelevant by calendar date alone.",
+    "retrospective_evidence_is_not_PIT_certification": true
+  },
+  "completed_preexisting": [
+    {
+      "symbol": "DBMF",
+      "status": "COMPLETED_PREVIOUSLY_NOT_RERUN",
+      "evidence_reference": "outputs/dbmf_independent_review_20261025",
+      "repository_reference": "research/data_quality/20261025_dbmf/完整比较结果.json"
+    },
+    {
+      "symbol": "KMLM",
+      "status": "COMPLETED_PREVIOUSLY_NOT_RERUN",
+      "evidence_reference": [
+        "outputs/v16_independent_review_20261025",
+        "outputs/v80_independent_review_20261025"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "QQQ_2020-09-21",
+      "symbol": "QQQ",
+      "ex_date": "2020-09-21",
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.38824",
+        "ex_date": "2020-09-21",
+        "pay_date": "2020-10-30",
+        "record_date": null,
+        "cash_basis": "2020 Swiss Federal Tax Administration gross USD income per QQQ share; exclude CHF taxable-income conversion",
+        "date_evidence": "explicit ex. and pay. columns; annual table title identifies 2020",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "usable_scope": {
+          "symbol": "QQQ",
+          "ex_dates": [
+            "2020-09-21"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "other dates",
+          "full adjusted series",
+          "strategy impact"
+        ]
+      },
+      "evidence": [
+        {
+          "url": "https://www.ictax.admin.ch/extern/api/download/1965377/2d68057143f0d84058d1b4d0b7268ed9/Ergaenzungen_HB_Band_2_2020%2820210326%29.pdf",
+          "artifact": "qqq_swiss_tax_2020.pdf",
+          "sha256": "c10b9db052db217b2e7c28b4583e8112987d520bb8b80a6e3cdc2a7c7248f678",
+          "kind": "pdf",
+          "page_1based": 12,
+          "retrieved": "2026-10-26",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2020-09-21",
+        "flags": [
+          "raw_open",
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.38824,
+        "yahoo_cash": 0.0,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.003852962116526859,
+          "yahoo": 0.0023982207253840926
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 262.52,
+            "close": 267.51,
+            "volume": 57168570.0
+          },
+          "yahoo": {
+            "open": 262.4700012207031,
+            "close": 267.510009765625,
+            "volume": 57168600.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    },
+    {
+      "id": "AGG_2018-11-01",
+      "symbol": "AGG",
+      "ex_date": "2018-11-01",
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.256340",
+        "cash_basis": "issuer displayed historical total distribution per ETF share",
+        "source_record": {
+          "recordDate": "Nov 02, 2018",
+          "exDate": "Nov 01, 2018",
+          "payableDate": "Nov 07, 2018",
+          "totalDistribution": "0.256340",
+          "incomeAmount": "0.256340",
+          "shortTermCapitalGain": "0.000000",
+          "longTermCapitalGain": "0.000000",
+          "returnOnCapital": "0.000000"
+        },
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "date_evidence": "explicit ex/record/pay table columns",
+        "usable_scope": {
+          "symbol": "AGG",
+          "ex_dates": [
+            "2018-11-01"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV conflicts",
+          "other dates",
+          "full adjusted series",
+          "strategy impact"
+        ]
+      },
+      "evidence": [
+        {
+          "url": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+          "artifact": "agg_issuer.html",
+          "sha256": "7f4d786b84fef64d32a5de45db15c9a1dfe8e9cdcc942b0d282491aef46ae483",
+          "kind": "html",
+          "page_1based": null,
+          "retrieved": "2026-10-26",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2018-11-01",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.25634,
+        "yahoo_cash": 0.513,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 6.061764962983496e-05,
+          "yahoo": 0.002527442421514481
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 104.22,
+            "close": 104.34,
+            "volume": 7918997.0
+          },
+          "yahoo": {
+            "open": 104.22000122070312,
+            "close": 104.33999633789062,
+            "volume": 7919000.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    },
+    {
+      "id": "SPY_2021-12-17",
+      "symbol": "SPY",
+      "ex_date": "2021-12-17",
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "1.636431",
+        "record_date": "2021-12-20",
+        "pay_date": "2022-01-31",
+        "ex_date": "2021-12-17",
+        "ex_date_derivation": "inferred from issuer defined third Friday of December, matching frozen vendor event date; row itself states record/pay dates",
+        "cash_basis": "issuer regulatory filing, USD distribution per SPDR S&P 500 ETF Trust unit; not JPY conversion or aggregate distribution",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "usable_scope": {
+          "symbol": "SPY",
+          "ex_dates": [
+            "2021-12-17"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "other dates",
+          "full adjusted series",
+          "strategy impact"
+        ]
+      },
+      "evidence": [
+        {
+          "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100VGRO.pdf",
+          "artifact": "spy_edinet_filing.pdf",
+          "sha256": "08c0171ace2c8f8b5d7a5c51353f29ea9952542a1f276609b37996dfcf149250",
+          "kind": "pdf",
+          "page_1based": 47,
+          "retrieved": "2026-10-26",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2021-12-17",
+        "flags": [
+          "cash"
+        ],
+        "tiingo_cash": 1.636431,
+        "yahoo_cash": 1.633,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": null,
+        "comparison_values": {
+          "tiingo": {
+            "open": 461.55,
+            "close": 459.87,
+            "volume": 135636510.0
+          },
+          "yahoo": {
+            "open": 461.54998779296875,
+            "close": 459.8699951171875,
+            "volume": 135511600.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    },
+    {
+      "id": "TLT_2012-11-01",
+      "symbol": "TLT",
+      "ex_date": "2012-11-01",
+      "status": "CONFIRMED_CASH_EVENT",
+      "resolution": {
+        "cash_usd_per_share": "0.269553",
+        "cash_basis": "issuer displayed historical total distribution per ETF share",
+        "source_record": {
+          "recordDate": "Nov 05, 2012",
+          "exDate": "Nov 01, 2012",
+          "payableDate": "Nov 07, 2012",
+          "totalDistribution": "0.269553",
+          "incomeAmount": "0.269553",
+          "shortTermCapitalGain": "0.000000",
+          "longTermCapitalGain": "0.000000",
+          "returnOnCapital": "0.000000"
+        },
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "date_evidence": "explicit ex/record/pay table columns",
+        "usable_scope": {
+          "symbol": "TLT",
+          "ex_dates": [
+            "2012-11-01"
+          ],
+          "fields": [
+            "cash_distribution"
+          ]
+        },
+        "not_resolved": [
+          "raw OHLCV conflicts",
+          "other dates",
+          "full adjusted series",
+          "strategy impact"
+        ]
+      },
+      "evidence": [
+        {
+          "url": "https://www.ishares.com/us/products/239454/ishares-20-year-treasury-bond-etf",
+          "artifact": "tlt_issuer.html",
+          "sha256": "9a25ecd1253d1f16e3ce9730fe974bfea9c45323d8242621405b665ab2a0d06f",
+          "kind": "html",
+          "page_1based": null,
+          "retrieved": "2026-10-26",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2012-11-01",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.269553,
+        "yahoo_cash": 0.0,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.006002326524704449,
+          "yahoo": -0.00818769364445282
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 122.77,
+            "close": 122.35,
+            "volume": 3659628.0
+          },
+          "yahoo": {
+            "open": 122.7699966430664,
+            "close": 122.3499984741211,
+            "volume": 3659700.0
+          }
+        }
+      },
+      "projects": [
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "CASH_REFERENCE_ONLY",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false
+    },
+    {
+      "id": "VGIT_2013-12-24",
+      "symbol": "VGIT",
+      "ex_date": "2013-12-24",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [
+        {
+          "url": "https://infomemo.theocc.com/infomemos?date=201312&lastModifiedDate=12%2F23%2F2013+18%3A14%3A14&number=33831",
+          "artifact": "vgit_occ_33831_web_capture.json",
+          "sha256": "275dedd322f2e34abfba11f7a689638e49a0ed3b3b5d3f18c4d0a42d10703ead",
+          "kind": "web_extracted_record",
+          "page_1based": 3,
+          "original_pdf_archived": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2013-12-24",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.1064,
+        "yahoo_cash": 0.263,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.004348996689764628,
+          "yahoo": -0.0018610309181300577
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 62.85,
+            "close": 62.76,
+            "volume": 25500.0
+          },
+          "yahoo": {
+            "open": 62.849998474121094,
+            "close": 62.7599983215332,
+            "volume": 25500.0
+          }
+        }
+      },
+      "projects": [
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "corroboration": {
+        "provider": "yahoo",
+        "cash_reference": "0.2630",
+        "basis": "contemporaneous OneChicago futures adjustment communicated by OCC; not yet issuer final cash amount"
+      },
+      "unresolved_reason": "Exchange record corroborates Yahoo, but final ETF distribution amount and any estimate/revision distinction remain unproven; no canonical replacement authorized.",
+      "required_evidence": "Vanguard final 2013-12-24 ETF distribution record and any amendment, with explicit ETF share class and ex-date."
+    },
+    {
+      "id": "VGIT_2015-11-02",
+      "symbol": "VGIT",
+      "ex_date": "2015-11-02",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [],
+      "frozen_observation": {
+        "date": "2015-11-02",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.085,
+        "yahoo_cash": 0.0,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.0020762842203148058,
+          "yahoo": -0.003383035715311733
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 64.84,
+            "close": 64.8,
+            "volume": 289715.0
+          },
+          "yahoo": {
+            "open": 64.83999633789062,
+            "close": 64.80000305175781,
+            "volume": 289700.0
+          }
+        }
+      },
+      "projects": [
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
+      "required_evidence": "Vanguard final distribution notice for 2015-11-02, with amount and ex/record/pay dates."
+    },
+    {
+      "id": "VEA_2008-03-12",
+      "symbol": "VEA",
+      "ex_date": "2008-03-12",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [],
+      "frozen_observation": {
+        "date": "2008-03-12",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.032,
+        "yahoo_cash": 0.016,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.0014181152768686367,
+          "yahoo": 0.0010521172576507531
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 44.02,
+            "close": 43.75,
+            "volume": 366300.0
+          },
+          "yahoo": {
+            "open": 44.02000045776367,
+            "close": 43.75,
+            "volume": 366300.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
+      "required_evidence": "Vanguard 2008 VEA class final distribution notice, separating ETF share class and any split basis."
+    },
+    {
+      "id": "EFA_2003-12-16",
+      "symbol": "EFA",
+      "ex_date": "2003-12-16",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [
+        {
+          "url": "https://www.ishares.com/us/products/239623/ishares-msci-eafe-etf",
+          "artifact": "efa_issuer.html",
+          "sha256": "af6f611b36fbee069230599f42659855c4396626f2a8a17cf36a4b37e829a822",
+          "kind": "html",
+          "page_1based": null,
+          "retrieved": "2026-10-26",
+          "retrospective_evidence": true,
+          "point_in_time_certified": false
+        }
+      ],
+      "frozen_observation": {
+        "date": "2003-12-16",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.156667,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.009174311924956102,
+          "yahoo": 0.012813794294834535
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 43.666623000043664,
+            "close": 43.999956000044,
+            "volume": 1147201.1472
+          },
+          "yahoo": {
+            "open": 43.66666793823242,
+            "close": 44.0,
+            "volume": 1147200.0
+          }
+        }
+      },
+      "projects": [
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "issuer_2003_rows": [
+        {
+          "recordDate": "Dec 24, 2003",
+          "exDate": "Dec 22, 2003",
+          "payableDate": "Jan 02, 2004",
+          "totalDistribution": "0.522510",
+          "incomeAmount": "-",
+          "shortTermCapitalGain": "0.000000",
+          "longTermCapitalGain": "0.000000",
+          "returnOnCapital": "0.000000"
+        }
+      ],
+      "unresolved_reason": "Current issuer historical table has no 2003-12-16 row; absence is insufficient to establish zero, and historical cash share basis is not explicit. Do not infer Tiingo correctness or divide historical issuer amounts by the later split.",
+      "required_evidence": "Contemporaneous iShares 2003 dividend/capital-gain announcement or issuer/broker cash record, plus explicit original/latest-share split basis."
+    },
+    {
+      "id": "QQQ_2009-12-18",
+      "symbol": "QQQ",
+      "ex_date": "2009-12-18",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [],
+      "frozen_observation": {
+        "date": "2009-12-18",
+        "flags": [
+          "raw_open",
+          "cash"
+        ],
+        "tiingo_cash": 0.0776,
+        "yahoo_cash": 0.073,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": null,
+        "comparison_values": {
+          "tiingo": {
+            "open": 44.14,
+            "close": 44.46,
+            "volume": 96442600.0
+          },
+          "yahoo": {
+            "open": 44.15999984741211,
+            "close": 44.459999084472656,
+            "volume": 96442600.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
+      "required_evidence": "Contemporaneous Invesco/PowerShares final distribution notice or primary broker record, separating estimate/final amount."
+    },
+    {
+      "id": "QQQ_2010-06-25",
+      "symbol": "QQQ",
+      "ex_date": "2010-06-25",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [],
+      "frozen_observation": {
+        "date": "2010-06-25",
+        "flags": [
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.089,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": -0.0017640573328050468,
+          "yahoo": 0.00019889609760825877
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 45.51,
+            "close": 45.27,
+            "volume": 88740300.0
+          },
+          "yahoo": {
+            "open": 45.5099983215332,
+            "close": 45.27000045776367,
+            "volume": 88740300.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
+      "required_evidence": "Issuer final 2010 Q2 event calendar and amount; distinguish ex-date 06-18 from potential duplicate or payment-date record 06-25."
+    },
+    {
+      "id": "QQQ_2011-12-27",
+      "symbol": "QQQ",
+      "ex_date": "2011-12-27",
+      "status": "UNRESOLVED",
+      "resolution": null,
+      "evidence": [],
+      "frozen_observation": {
+        "date": "2011-12-27",
+        "flags": [
+          "raw_open",
+          "cash",
+          "adjusted_return"
+        ],
+        "tiingo_cash": 0.0,
+        "yahoo_cash": 0.049,
+        "yahoo_capital_gain": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0,
+        "returns": {
+          "tiingo": 0.0028530670486781595,
+          "yahoo": 0.003729877227864664
+        },
+        "comparison_values": {
+          "tiingo": {
+            "open": 56.01,
+            "close": 56.24,
+            "volume": 21443500.0
+          },
+          "yahoo": {
+            "open": 55.9900016784668,
+            "close": 56.2400016784668,
+            "volume": 21443500.0
+          }
+        }
+      },
+      "projects": [
+        "V1.6",
+        "V8.0"
+      ],
+      "comparison_basis": "Latest-share split-adjusted OHLC/cash/share volume; native fields retained in raw archives; vendor adjClose unchanged",
+      "source_audit_cutoff": "2026-10-23",
+      "data_gate": "BLOCK",
+      "allows_price_repair": false,
+      "allows_series_promotion": false,
+      "strategy_replayed_this_task": false,
+      "production_approved": false,
+      "unresolved_reason": "Public primary-source searches did not establish the exact conflicting event. Aggregator agreement and provider zero are not independent evidence.",
+      "required_evidence": "Issuer final 2011 Q4 ordinary/special distribution calendar; establish whether 12-27 is an ex-date or a duplicate/non-ex-date."
+    }
+  ],
+  "strategy_replayed": false,
+  "production_approved": false
+}
