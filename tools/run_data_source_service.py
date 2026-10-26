@@ -48,6 +48,10 @@ def wind_archive(root, legacy_path):
 def cn_run(config, output, mode, cutoff):
     if mode=='skip': return None
     root=Path(config['store_root'])
+    requested_mode=mode
+    hold_file=root/'provider_holds/wind.json'
+    hold=json.loads(hold_file.read_text(encoding='utf-8')) if hold_file.exists() else None
+    if hold and hold.get('status')=='OPEN': mode='archive'
     archive=wind_archive(root,config['legacy_wind_archive'])
     calendar=root/'calendars'/'xshg_2026_sessions.json'
     command=[sys.executable,'-B',str(REPO/'tools/audit_cn_sources.py'),'--credential',config['credentials']['wind'],
@@ -62,6 +66,12 @@ def cn_run(config, output, mode, cutoff):
     report=json.loads(runs[-1].read_text(encoding='utf-8'))
     report['artifact_path']=str(runs[-1])
     report['exit_code']=proc.returncode
+    hold=json.loads(hold_file.read_text(encoding='utf-8')) if hold_file.exists() else None
+    if hold and hold.get('status')=='OPEN':
+        report['collection_hold']=hold
+        report['requested_mode']=requested_mode
+        report['provider_stops']={'wind':{'failure_class':hold['reason']}}
+        report['status']='BLOCKED_PROVIDER_QUOTA'
     return report
 
 
@@ -85,9 +95,11 @@ def render(report, output):
     cgates={v:sum(a.get('gate')==v for a in cn.get('assets',[])) for v in ('BLOCKED','INTERVAL_COHERENT_ONLY','INDEPENDENT_OVERLAP_CHECKED','INCREMENTAL_OVERLAP_CHECKED')}
     probes=report.get('field_probes') or {}
     probe_text='；'.join(str(p.get('probe'))+'：'+str(p.get('status')) for p in probes.get('probes',[]))
+    hold_notice='<aside>万得已明确返回账户积分不足。新采集已暂停，仅检查存档；恢复额度后需重新验证新数据，不能把现有样本视为当前全量合格。Tiingo/Yahoo仍独立检查。</aside>' if cn.get('collection_hold') else ''
     text=f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>策略共享数据源服务</title>
 <style>body{{font:16px/1.7 system-ui;max-width:1200px;margin:32px auto;padding:0 20px;color:#1a3441;background:#f5f8fa}}table{{border-collapse:collapse;background:white;width:100%}}td,th{{padding:10px;border:1px solid #cbd8df}}aside{{padding:18px;background:#fff0ca}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}a{{color:#08788e}}</style>
 <h1>共享数据源服务 · 本轮只读核验</h1>
+{hold_notice}
 <aside>生产、策略参数与 Poe 未改。该服务提供归档、质量校验和研究快照；未通过的数据不会进入研究快照接口，更不会自动替换正式数据源。</aside>
 <p>本轮：{report['run_id']}；美国已确认交易日：{report['cutoffs']['US']}；中国已确认交易日：{report['cutoffs']['CN']}。美股日历独立于两家行情源；中国独立日历目前覆盖 2026 年。</p>
 <h2>已完成事项直接复用</h2><ul>{complete}</ul>
@@ -135,12 +147,17 @@ def _run_locked(args):
             probes['additional_scope_and_reference_evidence']=json.loads(latest_followup.read_text(encoding='utf-8'))
         changes=list(us.get('new_or_changed_issues',[]))
         if cn:
+            hold=cn.get('collection_hold')
+            if hold:
+                evidence={k:hold.get(k) for k in ['provider','status','reason','recovery']}
+                if store.issue('PROVIDER:wind','BLOCKED_PROVIDER_QUOTA',evidence):
+                    changes.append({'issue_id':'PROVIDER:wind','status':'BLOCKED_PROVIDER_QUOTA','evidence':evidence})
             for asset in cn.get('assets',[]):
                 issue_id='CN:'+asset['code']
                 evidence={k:asset.get(k) for k in ['code','gate','amount_gate','reason','field_gaps']}
                 prior=store.db.execute('SELECT 1 FROM known_issues WHERE issue_id=?',(issue_id,)).fetchone()
                 changed=store.issue(issue_id,asset.get('gate','BLOCKED'),evidence)
-                if changed and (prior or asset['code']!='000852.SH'): changes.append({'issue_id':issue_id,'evidence':evidence})
+                if changed and not hold and (prior or asset['code']!='000852.SH'): changes.append({'issue_id':issue_id,'evidence':evidence})
         project_readiness=adapters.readiness(us,cn,probes)
         for project in project_readiness:
             issue_id='PROJECT_SCOPE:'+project['project_id']

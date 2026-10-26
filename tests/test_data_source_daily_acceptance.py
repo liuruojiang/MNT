@@ -59,3 +59,10 @@ def test_project_version_change_must_remain_explicitly_blocked():
     assert result['status']=='RUNTIME_CHECKS_PASS' and result['blocked_project_contracts']==['changed']
     second['projects'][0]['status']='REVIEW_REQUIRED'
     assert run(first,second)['status']=='FAILED'
+
+
+def test_archived_quotes_cannot_hide_an_active_provider_credit_hold():
+    first,second=reports()
+    second['CN']['collection_hold']={'status':'OPEN','reason':'ACCOUNT_CREDITS_EXHAUSTED'}
+    second['CN']['provider_stops']={'wind':{'failure_class':'ACCOUNT_CREDITS_EXHAUSTED'}}
+    assert run(first,second)['status']=='FAILED'

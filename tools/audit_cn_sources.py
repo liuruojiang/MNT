@@ -290,6 +290,7 @@ def run(args):
               'unvalidated_requirements': ['Historical pre-2026 date/value certification', 'Index constituent turnover definition',
                                            'PIT/ST/delisting/share capital historical rights', 'Futures/options contract field rights'],
               'requests': client.count if client else 0}
+    report['provider_stops']=client.stopped if client else {}
     write_json(output / 'report.json', report)
     write_json(output / 'manifest.json', {'mode': args.mode, 'receipts': client.receipts if client else [],
                                          'archives_reused_explicitly': args.mode != 'live', 'production_changed': False})

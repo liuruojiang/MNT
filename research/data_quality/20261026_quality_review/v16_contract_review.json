@@ -1,0 +1,30 @@
+{
+  "status": "DATA_FIELD_CONTRACT_REVIEWED_FOR_COMMITTED_RC14",
+  "reviewed_at_utc": "2026-10-26T10:25:18.332947+00:00",
+  "source_commit": "cc9adca1ebb3f47c39c2872d5dfcfc8575456c17",
+  "previous_source_commit": "7b6c45a682d4f21806a53ab262abdde8fb0404d5",
+  "live_matches_committed": true,
+  "previous_identity": {
+    "lf_sha256": "e9fa3ca09e2d559869ed21f65c10fb4d781118dcf85990007964e97dbf2424c5",
+    "raw_sha256": "f10e12d46e3dfcc7b49af5b53b71bd353106aa7c426ee15bb034e1d624cc4b13"
+  },
+  "current_raw_sha256": "4019a8902dd3c6d113d69d1bdc8ebaead9071848821fc06e8896f58dc7ea4ab2",
+  "current_lf_sha256": "19682b48bc3269b3baf84244fa423fdc2c269bdeaad7b1a5276b648b655ee7bb",
+  "top_assignments_compared": 81,
+  "changed_top_assignments": [
+    "BOT_BUILD_VERSION",
+    "BOT_VERSION",
+    "BUILD_TIME_BJ"
+  ],
+  "changed_functions_or_classes": [
+    "_fetch_yahoo_ohlcv_locked",
+    "_repair_verified_kmlm_distribution",
+    "prepare_verified_ohlcv",
+    "v15_runtime_config_payload"
+  ],
+  "reviewed_effect": "RC14 strengthens price-frame admission and saved-CSV consistency; required ticker universe, input OHLCV/adjusted-close fields and strategy parameter constants unchanged. Data contract can bind this committed source; no KMLM study or backtest repeated.",
+  "parameters_changed_by_this_task": false,
+  "production_script_changed_by_this_task": false,
+  "data_quality_approved": false,
+  "poe_deployed": false
+}

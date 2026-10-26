@@ -5,7 +5,7 @@
     "V1.6": {
       "directory": "美股多头策略",
       "entrypoint": "poe_us_seventeen_sleeve_long_momentum_v1_6_bot.py",
-      "entrypoint_lf_sha256": "e9fa3ca09e2d559869ed21f65c10fb4d781118dcf85990007964e97dbf2424c5",
+      "entrypoint_lf_sha256": "19682b48bc3269b3baf84244fa423fdc2c269bdeaad7b1a5276b648b655ee7bb",
       "symbols": ["SPY", "QQQ", "AVUV", "AVDV", "GLD", "AGG", "DBC", "KMLM", "DBMF", "VEA", "BIL", "BTC-USD"],
       "excluded": ["BTC-USD: crypto daily boundaries and volume aggregation require separate acceptance"]
     },

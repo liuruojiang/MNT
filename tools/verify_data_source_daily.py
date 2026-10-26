@@ -19,7 +19,7 @@ def verify(first,repeat,*,not_before,first_started,repeat_started,receipts,live_
         'distinct_completed_runs':complete(first) and complete(repeat) and first['run_id']!=repeat['run_id'],
         'execution_after_checkpoint':first_started>=not_before and repeat_started>=first_started,
         'independent_market_cutoffs':first.get('cutoffs')==expected and repeat.get('cutoffs')==expected,
-        'provider_transport_not_failed':not first.get('US',{}).get('collection',{}).get('provider_stops') and not repeat.get('US',{}).get('collection',{}).get('provider_stops') and all(r.get('status')==200 and not r.get('error_type') for r in receipts),
+        'provider_transport_not_failed':not first.get('US',{}).get('collection',{}).get('provider_stops') and not repeat.get('US',{}).get('collection',{}).get('provider_stops') and all(not (r.get('CN') or {}).get('provider_stops') and not (r.get('CN') or {}).get('collection_hold') for r in [first,repeat]) and all(r.get('status')==200 and not r.get('error_type') and not r.get('business_error') for r in receipts),
         'request_receipts_complete':len(receipts)==sum(len(r.get('US',{}).get('collection',{}).get('requests',[]))+(r.get('CN') or {}).get('requests',0) for r in [first,repeat]),
         'same_cutoff_repeat_no_network':not repeat.get('US',{}).get('collection',{}).get('requests') and (repeat.get('CN') or {}).get('requests')==0,
         'unchanged_problems_no_repeat_alert':repeat.get('new_or_changed_issues')==[],

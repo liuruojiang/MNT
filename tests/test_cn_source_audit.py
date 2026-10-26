@@ -162,6 +162,26 @@ def test_non_json_auth_failure_stops_every_wind_server(tmp_path,monkeypatch):
     assert len(calls)==1 and client.global_stopped
 
 
+def test_http200_credit_business_error_stops_batch_and_persists_hold(tmp_path,monkeypatch):
+    import source_audit.wind as wind
+    monkeypatch.setattr(wind,'decrypt_dpapi',lambda p:'TEST_SECRET_SENTINEL')
+    calls=[]
+    def depleted(command,input,**kwargs):
+        calls.append(1)
+        request=json.loads(json.loads(input.decode().split('data = ',1)[1]))
+        result={'id':request['id'],'jsonrpc':'2.0','result':{'isError':True,'structuredContent':{'code':402,'message':'账户积分余额不足'},'content':[{'type':'text','text':'账户积分余额不足'}]}}
+        return type('Response',(),{'returncode':0,'stdout':json.dumps(result,ensure_ascii=False).encode()+b'\n__HTTP_STATUS__200'})()
+    monkeypatch.setattr(wind.subprocess,'run',depleted)
+    client=WindClient(tmp_path/'unused',tmp_path/'run',budget_store=tmp_path/'store')
+    with pytest.raises(RuntimeError):client.kline('000852.SH','index','2026-01-01','2026-10-26')
+    with pytest.raises(RuntimeError):client.kline('000300.SH','index','2026-01-01','2026-10-26')
+    assert len(calls)==1 and client.global_stopped
+    hold=json.loads((tmp_path/'store/provider_holds/wind.json').read_text(encoding='utf-8'))
+    assert hold['status']=='OPEN' and hold['reason']=='ACCOUNT_CREDITS_EXHAUSTED'
+    receipt=json.loads(next((tmp_path/'run').glob('*_receipt.json')).read_text(encoding='utf-8'))
+    assert receipt['status']==200 and receipt['business_error'] is True
+
+
 def test_actual_wrong_option_product_and_intraday_date_are_hard_rejected():
     payload = json.loads((ROOT / 'tests/fixtures/cn_source_audit/wind_wrong_option_chain.json').read_text(encoding='utf-8'))
     result, rows = validate_option_chain_result(payload, product='MO', underlying_code='000852.SH', date='2026-10-23', expiry_month='2026-12')

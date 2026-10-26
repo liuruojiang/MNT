@@ -1,0 +1,249 @@
+{
+  "status": "BLOCKED",
+  "created_at_utc": "2026-10-26T10:24:20.172343+00:00",
+  "cutoff": "2026-10-26",
+  "review_performed_now": true,
+  "research_only": true,
+  "production_approved": false,
+  "request_counts": {
+    "Wind": 4,
+    "official_CSI_public_GETs": 2,
+    "tools_list": 0,
+    "retries": 0
+  },
+  "fresh_time_scope": "New after-close observation at 18:22-18:23 Asia/Shanghai, distinct from old 16:06 snapshot",
+  "results": [
+    {
+      "code": "000852.SH",
+      "kind": "index",
+      "gate": "BLOCKED",
+      "reason": "Wind business error",
+      "error_type": "WindIntervalConflict",
+      "production_approved": false,
+      "amount_gate": "BLOCKED",
+      "needs_full_refresh": false
+    },
+    {
+      "code": "000300.SH",
+      "kind": "index",
+      "gate": "BLOCKED",
+      "reason": "Wind business error",
+      "error_type": "WindIntervalConflict",
+      "production_approved": false,
+      "amount_gate": "BLOCKED",
+      "needs_full_refresh": false
+    }
+  ],
+  "primary_blocker": "Wind explicitly returned isError=true and insufficient account credits on all four bounded calls. No qualified new market data were returned. HTTP200 is not acceptance.",
+  "secondary_blocker": "Both newly fetched official CSI short windows only contain Oct20..23, and omit required Oct26.",
+  "wind_attempts": [
+    {
+      "receipt_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\audit_runs\\20261026T102305Z_72a2e7d1\\responses\\001_000852_SH_long_receipt.json",
+      "receipt": {
+        "provider": "wind",
+        "server": "index_data",
+        "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179301018547801,
+        "retrieved_at_utc": "2026-10-26T10:23:05.478292+00:00",
+        "authenticated": true,
+        "attempt": 1,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_index_kline",
+        "arguments": {
+          "windcode": "000852.SH",
+          "begin_date": "2026-01-01",
+          "end_date": "2026-10-26",
+          "period": "10",
+          "count": 0
+        },
+        "status": 200,
+        "bytes": 558,
+        "sha256": "79c336837eec4a898ca812b423653b05cfc2e38f061f99e03f08e5f852f9cd7b",
+        "raw_file": "001_000852_SH_long_response.txt",
+        "parsed_file": "001_000852_SH_long_parsed.json"
+      },
+      "isError": true,
+      "business_message": "原因：账户积分余额不足，无法完成当前操作。建议：先完成充值并确认余额恢复后，再重新发起请求；官网充值地址：https://market.windalice.com/#/user/credits。",
+      "qualified_market_rows": 0,
+      "classification": "ACCOUNT_CREDITS_EXHAUSTED"
+    },
+    {
+      "receipt_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\audit_runs\\20261026T102305Z_72a2e7d1\\responses\\002_000852_SH_short_receipt.json",
+      "receipt": {
+        "provider": "wind",
+        "server": "index_data",
+        "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179301018751502,
+        "retrieved_at_utc": "2026-10-26T10:23:07.515948+00:00",
+        "authenticated": true,
+        "attempt": 2,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_index_kline",
+        "arguments": {
+          "windcode": "000852.SH",
+          "begin_date": "2026-10-20",
+          "end_date": "2026-10-26",
+          "period": "10",
+          "count": 0
+        },
+        "status": 200,
+        "bytes": 558,
+        "sha256": "7af3f5173ed7895afc57b148eec8be4559212ba5c8750479db6653a1c8faae05",
+        "raw_file": "002_000852_SH_short_response.txt",
+        "parsed_file": "002_000852_SH_short_parsed.json"
+      },
+      "isError": true,
+      "business_message": "原因：账户积分余额不足，无法完成当前操作。建议：先完成充值并确认余额恢复后，再重新发起请求；官网充值地址：https://market.windalice.com/#/user/credits。",
+      "qualified_market_rows": 0,
+      "classification": "ACCOUNT_CREDITS_EXHAUSTED"
+    },
+    {
+      "receipt_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\audit_runs\\20261026T102305Z_72a2e7d1\\responses\\003_000300_SH_long_receipt.json",
+      "receipt": {
+        "provider": "wind",
+        "server": "index_data",
+        "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179301018905903,
+        "retrieved_at_utc": "2026-10-26T10:23:09.059296+00:00",
+        "authenticated": true,
+        "attempt": 3,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_index_kline",
+        "arguments": {
+          "windcode": "000300.SH",
+          "begin_date": "2026-01-01",
+          "end_date": "2026-10-26",
+          "period": "10",
+          "count": 0
+        },
+        "status": 200,
+        "bytes": 558,
+        "sha256": "c6b971133e01d860e682b31090284285d236bdd5b7ca5821fa5c1ff023a37025",
+        "raw_file": "003_000300_SH_long_response.txt",
+        "parsed_file": "003_000300_SH_long_parsed.json"
+      },
+      "isError": true,
+      "business_message": "原因：账户积分余额不足，无法完成当前操作。建议：先完成充值并确认余额恢复后，再重新发起请求；官网充值地址：https://market.windalice.com/#/user/credits。",
+      "qualified_market_rows": 0,
+      "classification": "ACCOUNT_CREDITS_EXHAUSTED"
+    },
+    {
+      "receipt_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\audit_runs\\20261026T102305Z_72a2e7d1\\responses\\004_000300_SH_short_receipt.json",
+      "receipt": {
+        "provider": "wind",
+        "server": "index_data",
+        "url": "https://mcp.wind.com.cn/vserver_index_data/mcp/",
+        "method": "tools/call",
+        "request_id": 179301019066604,
+        "retrieved_at_utc": "2026-10-26T10:23:10.666760+00:00",
+        "authenticated": true,
+        "attempt": 4,
+        "transport": "curl/Windows HTTPS",
+        "dns_override_used": false,
+        "source_mode": "LIVE_FRESH",
+        "tool": "get_index_kline",
+        "arguments": {
+          "windcode": "000300.SH",
+          "begin_date": "2026-10-20",
+          "end_date": "2026-10-26",
+          "period": "10",
+          "count": 0
+        },
+        "status": 200,
+        "bytes": 558,
+        "sha256": "b30297486ccbc3c08786f1b78880766a9d83db6bc20f10595e3ab6b045455d90",
+        "raw_file": "004_000300_SH_short_response.txt",
+        "parsed_file": "004_000300_SH_short_parsed.json"
+      },
+      "isError": true,
+      "business_message": "原因：账户积分余额不足，无法完成当前操作。建议：先完成充值并确认余额恢复后，再重新发起请求；官网充值地址：https://market.windalice.com/#/user/credits。",
+      "qualified_market_rows": 0,
+      "classification": "ACCOUNT_CREDITS_EXHAUSTED"
+    }
+  ],
+  "independent_references": [
+    {
+      "code": "000852",
+      "receipt": {
+        "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000852&startDate=20261020&endDate=20261026",
+        "status": 200,
+        "retrieved_at_utc": "2026-10-26T10:22:46.481542+00:00",
+        "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\independent_csi\\000852_raw.json",
+        "sha256": "277914aa72b0bcb46d1a2e6431ecd6d12886300d4b6c85cec69558c1b72eeded",
+        "bytes": 1421,
+        "request_count": 1
+      },
+      "dates": [
+        "20261020",
+        "20261021",
+        "20261022",
+        "20261023"
+      ],
+      "required_date": "20261026",
+      "required_date_present": false,
+      "classification": "OFFICIAL_REFERENCE_MISSING_CURRENT_SESSION"
+    },
+    {
+      "code": "000300",
+      "receipt": {
+        "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000300&startDate=20261020&endDate=20261026",
+        "status": 200,
+        "retrieved_at_utc": "2026-10-26T10:22:47.887660+00:00",
+        "raw_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\independent_csi\\000300_raw.json",
+        "sha256": "604df2ffc9144b11118804045537d65587b84fd54a123095b82190ca4d2c3723",
+        "bytes": 1405,
+        "request_count": 1
+      },
+      "dates": [
+        "20261020",
+        "20261021",
+        "20261022",
+        "20261023"
+      ],
+      "required_date": "20261026",
+      "required_date_present": false,
+      "classification": "OFFICIAL_REFERENCE_MISSING_CURRENT_SESSION"
+    }
+  ],
+  "index_backups": {
+    "directory": "D:\\动量策略\\_data_source_service\\state_backups\\cn_fresh_review_20261026T102244Z",
+    "fixed_indexes": [
+      {
+        "path": "D:\\动量策略\\_data_source_service\\wind_short_index.json",
+        "sha256": "5f32b5af5ac02c066c470fb8c5b16e30d6ef42d4e617551274b71eb76cfe5667",
+        "matches_pre_run_backup": true
+      },
+      {
+        "path": "D:\\动量策略\\_data_source_service\\wind_long_index.json",
+        "sha256": "c7a5934af592150b324aab81e54575eade5f4a99f96e10a12af7dcd604b6c40d",
+        "matches_pre_run_backup": true
+      }
+    ],
+    "candidate_index_directory": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z\\candidate_indexes",
+    "promotion_performed": false
+  },
+  "validation": "Existing audit_cn_sources/guard refused business-error payloads. Current-session OHLCV and independent-reference comparison could not run because no qualified Wind rows and missing official date. No fabricated OHLCV or stale fallback.",
+  "execution_note": "CLI completed and wrote 4-request report/manifest. Outer stdout UTF-8 decoding failed on Windows after completion; archived files were inspected to establish outcome, without repeating any request. Existing CLI continued the bounded four calls after the first business-credit error; no further call is authorized by this review.",
+  "next_required_input": "User must restore Wind Alice credits; no purchase performed. CSI must publish the required session. After both blockers change, perform a newly timestamped targeted verification; do not reuse these error responses as current data.",
+  "no_actions": [
+    "No old 000852 history re-adjudication",
+    "No strategy backtest",
+    "No shared code change",
+    "No production change",
+    "No fixed index replacement",
+    "No commit or push",
+    "No supplier message",
+    "No automatic credit purchase"
+  ],
+  "stable_evidence_directory": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\cn_fresh_review_20261026T102244Z",
+  "output_directory": "C:\\Users\\Administrator.DESKTOP-95I7VVU\\Documents\\Codex\\2026-10-25\\new-chat-2\\outputs\\data_quality_review_20261026\\cn_fresh"
+}

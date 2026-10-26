@@ -238,3 +238,22 @@ def test_pinned_wind_bootstrap_survives_original_chat_directory_unavailable(tmp_
     (pinned/'receipt.json').write_text('{"tampered":true}')
     with pytest.raises(ValueError,match='archive changed'):
         service.wind_archive(root,tmp_path/'nonexistent_old_chat')
+
+
+def test_persistent_credit_hold_prevents_daily_live_collection(store,tmp_path,monkeypatch):
+    import run_data_source_service as service
+    hold=store.root/'provider_holds/wind.json';hold.parent.mkdir()
+    hold.write_text(json.dumps({'status':'OPEN','reason':'ACCOUNT_CREDITS_EXHAUSTED'}))
+    monkeypatch.setattr(service,'wind_archive',lambda root,legacy:root/'archive')
+    calls=[]
+    def archived(command,**kw):
+        calls.append(command)
+        assert command[command.index('--mode')+1]=='archive'
+        destination=Path(command[command.index('--output')+1])/'test_run';destination.mkdir(parents=True)
+        (destination/'report.json').write_text(json.dumps({'mode':'archive','requests':0,'assets':[]}))
+        return type('Proc',(),{'stdout':'','stderr':'','returncode':2})()
+    monkeypatch.setattr(service.subprocess,'run',archived)
+    output=tmp_path/'assessment';output.mkdir()
+    result=service.cn_run({'store_root':str(store.root),'legacy_wind_archive':'unused','credentials':{'wind':'unused'},'local_hourly_budgets':{'wind':30}},output,'tail','2026-10-27')
+    assert len(calls)==1 and result['status']=='BLOCKED_PROVIDER_QUOTA' and result['requested_mode']=='tail'
+    assert result['requests']==0 and result['provider_stops']['wind']['failure_class']=='ACCOUNT_CREDITS_EXHAUSTED'

@@ -118,6 +118,26 @@ class WindClient:
                 receipt['parsed_file'] = stem + '_parsed.json'
                 if method == 'tools/list':
                     self.catalogs[server] = {t['name']: t for t in value.get('result', {}).get('tools', [])}
+                result=value.get('result',{})
+                if result.get('isError') is True:
+                    receipt['business_error']=True
+                    message=' '.join(str(b.get('text','')) for b in result.get('content',[]) if b.get('type')=='text')
+                    quota=result.get('structuredContent',{}).get('code') in {402,'402'} or any(s in message for s in ['积分余额不足','额度不足','insufficient credits'])
+                    receipt['failure_class']='ACCOUNT_CREDITS_EXHAUSTED' if quota else 'WIND_BUSINESS_ERROR'
+                    self.stopped[server]={'failure_class':receipt['failure_class']}
+                    if quota:
+                        self.global_stopped=True
+                        if self.budget_store is not None:
+                            hold=self.budget_store/'provider_holds'/'wind.json'
+                            hold.parent.mkdir(parents=True,exist_ok=True)
+                            state={'status':'OPEN','provider':'wind','reason':'ACCOUNT_CREDITS_EXHAUSTED',
+                                   'observed_at_utc':receipt['retrieved_at_utc'],'evidence_sha256':receipt['sha256'],
+                                   'evidence_receipt':str(self.run_dir/(stem+'_receipt.json')),
+                                   'recovery':'User restores credits, then explicitly resume and validate fresh data; no automatic paid action'}
+                            temp=hold.with_suffix('.tmp')
+                            temp.write_text(json.dumps(state,ensure_ascii=False,indent=2),encoding='utf-8')
+                            temp.replace(hold)
+                    value=None
         except Exception as exc:
             receipt['error_type'] = type(exc).__name__
             self.stopped[server] = {'error_type': type(exc).__name__}
