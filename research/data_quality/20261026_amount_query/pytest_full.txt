@@ -1,0 +1,119 @@
+........................................................................ [  6%]
+........................................................................ [ 13%]
+........................................................................ [ 20%]
+........................................................................ [ 26%]
+........................................................................ [ 33%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 53%]
+........................................................................ [ 60%]
+........................................................................ [ 66%]
+........................................................................ [ 73%]
+........................................................................ [ 80%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+................................................................. [ 99%]
+......                                                              [100%]
+============================== warnings summary ===============================
+C:\Python314\Lib\site-packages\fastapi_poe\types.py:171
+  C:\Python314\Lib\site-packages\fastapi_poe\types.py:171: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class RequestContext(BaseModel):
+
+tests/test_v80_adversarial_cn_20261023.py: 6 warnings
+tests/test_v80_cn_repair_20261023.py: 2 warnings
+tests/test_v80_l1_input_boundaries.py: 2 warnings
+tests/test_v80_review_cn_20261023.py: 17 warnings
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:2449: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    severe_signal = severe_signal.reindex(combined_index).fillna(False).astype(bool)
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8751: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_ratio'] = vol_ratio
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8752: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_defense'] = mask
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8753: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_cash'] = False
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8754: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_effective_scale'] = pd.Series(np.where(mask, float(_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE), 1.0), index=result.index, dtype=float)
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8755: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_moved_to_bil'] = pd.Series(moved_to_bil_values, index=result.index, dtype=float)
+
+tests/test_v80_adversarial_us_20261023.py: 1 warning
+tests/test_v80_doublecheck_execution_20261007.py: 5 warnings
+tests/test_v80_live_model_reference_20261021.py: 2 warnings
+tests/test_v80_reference_data_boundaries_20261022.py: 1 warning
+tests/test_v80_reference_native_state_20261022.py: 1 warning
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:8756: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    result['volreg_scaled_assets'] = ','.join(_v80_b78_US_ROT_VOLREG_SCALE_ASSETS)
+
+tests/test_v80_cn_repair_20261023.py::test_publication_boundary_is_inactive_not_unknown
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:2323: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    signal_df = pd.concat(signals, axis=1).fillna(False).astype(bool).sort_index()
+
+tests/test_v80_cn_repair_20261023.py::test_publication_boundary_is_inactive_not_unknown
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:2324: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    known_df = pd.concat(known_values, axis=1).reindex(signal_df.index).fillna(False).astype(bool)
+
+tests/test_v80_cn_repair_20261023.py: 3 warnings
+tests/test_v80_review_cn_20261023.py: 7 warnings
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:2512: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    return bool(unknown.fillna(True).astype(bool).any())
+
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\动量策略\A股美股动量组合策略\tests\test_v80_l1_input_boundaries.py:46: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    assert not pre["zz2000_signal"].fillna(False).any()
+
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.8]
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.9]
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:9380: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+    vol_row = prices.pct_change().rolling(vol_lb).std().mul(np.sqrt(trading_days)).iloc[-1]
+
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.8]
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:7970: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+    ret = close_df.pct_change()
+
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.9]
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:6166: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+    ret = close_df.pct_change()
+
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.9]
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:5961: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+    vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
+
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.9]
+tests/test_v80_reference_data_boundaries_20261022.py::test_empty_unheld_optional_asset_remains_unavailable_to_native_ranking[B7.9]
+  D:\动量策略\A股美股动量组合策略\mnt_bot V 8.0 plus.py:6559: FutureWarning: The default fill_method='pad' in DataFrame.pct_change is deprecated and will be removed in a future version. Either fill in any non-leading NA values prior to calling pct_change or specify 'fill_method=None' to not fill NA values.
+    vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1079 passed, 110 warnings, 12 subtests passed in 525.01s (0:08:45)

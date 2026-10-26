@@ -13,6 +13,7 @@ import importlib.util
 import io
 import json
 import re
+import runpy
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -218,6 +219,129 @@ def test_confirmed_cutoff_still_rejects_missing_completed_us_returns(v80, report
     results[2].attrs["v80_b78"].drop(pd.Timestamp(missing), inplace=True)
     with pytest.raises(ValueError, match=f"B7.8: missing market-session return at {missing}; refusing zero fill"):
         report_harness.execute("最近一年表现")
+
+
+@pytest.mark.parametrize("report_harness", [{
+    "start": "2024-06-28", "cn_end": "2026-10-26", "us_end": "2026-10-23",
+    "now": "2026-10-26 16:30:00",
+}], indirect=True)
+@pytest.mark.parametrize("prefix", ["表现", "净值曲线"])
+@pytest.mark.parametrize("period,cutoff", [
+    ("最近一年", "2026-10-23"), ("2026-09-01到2026-10-19", "2026-10-19"),
+])
+def test_report_does_not_require_amount_after_report_end(v80, report_harness, monkeypatch, prefix, period, cutoff):
+    original = report_harness.bot._cached_run_strategies
+    calls = []
+    snapshots = [frame.copy(deep=True) for frame in report_harness.frames]
+    generation = v80._v80_integrity_generation()
+    for frame in report_harness.frames:
+        frame.attrs["verified_integrity_generation"] = generation
+
+    def require_report_amount(cn, dk, us, prod, **kwargs):
+        # Simulate a source published through the report's required close only.
+        # The real handlers must stop demanding the newer CN day before calling
+        # the strategies, rather than swallowing a validation error afterwards.
+        assert cn.index[-1] == dk.index[-1] == pd.Timestamp(cutoff)
+        assert cn.index[0] == dk.index[0] == snapshots[0].index[0]
+        assert cn.attrs["verified_integrity_generation"] == generation
+        assert us is report_harness.frames[2] and prod is report_harness.frames[3]
+        calls.append(cn.index[-1])
+        return original(cn, dk, us, prod, **kwargs)
+
+    monkeypatch.setattr(report_harness.bot, "_cached_run_strategies", require_report_amount)
+    captured = report_harness.execute(prefix + " " + period)
+    assert calls == [pd.Timestamp(cutoff)]
+    assert captured["attachments"]
+    assert captured["charts"][0]["end"] == pd.Timestamp(cutoff)
+    for frame, snapshot in zip(report_harness.frames, snapshots):
+        pd.testing.assert_frame_equal(frame, snapshot)
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "unresolved", "empty"])
+def test_formal_amount_failure_keeps_provider_evidence_in_user_message(v80, monkeypatch, failure):
+    bot = v80.CombinedStrategyV80()
+    capture = Capture()
+    dates = pd.to_datetime(["2026-10-22", "2026-10-23"])
+    prices = pd.DataFrame({"diagnostic": [100., 101.]}, index=dates)
+    result = pd.DataFrame({"return": 0.}, index=dates)
+    reason = "ZZ2000: CSIndex official amount: latest valid amount 2026-10-22 < expected 2026-10-23"
+    monkeypatch.setattr(v80, "DEBUG_MODE", False)
+    monkeypatch.setattr(v80.poe, "query", types.SimpleNamespace(text="最近一年表现"))
+    monkeypatch.setattr(v80, "_sm", lambda: capture)
+    monkeypatch.setattr(v80, "_add_cn_bond_column", lambda *a, **k: prices)
+    monkeypatch.setattr(v80, "run_cn_strategy", lambda *a, **k: result)
+    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp("2026-10-26 16:30").to_pydatetime())
+
+    def amount(**kwargs):
+        assert kwargs["expected_date"] == dates[-1]
+        if failure == "unavailable":
+            raise v80.DataUnavailableError(reason)
+        if failure == "empty":
+            return pd.Series(dtype=bool), pd.DataFrame()
+        return pd.Series(False, index=dates), pd.DataFrame({
+            "combined_unresolved": [False, True], "zz2000_error": reason,
+        }, index=dates)
+
+    monkeypatch.setattr(v80, "_load_suba_volume_signal", amount)
+    monkeypatch.setattr(bot, "_run_impl", lambda: bot._run_strategies(prices, prices, prices, prices))
+    monkeypatch.setattr(v80.requests.sessions.Session, "request", lambda *a, **k: pytest.fail("unexpected network"))
+    bot.run()
+    assert "所需截至 2026-10-23" in capture.text
+    if failure != "empty":
+        assert "latest valid amount 2026-10-22" in capture.text
+        assert "CSIndex official amount" in capture.text
+    assert "本次未生成绩效报告" in capture.text
+    assert "进入策略前" not in capture.text
+    assert not capture.attachments
+    if failure == "unresolved":
+        assert "不可判定 1 日（2026-10-23 至 2026-10-23）" in capture.text
+
+
+@pytest.mark.parametrize("native_api_complete", [False, True])
+def test_poe_bootstrap_does_not_access_runtime_only_boterror(monkeypatch, native_api_complete):
+    """Reproduce Poe's load phase, where BotError deliberately raises AttributeError."""
+    denied = []
+    settings = []
+
+    class SandboxPoe:
+        def __getattr__(self, name):
+            if name == "BotError":
+                denied.append(name)
+                raise AttributeError("'poe' module attribute 'BotError' is not available in this context. "
+                                     "Wrap your code in if __name__ == \"__main__\": block")
+            raise AttributeError(name)
+
+        def update_settings(self, value):
+            settings.append(value)
+
+    sandbox = SandboxPoe()
+    if native_api_complete:
+        sandbox.query = types.SimpleNamespace(text="最近一年表现", attachments=[])
+        sandbox.default_chat = []
+        sandbox.start_message = lambda: Capture()
+        sandbox.call = lambda *a, **k: pytest.fail("bootstrap must not call LLM")
+    monkeypatch.setattr("requests.sessions.Session.request", lambda *a, **k: pytest.fail("bootstrap must not fetch data"))
+    loaded = runpy.run_path(str(ROOT / "mnt_bot V 8.0 plus.py"),
+                           init_globals={"poe": sandbox}, run_name="v80_poe_bootstrap_regression")
+    assert denied == [], "Poe runtime-only exceptions must not be resolved while loading class bases"
+    assert settings
+    assert issubclass(loaded["SubaVolumeDataError"], RuntimeError)
+
+    # The local exception must still reach the user even while BotError is
+    # unavailable; handling this error must not dereference the native API.
+    capture = Capture()
+    bot = loaded["CombinedStrategyV80"]()
+    bot.run.__globals__["_sm"] = lambda: capture
+    bot.run.__globals__["DEBUG_MODE"] = False
+
+    def fail_amount():
+        raise loaded["SubaVolumeDataError"]("Sub-A成交额风控数据不可用；ZZ2000 所需截至 2026-10-23")
+
+    bot._run_impl = fail_amount
+    bot.run()
+    assert "ZZ2000 所需截至 2026-10-23" in capture.text
+    assert "本次未生成绩效报告" in capture.text
+    assert denied == []
 
 
 def subb_display_result():

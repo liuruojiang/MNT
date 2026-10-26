@@ -1371,6 +1371,10 @@ class VerifiedDataRepairConflict(RuntimeError):
 
 class DataUnavailableError(RuntimeError):
     pass
+
+class SubaVolumeDataError(RuntimeError):
+    """Keep provider evidence without touching Poe's runtime-only API at import."""
+    pass
 NETWORK_ERRORS = (requests.exceptions.RequestException, json.JSONDecodeError)
 DATA_VALIDATION_ERRORS = (ValueError, pd.errors.ParserError, DataSchemaError, DataUnavailableError)
 _DATA_FETCH_ERRORS = NETWORK_ERRORS + DATA_VALIDATION_ERRORS
@@ -13920,13 +13924,23 @@ class CombinedStrategyBase:
                 suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date)
                 suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
                 if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
-                    raise poe.BotError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。信号查询可降级显示“0%仓位扩展风控不可判定，不应按正常仓位执行”。')
+                    unknown = suba_volume_feature['combined_unresolved'].reindex(cn_result.index).fillna(True).astype(bool) if suba_volume_feature is not None and 'combined_unresolved' in suba_volume_feature else pd.Series(True, index=cn_result.index)
+                    unknown = unknown.loc[unknown.index <= suba_volume_expected_date]
+                    dates = unknown.index[unknown]
+                    details = [f'所需截至 {suba_volume_expected_date:%Y-%m-%d}；不可判定 {len(dates)} 日（{dates[0]:%Y-%m-%d} 至 {dates[-1]:%Y-%m-%d}）']
+                    for name in ('zz2000', 'cyb'):
+                        column = f'{name}_error'
+                        if suba_volume_feature is not None and column in suba_volume_feature:
+                            values = suba_volume_feature[column].dropna()
+                            if len(values):
+                                details.append(f'{name}: {_short_error(values.iloc[-1], 500)}')
+                    raise SubaVolumeDataError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。' + '；'.join(details))
                 cn_result = _apply_suba_volume_overlay_policy(cn_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
             except _fetch_or_bot_errors() as exc:
                 if isinstance(exc, poe.BotError):
                     raise
                 if not allow_unresolved_suba_volume:
-                    raise poe.BotError('Sub-A成交额风控数据不可用，正式回测/绩效查询已中止；信号查询可降级显示“成交额风控不可判定”。') from exc
+                    raise SubaVolumeDataError(f'Sub-A成交额风控数据不可用，正式回测/绩效查询已中止。所需截至 {suba_volume_expected_date:%Y-%m-%d}；来源原因：{_short_error(exc, 1200)}') from exc
                 cn_result = _mark_suba_volume_unavailable(cn_result, exc)
         cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'
         cn_dk_result = run_v80_adk_new_only(cn_close, cn_dk_close)
@@ -14114,10 +14128,11 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     msg.write(traceback.format_exc())
                     msg.write('\n```\n')
                 else:
-                    msg.write(f'{_short_error(exc)}\n')
-                query_compact = re.sub('\\s+', '', poe.query.text.strip())
-                retry_command = '净值曲线' if '净值曲线' in query_compact or '收益曲线' in query_compact or '走势' in query_compact else '表现' if re.search('表现|收益(?!曲线)|回撤|年化|夏普|回报', query_compact) else '实时参数' if '实时参数' in query_compact or '参数实时' in query_compact else '参数' if '参数' in query_compact else '实时信号' if '实时信号' in query_compact or '信号实时' in query_compact else '信号'
-                msg.write(f'请重新发送“{retry_command}”；如果仍为空，说明 Poe 在进入策略前发生运行时错误。\n')
+                    msg.write(f'{_short_error(exc, 1600 if isinstance(exc, SubaVolumeDataError) else 120)}\n')
+                if isinstance(exc, SubaVolumeDataError):
+                    msg.write('本次未生成绩效报告。请待上述来源补齐所需成交额后重试原查询；信号查询可降级显示“成交额风控不可判定”，不应按正常仓位执行。\n')
+                else:
+                    msg.write(f'可重新发送原查询“{_short_error(poe.query.text.strip(), 160)}”；若持续失败，请保留上方错误详情用于排查。\n')
 
     def _run_impl(self):
         query = poe.query.text.strip()
@@ -14560,6 +14575,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
             end_date = report_context['actual_end']
             w('⏳ 正在计算策略净值...\n')
+        cn_close = _drop_cn_rows_after(cn_close, end_date)
+        cn_dk_close = _drop_cn_rows_after(cn_dk_close, end_date)
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_daily_ret = cn_result['return']
         dk_daily_ret = cn_dk_result['return']
@@ -14638,6 +14655,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
             end_date = report_context['actual_end']
             w('⏳ 正在计算策略...\n')
+        cn_close = _drop_cn_rows_after(cn_close, end_date)
+        cn_dk_close = _drop_cn_rows_after(cn_dk_close, end_date)
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         b78_result, _ = _v80_subb_results(us_rot_result)
         cn_daily_period = cn_result['return'][(cn_result.index >= start_date) & (cn_result.index <= end_date)]

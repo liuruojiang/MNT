@@ -1,0 +1,35 @@
+........................................................................ [ 44%]
+...................................................................... [ 87%]
+.....................                                          [100%]
+============================== warnings summary ===============================
+C:\Python314\Lib\site-packages\fastapi_poe\types.py:171
+  C:\Python314\Lib\site-packages\fastapi_poe\types.py:171: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class RequestContext(BaseModel):
+
+tests/test_v80_cn_repair_20261023.py::test_publication_boundary_is_inactive_not_unknown
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\��������\A�����ɶ�����ϲ���\mnt_bot V 8.0 plus.py:2323: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    signal_df = pd.concat(signals, axis=1).fillna(False).astype(bool).sort_index()
+
+tests/test_v80_cn_repair_20261023.py::test_publication_boundary_is_inactive_not_unknown
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\��������\A�����ɶ�����ϲ���\mnt_bot V 8.0 plus.py:2324: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    known_df = pd.concat(known_values, axis=1).reindex(signal_df.index).fillna(False).astype(bool)
+
+tests/test_v80_cn_repair_20261023.py: 2 warnings
+tests/test_v80_review_cn_20261023.py: 17 warnings
+tests/test_v80_l1_input_boundaries.py: 2 warnings
+  D:\��������\A�����ɶ�����ϲ���\mnt_bot V 8.0 plus.py:2449: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    severe_signal = severe_signal.reindex(combined_index).fillna(False).astype(bool)
+
+tests/test_v80_cn_repair_20261023.py: 3 warnings
+tests/test_v80_review_cn_20261023.py: 7 warnings
+  D:\��������\A�����ɶ�����ϲ���\mnt_bot V 8.0 plus.py:2512: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    return bool(unknown.fillna(True).astype(bool).any())
+
+tests/test_v80_l1_input_boundaries.py::test_zz2000_amount_cannot_signal_before_publication
+  D:\��������\A�����ɶ�����ϲ���\tests\test_v80_l1_input_boundaries.py:46: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    assert not pre["zz2000_signal"].fillna(False).any()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+163 passed, 37 warnings, 12 subtests passed in 25.53s

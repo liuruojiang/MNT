@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "network_enabled": false,
+  "source_sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+  "unchanged_top_level_assignments": 361,
+  "consumed_amount_sessions": 2284,
+  "unresolved_consumed_sessions": 0,
+  "native_suba_rows_exact_equal": 2189,
+  "poe_bootstrap_simulation": "PASS",
+  "basis": "captured-data diagnostic regression; no current five-sleeve performance or online deployment acceptance"
+}

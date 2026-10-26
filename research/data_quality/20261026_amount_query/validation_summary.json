@@ -1,0 +1,31 @@
+{
+  "full_suite": {
+    "passed": 1079,
+    "subtests_passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "warnings": 110,
+    "seconds": 525.01,
+    "command": "PYTHONUTF8=1 PYTHONDONTWRITEBYTECODE=1 python -B -m pytest tests -q -x -p no:cacheprovider"
+  },
+  "source_sha256_lf": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+  "poe_pruner_check": "PASS",
+  "python_311_syntax": "PASS",
+  "source_normalization_ast_unchanged": true,
+  "calendar_definitions_ast_unchanged": 7,
+  "offline_replay": "PASS",
+  "poe_online_acceptance": "NOT_PERFORMED",
+  "cleanup": {
+    "status": "BLOCKED_BY_POLICY",
+    "action": "Remove only untracked pytest and Python bytecode cache directories",
+    "targets": [
+      "D:\\动量策略\\A股美股动量组合策略\\.pytest_cache",
+      "D:\\动量策略\\A股美股动量组合策略\\归档\\策略A延后入场回测_2026-04-17\\__pycache__"
+    ],
+    "removal_confirmed": false,
+    "reason": "exec_command process creation rejected: blocked by policy",
+    "retry_policy": "Stop these deletion targets; do not retry through another command, script, or tool",
+    "remaining_route": "User can inspect and remove the two caches through Windows File Explorer; no alternative agent deletion attempted",
+    "research_outputs_market_data_and_backups": "PRESERVED"
+  }
+}

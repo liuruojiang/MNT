@@ -206,16 +206,16 @@
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
           "role": "formal_entrypoint",
-          "sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
-          "sha256_lf": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c"
+          "sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+          "sha256_lf": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b"
         }
       ],
       "source_evidence": [
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\README.md",
           "role": "requirements_contract",
-          "sha256": "16fd0bcfa5bc1ca9603b5493c0ac94cd4355b6c478f41ff976c08c89b4a1e39a",
-          "sha256_lf": "77efcf0e7c49119f8de99a9f13d784cf3302f25f5fde83666860fa82386bb2c6"
+          "sha256": "ef0a118485d153ec1eafa041ae30efd8d1ee4092d8540aab2b410e7119b3ce76",
+          "sha256_lf": "e586bc7f11bae9e01fb761854d784da4eb0fba089701264e9df2cad8d9fce80e"
         },
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\AGENTS.md",

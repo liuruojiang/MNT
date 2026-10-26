@@ -1,0 +1,12 @@
+{
+  "before": {
+    "bootstrap": "FAIL",
+    "exception": "AttributeError",
+    "message": "'poe' module attribute 'BotError' is not available in this context. Wrap your code in if __name__ == \"__main__\": block",
+    "sha256": "735de9c8b4b1dfbb5e4c18b1e2920cc00991bbdd2e2690abf3d9b820d7896efa"
+  },
+  "after": {
+    "bootstrap": "PASS",
+    "sha256": "6403d344e77d5781e4257611f4739c974601420d99bf79e751859ceeaa1a8161"
+  }
+}

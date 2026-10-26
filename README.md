@@ -1,5 +1,7 @@
 # A-Share / US Momentum Combo Strategy
 
+Latest query repair: [2026-10-26 performance amount cutoff and Poe bootstrap compatibility](docs/v80_amount_query_fix_20261026.md), with a [portable offline evidence package](research/data_quality/20261026_amount_query/README.md). Strategy parameters unchanged; online Poe acceptance remains pending.
+
 Shared research data service: [Tiingo / Wind storage, incremental validation and project field contracts](docs/data_source_service.md). Reuses completed DBMF/KMLM/Sub-A studies; no production source switch or Poe deployment.
 
 Latest KMLM adjustment/cache adversarial follow-up: [2026-10-25 independent review and repair](docs/v80_independent_review_20261025.md). Parameters unchanged; not deployed to Poe.
@@ -106,6 +108,8 @@ The code is synchronized locally/remotely; this does not deploy to Poe or trade.
 Run these commands after touching production behavior:
 
 ```powershell
+$env:PYTHONUTF8='1'
+$env:PYTHONDONTWRITEBYTECODE='1'
 python "tools/prune_v80_poe.py" --check "mnt_bot V 8.0 plus.py"
 python -m py_compile "mnt_bot V 7.8 plus.py" "mnt_bot V 7.9 plus.py" "mnt_bot V 8.0 plus.py" "tools/prune_v80_poe.py" "poe_adk_16_spread_v1_0_bot.py"
 python -m pytest tests/test_v78_v79_adversarial_repairs.py tests/test_v78_v79_subc_sleeve_vol.py -q

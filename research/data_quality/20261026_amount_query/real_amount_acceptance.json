@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "checked_at_bj": "2026-10-26T16:44:09.153037",
+  "mode": "captured-provider-replay",
+  "source_capture_checked_at_bj": "2026-10-26T16:35:54.771441",
+  "source_sha256": "6403d344e77d5781e4257611f4739c974601420d99bf79e751859ceeaa1a8161",
+  "backup_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+  "top_level_assignments_unchanged": 361,
+  "required_report_close": "2026-10-23",
+  "providers": {
+    "ZZ2000": {
+      "source": "CSIndex official amount",
+      "rows": 3114,
+      "start": "2000-01-01",
+      "end": "2026-10-23",
+      "csv_sha256": "3ea1e059cc08eaac3dd4381a7c6520e0777276869ce753e0a911b68096c9b394"
+    },
+    "CYB": {
+      "source": "Sohu amount+CNI-399006-20181214",
+      "rows": 3978,
+      "start": "2010-06-01",
+      "end": "2026-10-23",
+      "csv_sha256": "ce049376b5d4c86a476d0a10b04d3803ff7c653a5c863402c78ed80fc6b7aa3b"
+    }
+  },
+  "consumed_amount_sessions": 2284,
+  "unresolved_consumed_sessions": 0,
+  "real_suba_regression": {
+    "frozen_input": "D:\\动量策略\\A股美股动量组合策略\\outputs\\v80_recert_20260926\\l1_final\\formal_inputs.pkl",
+    "input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "source_start": "2017-05-26",
+    "source_end": "2026-09-24",
+    "result_rows": 2189,
+    "all_columns_exact_equal": true,
+    "basis": "native Sub-A strategy and amount overlay; diagnostic frozen prices with captured live amount history; no five-sleeve return certification"
+  }
+}

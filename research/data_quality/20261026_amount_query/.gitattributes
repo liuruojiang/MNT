@@ -1,0 +1,7 @@
+*.csv -text -diff
+*.gz -text
+*.json -text whitespace=cr-at-eol
+*.txt -text whitespace=cr-at-eol
+*.py text eol=lf
+*.md text eol=lf
+/.gitattributes text eol=lf

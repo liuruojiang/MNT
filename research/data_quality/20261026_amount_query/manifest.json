@@ -1,0 +1,47 @@
+{
+  "source_sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+  "baseline_commit": "d28e5e82aea4dd6a760621735e81120fcf4fd537",
+  "baseline_source_sha256": "726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c",
+  "report_cutoff": "2026-10-23",
+  "source_capture_checked_at_bj": "2026-10-26T16:35:54.771441",
+  "providers": {
+    "ZZ2000": {
+      "source": "CSIndex official amount",
+      "rows": 3114,
+      "start": "2000-01-01",
+      "end": "2026-10-23",
+      "csv_sha256": "3ea1e059cc08eaac3dd4381a7c6520e0777276869ce753e0a911b68096c9b394"
+    },
+    "CYB": {
+      "source": "Sohu amount+CNI-399006-20181214",
+      "rows": 3978,
+      "start": "2010-06-01",
+      "end": "2026-10-23",
+      "csv_sha256": "ce049376b5d4c86a476d0a10b04d3803ff7c653a5c863402c78ed80fc6b7aa3b"
+    }
+  },
+  "price_extraction": {
+    "original_pickle_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+    "frame_number": 0,
+    "rows": 2269,
+    "start": "2017-05-26",
+    "end": "2026-09-24",
+    "exact_round_trip_verified": true
+  },
+  "files": {
+    ".gitattributes": "73101292ad35ffc75822e28658f3bb43687a8041dcd40129dec5d5ccc835659a",
+    "bootstrap_reproduction.json": "d8658ac8e5166c5776964b3d66826dc10d00662f7b63e9350a6e71dc6678eb71",
+    "calendar_scope_review.json": "4f51a3a79d2afdda8aec4ce297b04adaa19d520191be4d6d55b85123f1ca5671",
+    "cn_prices.csv.gz": "9a4a19bb155d6f7084ba00f570422c0035873a3c1e47575c6df24c2d66a99c9f",
+    "CYB_amount.csv": "ce049376b5d4c86a476d0a10b04d3803ff7c653a5c863402c78ed80fc6b7aa3b",
+    "offline_verification.json": "1a0bafeb914ecabd90d70e5b361f6adafc62297715be22da83a7122abbfb2a7c",
+    "pytest_bootstrap.txt": "627b2c1aa0b81f96c73ec495469485c509783fb834387545dbfea6f182b05168",
+    "pytest_full.txt": "dd23f4ab3b873371f7c0b4070f3e9db942d982cf1031f6d11ea0dc37b3ce9f19",
+    "README.md": "c8b6bfd4d79ce0a83341fb354992ba032056113fd6de5ee6a409937f52abb096",
+    "real_amount_acceptance.json": "9528fd502355d6efc6e181d32862fc12ac2df8711b5c5f91774d8c1c42ddc70c",
+    "validation_summary.json": "567ca76a7d88aab12db08b7b0d6cbe4a3d275269c595756e19b8b3e4195b459b",
+    "verify_offline.py": "cd80be0653e0b4fc9858a3221b04007e60800f88f1de2c0a93e2b3bde6b4e034",
+    "ZZ2000_amount.csv": "3ea1e059cc08eaac3dd4381a7c6520e0777276869ce753e0a911b68096c9b394"
+  },
+  "source_hash_basis": "SHA256 of LF-normalized formal bot"
+}

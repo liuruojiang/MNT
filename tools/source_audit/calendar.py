@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
-US_POLICY_SHA256 = '726e201c4ef7a8480296c9bc7813819d3a6e5e9e2ce3aaccca5f65232b23a44c'
+US_POLICY_SHA256 = 'bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b'
 NYSE_URL = 'https://www.nyse.com/markets/hours-calendars'
 SSE_URL = 'https://www.sse.com.cn/disclosure/dealinstruc/closed/'
 CN_2026_CLOSED_RANGES = [('2026-01-01', '2026-01-03'), ('2026-02-15', '2026-02-23'),
