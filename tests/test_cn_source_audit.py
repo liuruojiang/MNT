@@ -149,6 +149,48 @@ def test_client_rejects_unverified_side_effect_tool(tmp_path, monkeypatch):
     assert client.count == 0
 
 
+def test_curl_preserves_chinese_request_body(tmp_path, monkeypatch):
+    """Exercise curl's real config parser against a loopback-only HTTP server."""
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import shutil
+    import threading
+    import source_audit.wind as wind
+
+    if shutil.which('curl.exe') is None:
+        pytest.skip('Windows curl.exe is required for the production transport')
+    observed = []
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            assert self.headers.get('Content-Length') is not None, str(self.headers)
+            body = self.rfile.read(int(self.headers['Content-Length']))
+            request = json.loads(body.decode('utf-8'))
+            observed.append(request['params']['arguments']['question'])
+            response = json.dumps({'jsonrpc': '2.0', 'id': request['id'],
+                                   'result': {'ok': True}}).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+        def log_message(self, *args):
+            pass
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(wind, 'decrypt_dpapi', lambda p: 'TEST_SECRET_SENTINEL')
+    monkeypatch.setitem(wind.SERVERS, 'index_data', f'http://127.0.0.1:{server.server_port}/')
+    question = '查询中证红利低波100；保留 "引号"、反斜杠\\和换行\n第二行'
+    try:
+        client = WindClient(tmp_path / 'unused', tmp_path / 'run', max_requests=1)
+        result = client.rpc('index_data', 'tools/call', {
+            'name': 'get_index_kline', 'arguments': {'question': question}})
+        assert result['result']['ok'] is True
+        assert observed == [question]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_non_json_auth_failure_stops_every_wind_server(tmp_path,monkeypatch):
     import source_audit.wind as wind
     monkeypatch.setattr(wind,'decrypt_dpapi',lambda p:'TEST_SECRET_SENTINEL')

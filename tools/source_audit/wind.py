@@ -79,7 +79,9 @@ class WindClient:
                   'header = "Content-Type: application/json"',
                   'header = "Accept: application/json, text/event-stream"',
                   'header = "User-Agent: ReadOnlyDataSourceService/1.0"',
-                  'data = ' + json.dumps(json.dumps(payload, ensure_ascii=False))]
+                  # curl's config parser does not decode JSON \uXXXX escapes.
+                  # Keep non-ASCII text UTF-8 in the outer config string too.
+                  'data = ' + json.dumps(json.dumps(payload, ensure_ascii=False), ensure_ascii=False)]
         timeout_seconds = 90 if method == 'tools/call' and isinstance(params.get('arguments', {}).get('question'), str) else 45
         command = ['curl.exe', '--silent', '--show-error', '--connect-timeout', '10', '--max-time', str(timeout_seconds),
                    '--max-filesize', '20000000', '--config', '-', '--write-out', '\n__HTTP_STATUS__%{http_code}']
@@ -87,7 +89,7 @@ class WindClient:
             command += ['--resolve', 'mcp.wind.com.cn:443:' + self.dns_override]
         value = None
         try:
-            process = subprocess.run(command, input='\n'.join(config).encode('utf-8'), capture_output=True, timeout=timeout_seconds + 5)
+            process = subprocess.run(command, input=('\n'.join(config) + '\n').encode('utf-8'), capture_output=True, timeout=timeout_seconds + 5)
             if process.returncode:
                 raise RuntimeError('HTTPS transport failed')
             content, status = process.stdout.rsplit(b'\n__HTTP_STATUS__', 1)
