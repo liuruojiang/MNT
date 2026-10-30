@@ -1762,7 +1762,7 @@ def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
     return last_close * (quote / prev_proxy_close)
 
 def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None):
-    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).strftime('%Y%m%d')
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
     for candidate_secid in candidate_secids:
         parts = str(candidate_secid).split('.', 1)
         if len(parts) != 2 or parts[0] not in {'0', '1'}:
@@ -1774,7 +1774,7 @@ def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None
             text = resp.content.decode('gbk', errors='ignore')
             payload = text.split('"', 2)[1] if '"' in text else ''
             fields = payload.split('~')
-            if len(fields) > 30 and str(fields[30])[:8] == expected:
+            if len(fields) > 30 and fields[2] == parts[1] and text.startswith(f'v_{symbol}="') and _cn_quote_time_valid(pd.to_datetime(fields[30], format='%Y%m%d%H%M%S'), expected):
                 price = float(fields[3])
                 if np.isfinite(price) and price > 0:
                     return price
@@ -1786,12 +1786,72 @@ def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None
             text = resp.content.decode('gb18030', errors='ignore')
             payload = text.split('"', 2)[1] if '"' in text else ''
             fields = payload.split(',')
-            if len(fields) > 30 and str(fields[30]).replace('-', '') == expected:
+            if len(fields) > 31 and text.startswith(f'var hq_str_{symbol}="') and _cn_quote_time_valid(pd.Timestamp(f'{fields[30]} {fields[31]}'), expected):
                 price = float(fields[3])
                 if np.isfinite(price) and price > 0:
                     return price
         except _DATA_FETCH_ERRORS:
             pass
+    return None
+
+def _cn_quote_time_valid(quote_time, expected_date):
+    stamp = pd.Timestamp(quote_time)
+    if pd.isna(stamp):
+        return False
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize('Asia/Shanghai')
+    else:
+        stamp = stamp.tz_convert('Asia/Shanghai')
+    now = pd.Timestamp(beijing_now())
+    now = now.tz_localize('Asia/Shanghai') if now.tzinfo is None else now.tz_convert('Asia/Shanghai')
+    if stamp.date() != expected_date or expected_date != now.date() or stamp > now or not _is_cn_required_close_day(stamp.date()):
+        return False
+    minute = (stamp.hour, stamp.minute, stamp.second)
+    if not ((9, 30, 0) <= minute <= (11, 30, 0) or (13, 0, 0) <= minute <= (15, 0, 0)):
+        return False
+    # Realtime quotes are never evidence of a final close. During lunch the
+    # expected last legal timestamp is 11:30; otherwise allow five minutes.
+    if (now.hour, now.minute) >= (15, 0):
+        return False
+    reference = now.replace(hour=11, minute=30, second=0, microsecond=0) if (11, 30) <= (now.hour, now.minute) < (13, 0) else now
+    return pd.Timedelta(0) <= reference - stamp <= pd.Timedelta(minutes=5)
+
+def _fetch_cn_realtime_trends(candidate_secids, expected_date):
+    """Date-stamped same-index fallback for quotes whose f124 is absent/zero."""
+    for candidate_secid in candidate_secids:
+        try:
+            market, code = candidate_secid.split('.', 1)
+            url = f'https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={candidate_secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0'
+            resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
+            resp.raise_for_status()
+            payload = resp.json()
+            data = payload.get('data') if isinstance(payload, dict) else None
+            if not isinstance(data, dict) or str(data.get('code')) != code or str(data.get('market')) != market:
+                continue
+            rows = data.get('trends')
+            if not isinstance(rows, list) or not rows:
+                continue
+            fields = [row.split(',') for row in rows if isinstance(row, str)]
+            if len(fields) != len(rows) or any(len(row) < 3 for row in fields):
+                continue
+            dates = pd.DatetimeIndex(pd.to_datetime([row[0] for row in fields], errors='coerce'))
+            if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+                continue
+            # EastMoney labels an in-progress minute by its ending minute.
+            # Use the newest already-started timestamp, never that future label.
+            now = pd.Timestamp(beijing_now())
+            if now.tzinfo is not None:
+                now = now.tz_convert('Asia/Shanghai').tz_localize(None)
+            if dates.tz is not None or any(day.date() != expected_date for day in dates) or dates[-1] > now.ceil('min'):
+                continue
+            eligible = np.flatnonzero(dates <= now)
+            if not len(eligible) or not _cn_quote_time_valid(dates[eligible[-1]], expected_date):
+                continue
+            price = float(fields[eligible[-1]][2])  # f53: minute close, already in index points.
+            if np.isfinite(price) and price > 0:
+                return price
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+            continue
     return None
 
 def _fetch_cn_realtime_close(secid, expected_date=None):
@@ -1800,7 +1860,7 @@ def _fetch_cn_realtime_close(secid, expected_date=None):
     candidate_secids = [proxy_secid] if proxy_secid else _vendor_secid_candidates(secid)
     for candidate_secid in candidate_secids:
         try:
-            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f43,f44,f45,f46,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
+            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
             resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
             resp.raise_for_status()
             payload = resp.json()
@@ -1809,33 +1869,50 @@ def _fetch_cn_realtime_close(secid, expected_date=None):
             data = payload.get('data')
             if not isinstance(data, dict):
                 continue
+            if str(data.get('f57')) != candidate_secid.split('.', 1)[1]:
+                continue
             f43 = data.get('f43')
             f46 = data.get('f46')
             f124 = data.get('f124')
             if f43 is None or f46 is None or f124 is None or (f43 == '-') or (f46 == '-'):
                 continue
-            quote_date = datetime.fromtimestamp(float(f124), tz=timezone.utc).astimezone(ZoneInfo('Asia/Shanghai')).date()
-            price = float(f43) / 100.0
-            if quote_date != expected or float(f46) <= 0 or (not np.isfinite(price)) or (price <= 0):
+            timestamp = float(f124)
+            if not np.isfinite(timestamp) or not 0 < timestamp < 4102444800:
+                continue
+            quote_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            decimals = float(data.get('f59', 2))
+            if not np.isfinite(decimals) or decimals != int(decimals) or not 0 <= decimals <= 6:
+                continue
+            price = float(f43) / (10 ** int(decimals))
+            if not _cn_quote_time_valid(quote_time, expected) or not np.isfinite(float(f46)) or float(f46) <= 0 or (not np.isfinite(price)) or (price <= 0):
                 continue
             return price
-        except _DATA_FETCH_ERRORS:
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
             continue
+    price = _fetch_cn_realtime_trends(candidate_secids, expected)
+    if price is not None:
+        return price
     return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected)
 
 def _supplement_today_close(df, secid, bj_today, msg=None):
     if df is None or len(df) == 0:
         return df
     last_date = df.index[-1].date() if hasattr(df.index[-1], 'date') else df.index[-1]
-    if last_date >= bj_today:
+    if last_date > bj_today:
         return df
     if bj_today.weekday() >= 5:
         return df
     if not _is_cn_required_close_day(bj_today):
         return df
     bj_now = beijing_now()
-    if bj_today == bj_now.date() and (not _can_use_cn_realtime_snapshot_at(bj_now)):
+    if bj_today != bj_now.date() or not _is_cn_unconfirmed_at(bj_now):
         return df
+    # Today's unconfirmed daily bar may itself be stale: refresh it, and if
+    # refresh fails remove it rather than relabel it as a valid live quote.
+    if last_date == bj_today:
+        df = df.loc[df.index < pd.Timestamp(bj_today)].copy()
+        if df.empty:
+            return df
     realtime_close = _fetch_cn_realtime_close(secid)
     if realtime_close is None:
         return df
@@ -2042,6 +2119,22 @@ def _price_column_frame(df, source_col, output_col):
     out.index = dates
     return out
 
+def _align_partial_cn_intraday(cn_raw, columns, clock, required_close, msg):
+    """Use one confirmed cutoff when today's optional quotes are incomplete."""
+    today = pd.Timestamp(clock.date())
+    required = pd.Timestamp(required_close)
+    if not _is_cn_unconfirmed_at(clock) or required >= today:
+        return cn_raw
+    latest = {code: _latest_valid_close_date(cn_raw.get(code)) for code in columns}
+    if any(value is None or value < required for value in latest.values()):
+        return cn_raw  # Required history remains subject to strict validation.
+    missing = [code for code, value in latest.items() if value < today]
+    if not missing:
+        return cn_raw
+    names = '、'.join(CN_NAMES.get(code, code) for code in missing)
+    msg.write(f'  ⚠️ Sub-A 当前实时信号不可用：{names}缺少今日快照；全部Sub-A价格统一截至 {required.date().isoformat()} 最近确认收盘，仅展示该日信号，不代表今日实时信号。\n')
+    return {code: _drop_cn_rows_after(frame, required) for code, frame in cn_raw.items()}
+
 def _merge_cn_price_frames(frames, columns, label, formal_start=None):
     out = pd.concat(frames, axis=1).sort_index()
     common_start = max((out[col].first_valid_index() for col in columns))
@@ -2070,7 +2163,12 @@ def _assert_cn_raw_prices_fresh(raw_dict, columns, expected_date, label):
     expected = pd.Timestamp(expected_date).normalize()
     missing = []
     for col in columns:
-        frame = _price_column_frame(raw_dict.get(col), 'close', col)
+        raw = raw_dict.get(col)
+        frame = _price_column_frame(raw, 'close', col)
+        if raw is not None and 'is_live_bar' in raw and expected in raw.index and expected <= _latest_cn_data_required_date():
+            flag = raw.at[expected, 'is_live_bar']
+            if pd.notna(flag) and bool(flag):
+                raise DataSchemaError(f'{label} {col}: unconfirmed snapshot cannot satisfy required close {expected.date()}')
         if expected not in frame.index or pd.isna(frame.at[expected, col]):
             latest = frame[col].last_valid_index()
             missing.append(f'{col}: latest={pd.Timestamp(latest).date().isoformat()}, required={expected.date().isoformat()}')
@@ -2079,12 +2177,16 @@ def _assert_cn_raw_prices_fresh(raw_dict, columns, expected_date, label):
 
 def _build_cn_stock_close_frame(cn_raw):
     frames = [_price_column_frame(cn_raw[secid], 'close', secid) for secid in CN_STOCK_CODES]
-    return _merge_cn_price_frames(frames, CN_STOCK_CODES, 'Sub-A', formal_start=CN_STOCK_FORMAL_START)
+    out = _merge_cn_price_frames(frames, CN_STOCK_CODES, 'Sub-A', formal_start=CN_STOCK_FORMAL_START)
+    out.attrs['cn_unconfirmed_snapshot'] = any('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in cn_raw.values() if len(frame))
+    return out
 
 def _build_cn_dk_close_frame(dk_dfs):
     frames = [_price_column_frame(dk_dfs[col], col, col) for col in CN_DK_COLS]
     formal_start = max((CN_DK_PUBLICATION_DATES[col] for col in CN_DK_COLS))
-    return _merge_cn_price_frames(frames, CN_DK_COLS, 'A-DK', formal_start=formal_start)
+    out = _merge_cn_price_frames(frames, CN_DK_COLS, 'A-DK', formal_start=formal_start)
+    out.attrs['cn_unconfirmed_snapshot'] = any('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in dk_dfs.values() if len(frame))
+    return out
 
 def _fetch_cn_dk_price_index(idx_code, secid):
     attempts = []
@@ -7503,31 +7605,40 @@ def _write_adk_decision_explanation(w, cn_dk_result):
         conclusion = f"原始动量有效；score-hot下一状态={('开' if target_hot else '关')}；最终目标={item.get('target_final_text', '状态不可用')}。"
     w(f'- 结论：{conclusion}\n')
 
-def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False, dk_intraday=False, query_kind='signal'):
+def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False, dk_intraday=False, query_kind='signal', cn_price_frame=None, dk_price_frame=None):
+    cn_intraday = cn_intraday or bool(getattr(cn_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
+    dk_intraday = dk_intraday or bool(getattr(dk_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
     w('## 🇨🇳 A / ADK总览\n\n')
     if query_kind in {'params', 'live_params'}:
         w('> 参数核对页；下单只看“实时信号”。\n\n')
     suba = _suba_query_overview(cn_result, -1)
     suba_available = bool(suba['rows'])
+    suba_live_missing = (query_kind in {'live_signal', 'live_params'}
+                        and _is_cn_required_close_day(beijing_now().date())
+                        and (beijing_now().hour, beijing_now().minute) >= (9, 30)
+                        and cn_result is not None and len(cn_result) > 0
+                        and pd.Timestamp(cn_result.index[-1]).date() < beijing_now().date())
     a_volume_unresolved = False
     if cn_result is not None and len(cn_result) > 0:
         a_row = cn_result.iloc[-1]
         a_volume_unresolved = bool(a_row.get('suba_volume_unresolved', a_row.get('suba_volume_unavailable', False)))
-    suba_executable = suba_available and (not a_volume_unresolved)
+    suba_executable = suba_available and (not a_volume_unresolved) and (not suba_live_missing)
     suba_mark = '🔴' if suba_executable and suba['changed'] else '🟢' if suba_executable else '⚠️'
     suba_status = '需要调整' if suba_executable and suba['changed'] else '维持' if suba_executable else '状态不可判定'
     w(f'### A策略（Sub-A）｜{suba_mark} {suba_status}\n\n')
+    if suba_live_missing:
+        w('⚠️ 今日Sub-A实时数据不完整；以下仅为最近确认收盘的历史信号，不作为今日实时操作依据。\n\n')
     if cn_result is not None and len(cn_result) > 0:
         w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
     if query_kind in {'params', 'live_params'}:
         w(f'规则：**A策略（单一生产策略）**｜MA{CN_BIAS_N}/动量{CN_MOM_DAY}日｜原始Top-1需score>0且R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD:.2f}，失败不递补｜目标波动{CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日｜杠杆{CN_MIN_LEV:.2f}–{CN_MAX_LEV:.2f}x\n\n')
         w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜A股收盘执行｜现金收益与借款成本均按{CN_RF_ANNUAL:.0%}/年回测假设，非券商融资报价\n\n')
     if suba['rows']:
-        target_label = '诊断目标（不可执行）' if a_volume_unresolved else '收盘最终目标'
+        target_label = '历史收盘目标（非今日实时）' if suba_live_missing else '诊断目标（不可执行）' if a_volume_unresolved else '盘中参考目标（待收盘确认）' if cn_intraday else '收盘最终目标'
         w(f'| 策略 | 当前已生效 | {target_label} | 操作 |\n')
         w('|:-|:-|:-|:-|\n')
         for item in suba['rows']:
-            action = '风控不可判定；停止执行并刷新数据' if a_volume_unresolved else item['action']
+            action = '实时数据不完整；等待刷新' if suba_live_missing else '风控不可判定；停止执行并刷新数据' if a_volume_unresolved else item['action']
             w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
     else:
         w('⚠️ A策略状态不可用。\n')
@@ -7557,7 +7668,7 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w(f'规则：**ADK策略（单一生产策略）**｜5指数全10对固定Top-1｜MA{CN_DK_BIAS_N}/动量{CN_DK_MOM_DAY}日｜score-hot进入/恢复/乘数={V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}/{V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x\n\n')
         w(f'风控/执行：目标波动{CN_DK_TARGET_VOL:.0%}/{CN_DK_VOL_WINDOW}日｜杠杆{CN_DK_MIN_LEV:.1f}–{CN_DK_MAX_LEV:.1f}x｜|Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整｜每条多/空腿单边成本{CN_DK_COMMISSION:.3%}｜A股收盘执行\n\n')
     if adk['rows']:
-        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | 收盘最终目标 | 操作 |\n")
+        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | {('盘中参考目标（待收盘确认）' if dk_intraday else '收盘最终目标')} | 操作 |\n")
         w('|:-|:-|:-|:-|\n')
         for item in adk['rows']:
             w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
@@ -11754,7 +11865,7 @@ def is_cn_market_open():
     return (morning_open <= bj <= morning_close or afternoon_open <= bj <= afternoon_close, bj)
 
 def _is_cn_unconfirmed_at(bj):
-    if bj.weekday() >= 5:
+    if not _is_cn_required_close_day(bj.date()):
         return False
     session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
     session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
@@ -13671,6 +13782,8 @@ class CombinedStrategyBase:
         _cn_input_cutoff = pd.Timestamp(_bj_today_cn).normalize() if include_cn_live_snapshot else _cn_requested_close
         for secid in CN_STOCK_CODES:
             cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_input_cutoff)
+        if include_cn_live_snapshot:
+            cn_raw = _align_partial_cn_intraday(cn_raw, CN_STOCK_CODES, _cn_clock, _cn_requested_close, msg)
         _cn_open_now, _bj_now_check = is_cn_market_open()
         _is_cn_trading_day = _is_cn_required_close_day(_bj_today_cn)
         _cn_after_close = _is_cn_trading_day and (not _cn_open_now) and (_bj_now_check.hour >= 15)
@@ -14318,7 +14431,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         cn_data_is_today = cn_date.date() == bj_now.date()
         dk_data_is_today = dk_date.date() == bj_now.date()
         us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
-        any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today)
+        any_cn_live = (cn_unconfirmed and (cn_data_is_today or dk_data_is_today)) or any(bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close))
         any_market_live = any_cn_live or (us_open and us_data_is_today)
         bj_time_str_val = bj_now.strftime('%H:%M')
         bj_date_str = bj_now.strftime('%Y-%m-%d')
@@ -14332,10 +14445,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     live_markets.append('A股')
                 if us_open and us_data_is_today:
                     live_markets.append('美股')
-                w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 实时数据快照（{'、'.join(live_markets)}盘中，收盘前信号可能变化）\n\n")
+                w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 未确认行情快照（{'、'.join(live_markets)}，须等确认收盘后重新查询）\n\n")
             else:
                 w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 基于收盘数据（非盘中）\n\n')
-            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal')
+            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close, is_signal_day=is_us_signal)
             subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
             _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
@@ -14395,7 +14508,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             cn_data_is_today = cn_date.date() == bj_now.date()
             dk_data_is_today = dk_date.date() == bj_now.date()
             us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
-            any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today)
+            any_cn_live = (cn_unconfirmed and (cn_data_is_today or dk_data_is_today)) or any(bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close))
             any_live = any_cn_live or (us_open and us_data_is_today)
             bj_ts = bj_now.strftime('%Y-%m-%d %H:%M')
             w(f'## 📐 实时参数值\n\n')
@@ -14406,11 +14519,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     live_mkts.append('A股')
                 if us_open and us_data_is_today:
                     live_mkts.append('美股')
-                w(f"⏱ **北京时间 {bj_ts}** 实时数据快照（{'、'.join(live_mkts)}盘中，收盘前参数可能变化）\n\n")
+                w(f"⏱ **北京时间 {bj_ts}** 未确认行情快照（{'、'.join(live_mkts)}，须等确认收盘后重新查询）\n\n")
             else:
                 w(f'⏱ **北京时间 {bj_ts}** 基于收盘数据\n\n')
-            w(f'A股收盘: {cn_close_bj} | 美股收盘: {us_close_bj}\n\n')
-            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params')
+            cn_time_label = f'A股数据日期: {cn_date.date()}（含未确认快照）' if any_cn_live else f'A股收盘: {cn_close_bj}'
+            w(f'{cn_time_label} | 美股收盘: {us_close_bj}\n\n')
+            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
             subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)

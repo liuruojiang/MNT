@@ -1,0 +1,26 @@
+{
+  "status": "PASS_WITH_SCOPE",
+  "source_sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+  "fixed": [
+    "same-day stale quotes",
+    "lunch invalid timestamps",
+    "future/wrong-symbol fallback quotes",
+    "after-close realtime supplementation",
+    "cross-close fallback execution",
+    "snapshot confirmation metadata",
+    "holiday false missing warning",
+    "existing current-day refresh",
+    "header consistency"
+  ],
+  "regression": {
+    "passed": 193,
+    "subtests_passed": 12
+  },
+  "independent_source_cases": 33,
+  "independent_pipeline_cases": 8,
+  "live_quote_probe": "live_probe.json",
+  "pipeline_final": "pipeline/reaudit_checks_final.json",
+  "tests_agent": "tests/result.json",
+  "backup": ".codex_backups/20261029_144312",
+  "scope": "Local repair, offline adversarial handlers/cache and live quote probe; no Poe deployment, no full strategy performance certification"
+}

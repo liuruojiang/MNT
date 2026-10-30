@@ -1,0 +1,205 @@
+{
+  "source_sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+  "results": [
+    {
+      "case": "clock_14:30:00_09:30:00",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_14:30:00_12:30:00",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_15:10:00_14:59:00",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_15:00:00_15:00:00",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_14:59:59_14:59:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_14:30:00_14:25:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_14:30:00_14:24:59",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_14:30:00_14:30:01",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_12:30:00_11:30:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_12:30:00_11:25:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_12:30:00_11:24:59",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_12:30:00_11:30:01",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_12:59:59_11:30:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_13:00:00_11:30:00",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_13:00:00_13:00:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "clock_09:29:59_09:29:59",
+      "actual": false,
+      "expected": false,
+      "passed": true
+    },
+    {
+      "case": "clock_09:30:00_09:30:00",
+      "actual": true,
+      "expected": true,
+      "passed": true
+    },
+    {
+      "case": "stale_route",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "stale_supplement",
+      "actual": "2026-10-28 00:00:00",
+      "expected": "2026-10-28 00:00:00",
+      "passed": true
+    },
+    {
+      "case": "lunch_route",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "lunch_supplement",
+      "actual": "2026-10-28 00:00:00",
+      "expected": "2026-10-28 00:00:00",
+      "passed": true
+    },
+    {
+      "case": "afterclose_route",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "afterclose_supplement",
+      "actual": "2026-10-28 00:00:00",
+      "expected": "2026-10-28 00:00:00",
+      "passed": true
+    },
+    {
+      "case": "tencent_14:29:00_930955",
+      "actual": 321.0,
+      "expected": 321.0,
+      "passed": true
+    },
+    {
+      "case": "tencent_14:59:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "tencent_09:30:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "tencent_12:30:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "tencent_14:29:00_000905",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "sina_14:29:00_930955",
+      "actual": 321.0,
+      "expected": 321.0,
+      "passed": true
+    },
+    {
+      "case": "sina_14:59:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "sina_09:30:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "sina_12:30:00_930955",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    },
+    {
+      "case": "sina_14:29:00_000905",
+      "actual": null,
+      "expected": null,
+      "passed": true
+    }
+  ],
+  "passed": 33,
+  "total": 33
+}

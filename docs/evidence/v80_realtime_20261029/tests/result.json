@@ -1,0 +1,45 @@
+{
+  "fetch_calls": 1,
+  "strategy_calls": 1,
+  "still_unconfirmed": true,
+  "reference_target": true,
+  "contradictory_header": false,
+  "boundary_checks": [
+    {
+      "now": "11:30:30",
+      "tick": "11:30:00",
+      "expected": true,
+      "observed": true
+    },
+    {
+      "now": "12:59:59",
+      "tick": "11:30:00",
+      "expected": true,
+      "observed": true
+    },
+    {
+      "now": "13:00:01",
+      "tick": "11:30:00",
+      "expected": false,
+      "observed": false
+    },
+    {
+      "now": "14:30:00",
+      "tick": "14:24:59",
+      "expected": false,
+      "observed": false
+    },
+    {
+      "now": "14:30:00",
+      "tick": "14:25:00",
+      "expected": true,
+      "observed": true
+    },
+    {
+      "now": "09:29:59",
+      "tick": "09:30:00",
+      "expected": false,
+      "observed": false
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "source_sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+  "scope": "Local code, offline counterexamples and 2026-10-29 live probe; Poe not deployed",
+  "reproduce": [
+    "python -B -m pytest -q -p no:cacheprovider tests/test_v80_realtime_source_20261029.py tests/test_v80_partial_intraday_20261029.py tests/test_v80_realtime_audit_closure_20261029.py",
+    "python -B docs/evidence/v80_realtime_20261029/source/repro.py",
+    "python -B docs/evidence/v80_realtime_20261029/pipeline/reaudit_checks_final.py",
+    "python -B docs/evidence/v80_realtime_20261029/pipeline/fallback_handler_recheck.py",
+    "python -B docs/evidence/v80_realtime_20261029/tests/reaudit.py",
+    "python -B docs/evidence/v80_realtime_20261029/tests/old_counterexamples_closed.py"
+  ],
+  "clean_export_validation": {
+    "date": "2026-10-30",
+    "tests_passed": 59,
+    "independent_scripts_passed": 5,
+    "basis": "git checkout-index staged tracked files, no ignored data copied"
+  }
+}

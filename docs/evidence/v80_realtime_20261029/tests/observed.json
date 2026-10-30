@@ -1,0 +1,14 @@
+[
+  {
+    "case": "same_day_opening_only",
+    "observed": null,
+    "expected": null,
+    "rejected": true
+  },
+  {
+    "case": "invalid_lunch_time",
+    "observed": null,
+    "expected": null,
+    "rejected": true
+  }
+]
