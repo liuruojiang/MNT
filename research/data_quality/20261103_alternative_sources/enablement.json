@@ -1,0 +1,13 @@
+{
+  "enabled_at_utc": "2026-11-03T05:19:58.252419+00:00",
+  "enabled_sources": [
+    "tencent",
+    "eastmoney",
+    "sina"
+  ],
+  "config_backup": "D:\\动量策略\\_data_source_service\\state_backups\\alternative_sources_20261103T051958Z\\config.json",
+  "code_backup": "D:\\动量策略\\A股美股动量组合策略\\.codex_backups\\20261103_131125",
+  "source_scope": "518880.SH / 2026 daily OHLC research only; public sources; no production promotion",
+  "original_provider_failure_not_cleared": true,
+  "production_changed": false
+}

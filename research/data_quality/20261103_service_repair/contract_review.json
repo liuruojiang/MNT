@@ -1,0 +1,173 @@
+{
+  "reviewed_at_utc": "2026-11-03T04:55:10.288732+00:00",
+  "recovery_commit": "8f284b7e56265cf1f75a6c58c6302447d71f11c9",
+  "pre_edit_tracked_state_was_clean": true,
+  "calendar_reviewed_policy_ast_sha256": "4a329e50696c92462ffaeae1472dc1d7c10a3b08c4e2487469ab0d7a0586684e",
+  "projects": [
+    {
+      "project_id": "combo_v80",
+      "before": [
+        {
+          "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+          "role": "formal_entrypoint",
+          "sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
+          "sha256_lf": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b"
+        }
+      ],
+      "after": [
+        {
+          "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+          "role": "formal_entrypoint",
+          "sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+          "sha256_lf": "ecf0244b75336a923d3474879bb13b18c1a8df1f19424ee4fa9433a6d66dbe69"
+        }
+      ],
+      "runtime_dependencies": [],
+      "review_findings": [
+        "Compared current entrypoint with reviewed 733486dd; all seven US calendar AST nodes unchanged.",
+        "Changes affect quote timestamp freshness, close confirmation, partial intraday alignment and display; no new daily ETF/turnover/macro instruments or relaxed source gates.",
+        "Separated H11077 date/close contract from equity OHLCV; neither turnover nor stock volume is required."
+      ],
+      "data_or_production_accepted": false
+    },
+    {
+      "project_id": "microcap_v20_v23_v25",
+      "before": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_0.py",
+          "role": "formal_entrypoint",
+          "sha256": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1",
+          "sha256_lf": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_3.py",
+          "role": "formal_entrypoint",
+          "sha256": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6",
+          "sha256_lf": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_5.py",
+          "role": "formal_entrypoint",
+          "sha256": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50",
+          "sha256_lf": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50"
+        }
+      ],
+      "after": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_0.py",
+          "role": "formal_entrypoint",
+          "sha256": "b07bc91ca822c29e0135a8a6c5d036c8061eb1c879bb635cb6ee07cea2443e80",
+          "sha256_lf": "39402521bea42551e83f97675b1fdff681ea62e6972e8ba6a6ae6208f1a50459"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_3.py",
+          "role": "formal_entrypoint",
+          "sha256": "db1f635f291473775d20aca2a57886512b2494c4fa871a534a0ea9f2c5568063",
+          "sha256_lf": "db1f635f291473775d20aca2a57886512b2494c4fa871a534a0ea9f2c5568063"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_5.py",
+          "role": "formal_entrypoint",
+          "sha256": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50",
+          "sha256_lf": "c39b8fa5b4fe44142fb470944bf87c875c18dcc480cad0f705b4e653bba64f50"
+        }
+      ],
+      "runtime_dependencies": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\bounded_market_data.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "ce13d5ae75d9e174477cc3816d22c4f54443f344b853ba00210ec5419c61543e"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\share_change_source.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d641293a39185a755de5c9da2e7760d6630a877ad61c0c8edcf5942dc3c2a443"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_history_scope.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "1365b7c0aa289efc30537ef2ede5a1bd7126952bd29c6a026a69d9d25659e47b"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_metadata_refresh.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "0aa385ee70725e6f022eac72655cb87a5bf79fb086b831fecacbe9bf646aed9d"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_archive.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "625483138aebda935a852953a1645ec95eeff9fdf10ab259c463af198c7b7c9c"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_evidence.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "7d9f195606b4778c4e53ce99a8c439d8d5bddc0129dbc7399768a10455b7ab1c"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_incremental.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d1b0f043137e0627f0510b95be42722e1018f0d40bcf59d8655687f63ceafae8"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_refresh.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "629ef0a87a65673f68d960d3bdb62faedca84e2a8010b766289d98b4749133dc"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_daily_alternative.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "261e03ecc279011e21de8a7b1ee27114740c73da61d5b26b078f5be9e032efc6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_daily_inputs.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d5a7f4b496798ef4e2c834b9317ebf435cf8600de0f880a202a4fc5ce6e381f5"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_input_contract.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "0c11f9d7ab536838c127bc288038e74db190cb7ea894aafbe73403d94c5c3cc5"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_basis.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "4e67e8a31a216e6d0f8069fe869c9b6961ff52e503e1921a75e75e00c6046e59"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_basis_store.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "fe1dfce2c961cff1e63ff9f2a1284f4b150897b83b521d85795a0aaf210fff39"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_pipeline.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "19eb18eecf7a335ce791c3194060caa53f2170a54598f16dd9172fc2dc4a031d"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_tail_returns.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "fc5875bdb53ed1786c7c851b8e3c9b8028f79f49a71c72cd4eb22c8f1c14d5c6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\top100_data_contracts.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "df659bbe5c48874ca45e659699d88a73a036cb624afdb466c60331f307b258ab"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\tradeability_evidence.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "9fbccd9b30003cc6bf590f678ba95da56e7bfc96f1488369d093285055159832"
+        }
+      ],
+      "review_findings": [
+        "Reviewed entrypoint diffs against 79c6f8d; parsed embedded stock data/ST/simulation sources and traced new external stock-input adapters.",
+        "Recorded ratio adjustment, raw capitalization, dated CNInfo share history, independent trade-status evidence and ST notice provenance requirements.",
+        "Recorded delisting-zero valuation and changed v2.3 overheat-OFF semantics; no strategy edits, NAV rebuilding or production source acceptance.",
+        "Runtime stock-input module hashes are now checked in addition to entrypoints. Provider entitlement/coverage gaps remain unchanged."
+      ],
+      "data_or_production_accepted": false
+    }
+  ],
+  "production_modified": false,
+  "strategy_backtests_run": 0
+}

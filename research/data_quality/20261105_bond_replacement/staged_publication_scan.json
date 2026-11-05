@@ -1,0 +1,79 @@
+{
+  "staged_files_scanned": 122,
+  "matches": [],
+  "old_test_copies_or_credentials_staged": false,
+  "staged_python_matches_tested_worktree": [
+    {
+      "path": "mnt_bot V 8.0 plus.py",
+      "sha256_lf": "2f7543e5fc77221b42aa99856978b75284d529ee27a67f165a88071e7e911725"
+    },
+    {
+      "path": "tests/test_alternative_data_sources.py",
+      "sha256_lf": "88ab961e4c5a54fca5dd243b31eb246a4d32c3110fbdd876e1d7e116df5d5db2"
+    },
+    {
+      "path": "tests/test_bond_adversarial_delivery.py",
+      "sha256_lf": "806e4e7e8e58b1927707f0842cdefae1f0b1bcbcf2cbb331ec3628a017d07811"
+    },
+    {
+      "path": "tests/test_bond_adversarial_service.py",
+      "sha256_lf": "932cdeb03646f31be0eb19a75e6566bcf5496d02b52060105effadd5e280e7fc"
+    },
+    {
+      "path": "tests/test_bond_adversarial_strategy.py",
+      "sha256_lf": "a0caeec4d5add3e64de3de2446326bae4a28cf30ce111a54e3e9522b4d47ce16"
+    },
+    {
+      "path": "tests/test_data_source_service.py",
+      "sha256_lf": "464f48c6b612371aadd7bfc2e1b73cf1d8f50f99de0b200df92c12d98d6c3437"
+    },
+    {
+      "path": "tests/test_source_service_repairs.py",
+      "sha256_lf": "05050e2977839ada674c084d30fc28d6816aba3039811871dc8e05216e183a80"
+    },
+    {
+      "path": "tests/test_v80_bond_replacement.py",
+      "sha256_lf": "2f0a091efc0b7237107aa302dc757614c520164d69d851e9c7739625f89c5e20"
+    },
+    {
+      "path": "tests/test_v80_data_display_audit_20261007.py",
+      "sha256_lf": "50658d9594dc1c32afe0612f225ea3f1bb2063738b264c5f54a2b55d7e46eb7d"
+    },
+    {
+      "path": "tests/test_v80_review_cn_20261023.py",
+      "sha256_lf": "82604c4110f63753062a4f1389a53efeb69865d62c5e44c2b29faff27e85e722"
+    },
+    {
+      "path": "tools/audit_cn_sources.py",
+      "sha256_lf": "155888d6a3ca893b3f2fdf561bbce4d6f097879574470e08d6bbd3bb0d01f319"
+    },
+    {
+      "path": "tools/run_data_source_service.py",
+      "sha256_lf": "a5755470c5d4d06a9a3a3240c76cb7f31cf7fb0ed0e40fadba1f0b1a6b80c505"
+    },
+    {
+      "path": "tools/source_audit/adapters.py",
+      "sha256_lf": "fbf7e5d843a71c7a6a0b36acd88879a456dad3bf3c0a76e32144318ad2066808"
+    },
+    {
+      "path": "tools/source_audit/alternative_sources.py",
+      "sha256_lf": "029d0d8ac2027e9643df89a014cdbeebe07b115a934ce6f9d660e1058719f59d"
+    },
+    {
+      "path": "tools/source_audit/calendar.py",
+      "sha256_lf": "fca25a518f149c34d9048920cf6cb1f072b55f3378e1b221c31333e8e2a872e4"
+    },
+    {
+      "path": "tools/source_audit/independent_cash.py",
+      "sha256_lf": "fe4cd9016f05c75a6526d9f8b92c89e749d6d4a261994209b998f3fa1af392ac"
+    },
+    {
+      "path": "tools/source_audit/official_reference.py",
+      "sha256_lf": "22509964a8b65bc78a6007dee65dde17380761cd49ac2e263ad3025ba2e44000"
+    },
+    {
+      "path": "tools/source_audit/registry.py",
+      "sha256_lf": "91edbb795edf0827a4e07d7bf4a9b9c2bf47622f03057133c7bda60e6fa1ac39"
+    }
+  ]
+}

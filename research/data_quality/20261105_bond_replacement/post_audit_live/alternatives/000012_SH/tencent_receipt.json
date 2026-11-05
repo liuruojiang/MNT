@@ -1,0 +1,9 @@
+{
+  "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000012,day,2026-01-01,2026-11-05,320,qfq",
+  "retrieved_at_utc": "2026-11-05T10:33:25.408787+00:00",
+  "provider": "tencent",
+  "symbol": "000012.SH",
+  "status": 200,
+  "sha256": "3bf8e0087ffa17c87d36d014156ae5ef070011dbf2d4648c87a3f00f91b0d4d4",
+  "bytes": 15670
+}

@@ -1,0 +1,24 @@
+{
+  "provider": "sina",
+  "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000012&scale=240&ma=no&datalen=320",
+  "retrieved_at_utc": "2026-11-05T10:12:26.343731+00:00",
+  "status": 200,
+  "sha256": "b370efbd3ed8f51ea2f3f2c1f2ceff3a488ff286327781fa8b1993090588e81e",
+  "rows": 320,
+  "first": {
+    "day": "2025-07-11",
+    "open": "225.920",
+    "high": "225.966",
+    "low": "225.858",
+    "close": "225.942",
+    "volume": "1804159900"
+  },
+  "last": {
+    "day": "2026-11-05",
+    "open": "232.223",
+    "high": "232.286",
+    "low": "232.205",
+    "close": "232.258",
+    "volume": "19349320000"
+  }
+}

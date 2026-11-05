@@ -1,0 +1,12 @@
+{
+  "reviewer": "audit_delivery",
+  "staged_files_scanned": 122,
+  "research_blobs_equal_working_bytes": 98,
+  "issuer_hash_bound_files_verified": 6,
+  "forbidden_tmp_or_operational_files_staged": false,
+  "credential_pattern_matches": [],
+  "git_diff_cached_check_exit_code": 0,
+  "attributes_scope": "Three exact research trees -text; no code whitespace rule suppressed",
+  "status": "PASS_DELIVERY_STAGED_TREE",
+  "scope_note": "Final metadata/report additions require normal restaging; this is not strategy/performance/intraday certification"
+}

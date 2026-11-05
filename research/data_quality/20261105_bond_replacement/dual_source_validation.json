@@ -1,0 +1,23 @@
+{
+  "status": "QUALIFIED_FOR_RESEARCH_PRICE_ONLY",
+  "symbol": "000012.SH",
+  "start": "2026-01-01",
+  "last": "2026-11-05",
+  "rows": 202,
+  "fields_qualified": [
+    "close"
+  ],
+  "tolerance": 0.011,
+  "max_abs_difference_from_tencent": {
+    "sina": 0.005000000000023874
+  },
+  "providers": [
+    "tencent",
+    "sina"
+  ],
+  "adjustment": "Published broad government bond index points; no equity adjustment; distinct from H11077",
+  "volume_gate": "NOT_QUALIFIED",
+  "amount_gate": "NOT_QUALIFIED",
+  "pre_2026_history_certified": false,
+  "production_approved": false
+}

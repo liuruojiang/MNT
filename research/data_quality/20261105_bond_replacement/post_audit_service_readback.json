@@ -1,0 +1,72 @@
+{
+  "run_id": "20261105T103808Z_a58a4f95",
+  "report": "D:\\动量策略\\_data_source_service\\runs\\20261105T103808Z_a58a4f95\\report.json",
+  "status": "REVIEW_REQUIRED",
+  "CN_cutoff": "2026-11-05",
+  "suba_bond_symbol": "000012.SH",
+  "retired": {
+    "symbol": "H11077.SH",
+    "status": "REPLACED_NOT_REPAIRED",
+    "replacement": "000012.SH",
+    "reason": "User-authorized broad bond replacement 2026-11-05; original failure evidence retained"
+  },
+  "snapshot_rows": 202,
+  "snapshot_last": {
+    "date": "2026-11-05",
+    "close": 232.26
+  },
+  "bond": {
+    "status": "QUALIFIED_FOR_RESEARCH_PRICE_ONLY",
+    "symbol": "000012.SH",
+    "start": "2026-01-01",
+    "last": "2026-11-05",
+    "rows": 202,
+    "fields_qualified": [
+      "close"
+    ],
+    "tolerance": 0.011,
+    "max_abs_difference_from_tencent": {
+      "sina": 0.005000000000023874
+    },
+    "providers": [
+      "tencent",
+      "sina"
+    ],
+    "adjustment": "Published broad government bond index points; no equity adjustment; distinct from H11077",
+    "volume_gate": "NOT_QUALIFIED",
+    "amount_gate": "NOT_QUALIFIED",
+    "pre_2026_history_certified": false,
+    "production_approved": false,
+    "evidence": {
+      "tencent": {
+        "sha256": "3bf8e0087ffa17c87d36d014156ae5ef070011dbf2d4648c87a3f00f91b0d4d4",
+        "cutoff": "2026-11-05",
+        "receipt": {
+          "bytes": 15670,
+          "provider": "tencent",
+          "retrieved_at_utc": "2026-11-05T10:33:25.408787+00:00",
+          "sha256": "3bf8e0087ffa17c87d36d014156ae5ef070011dbf2d4648c87a3f00f91b0d4d4",
+          "status": 200,
+          "symbol": "000012.SH",
+          "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000012,day,2026-01-01,2026-11-05,320,qfq"
+        }
+      },
+      "sina": {
+        "sha256": "b370efbd3ed8f51ea2f3f2c1f2ceff3a488ff286327781fa8b1993090588e81e",
+        "cutoff": "2026-11-05",
+        "receipt": {
+          "bytes": 35559,
+          "provider": "sina",
+          "retrieved_at_utc": "2026-11-05T10:33:27.482372+00:00",
+          "sha256": "b370efbd3ed8f51ea2f3f2c1f2ceff3a488ff286327781fa8b1993090588e81e",
+          "status": 200,
+          "symbol": "000012.SH",
+          "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000012&scale=240&ma=no&datalen=320"
+        }
+      }
+    }
+  },
+  "combo_scope": "MATCHES_REVIEWED_ENTRYPOINTS",
+  "new_or_changed_issues": 0,
+  "old_bond_active": false
+}

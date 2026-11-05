@@ -1,0 +1,9 @@
+{
+  "provider": "original_sina_quote",
+  "url": "https://hq.sinajs.cn/list=shH11077,sh931077",
+  "retrieved_at_utc": "2026-11-05T10:13:12.840789+00:00",
+  "status": 200,
+  "sha256": "58c12d185dc9f8e6aa0d09e8f287061b834b6bffa58a39f2ed044f60c4b7fb16",
+  "bytes": 48,
+  "response": "var hq_str_shH11077=\"\";\nvar hq_str_sh931077=\"\";\n"
+}

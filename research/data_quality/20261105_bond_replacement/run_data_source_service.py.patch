@@ -1,0 +1,60 @@
+--- before/tools/run_data_source_service.py
+
++++ after/tools/run_data_source_service.py
+
+@@ -66,8 +66,18 @@
+
+     # evidence, never a fallback for a future date or a failed live request.
+     resumed=root/'wind_capability_evidence/cn_free_resume_20261026T110255Z'
+     reference_dir=Path(config.get('wind_reference_dir',resumed/'independent'))
++    bond_symbol = config.get('suba_bond_symbol', 'H11077.SH')
++    if bond_symbol not in {'H11077.SH', '000012.SH'}:
++        raise ValueError('Unreviewed Sub-A bond symbol')
++    if bond_symbol == '000012.SH':
++        project = adapters.project_scope('combo_v80')
++        bond = next(r for r in project['requirements'] if r['requirement_id'] == 'cn_bond_close')
++        if bond['instruments'] != ['000012.SH'] or '000012.SH' not in config.get('alternative_cn_symbols', []):
++            raise ValueError('Sub-A bond configuration does not match reviewed contract')
++        from audit_cn_sources import ASSETS
++        command += ['--symbols', ','.join(a['code'] for a in ASSETS if a['code'] != 'H11077.SH')]
+     reference_refresh = None
+-    if mode == 'tail':
++    if mode == 'tail' and bond_symbol == 'H11077.SH':
+         reference_dir, reference_refresh = refresh_bond_reference(reference_dir, output, cutoff)
+     for flag, path in [('--candidate-archive',resumed/'H11077_probes'),
+                        ('--reference-dir',reference_dir),
+@@ -81,6 +91,10 @@
+
+     report['artifact_path']=str(runs[-1])
+     report['exit_code']=proc.returncode
+     report['official_reference_refresh'] = reference_refresh
++    report['suba_bond_symbol'] = bond_symbol
++    if bond_symbol == '000012.SH':
++        report['retired_suba_bond'] = {'symbol': 'H11077.SH', 'status': 'REPLACED_NOT_REPAIRED',
++            'replacement': '000012.SH', 'reason': 'User-authorized broad bond replacement 2026-11-05; original failure evidence retained'}
+     hold=json.loads(hold_file.read_text(encoding='utf-8')) if hold_file.exists() else None
+     if hold and hold.get('status')=='OPEN':
+         report['collection_hold']=hold
+@@ -126,8 +140,8 @@
+
+ <h2>研究快照与项目覆盖</h2><p>通过价格字段核验的研究快照：Tiingo {counts['tiingo']}，Yahoo {counts['yahoo']}。这是逐资产研究资格，成交量、整套策略和生产资格单列，不能据此全源晋级。</p>
+ <table><tr><th>项目</th><th>完整项目状态</th><th>入口版本</th><th>字段组数</th></tr>{rows}</table>
+ <p>万得区间结果：{html.escape(str(cgates))}。历史成交额统计口径、PIT-ST/股本/退市与期货期权字段按实际返回判定；HTTP 200 或能发现工具都不等于字段可用。BTC 保留 UTC 日历和独立成交量口径。</p>
+-<h2>已启用的独立研究备用源</h2><p>腾讯前复权行情需与东方财富和新浪逐日核对；仅登记范围和字段可用，原万得故障、量额阻断和生产资格保留。发行人现金原件只裁定对应事件，仍单独检查价格和复权因子。</p><pre>{alternative_text}</pre>
+-<p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077只需日期和收盘，实际行情代码仍为H11077，931077只用于详情页与Referer；按收盘专用校验报告判断，缺独立参考日期时保持隔离。</p>
++<h2>已启用的独立研究备用源</h2><p>股票/ETF按原三源合同核对；000012国债收盘按腾讯与新浪双源合同核对，仅登记范围和字段可用，原万得故障、量额阻断和生产资格保留。发行人现金原件只裁定对应事件，仍单独检查价格和复权因子。</p><pre>{alternative_text}</pre>
++<p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。当前A策略国债标的见本轮suba_bond_symbol；若为000012，按独立备用源合同核对日期/收盘。H11077退役不表示原源故障已修复，历史失败证据保留。</p>
+ <p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口 aftype=0 为前复权，aftype=2 为不复权；已确认价格序列不同，不能把前复权数据再次复权，具体资产仍按证据限制使用。</p>
+ <h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成正现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条、无现金事件裁定 {sum(x.get('status')=='CONFIRMED_NO_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。现金为0也必须核对上游现金与因子，不能跳过。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
+ <p>新增或改变的问题 {len(report['new_or_changed_issues'])} 项；已知问题不变时每日任务保持静默。</p><details><summary>查看本轮变化</summary><pre>{html.escape(json.dumps(report['new_or_changed_issues'],ensure_ascii=False,indent=2))}</pre></details>
+@@ -167,6 +181,9 @@
+
+             probes['additional_scope_and_reference_evidence']=json.loads(latest_followup.read_text(encoding='utf-8'))
+         changes=list(us.get('new_or_changed_issues',[]))
+         if cn:
++            retired = cn.get('retired_suba_bond')
++            if retired and store.issue('CN:H11077.SH', 'REPLACED_NOT_REPAIRED', retired):
++                changes.append({'issue_id': 'CN:H11077.SH', 'status': 'REPLACED_NOT_REPAIRED', 'evidence': retired})
+             hold=cn.get('collection_hold')
+             if hold:
+                 evidence={k:hold.get(k) for k in ['provider','status','reason','recovery']}

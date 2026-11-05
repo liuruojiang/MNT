@@ -1,0 +1,330 @@
+{
+  "verified_at_utc": "2026-11-03T05:35:20.609856+00:00",
+  "run_id": "20261103T053156Z_d0c179c8",
+  "report": "D:\\动量策略\\_data_source_service\\runs\\20261103T053156Z_d0c179c8\\report.json",
+  "report_sha256": "97f614fb9a24cf88fdbbc72dd7236c83a082dd4347cc6d5ad5699996dc5ad8f6",
+  "process_exit_code": 0,
+  "status": "REVIEW_REQUIRED",
+  "cutoffs": {
+    "US": "2026-11-02",
+    "CN": "2026-11-02"
+  },
+  "validation_mode": "same_cutoff_frozen_evidence_reuse; not a new source download or scheduled trigger",
+  "final_new_source_requests": 0,
+  "research_consumer_reads": [
+    {
+      "symbol": "518880.SH",
+      "rows": 199,
+      "last": "2026-11-02",
+      "run_id": "20261103T053156Z_d0c179c8",
+      "fields_qualified": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "refused_fields": [
+        "volume",
+        "amount",
+        "adjClose"
+      ],
+      "cross_source_verification": {
+        "status": "QUALIFIED_FOR_RESEARCH_PRICE_ONLY",
+        "symbol": "518880.SH",
+        "start": "2026-01-01",
+        "last": "2026-11-02",
+        "rows": 199,
+        "fields_qualified": [
+          "open",
+          "high",
+          "low",
+          "close"
+        ],
+        "tolerance": 0.0011,
+        "max_abs_difference_from_tencent": {
+          "eastmoney": 0.0,
+          "sina": 0.0
+        },
+        "providers": [
+          "tencent",
+          "eastmoney",
+          "sina"
+        ],
+        "adjustment": "provider_native_qfq; matches Sina unadjusted OHLC only in the stated window",
+        "volume_gate": "NOT_QUALIFIED",
+        "amount_gate": "NOT_QUALIFIED",
+        "pre_2026_history_certified": false,
+        "production_approved": false
+      },
+      "raw_sources": [
+        {
+          "provider": "tencent",
+          "sha256": "842f1effc1936b77cc3f697cb0552f740d2dea3b72dab9a1d7507586d0dacf81",
+          "receipt": {
+            "bytes": 13941,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\gold_tencent.raw",
+            "retrieved_at_utc": "2026-11-03T05:09:34.599934+00:00",
+            "sha256": "842f1effc1936b77cc3f697cb0552f740d2dea3b72dab9a1d7507586d0dacf81",
+            "status": 200,
+            "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh518880,day,2026-01-01,2026-11-02,320,qfq"
+          }
+        },
+        {
+          "provider": "eastmoney",
+          "sha256": "1f51e483c32ed6cc6e2f7b20780ac8cc047745872284fda781ff0cc16393e36e",
+          "receipt": {
+            "bytes": 12345,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\gold_eastmoney.raw",
+            "retrieved_at_utc": "2026-11-03T05:09:34.602189+00:00",
+            "sha256": "1f51e483c32ed6cc6e2f7b20780ac8cc047745872284fda781ff0cc16393e36e",
+            "status": 200,
+            "url": "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.518880&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&beg=20260101&end=20261102&lmt=320"
+          }
+        },
+        {
+          "provider": "sina",
+          "sha256": "ee8e7bd02a9a9ba364539ee82f88bbcf4549854e0fde7b76fcb3999567fbbcd5",
+          "receipt": {
+            "bytes": 24677,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\gold_sina.raw",
+            "retrieved_at_utc": "2026-11-03T05:09:34.603444+00:00",
+            "sha256": "ee8e7bd02a9a9ba364539ee82f88bbcf4549854e0fde7b76fcb3999567fbbcd5",
+            "status": 200,
+            "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh518880&scale=240&ma=no&datalen=240"
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "000905.SH",
+      "rows": 199,
+      "last": "2026-11-02",
+      "run_id": "20261103T053156Z_d0c179c8",
+      "fields_qualified": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "refused_fields": [
+        "volume",
+        "amount",
+        "adjClose"
+      ],
+      "cross_source_verification": {
+        "status": "QUALIFIED_FOR_RESEARCH_PRICE_ONLY",
+        "symbol": "000905.SH",
+        "start": "2026-01-01",
+        "last": "2026-11-02",
+        "rows": 199,
+        "fields_qualified": [
+          "open",
+          "high",
+          "low",
+          "close"
+        ],
+        "tolerance": 0.011,
+        "max_abs_difference_from_tencent": {
+          "eastmoney": 0.010000000000218279,
+          "sina": 0.005000000001018634
+        },
+        "providers": [
+          "tencent",
+          "eastmoney",
+          "sina"
+        ],
+        "adjustment": "unadjusted price index; Tencent returns day rather than qfqday",
+        "volume_gate": "NOT_QUALIFIED",
+        "amount_gate": "NOT_QUALIFIED",
+        "pre_2026_history_certified": false,
+        "production_approved": false
+      },
+      "raw_sources": [
+        {
+          "provider": "tencent",
+          "sha256": "9c31d50341f9e459a5ced381286392ca172cd5b99ec11a25156b01c21d78eb7f",
+          "receipt": {
+            "bytes": 16436,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\zz500_tencent_qfq.raw",
+            "retrieved_at_utc": "2026-11-03T05:26:29.659523+00:00",
+            "sha256": "9c31d50341f9e459a5ced381286392ca172cd5b99ec11a25156b01c21d78eb7f",
+            "status": 200,
+            "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000905,day,2026-01-01,2026-11-02,320,qfq"
+          }
+        },
+        {
+          "provider": "eastmoney",
+          "sha256": "34f39f0ec2d74f5ef613a8dfbd33156f433d85edf94e217ceccf3c70ff0518c5",
+          "receipt": {
+            "bytes": 14312,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\zz500_eastmoney.raw",
+            "retrieved_at_utc": "2026-11-03T05:26:10.546467+00:00",
+            "sha256": "34f39f0ec2d74f5ef613a8dfbd33156f433d85edf94e217ceccf3c70ff0518c5",
+            "status": 200,
+            "url": "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.000905&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=0&beg=20260101&end=20261102&lmt=320"
+          }
+        },
+        {
+          "provider": "sina",
+          "sha256": "aea369f65e6b9165f1f318ddc73f708e9e1f9becede290eb5cfa400eca1873b3",
+          "receipt": {
+            "bytes": 37121,
+            "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\zz500_sina.raw",
+            "retrieved_at_utc": "2026-11-03T05:26:11.051729+00:00",
+            "sha256": "aea369f65e6b9165f1f318ddc73f708e9e1f9becede290eb5cfa400eca1873b3",
+            "status": 200,
+            "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000905&scale=240&ma=no&datalen=320"
+          }
+        }
+      ]
+    }
+  ],
+  "project_scopes": [
+    {
+      "project_id": "us_long_v16",
+      "matches_current_contract": true
+    },
+    {
+      "project_id": "combo_v80",
+      "matches_current_contract": true
+    },
+    {
+      "project_id": "cn_six_indices_v13",
+      "matches_current_contract": true
+    },
+    {
+      "project_id": "cn_six_etf_v13",
+      "matches_current_contract": true
+    },
+    {
+      "project_id": "microcap_v20_v23_v25",
+      "matches_current_contract": true
+    },
+    {
+      "project_id": "icim_v14",
+      "matches_current_contract": true
+    }
+  ],
+  "cash_adjudication_readback": [
+    {
+      "symbol": "AGG",
+      "date": "2026-11-02",
+      "status": "CASH_ADJUDICATION_COMPLETED"
+    },
+    {
+      "symbol": "BIL",
+      "date": "2026-11-02",
+      "status": "CASH_ADJUDICATION_COMPLETED"
+    },
+    {
+      "symbol": "TLT",
+      "date": "2026-11-02",
+      "status": "CASH_ADJUDICATION_COMPLETED"
+    },
+    {
+      "symbol": "VGIT",
+      "date": "2026-11-02",
+      "status": "CASH_ADJUDICATION_COMPLETED"
+    }
+  ],
+  "cash_candidates_verified": 4,
+  "fresh_primary_run_original_provider_blocks": [
+    {
+      "code": "000905.SH",
+      "gate": "BLOCKED",
+      "reason": "needs_full_refresh: schema or units changed"
+    },
+    {
+      "code": "930955.CSI",
+      "gate": "BLOCKED",
+      "reason": "Known 2026-10-23 range-dependent OHLC/amount conflict: a new agreeing Wind probe alone cannot certify correction; independent resolution required"
+    },
+    {
+      "code": "518880.SH",
+      "gate": "BLOCKED",
+      "reason": "needs_full_refresh: schema or units changed"
+    }
+  ],
+  "final_CN_gates": [
+    {
+      "code": "000852.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "000905.SH",
+      "gate": "BLOCKED",
+      "reason": "Independent short-window response not yet collected; long response cannot verify itself"
+    },
+    {
+      "code": "399006.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "000688.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "000300.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "000016.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "932000.CSI",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "930955.CSI",
+      "gate": "BLOCKED",
+      "reason": "Independent short-window response not yet collected; long response cannot verify itself"
+    },
+    {
+      "code": "H11077.SH",
+      "gate": "INDEPENDENT_CLOSE_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "159915.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "159941.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "513030.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "513520.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "159985.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "reason": null
+    },
+    {
+      "code": "518880.SH",
+      "gate": "BLOCKED",
+      "reason": "Independent short-window response not yet collected; long response cannot verify itself"
+    }
+  ],
+  "snapshot_count": 12,
+  "production_changed": false,
+  "poe_deployed": false,
+  "strategy_backtests_run": 0,
+  "automation_scope_readback": "automation_scope_update.json"
+}

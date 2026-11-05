@@ -1,0 +1,8 @@
+{
+  "url": "https://www.ishares.com/us/products/239458/ishares-core-total-us-bond-market-etf",
+  "retrieved_at_utc": "2026-11-03T05:09:34.593714+00:00",
+  "status": 200,
+  "bytes": 1988222,
+  "sha256": "cc796b75a70627d205d055efa716281d302dfb2e73f885b6181dd7a5bd79ef19",
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\agg_issuer.raw"
+}

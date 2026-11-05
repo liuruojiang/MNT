@@ -1,0 +1,56 @@
+--- before/tools/source_audit/alternative_sources.py
+
++++ after/tools/source_audit/alternative_sources.py
+
+@@ -13,6 +13,9 @@
+
+ SYMBOL = '518880.SH'
+ PROVIDERS = ('tencent', 'eastmoney', 'sina')
+ CONTRACTS = {
++    '000012.SH': {'code': '000012', 'name': '国债', 'tencent_key': 'day', 'fqt': 0, 'tolerance': .011,
++                  'providers': ('tencent', 'sina'), 'fields': ['close'],
++                  'adjustment': 'Published broad government bond index points; no equity adjustment; distinct from H11077'},
+     '518880.SH': {'code': '518880', 'name': '黄金', 'tencent_key': 'qfqday', 'fqt': 1, 'tolerance': .0011,
+                   'adjustment': 'provider_native_qfq; matches Sina unadjusted OHLC only in the stated window'},
+     '000905.SH': {'code': '000905', 'name': '中证500', 'tencent_key': 'day', 'fqt': 0, 'tolerance': .011,
+@@ -24,11 +27,12 @@
+
+     end = cutoff.replace('-', '')
+     contract = CONTRACTS[symbol]
+     code = contract['code']
+-    return {
++    urls = {
+         'tencent': 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh' + code + ',day,2026-01-01,' + cutoff + ',320,qfq',
+         'eastmoney': 'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.' + code + '&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=' + str(contract['fqt']) + '&beg=20260101&end=' + end + '&lmt=320',
+         'sina': 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh' + code + '&scale=240&ma=no&datalen=320',
+     }
++    return {p: urls[p] for p in contract.get('providers', PROVIDERS)}
+ 
+ 
+ def parse_prices(provider, payload, cutoff, symbol=SYMBOL):
+@@ -73,16 +77,18 @@
+
+ 
+ def assess_prices(payloads, cutoff, symbol=SYMBOL):
+     contract = CONTRACTS[symbol]
+-    frames = {p: parse_prices(p, payloads[p], cutoff, symbol) for p in PROVIDERS}
++    providers = contract.get('providers', PROVIDERS)
++    fields = contract.get('fields', ['open', 'high', 'low', 'close'])
++    frames = {p: parse_prices(p, payloads[p], cutoff, symbol) for p in providers}
+     delta = {p: max(abs(frames['tencent'][d][field] - frames[p][d][field])
+-                    for d in frames['tencent'] for field in ('open', 'high', 'low', 'close'))
+-             for p in ('eastmoney', 'sina')}
++                    for d in frames['tencent'] for field in fields)
++             for p in providers if p != 'tencent'}
+     if any(v > contract['tolerance'] for v in delta.values()):
+         raise ValueError('Independent alternative OHLC conflict')
+-    return frames['tencent'], {'status': 'QUALIFIED_FOR_RESEARCH_PRICE_ONLY', 'symbol': symbol,
++    return {d: {k: row[k] for k in fields} for d, row in frames['tencent'].items()}, {'status': 'QUALIFIED_FOR_RESEARCH_PRICE_ONLY', 'symbol': symbol,
+         'start': '2026-01-01', 'last': cutoff, 'rows': len(frames['tencent']),
+-        'fields_qualified': ['open', 'high', 'low', 'close'], 'tolerance': contract['tolerance'],
+-        'max_abs_difference_from_tencent': delta, 'providers': list(PROVIDERS),
++        'fields_qualified': fields, 'tolerance': contract['tolerance'],
++        'max_abs_difference_from_tencent': delta, 'providers': list(providers),
+         'adjustment': contract['adjustment'],
+         'volume_gate': 'NOT_QUALIFIED', 'amount_gate': 'NOT_QUALIFIED',
+         'pre_2026_history_certified': False, 'production_approved': False}

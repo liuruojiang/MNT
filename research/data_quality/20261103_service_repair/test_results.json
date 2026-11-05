@@ -1,0 +1,15 @@
+{
+  "verified_at_utc": "2026-11-03T04:58:25.653509+00:00",
+  "initial_suite": {
+    "passed": 106,
+    "failed": 1,
+    "failure": "New test mutation did not match the frozenset source; test corrected. No production failure."
+  },
+  "corrected_affected_suite": {
+    "passed": 47,
+    "failed": 0,
+    "command": "python -B -m pytest tests/test_source_service_repairs.py tests/test_cn_source_audit.py -q -p no:cacheprovider"
+  },
+  "unique_tests_passed_after_correction": 107,
+  "provider_results": "See execution_context.json and verification.json; software fixture tests do not prove live source availability."
+}

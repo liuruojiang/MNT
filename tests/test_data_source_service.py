@@ -242,6 +242,10 @@ def test_pinned_wind_bootstrap_survives_original_chat_directory_unavailable(tmp_
 
 def test_persistent_credit_hold_prevents_daily_live_collection(store,tmp_path,monkeypatch):
     import run_data_source_service as service
+    # This fixture exercises the historical H11077 quota hold, not the current
+    # machine's post-replacement bond configuration.
+    monkeypatch.setattr(service.adapters, 'project_scope', lambda _: {'requirements': [
+        {'requirement_id': 'cn_bond_close', 'instruments': ['H11077.SH']}]})
     hold=store.root/'provider_holds/wind.json';hold.parent.mkdir()
     hold.write_text(json.dumps({'status':'OPEN','reason':'ACCOUNT_CREDITS_EXHAUSTED'}))
     monkeypatch.setattr(service,'wind_archive',lambda root,legacy:root/'archive')

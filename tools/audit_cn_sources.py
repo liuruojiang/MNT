@@ -88,6 +88,13 @@ def reused_short(directory, cfg, end, begin):
     return archive_payload(parsed)
 
 
+def has_range_attempt(directory, cfg, end, begin):
+    """Check dates only; a matching failed attempt must still fail validation."""
+    return any((v := json.loads(p.read_text(encoding='utf-8'))).get('arguments', {}).get('windcode') == cfg['code']
+               and v['arguments'].get('begin_date') == begin and v['arguments'].get('end_date') == end
+               for p in directory.glob('*_receipt.json'))
+
+
 def load_index(path, kind):
     if path is None or not path.exists(): return {'schema': 1, 'kind': kind, 'entries': {}}
     data = json.loads(path.read_text(encoding='utf-8'))
@@ -196,9 +203,15 @@ def run(args):
             if cfg.get('unsupported_reason'):
                 raise ValueError(cfg['unsupported_reason'])
             candidate_archive = getattr(args, 'candidate_archive', None) if cfg.get('close_only') and args.mode != 'live' else None
+            if candidate_archive and not has_range_attempt(candidate_archive, cfg, args.cutoff, args.start) and (
+                    args.mode == 'tail' or long_index['entries'].get(code, {}).get('cutoff') == args.cutoff):
+                # Frozen evidence is still valid for its own cutoff; it cannot
+                # prevent a later, explicitly authorized incremental collection.
+                candidate_archive = None
             if candidate_archive:
                 long, long_source = reused_short(candidate_archive, cfg, args.cutoff, args.start)
-            elif args.mode == 'live':
+            elif args.mode == 'live' or (cfg.get('close_only') and args.mode == 'tail'
+                                        and long_index['entries'].get(code, {}).get('cutoff') != args.cutoff):
                 long = get_client().kline(code, cfg['kind'], args.start, args.cutoff, label=code + '_long')
                 long_source = live_provenance(client)
             elif code in long_index['entries']:
@@ -211,6 +224,14 @@ def run(args):
                 long_source = pin_response(long_source, args.long_index.parent, code)
             if not len(sessions): raise ValueError('Independent exchange sessions required before short-window collection')
             short_start = str(sessions[-args.tail_sessions:].min().date())
+            if args.mode == 'tail' and not cfg.get('close_only'):
+                # Preserve at least two real overlap sessions after downtime.
+                # This is a bounded wider tail, not a full-history replacement.
+                old_table = nested_data(long)
+                time_column = [c['name'] for c in old_table['columns']].index('TIME')
+                old_dates = sessions.intersection(pd.to_datetime([str(r[time_column])[:10] for r in old_table['rows']]))
+                if len(old_dates) >= 2:
+                    short_start = min(short_start, str(old_dates.sort_values()[-2].date()))
             record = short_index['entries'].get(code)
             reused = False
             if candidate_archive:

@@ -86,7 +86,7 @@ def test_h_proxy_history_failure_cannot_append_raw_quote(v80, monkeypatch):
 
     monkeypatch.setattr(v80, "_fetch_cn_h_proxy", failed_proxy)
     try:
-        result = v80._supplement_today_close(base.copy(), v80.CN_BOND_CODE, now.date())
+        result = v80._supplement_today_close(base.copy(), "1.H11077", now.date())
     except (v80.DataSchemaError, v80.DataUnavailableError, v80.poe.BotError):
         return
     assert result.index.max() == base.index.max(), "raw proxy quote must not enter H-index price scale"

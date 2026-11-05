@@ -206,8 +206,8 @@
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
           "role": "formal_entrypoint",
-          "sha256": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b",
-          "sha256_lf": "bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b"
+          "sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+          "sha256_lf": "2f7543e5fc77221b42aa99856978b75284d529ee27a67f165a88071e7e911725"
         }
       ],
       "source_evidence": [
@@ -372,9 +372,13 @@
             "399006",
             "000016",
             "000852",
-            "000905",
-            "000300",
-            "H11077.SH / CSI H11077"
+            {
+              "code": "000905",
+              "symbol": "000905.SH",
+              "market": "XSHG",
+              "mapping_evidence": "research/data_quality/20261103_alternative_sources/README.md"
+            },
+            "000300"
           ],
           "fields": [
             "session_date",
@@ -386,14 +390,23 @@
           ],
           "unit_basis": "Price-index points; bond-index points; shares for volume, not monetary turnover",
           "instrument_field_overrides": {
-            "H11077.SH / CSI H11077": {
-              "required_fields": ["session_date", "close"],
-              "not_required_by_formal_bond_leg": ["open", "high", "low", "share_volume", "turnover"],
-              "mapping_status": "CSI market-data indexCode=H11077; 931077 only detail-page/Referer; 2026 close-only and Oct26 independent close verified; pre-2026 full history not certified"
+            "000012.SH": {
+              "required_fields": [
+                "session_date",
+                "close"
+              ],
+              "not_required_by_formal_bond_leg": [
+                "open",
+                "high",
+                "low",
+                "share_volume",
+                "turnover"
+              ],
+              "mapping_status": "Direct SSE 000012 broad government bond index; user-authorized replacement 2026-11-05"
             }
           },
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
-          "adjustment": "Price index vs total-return index must remain distinct; H11077 cannot silently become broad bond index",
+          "adjustment": "Equity price indexes and published bond index levels remain distinct; 000012 replaces H11077 explicitly",
           "point_in_time": "No pre-publication backfilled index history for formal samples",
           "provider_coverage": {
             "tiingo": {
@@ -453,6 +466,30 @@
               "extra_index_930955": "NOT_CONFIRMED_BY_EXISTING_ARCHIVE"
             }
           }
+        },
+        {
+          "requirement_id": "cn_bond_close",
+          "instruments": [
+            "000012.SH"
+          ],
+          "fields": [
+            "session_date",
+            "close"
+          ],
+          "unit_basis": "Published SSE broad government bond index points; direct 000012; no H11077 splice",
+          "calendar": "XSHG actual sessions; Asia/Shanghai; confirmed close only",
+          "adjustment": "Native index level; no equity adjustment; dates/close only",
+          "point_in_time": "Complete 2026 session coverage and Tencent/Sina closes must reach the exact requested cutoff; vendor comparison is not an official-source certificate",
+          "provider_coverage": {
+            "tencent_sina": {
+              "status": "TWO_SOURCE_CLOSE_CONTRACT_SUBJECT_TO_CURRENT_GATES"
+            }
+          },
+          "publication_date": "2003-01-02",
+          "replacement_date": "2026-11-05",
+          "retired_instruments": [
+            "H11077.SH"
+          ]
         },
         {
           "requirement_id": "cn_index_turnover",
@@ -519,7 +556,7 @@
         "BTC daily aggregation, missing-date handling and volume basis are not certified",
         "No strategy production loader has been switched to either new provider",
         "Wind 000852 long/short response conflict is known and must remain quarantined",
-        "Wind 930955 full history, H11077 full history and exact constituent-turnover field equivalence remain uncertified",
+        "Wind 930955 full history, 000012 pre-2026 independent history and exact constituent-turnover field equivalence remain uncertified",
         "Existing FRED/risk path is retained; no claim of macro replacement"
       ],
       "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",
@@ -528,7 +565,9 @@
         "当前启用的成交额腿是中证2000与创业板；上证50成交额比值清仓当前关闭，仅列条件依赖。",
         "FRED 风险指标继续保留；不能以 ETF 价格替代。",
         "BTC 和其余 ETF 差异按独立口径处理。"
-      ]
+      ],
+      "field_contract_review_date": "2026-11-03",
+      "field_contract_review_evidence": "research/data_quality/20261103_service_repair/contract_review.json"
     },
     {
       "project_id": "cn_six_indices_v13",
@@ -554,7 +593,12 @@
           "requirement_id": "cn_index_daily",
           "instruments": [
             "000852",
-            "000905",
+            {
+              "code": "000905",
+              "symbol": "000905.SH",
+              "market": "XSHG",
+              "mapping_evidence": "research/data_quality/20261103_alternative_sources/README.md"
+            },
             "399006",
             "000688",
             "000300",
@@ -767,14 +811,14 @@
         {
           "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_0.py",
           "role": "formal_entrypoint",
-          "sha256": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1",
-          "sha256_lf": "0c4ef8356d0a61c1690b9751d0b003d0121e24fe89d82df693bd1c1232e910c1"
+          "sha256": "b07bc91ca822c29e0135a8a6c5d036c8061eb1c879bb635cb6ee07cea2443e80",
+          "sha256_lf": "39402521bea42551e83f97675b1fdff681ea62e6972e8ba6a6ae6208f1a50459"
         },
         {
           "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_3.py",
           "role": "formal_entrypoint",
-          "sha256": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6",
-          "sha256_lf": "e3c2b01d544d89dadd628e2e4dd32d86d503a94352f2c3d5c13a354198e038f6"
+          "sha256": "db1f635f291473775d20aca2a57886512b2494c4fa871a534a0ea9f2c5568063",
+          "sha256_lf": "db1f635f291473775d20aca2a57886512b2494c4fa871a534a0ea9f2c5568063"
         },
         {
           "path": "D:\\动量策略\\微盘股对冲策略\\microcap_top100_mom16_biweekly_live_v2_5.py",
@@ -838,12 +882,17 @@
           "fields": [
             "ST_or_starST_or_PT_entry_effective_date",
             "removal_effective_date",
-            "notice_or_source_provenance"
+            "notice_or_source_provenance",
+            "notice_archive_manifest_hash",
+            "notice_evidence_hash",
+            "source_boundary",
+            "parser_revision",
+            "presample_name_anchor"
           ],
           "unit_basis": "Dated classification intervals",
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
           "adjustment": "Not applicable to price adjustment",
-          "point_in_time": "As-of each historical rebalance; current ST status alone is insufficient",
+          "point_in_time": "As-of dated notice entry/withdrawal per risk category, verified pre-sample name anchor, full historical master and lifecycle; no current-ST back projection or unproved notice horizon.",
           "provider_coverage": {
             "tiingo": {
               "status": "NOT_PROBED_NOT_REPLACEMENT"
@@ -869,11 +918,18 @@
             "volume",
             "share_change_effective_date",
             "historical_total_shares",
-            "suspension_or_trade_eligibility"
+            "suspension_or_trade_eligibility",
+            "ratio_adjusted_close",
+            "return_basis_revision",
+            "raw_response_hash",
+            "factor_source_hash",
+            "source_verified_through",
+            "trade_status_evidence",
+            "share_source_query_end"
           ],
           "unit_basis": "CNY; shares; source total_shares_10k must explicitly multiply by 10000",
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
-          "adjustment": "Market cap uses raw close times historical total shares; adjusted prices/returns cannot silently substitute raw valuation close",
+          "adjustment": "Raw close remains valuation/tradeability input. Return prices use verified proportional ex-reference-price basis sina_ratio_ex_reference_v1 with separate raw/factor hashes and lifecycle coverage; not a dividend-reinvestment wealth ledger. Legacy additive qfq and raw-return fallback are rejected.",
           "point_in_time": "Historical total-share changes are joined backward as-of; corporate actions/listing/delisting must be dated",
           "provider_coverage": {
             "tiingo": {
@@ -898,7 +954,12 @@
             "rebalance_date",
             "execution_date",
             "hedge_daily_close",
-            "confirmed_intraday_snapshot_if_requested"
+            "confirmed_intraday_snapshot_if_requested",
+            "delisting_date",
+            "delisting_writeoff_event",
+            "terminal_effective_members",
+            "terminal_effective_as_of",
+            "return_basis_consumption_manifest"
           ],
           "unit_basis": "Proxy index and CNY/shares; hedge price-index points",
           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
@@ -911,7 +972,8 @@
             "wind_alice": {
               "status": "RECENT_OFFICIAL_INDEX_AVAILABILITY_DOES_NOT_CERTIFY_PROXY_EQUIVALENCE"
             }
-          }
+          },
+          "terminal_valuation": "delist_zero_writeoff_equal_survivors_v1: zero residual value on dated delisting and release to surviving members; conservative modeling convention, no sell trade or transaction cost."
         }
       ],
       "gaps": [
@@ -924,7 +986,101 @@
         "万得的完整历史证券主表、时点 ST、退市及历史股本权限尚未认证。",
         "当前 Top100 是本地重建代理，不能直接用官方868008.WI替换。",
         "后续数据血缘变化须重新生成并读回 V2.0/V2.3/V2.5；本次只盘点，不刷新策略。"
-      ]
+      ],
+      "field_contract_review_date": "2026-11-03",
+      "field_contract_review_evidence": "research/data_quality/20261103_service_repair/contract_review.json",
+      "runtime_dependencies": [
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\bounded_market_data.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "ce13d5ae75d9e174477cc3816d22c4f54443f344b853ba00210ec5419c61543e"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\share_change_source.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d641293a39185a755de5c9da2e7760d6630a877ad61c0c8edcf5942dc3c2a443"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_history_scope.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "1365b7c0aa289efc30537ef2ede5a1bd7126952bd29c6a026a69d9d25659e47b"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_metadata_refresh.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "0aa385ee70725e6f022eac72655cb87a5bf79fb086b831fecacbe9bf646aed9d"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_archive.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "625483138aebda935a852953a1645ec95eeff9fdf10ab259c463af198c7b7c9c"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_evidence.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "7d9f195606b4778c4e53ce99a8c439d8d5bddc0129dbc7399768a10455b7ab1c"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_incremental.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d1b0f043137e0627f0510b95be42722e1018f0d40bcf59d8655687f63ceafae8"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\st_notice_refresh.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "629ef0a87a65673f68d960d3bdb62faedca84e2a8010b766289d98b4749133dc"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_daily_alternative.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "261e03ecc279011e21de8a7b1ee27114740c73da61d5b26b078f5be9e032efc6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_daily_inputs.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "d5a7f4b496798ef4e2c834b9317ebf435cf8600de0f880a202a4fc5ce6e381f5"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_input_contract.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "0c11f9d7ab536838c127bc288038e74db190cb7ea894aafbe73403d94c5c3cc5"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_basis.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "4e67e8a31a216e6d0f8069fe869c9b6961ff52e503e1921a75e75e00c6046e59"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_basis_store.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "fe1dfce2c961cff1e63ff9f2a1284f4b150897b83b521d85795a0aaf210fff39"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_return_pipeline.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "19eb18eecf7a335ce791c3194060caa53f2170a54598f16dd9172fc2dc4a031d"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\stock_tail_returns.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "fc5875bdb53ed1786c7c851b8e3c9b8028f79f49a71c72cd4eb22c8f1c14d5c6"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\top100_data_contracts.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "df659bbe5c48874ca45e659699d88a73a036cb624afdb466c60331f307b258ab"
+        },
+        {
+          "path": "D:\\动量策略\\微盘股对冲策略\\scripts\\tradeability_evidence.py",
+          "role": "reviewed_stock_input_dependency",
+          "sha256_lf": "9fbccd9b30003cc6bf590f678ba95da56e7bfc96f1488369d093285055159832"
+        }
+      ],
+      "current_version_semantics": {
+        "v2.0": "Current proportional return basis, dated ST/share/trade-status source evidence and explicit delisting-zero convention.",
+        "v2.3": "LB25, half-life 2.5, R2 OFF, overheat OFF since 2026-10-29; reuses dated base inputs.",
+        "v2.5": "Entrypoint unchanged; shares the reviewed base dependency contract. No refresh or production approval implied."
+      }
     },
     {
       "project_id": "icim_v14",
@@ -1099,5 +1255,6 @@
         "数据覆盖不授权下单、改写账本、发信或部署。"
       ]
     }
-  ]
+  ],
+  "last_field_contract_review_date": "2026-11-03"
 }

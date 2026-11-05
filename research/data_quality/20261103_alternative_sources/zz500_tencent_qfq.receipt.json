@@ -1,0 +1,8 @@
+{
+  "url": "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000905,day,2026-01-01,2026-11-02,320,qfq",
+  "status": 200,
+  "retrieved_at_utc": "2026-11-03T05:26:29.659523+00:00",
+  "sha256": "9c31d50341f9e459a5ced381286392ca172cd5b99ec11a25156b01c21d78eb7f",
+  "bytes": 16436,
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\zz500_tencent_qfq.raw"
+}

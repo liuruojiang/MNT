@@ -1,0 +1,8 @@
+{
+  "url": "https://advisors.vanguard.com/investments/products/vgit/vanguard-intermediate-term-treasury-etf",
+  "retrieved_at_utc": "2026-11-03T05:09:34.596599+00:00",
+  "status": 200,
+  "bytes": 162337,
+  "sha256": "ef9fdf5810f88c012513ae189cb9a0b2adf9cb034bc8c3c2fb096336358586a2",
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\vgit_issuer.raw"
+}

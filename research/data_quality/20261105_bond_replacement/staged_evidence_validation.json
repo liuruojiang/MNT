@@ -1,0 +1,29 @@
+{
+  "issuer_hash_bound_files": [
+    {
+      "path": "research/data_quality/20261103_alternative_sources/agg_issuer.raw",
+      "sha256": "cc796b75a70627d205d055efa716281d302dfb2e73f885b6181dd7a5bd79ef19"
+    },
+    {
+      "path": "research/data_quality/20261103_alternative_sources/tlt_issuer.raw",
+      "sha256": "7d1ea967af0a533ffb9d917f7f7998459fe3c2c5dc44c950a5cce2cc5ce576bc"
+    },
+    {
+      "path": "research/data_quality/20261103_alternative_sources/bil_distributions.xlsx",
+      "sha256": "4add18439e505ba6c114bea5d352ac68b1ea5420bc99abdf2e21500dd6f1faa2"
+    },
+    {
+      "path": "research/data_quality/20261103_alternative_sources/vgit_investor.raw",
+      "sha256": "b155a176a084e4f58cc42722f7d43a300205a87bb1636ba425aeb471657ce1e6"
+    },
+    {
+      "path": "research/data_quality/20261103_alternative_sources/vanguard_schedule_browser_headers.pdf",
+      "sha256": "da88b7897fd84dba05e7ac00e03f86faa9109d96a22e4b5ff2edd8724613dd40"
+    },
+    {
+      "path": "research/data_quality/20261103_alternative_sources/vanguard_schedule_vgit_page24.txt",
+      "sha256": "261923f2a180107836b19c22f9464352d118b680caaea73ad401a998dd87888f"
+    }
+  ],
+  "all_staged_raw_pdf_xlsx_csv_equal_working_bytes": true
+}

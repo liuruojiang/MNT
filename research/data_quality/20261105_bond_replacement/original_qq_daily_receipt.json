@@ -1,0 +1,13 @@
+{
+  "provider": "original_qq_daily",
+  "url": "https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param=shH11077,day,,,320",
+  "retrieved_at_utc": "2026-11-05T10:13:12.840951+00:00",
+  "status": 200,
+  "sha256": "bff8ad6cf8c375a420235575f2166706a81ee3e2a8971989f009cf24270a2454",
+  "bytes": 40,
+  "response": {
+    "code": 0,
+    "msg": "param error",
+    "data": []
+  }
+}

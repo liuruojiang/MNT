@@ -1,0 +1,8 @@
+{
+  "url": "https://www.ishares.com/us/products/239454/ishares-20-year-treasury-bond-etf",
+  "retrieved_at_utc": "2026-11-03T05:09:34.594955+00:00",
+  "status": 200,
+  "bytes": 1977538,
+  "sha256": "7d1ea967af0a533ffb9d917f7f7998459fe3c2c5dc44c950a5cce2cc5ce576bc",
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\tlt_issuer.raw"
+}

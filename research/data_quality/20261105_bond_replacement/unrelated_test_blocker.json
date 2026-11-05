@@ -1,0 +1,7 @@
+{
+  "project": "cn_six_indices_v13",
+  "pre_edit_contract_sha256": "7425f960f155246a735c9a32fc52c37ab850d3f33361fe07c8aad5d8be01e960",
+  "actual_entrypoint_sha256": "4238cd9468c1b8d5169a7477bd6b28db1c8451595053730349c253f44d53e886",
+  "unchanged_by_this_task": true,
+  "reason": "Pre-existing external project contract drift; do not auto-certify unrelated code"
+}

@@ -1,0 +1,84 @@
+--- before/tools/source_audit/project_requirements.json
+
++++ after/tools/source_audit/project_requirements.json
+
+@@ -207,7 +207,7 @@
+
+           "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
+           "role": "formal_entrypoint",
+           "sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
+-          "sha256_lf": "ecf0244b75336a923d3474879bb13b18c1a8df1f19424ee4fa9433a6d66dbe69"
++          "sha256_lf": "e80775cf9aadf6f452e59f6d77493a25a0da0e1f3151e10cebd8480d8335e227"
+         }
+       ],
+       "source_evidence": [
+@@ -390,7 +390,7 @@
+
+           ],
+           "unit_basis": "Price-index points; bond-index points; shares for volume, not monetary turnover",
+           "instrument_field_overrides": {
+-            "H11077.SH / CSI H11077": {
++            "000012.SH": {
+               "required_fields": [
+                 "session_date",
+                 "close"
+@@ -402,11 +402,11 @@
+
+                 "share_volume",
+                 "turnover"
+               ],
+-              "mapping_status": "CSI market-data indexCode=H11077; 931077 only detail-page/Referer; 2026 close-only and Oct26 independent close verified; pre-2026 full history not certified"
++              "mapping_status": "Direct SSE 000012 broad government bond index; user-authorized replacement 2026-11-05"
+             }
+           },
+           "calendar": "Mainland exchange sessions; Asia/Shanghai; no weekend/holiday forward-fill",
+-          "adjustment": "Price index vs total-return index must remain distinct; H11077 cannot silently become broad bond index",
++          "adjustment": "Equity price indexes and published bond index levels remain distinct; 000012 replaces H11077 explicitly",
+           "point_in_time": "No pre-publication backfilled index history for formal samples",
+           "provider_coverage": {
+             "tiingo": {
+@@ -470,21 +470,26 @@
+
+         {
+           "requirement_id": "cn_bond_close",
+           "instruments": [
+-            "H11077.SH"
++            "000012.SH"
+           ],
+           "fields": [
+             "session_date",
+             "close"
+           ],
+-          "unit_basis": "Index points; CSI market-data identity H11077; detail-page identity 931077 is not the market code",
++          "unit_basis": "Published SSE broad government bond index points; direct 000012; no H11077 splice",
+           "calendar": "XSHG actual sessions; Asia/Shanghai; confirmed close only",
+-          "adjustment": "Price index; no equity OHLC/volume/turnover requirement",
++          "adjustment": "Native index level; no equity adjustment; dates/close only",
+           "point_in_time": "Coverage and recent independent official closes must reach the exact requested cutoff",
+           "provider_coverage": {
+-            "wind_alice": {
+-              "status": "RESEARCH_CLOSE_ONLY_SUBJECT_TO_CURRENT_DATA_GATES"
+-            }
+-          }
++            "tencent_sina": {
++              "status": "TWO_SOURCE_CLOSE_CONTRACT_SUBJECT_TO_CURRENT_GATES"
++            }
++          },
++          "publication_date": "2003-01-02",
++          "replacement_date": "2026-11-05",
++          "retired_instruments": [
++            "H11077.SH"
++          ]
+         },
+         {
+           "requirement_id": "cn_index_turnover",
+@@ -551,7 +556,7 @@
+
+         "BTC daily aggregation, missing-date handling and volume basis are not certified",
+         "No strategy production loader has been switched to either new provider",
+         "Wind 000852 long/short response conflict is known and must remain quarantined",
+-        "Wind 930955 full history, H11077 full history and exact constituent-turnover field equivalence remain uncertified",
++        "Wind 930955 full history, 000012 pre-2026 independent history and exact constituent-turnover field equivalence remain uncertified",
+         "Existing FRED/risk path is retained; no claim of macro replacement"
+       ],
+       "approval_status": "RESEARCH_ONLY_NOT_PRODUCTION_ACCEPTED",

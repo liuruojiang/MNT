@@ -1,0 +1,861 @@
+{
+  "verified_at_utc": "2026-11-03T05:02:22.193665+00:00",
+  "run_id": "20261103T045657Z_b607cef6",
+  "report_path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\report.json",
+  "report_sha256": "6df1feb550eac1d5ff479e0ba6416046d630f9900982065d551cc37d06ece6eb",
+  "invocation": "user_authorized_manual_repair_verification_not_scheduled_acceptance",
+  "process_exit": 0,
+  "assessment_status": "REVIEW_REQUIRED",
+  "cutoffs": {
+    "US": "2026-11-02",
+    "CN": "2026-11-02"
+  },
+  "US_receipts": [
+    {
+      "provider": "tiingo",
+      "symbol": "AGG",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "AGG",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "AVDV",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "AVDV",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "AVUV",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "AVUV",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "BIL",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "BIL",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "DBC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "DBC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "DBMF",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "DBMF",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "EEM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "EEM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "EFA",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "EFA",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "EMXC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "EMXC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "GLD",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "GLD",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "GLDM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "GLDM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "IBIT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "IBIT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "KMLM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "KMLM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "PDBC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "PDBC",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "QQQ",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "QQQ",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "QQQM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "QQQM",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "SPY",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "SPY",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "TLT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "TLT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "UUP",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "UUP",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "VEA",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "VEA",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "VGIT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "VGIT",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "VTI",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "VTI",
+      "raw_sha256_verified": true,
+      "actual_last_date": "2026-11-02"
+    }
+  ],
+  "CN_receipts": [
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\001_000852_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "000852.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\002_000905_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "000905.SH",
+        "begin_date": "2026-10-26",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 6,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\003_399006_SZ_short_receipt.json",
+      "arguments": {
+        "windcode": "399006.SZ",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\004_000688_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "000688.SH",
+        "begin_date": "2026-10-26",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 6,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\005_000300_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "000300.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\006_000016_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "000016.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\007_932000_CSI_short_receipt.json",
+      "arguments": {
+        "windcode": "932000.CSI",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\008_930955_CSI_short_receipt.json",
+      "arguments": {
+        "windcode": "930955.CSI",
+        "begin_date": "2026-10-23",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 7,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\009_H11077_SH_long_receipt.json",
+      "arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-01-01",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 199,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\010_H11077_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "H11077.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\011_159915_SZ_short_receipt.json",
+      "arguments": {
+        "windcode": "159915.SZ",
+        "begin_date": "2026-10-23",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 7,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\012_159941_SZ_short_receipt.json",
+      "arguments": {
+        "windcode": "159941.SZ",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\013_513030_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "513030.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\014_513520_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "513520.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\015_159985_SZ_short_receipt.json",
+      "arguments": {
+        "windcode": "159985.SZ",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 5,
+      "actual_last_date": "2026-11-02",
+      "business_error": false
+    },
+    {
+      "path": "D:\\动量策略\\_data_source_service\\runs\\20261103T045657Z_b607cef6\\cn\\20261103T050010Z_5769a89e\\responses\\016_518880_SH_short_receipt.json",
+      "arguments": {
+        "windcode": "518880.SH",
+        "begin_date": "2026-10-27",
+        "end_date": "2026-11-02",
+        "period": "10",
+        "count": 0,
+        "aftype": "0"
+      },
+      "raw_sha256_verified": true,
+      "parsed_matches_raw": true,
+      "rows": 0,
+      "actual_last_date": null,
+      "business_error": false
+    }
+  ],
+  "official_reference": {
+    "provider": "CSI official",
+    "url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H11077&startDate=20261026&endDate=20261102",
+    "cutoff": "2026-11-02",
+    "requests": 1,
+    "retrieved_at_utc": "2026-11-03T05:00:08.316303+00:00",
+    "production_approved": false,
+    "status": 200,
+    "sha256": "7e34adfff1a72458ffbda0777f838c526899a36bc9d72862286b2a6a409e95d8",
+    "bytes": 2394,
+    "assessment": "DOWNLOADED_NOT_QUALIFIED",
+    "last_returned_date": "20261102",
+    "base_reference_path": "D:\\动量策略\\_data_source_service\\wind_capability_evidence\\H11077_official_followup_20261026T114713Z\\H11077.json",
+    "base_reference_sha256": "759f345af14aba1e1cb314f35857e6b8d4979df91ed9f1d39dce00b254704b70",
+    "merged_reference_sha256": "1b15a74476e053472484bfb042d33a95de5d79ccbb723a43cf01322591de4a33"
+  },
+  "snapshots": [
+    {
+      "provider": "tiingo",
+      "symbol": "AVDV",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "AVDV",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "AVUV",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "AVUV",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "EMXC",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "EMXC",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "GLDM",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "GLDM",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "tiingo",
+      "symbol": "IBIT",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    },
+    {
+      "provider": "yahoo",
+      "symbol": "IBIT",
+      "cutoff": "2026-11-02",
+      "run_id": "20261103T045657Z_b607cef6",
+      "status": "QUALIFIED_FOR_RESEARCH",
+      "gate_run": "20261103T045657Z_b607cef6"
+    }
+  ],
+  "project_scope": [
+    {
+      "project_id": "us_long_v16",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    },
+    {
+      "project_id": "combo_v80",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    },
+    {
+      "project_id": "cn_six_indices_v13",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    },
+    {
+      "project_id": "cn_six_etf_v13",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    },
+    {
+      "project_id": "microcap_v20_v23_v25",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    },
+    {
+      "project_id": "icim_v14",
+      "status": "MATCHES_REVIEWED_ENTRYPOINTS_AND_DEPENDENCIES"
+    }
+  ],
+  "cn_gates": [
+    {
+      "code": "000852.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "000905.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "399006.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "000688.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "000300.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "000016.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "932000.CSI",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "930955.CSI",
+      "gate": "BLOCKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": "Known 2026-10-23 range-dependent OHLC/amount conflict: a new agreeing Wind probe alone cannot certify correction; independent resolution required",
+      "independent_close_validation": null
+    },
+    {
+      "code": "H11077.SH",
+      "gate": "INDEPENDENT_CLOSE_OVERLAP_CHECKED",
+      "amount_gate": "NOT_REQUIRED_BY_FORMAL_BOND_LEG",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": {
+        "provider": "csindex",
+        "market_data_indexCode": "H11077",
+        "available_checked_sessions": 199,
+        "max_abs_difference": 0.005000000000023874,
+        "required_recent_dates": [
+          "2026-10-27",
+          "2026-10-28",
+          "2026-10-29",
+          "2026-10-30",
+          "2026-11-02"
+        ],
+        "missing_recent_dates": [],
+        "current_day_present": true,
+        "tolerance": 0.011,
+        "authentication": "caller responsibility"
+      }
+    },
+    {
+      "code": "159915.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "159941.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "513030.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "513520.SH",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "159985.SZ",
+      "gate": "INCREMENTAL_OVERLAP_CHECKED",
+      "amount_gate": "BLOCKED",
+      "last": "2026-11-02",
+      "reason": null,
+      "independent_close_validation": null
+    },
+    {
+      "code": "518880.SH",
+      "gate": "BLOCKED",
+      "amount_gate": "BLOCKED",
+      "last": null,
+      "reason": "needs_full_refresh: schema or units changed",
+      "independent_close_validation": null
+    }
+  ],
+  "new_unresolved_cash_events": [
+    {
+      "issue_id": "US:AGG:2026-11-02",
+      "status": "UNRESOLVED_DATA_CONFLICT",
+      "evidence": {
+        "symbol": "AGG",
+        "date": "2026-11-02",
+        "flags": [
+          "cash"
+        ],
+        "tiingo_cash": 0.342379,
+        "yahoo_cash": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0
+      }
+    },
+    {
+      "issue_id": "US:BIL:2026-11-02",
+      "status": "UNRESOLVED_DATA_CONFLICT",
+      "evidence": {
+        "symbol": "BIL",
+        "date": "2026-11-02",
+        "flags": [
+          "cash"
+        ],
+        "tiingo_cash": 0.308493,
+        "yahoo_cash": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0
+      }
+    },
+    {
+      "issue_id": "US:TLT:2026-11-02",
+      "status": "UNRESOLVED_DATA_CONFLICT",
+      "evidence": {
+        "symbol": "TLT",
+        "date": "2026-11-02",
+        "flags": [
+          "cash"
+        ],
+        "tiingo_cash": 0.343177,
+        "yahoo_cash": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0
+      }
+    },
+    {
+      "issue_id": "US:VGIT:2026-11-02",
+      "status": "UNRESOLVED_DATA_CONFLICT",
+      "evidence": {
+        "symbol": "VGIT",
+        "date": "2026-11-02",
+        "flags": [
+          "cash"
+        ],
+        "tiingo_cash": 0.199,
+        "yahoo_cash": 0.0,
+        "tiingo_split": 1.0,
+        "yahoo_split": 1.0
+      }
+    }
+  ],
+  "production_changed": false,
+  "poe_deployed": false,
+  "strategy_backtests_run": 0,
+  "cleanup_blocked": {
+    "reason": "blocked by policy; deletion stopped and not retried",
+    "paths": [
+      "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_service_repair\\test_temp",
+      "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_service_repair\\recheck_temp"
+    ]
+  }
+}

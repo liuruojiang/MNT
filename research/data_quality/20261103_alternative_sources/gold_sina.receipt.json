@@ -1,0 +1,8 @@
+{
+  "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh518880&scale=240&ma=no&datalen=240",
+  "retrieved_at_utc": "2026-11-03T05:09:34.603444+00:00",
+  "status": 200,
+  "bytes": 24677,
+  "sha256": "ee8e7bd02a9a9ba364539ee82f88bbcf4549854e0fde7b76fcb3999567fbbcd5",
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\gold_sina.raw"
+}

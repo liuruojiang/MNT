@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import traceback
 
 import audit_us_sources as legacy
 from source_audit import adapters
@@ -16,6 +17,9 @@ from source_audit.config import DEFAULT_ROOT, load
 from source_audit.registry import completed_work
 from source_audit.store import Store,service_lock,ServiceAlreadyRunning
 from source_audit.us_service import import_legacy, refresh, assess
+from source_audit.official_reference import refresh_bond_reference
+from source_audit.alternative_sources import run as run_alternatives
+from source_audit.alternative_sources import validate_configuration
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -63,6 +67,20 @@ def cn_run(config, output, mode, cutoff):
     # evidence, never a fallback for a future date or a failed live request.
     resumed=root/'wind_capability_evidence/cn_free_resume_20261026T110255Z'
     reference_dir=Path(config.get('wind_reference_dir',resumed/'independent'))
+    bond_symbol = config.get('suba_bond_symbol', 'H11077.SH')
+    if bond_symbol not in {'H11077.SH', '000012.SH'}:
+        raise ValueError('Unreviewed Sub-A bond symbol')
+    project = adapters.project_scope('combo_v80')
+    bond = next(r for r in project['requirements'] if r['requirement_id'] == 'cn_bond_close')
+    if bond['instruments'] != [bond_symbol]:
+        raise ValueError('Sub-A bond configuration does not match reviewed contract; migrate the local configuration')
+    if bond_symbol == '000012.SH':
+        validate_configuration(config)
+        from audit_cn_sources import ASSETS
+        command += ['--symbols', ','.join(a['code'] for a in ASSETS if a['code'] != 'H11077.SH')]
+    reference_refresh = None
+    if mode == 'tail' and bond_symbol == 'H11077.SH':
+        reference_dir, reference_refresh = refresh_bond_reference(reference_dir, output, cutoff)
     for flag, path in [('--candidate-archive',resumed/'H11077_probes'),
                        ('--reference-dir',reference_dir),
                        ('--independent-attestation',resumed/'sina_overlap_attestation_20261026.json')]:
@@ -74,6 +92,11 @@ def cn_run(config, output, mode, cutoff):
     report=json.loads(runs[-1].read_text(encoding='utf-8'))
     report['artifact_path']=str(runs[-1])
     report['exit_code']=proc.returncode
+    report['official_reference_refresh'] = reference_refresh
+    report['suba_bond_symbol'] = bond_symbol
+    if bond_symbol == '000012.SH':
+        report['retired_suba_bond'] = {'symbol': 'H11077.SH', 'status': 'REPLACED_NOT_REPAIRED',
+            'replacement': '000012.SH', 'reason': 'User-authorized broad bond replacement 2026-11-05; original failure evidence retained'}
     hold=json.loads(hold_file.read_text(encoding='utf-8')) if hold_file.exists() else None
     if hold and hold.get('status')=='OPEN':
         report['collection_hold']=hold
@@ -104,6 +127,10 @@ def render(report, output):
     probes=report.get('field_probes') or {}
     probe_text='；'.join(str(p.get('probe'))+'：'+str(p.get('status')) for p in probes.get('probes',[]))
     hold_notice='<aside>万得已明确返回账户积分不足。新采集已暂停，仅检查存档；恢复额度后需重新验证新数据，不能把现有样本视为当前全量合格。Tiingo/Yahoo仍独立检查。</aside>' if cn.get('collection_hold') else ''
+    alternative = report.get('alternatives') or {}
+    alternative_text = html.escape(json.dumps({'status': alternative.get('status', 'NOT_ENABLED'),
+        'assets': [{k: a.get(k) for k in ['symbol', 'status', 'start', 'last', 'rows', 'fields_qualified', 'amount_gate', 'production_approved']}
+                   for a in alternative.get('assets', [])]}, ensure_ascii=False, indent=2))
     text=f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>策略共享数据源服务</title>
 <style>body{{font:16px/1.7 system-ui;max-width:1200px;margin:32px auto;padding:0 20px;color:#1a3441;background:#f5f8fa}}table{{border-collapse:collapse;background:white;width:100%}}td,th{{padding:10px;border:1px solid #cbd8df}}aside{{padding:18px;background:#fff0ca}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}a{{color:#08788e}}</style>
 <h1>共享数据源服务 · 本轮只读核验</h1>
@@ -115,7 +142,8 @@ def render(report, output):
 <h2>研究快照与项目覆盖</h2><p>通过价格字段核验的研究快照：Tiingo {counts['tiingo']}，Yahoo {counts['yahoo']}。这是逐资产研究资格，成交量、整套策略和生产资格单列，不能据此全源晋级。</p>
 <table><tr><th>项目</th><th>完整项目状态</th><th>入口版本</th><th>字段组数</th></tr>{rows}</table>
 <p>万得区间结果：{html.escape(str(cgates))}。历史成交额统计口径、PIT-ST/股本/退市与期货期权字段按实际返回判定；HTTP 200 或能发现工具都不等于字段可用。BTC 保留 UTC 日历和独立成交量口径。</p>
-<p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。H11077只需日期和收盘，实际行情代码仍为H11077，931077只用于详情页与Referer；按收盘专用校验报告判断，缺独立参考日期时保持隔离。</p>
+<h2>已启用的独立研究备用源</h2><p>股票/ETF按原三源合同核对；000012国债收盘按腾讯与新浪双源合同核对，仅登记范围和字段可用，原万得故障、量额阻断和生产资格保留。发行人现金原件只裁定对应事件，仍单独检查价格和复权因子。</p><pre>{alternative_text}</pre>
+<p>增量重叠一致只证明尾部与已存历史相容；独立行情核对另列逐资产结果，不自动认证全部历史。已知930955区间冲突继续隔离；399006成交额的独立冲突继续阻断。当前A策略国债标的见本轮suba_bond_symbol；若为000012，按独立备用源合同核对日期/收盘。H11077退役不表示原源故障已修复，历史失败证据保留。</p>
 <p>实际字段探针：{html.escape(probe_text)}。两次缩小到单字段的追问仍未取得合格结果；没有观察到权限拒绝，不能据此断定需要升级账号。MO 请求返回了 IO 合约及另一数据日，已阻断。基金接口 aftype=0 为前复权，aftype=2 为不复权；已确认价格序列不同，不能把前复权数据再次复权，具体资产仍按证据限制使用。</p>
 <h2>新增裁定与需要处理的差异</h2><p>其余 ETF 公司行动已完成正现金参考裁定 {sum(x.get('status')=='CONFIRMED_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条、无现金事件裁定 {sum(x.get('status')=='CONFIRMED_NO_CASH_EVENT' for x in report['US'].get('additional_adjudications',[]))} 条；没有合格证据的条目保留阻断。现金为0也必须核对上游现金与因子，不能跳过。新事件的因子/影响报告在交付目录独立提供；DBMF 不再重新分析。</p>
 <p>新增或改变的问题 {len(report['new_or_changed_issues'])} 项；已知问题不变时每日任务保持静默。</p><details><summary>查看本轮变化</summary><pre>{html.escape(json.dumps(report['new_or_changed_issues'],ensure_ascii=False,indent=2))}</pre></details>
@@ -155,6 +183,9 @@ def _run_locked(args):
             probes['additional_scope_and_reference_evidence']=json.loads(latest_followup.read_text(encoding='utf-8'))
         changes=list(us.get('new_or_changed_issues',[]))
         if cn:
+            retired = cn.get('retired_suba_bond')
+            if retired and store.issue('CN:H11077.SH', 'REPLACED_NOT_REPAIRED', retired):
+                changes.append({'issue_id': 'CN:H11077.SH', 'status': 'REPLACED_NOT_REPAIRED', 'evidence': retired})
             hold=cn.get('collection_hold')
             if hold:
                 evidence={k:hold.get(k) for k in ['provider','status','reason','recovery']}
@@ -174,6 +205,8 @@ def _run_locked(args):
                 prior=store.db.execute('SELECT 1 FROM known_issues WHERE issue_id=?',(issue_id,)).fetchone()
                 changed=store.issue(issue_id,asset.get('gate','BLOCKED'),evidence)
                 if changed and not hold and (prior or asset['code']!='000852.SH'): changes.append({'issue_id':issue_id,'evidence':evidence})
+        alternatives = run_alternatives(store, config, output, cutoff_cn, run_id, allow_network=args.mode=='incremental')
+        changes.extend(alternatives.get('new_or_changed_issues', []))
         project_readiness=adapters.readiness(us,cn,probes)
         for project in project_readiness:
             issue_id='PROJECT_SCOPE:'+project['project_id']
@@ -184,7 +217,7 @@ def _run_locked(args):
                 changes.append({'issue_id':issue_id,'status':'PROJECT_CONTRACT_CHANGED','evidence':evidence})
         report={'schema_version':1,'run_id':run_id,'status':'REVIEW_REQUIRED','purpose':'research_only',
                 'cutoffs':{'US':cutoff_us,'CN':cutoff_cn},'bootstrap':bootstrap,
-                'US':us,'CN':cn,'crypto':crypto_boundary(config),'field_probes':probes,
+                'US':us,'CN':cn,'alternatives':alternatives,'crypto':crypto_boundary(config),'field_probes':probes,
                 'projects':project_readiness,'completed_work_reused':completed_work(REPO),
                 'new_or_changed_issues':changes,'production_changed':False,'poe_deployed':False,'strategy_backtests_run':0}
         write(output/'US_report.json',us)
@@ -202,11 +235,16 @@ def _run_locked(args):
                 shutil.copyfile(output/name,args.export/name)
         print(json.dumps({'report':str(output/'report.html'),'cutoffs':report['cutoffs'],'new_or_changed_issues':len(changes),
                           'reused_completed_work':3,'US_requests':len(network.get('requests',[])),'CN_requests':cn.get('requests',0) if cn else 0,
+                          'alternative_requests':len(alternatives.get('requests', [])),
                           'production_changed':False},ensure_ascii=False))
         return 0  # Process completion; report status remains REVIEW_REQUIRED.
     except Exception as exc:
-        for provider in ['tiingo','yahoo','wind']: store.quarantine_provider(provider,'Incomplete service assessment',run_id)
+        for provider in ['tiingo','yahoo','wind',*config.get('enabled_alternative_sources', [])]: store.quarantine_provider(provider,'Incomplete service assessment',run_id)
         failure={'run_id':run_id,'status':'FAILED','error_type':type(exc).__name__,'production_changed':False}
+        # Stack locations aid diagnosis without logging provider exception text,
+        # which can contain credentials or response bodies.
+        failure['failure_locations']=[{'file':frame.filename,'line':frame.lineno,'function':frame.name}
+                                      for frame in traceback.extract_tb(exc.__traceback__)]
         write(output/'report.json',failure)
         store.finish_run(run_id,'FAILED',output/'report.json')
         write(root/'latest.json',{'run_id':run_id,'report':str(output/'report.json'),'status':'FAILED'})

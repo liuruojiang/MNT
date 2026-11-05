@@ -9,6 +9,9 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[2]
 US_POLICY_SHA256 = 'bf64b334274a37b2b2b735ca78da8c5e16fb52aeeec2d2ece1a8c7056ef4d76b'
+# Structural fingerprint of the seven reviewed nodes in source commit 733486dd.
+# The full source hash above is historical provenance, not a bot-wide runtime gate.
+US_POLICY_AST_SHA256 = '4a329e50696c92462ffaeae1472dc1d7c10a3b08c4e2487469ab0d7a0586684e'
 NYSE_URL = 'https://www.nyse.com/markets/hours-calendars'
 SSE_URL = 'https://www.sse.com.cn/disclosure/dealinstruc/closed/'
 CN_2026_CLOSED_RANGES = [('2026-01-01', '2026-01-03'), ('2026-02-15', '2026-02-23'),
@@ -25,8 +28,6 @@ def _us_namespace():
     # import or execute the bot, its caches, queries or portfolio implementation.
     path = REPO / 'mnt_bot V 8.0 plus.py'
     body = path.read_bytes().replace(b'\r\n', b'\n')
-    if hashlib.sha256(body).hexdigest() != US_POLICY_SHA256:
-        raise CalendarCoverageError('Formal calendar source changed; review its policy before reuse')
     tree = ast.parse(body.decode('utf-8'))
     functions = {'_us_observed_holiday', '_us_nth_weekday', '_us_last_weekday', '_gregorian_easter', '_us_market_holidays'}
     assignments = {'XNYS_AD_HOC_CLOSURES', '_US_MARKET_HOLIDAY_CACHE'}
@@ -34,8 +35,12 @@ def _us_namespace():
                 or (isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in assignments for t in n.targets))]
     if len(selected) != len(functions) + len(assignments):
         raise CalendarCoverageError('Calendar pure-function contract differs')
+    module = ast.Module(body=selected, type_ignores=[])
+    digest = hashlib.sha256(ast.dump(module, include_attributes=False).encode('utf-8')).hexdigest()
+    if digest != US_POLICY_AST_SHA256:
+        raise CalendarCoverageError('Formal calendar policy changed; review its policy before reuse')
     namespace = {'pd': pd}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), str(path) + ':calendar-only', 'exec'), namespace)
+    exec(compile(module, str(path) + ':calendar-only', 'exec'), namespace)
     return namespace
 
 
@@ -78,4 +83,6 @@ def document(market, start, end):
             'calendar_basis': 'exchange_rules_independent_of_prices', 'start': str(pd.Timestamp(start).date()),
             'end': str(pd.Timestamp(end).date()), 'sessions': [str(d.date()) for d in ix],
             'historical_point_in_time_certified': False,
-            'rule_source_lf_sha256': US_POLICY_SHA256 if market == 'XNYS' else None}
+            'rule_source_lf_sha256': hashlib.sha256((REPO / 'mnt_bot V 8.0 plus.py').read_bytes().replace(b'\r\n', b'\n')).hexdigest() if market == 'XNYS' else None,
+            'reviewed_policy_source_lf_sha256': US_POLICY_SHA256 if market == 'XNYS' else None,
+            'rule_policy_ast_sha256': US_POLICY_AST_SHA256 if market == 'XNYS' else None}

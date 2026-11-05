@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "purpose": "research_only",
+  "production_approved": false,
+  "cases": [
+    {
+      "id": "AGG_2026-11-02",
+      "symbol": "AGG",
+      "ex_date": "2026-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "issuer_parser": "ishares",
+      "resolution": {
+        "cash_usd_per_share": "0.342379",
+        "ex_date": "2026-11-02",
+        "record_date": "2026-11-02",
+        "pay_date": "2026-11-05",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "cash_basis": "USD per current ex-date share; declared issuer distribution; not proof of realized future payment",
+        "usable_scope": {
+          "fields": [
+            "cash_distribution"
+          ],
+          "not_qualified": [
+            "full_adjusted_history",
+            "volume",
+            "strategy_or_production"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/agg_issuer.raw",
+          "sha256": "cc796b75a70627d205d055efa716281d302dfb2e73f885b6181dd7a5bd79ef19",
+          "url": "https://www.ishares.com/us/products/239458/ishares-core-total-us-bond-market-etf",
+          "retrieved_at_utc": "2026-11-03T05:09:34.593714+00:00",
+          "source_type": "issuer_original"
+        }
+      ]
+    },
+    {
+      "id": "TLT_2026-11-02",
+      "symbol": "TLT",
+      "ex_date": "2026-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "issuer_parser": "ishares",
+      "resolution": {
+        "cash_usd_per_share": "0.343177",
+        "ex_date": "2026-11-02",
+        "record_date": "2026-11-02",
+        "pay_date": "2026-11-05",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "cash_basis": "USD per current ex-date share; declared issuer distribution; not proof of realized future payment",
+        "usable_scope": {
+          "fields": [
+            "cash_distribution"
+          ],
+          "not_qualified": [
+            "full_adjusted_history",
+            "volume",
+            "strategy_or_production"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/tlt_issuer.raw",
+          "sha256": "7d1ea967af0a533ffb9d917f7f7998459fe3c2c5dc44c950a5cce2cc5ce576bc",
+          "url": "https://www.ishares.com/us/products/239454/ishares-20-year-treasury-bond-etf",
+          "retrieved_at_utc": "2026-11-03T05:09:34.594955+00:00",
+          "source_type": "issuer_original"
+        }
+      ]
+    },
+    {
+      "id": "BIL_2026-11-02",
+      "symbol": "BIL",
+      "ex_date": "2026-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "issuer_parser": "ssga",
+      "resolution": {
+        "cash_usd_per_share": "0.308493",
+        "ex_date": "2026-11-02",
+        "record_date": "2026-11-02",
+        "pay_date": "2026-11-05",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "cash_basis": "USD per current ex-date share; declared issuer distribution; not proof of realized future payment",
+        "usable_scope": {
+          "fields": [
+            "cash_distribution"
+          ],
+          "not_qualified": [
+            "full_adjusted_history",
+            "volume",
+            "strategy_or_production"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/bil_distributions.xlsx",
+          "sha256": "4add18439e505ba6c114bea5d352ac68b1ea5420bc99abdf2e21500dd6f1faa2",
+          "url": "https://www.ssga.com/library-content/products/fund-data/etfs/us/spdr-etf-historical-distributions.xlsx",
+          "retrieved_at_utc": "2026-11-03T05:10:27.447457+00:00",
+          "source_type": "issuer_original"
+        }
+      ]
+    },
+    {
+      "id": "VGIT_2026-11-02",
+      "symbol": "VGIT",
+      "ex_date": "2026-11-02",
+      "status": "CONFIRMED_CASH_EVENT",
+      "issuer_parser": "vanguard",
+      "resolution": {
+        "cash_usd_per_share": "0.1990000000",
+        "ex_date": "2026-11-02",
+        "record_date": "2026-11-02",
+        "pay_date": "2026-11-04",
+        "supports_provider": "tiingo",
+        "conflicting_provider": "yahoo",
+        "cash_basis": "USD per current ex-date share; declared issuer distribution; not proof of realized future payment",
+        "usable_scope": {
+          "fields": [
+            "cash_distribution"
+          ],
+          "not_qualified": [
+            "full_adjusted_history",
+            "volume",
+            "strategy_or_production"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/vgit_investor.raw",
+          "sha256": "b155a176a084e4f58cc42722f7d43a300205a87bb1636ba425aeb471657ce1e6",
+          "url": "https://investor.vanguard.com/investment-products/etfs/profile/vgit",
+          "retrieved_at_utc": "2026-11-03T05:11:57.185495+00:00",
+          "source_type": "issuer_original"
+        },
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/vanguard_schedule_browser_headers.pdf",
+          "sha256": "da88b7897fd84dba05e7ac00e03f86faa9109d96a22e4b5ff2edd8724613dd40",
+          "url": "https://advisors.vanguard.com/content/dam/fas/pdfs/DIVDAT_2026.pdf",
+          "page_1based": 24,
+          "source_type": "issuer_schedule"
+        },
+        {
+          "artifact": "research/data_quality/20261103_alternative_sources/vanguard_schedule_vgit_page24.txt",
+          "sha256": "261923f2a180107836b19c22f9464352d118b680caaea73ad401a998dd87888f",
+          "url": "https://advisors.vanguard.com/content/dam/fas/pdfs/DIVDAT_2026.pdf",
+          "page_1based": 24,
+          "source_type": "exact_pdf_page_text_extraction"
+        }
+      ]
+    }
+  ]
+}

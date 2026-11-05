@@ -1,0 +1,9 @@
+{
+  "provider": "original_qq_quote",
+  "url": "https://qt.gtimg.cn/q=shH11077,sh931077",
+  "retrieved_at_utc": "2026-11-05T10:13:12.840543+00:00",
+  "status": 200,
+  "sha256": "b00bd0cba55ccd1fa5046578ca8f44316cf2efd84eaf18b7b64d68cc110b6158",
+  "bytes": 21,
+  "response": "v_pv_none_match=\"1\";\n"
+}

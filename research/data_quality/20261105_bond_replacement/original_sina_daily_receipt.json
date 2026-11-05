@@ -1,0 +1,9 @@
+{
+  "provider": "original_sina_daily",
+  "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=shH11077&scale=240&ma=no&datalen=320",
+  "retrieved_at_utc": "2026-11-05T10:13:12.841177+00:00",
+  "status": 200,
+  "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+  "bytes": 4,
+  "response": null
+}

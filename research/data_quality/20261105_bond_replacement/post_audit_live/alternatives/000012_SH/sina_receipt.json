@@ -1,0 +1,9 @@
+{
+  "url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000012&scale=240&ma=no&datalen=320",
+  "retrieved_at_utc": "2026-11-05T10:33:27.482372+00:00",
+  "provider": "sina",
+  "symbol": "000012.SH",
+  "status": 200,
+  "sha256": "b370efbd3ed8f51ea2f3f2c1f2ceff3a488ff286327781fa8b1993090588e81e",
+  "bytes": 35559
+}

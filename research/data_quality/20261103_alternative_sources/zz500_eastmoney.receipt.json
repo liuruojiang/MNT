@@ -1,0 +1,8 @@
+{
+  "url": "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=1.000905&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=0&beg=20260101&end=20261102&lmt=320",
+  "status": 200,
+  "retrieved_at_utc": "2026-11-03T05:26:10.546467+00:00",
+  "sha256": "34f39f0ec2d74f5ef613a8dfbd33156f433d85edf94e217ceccf3c70ff0518c5",
+  "bytes": 14312,
+  "path": "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\zz500_eastmoney.raw"
+}

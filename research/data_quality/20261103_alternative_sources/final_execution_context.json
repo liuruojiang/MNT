@@ -1,0 +1,25 @@
+{
+  "started_at_utc": "2026-11-03T05:31:54.697159+00:00",
+  "invocation": "same_cutoff_frozen_raw_verification_after_adding_000905; no new source calls",
+  "command": [
+    "C:\\Python314\\python.exe",
+    "-B",
+    "D:\\动量策略\\A股美股动量组合策略\\tools\\run_data_source_service.py",
+    "--config",
+    "D:\\动量策略\\A股美股动量组合策略\\research\\data_quality\\20261103_alternative_sources\\frozen_same_cutoff_config.json",
+    "--mode",
+    "reuse",
+    "--cn-mode",
+    "archive"
+  ],
+  "official_reference_source_run": "20261103T052231Z_a7d5362c",
+  "config_is_isolated_copy": true,
+  "live_config_not_replaced": true,
+  "finished_at_utc": "2026-11-03T05:33:06.005363+00:00",
+  "exit_code": 0,
+  "latest": {
+    "run_id": "20261103T053156Z_d0c179c8",
+    "report": "D:\\动量策略\\_data_source_service\\runs\\20261103T053156Z_d0c179c8\\report.json",
+    "status": "REVIEW_REQUIRED"
+  }
+}

@@ -15,3 +15,19 @@ quant_param_scan_runs/
 *_backup*
 *_old.py
 *_copy.py
+
+# Preserve prior local test copies and machine-only records; never publish them.
+/research/data_quality/20261103_alternative_sources/zz500_recheck_tmp/
+/research/data_quality/20261103_alternative_sources/software_test_tmp/
+/research/data_quality/20261103_alternative_sources/final_scope_test_tmp/
+/research/data_quality/20261103_alternative_sources/archive_recheck_tmp/
+/research/data_quality/20261103_service_repair/test_temp/
+/research/data_quality/20261103_service_repair/recheck_temp/
+/research/data_quality/20261103_alternative_sources/automation_scope_update.json
+/research/data_quality/20261103_alternative_sources/frozen_same_cutoff_config.json
+/research/data_quality/20261103_alternative_sources/vanguard_app.js
+/research/data_quality/20261103_alternative_sources/vanguard_product.js
+/research/data_quality/20261103_alternative_sources/vanguard_app.receipt.json
+/research/data_quality/20261103_alternative_sources/vanguard_product.receipt.json
+/research/data_quality/20261105_bond_replacement/automation_readback.json
+/research/data_quality/20261105_bond_replacement/enablement.json

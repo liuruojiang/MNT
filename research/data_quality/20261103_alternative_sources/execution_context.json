@@ -1,0 +1,23 @@
+{
+  "started_at_utc": "2026-11-03T05:22:31.299282+00:00",
+  "invocation": "user_authorized_enable_alternative_sources_manual_verification",
+  "command": [
+    "C:\\Python314\\python.exe",
+    "-B",
+    "D:\\动量策略\\A股美股动量组合策略\\tools\\run_data_source_service.py",
+    "--config",
+    "D:\\动量策略\\_data_source_service\\config.json",
+    "--mode",
+    "incremental",
+    "--cn-mode",
+    "tail"
+  ],
+  "state_backup": "D:\\动量策略\\_data_source_service\\state_backups\\alternatives_verification_20261103T052231Z",
+  "finished_at_utc": "2026-11-03T05:24:01.904953+00:00",
+  "exit_code": 0,
+  "latest": {
+    "run_id": "20261103T052231Z_a7d5362c",
+    "report": "D:\\动量策略\\_data_source_service\\runs\\20261103T052231Z_a7d5362c\\report.json",
+    "status": "REVIEW_REQUIRED"
+  }
+}

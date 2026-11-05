@@ -1,0 +1,21 @@
+{
+  "distinct_tests_passed": 120,
+  "batches": [
+    {
+      "tests": 117,
+      "result": "passed",
+      "scope": "Initial alternative enablement plus full existing source suites"
+    },
+    {
+      "tests": 43,
+      "result": "passed",
+      "scope": "Two-asset extension and service/calendar guards"
+    },
+    {
+      "tests": 55,
+      "result": "passed",
+      "scope": "Final changed CN archive path and alternative sources; includes all three newly added tests"
+    }
+  ],
+  "note": "Counts overlap between batches; no claim of 215 distinct tests. No live source evidence is inferred from fixture tests."
+}

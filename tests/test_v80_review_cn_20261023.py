@@ -160,7 +160,9 @@ def test_truncated_warmup_recovers_after_full_dependency(v80):
 
 
 @pytest.mark.parametrize("query_kind", ["signal", "live_signal", "params", "live_params"])
-def test_unknown_advisory_cannot_emit_confirmed_adjustment(v80, query_kind):
+def test_unknown_advisory_cannot_emit_confirmed_adjustment(v80, monkeypatch, query_kind):
+    # Isolate UNKNOWN risk from the independent stale-live-data rejection.
+    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp("2026-09-29 18:00").to_pydatetime())
     dates = pd.to_datetime(["2026-09-28", "2026-09-29"])
     code = v80.CN_EQUITY_CODES[0]
     base = pd.DataFrame({"holding": ["cash", code], "target": ["cash", code],
@@ -174,7 +176,9 @@ def test_unknown_advisory_cannot_emit_confirmed_adjustment(v80, query_kind):
 
 
 @pytest.mark.parametrize("query_kind", ["signal", "live_signal", "params", "live_params"])
-def test_known_confirmed_adjustment_still_emits_signal(v80, query_kind):
+def test_known_confirmed_adjustment_still_emits_signal(v80, monkeypatch, query_kind):
+    # The fixed September rows describe that day's confirmed close, not today.
+    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp("2026-09-29 18:00").to_pydatetime())
     dates = pd.to_datetime(["2026-09-28", "2026-09-29"])
     code = v80.CN_EQUITY_CODES[0]
     base = pd.DataFrame({"holding": ["cash", code], "target": ["cash", code],
@@ -185,6 +189,20 @@ def test_known_confirmed_adjustment_still_emits_signal(v80, query_kind):
     assert result["Sub-A"]["is_signal"], "Known confirmed adjustment must remain executable"
     if query_kind in {"signal", "live_signal"}:
         assert "收盘目标已确认：若尚未执行，按目标调整" in "".join(output)
+
+
+@pytest.mark.parametrize("query_kind", ["live_signal", "live_params"])
+def test_known_but_stale_live_adjustment_is_not_executable(v80, monkeypatch, query_kind):
+    monkeypatch.setattr(v80, "beijing_now", lambda: pd.Timestamp("2026-11-05 18:00").to_pydatetime())
+    dates = pd.to_datetime(["2026-09-28", "2026-09-29"])
+    code = v80.CN_EQUITY_CODES[0]
+    base = pd.DataFrame({"holding": ["cash", code], "target": ["cash", code],
+                         "weight": [0., 1.], "is_signal": [False, True], "return": 0.,
+                         "suba_volume_unresolved": False, "suba_volume_unavailable": False}, index=dates)
+    output = []
+    result = v80._write_a_adk_query_overview(output.append, base, None, query_kind=query_kind)
+    assert not result["Sub-A"]["is_signal"], "Known risk state cannot make stale live data executable"
+    assert "收盘目标已确认：若尚未执行，按目标调整" not in "".join(output)
 
 
 def test_unknown_advisory_real_excel_is_nonexecuting(v80):

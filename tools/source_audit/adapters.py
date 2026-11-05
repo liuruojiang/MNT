@@ -17,6 +17,10 @@ def project_scope(project_id):
         path = Path(entry['path'])
         if not path.is_file() or hashlib.sha256(path.read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=entry['sha256_lf']:
             raise DataNotAccepted('Project entrypoint changed; refresh the reviewed field contract')
+    for entry in project.get('runtime_dependencies', []):
+        path = Path(entry['path'])
+        if not path.is_file() or hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest() != entry['sha256_lf']:
+            raise DataNotAccepted('Project runtime dependency changed; refresh the reviewed field contract')
     return project
 
 

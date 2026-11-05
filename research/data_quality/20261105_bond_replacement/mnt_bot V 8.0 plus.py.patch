@@ -1,0 +1,79 @@
+--- before/mnt_bot V 8.0 plus.py
+
++++ after/mnt_bot V 8.0 plus.py
+
+@@ -134,8 +134,9 @@
+
+ CN_MIN_HISTORY_ROWS = CN_BIAS_N + CN_MOM_DAY + 10
+ CN_ENTRY_WAIT_DAYS = None
+ CN_SWITCH_BUFFER = 1.0
+-CN_BOND_CODE = '1.H11077'
+-CN_BOND_NAME = '10Y国债'
++CN_BOND_CODE = '1.000012'
++CN_BOND_PUBLICATION_DATE = pd.Timestamp('2003-01-02')
++CN_BOND_NAME = '上证国债（全期限）'
+ CN_TARGET_VOL = 0.2
+ CN_VOL_WINDOW = 80
+ CN_MAX_LEV = 1.25
+@@ -181,7 +182,7 @@
+
+ CN_ALL_CODES = CN_EQUITY_CODES + [CN_BOND_CODE]
+ CN_STOCK_CODES = CN_EQUITY_CODES
+ CN_STOCK_FORMAL_START = pd.Timestamp('2017-05-26')
+-CN_NAMES = {'1.930955': '中证红利低波100', '0.399006': '创业板', '1.000016': '上证50', '1.000852': '中证1000', '1.000905': '中证500', '1.H00300': '沪深300', '1.H11077': '10Y国债', 'cash': 'Cash'}
++CN_NAMES = {'1.930955': '中证红利低波100', '0.399006': '创业板', '1.000016': '上证50', '1.000852': '中证1000', '1.000905': '中证500', '1.H00300': '沪深300', '1.000012': CN_BOND_NAME, '1.H11077': '旧10Y国债', 'cash': 'Cash'}
+ CN_ZZHL_INDEX_SECID = '1.930955'
+ CN_CSINDEX_PRICE_INDEX_CODES = {'1.930955': '930955'}
+ CN_VENDOR_SECID_ALIASES = {'1.930955': ['2.930955', '1.930955']}
+@@ -1951,7 +1952,7 @@
+
+             bond_df = _supplement_today_close(bond_df, CN_BOND_CODE, beijing_now().date(), msg)
+             after_latest = pd.Timestamp(bond_df.index.max()).normalize() if len(bond_df) > 0 else None
+             if before_latest is not None and after_latest is not None and (after_latest > before_latest):
+-                source = f'{source}+realtime-proxy'
++                source = f'{source}+realtime-snapshot'
+         bond_close = _price_column_frame(bond_df, 'close', CN_BOND_CODE)[CN_BOND_CODE]
+         if strict:
+             expected_date = pd.Timestamp(cn_close_with_bond.index.max()).normalize()
+@@ -2206,6 +2207,20 @@
+
+     code = secid.split('.')[1] if '.' in secid else secid
+     last_err = None
+     attempts = []
++    if secid == CN_BOND_CODE:
++        required = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
++        for name, fetcher in [('Sina', lambda: _fetch_cn_sina(secid)), ('QQ', lambda: _fetch_cn_qq_kline(secid, datalen=10000))]:
++            try:
++                df = fetcher()
++                df = df.loc[df.index >= CN_BOND_PUBLICATION_DATE].copy()
++                checked = _price_column_frame(df, 'close', secid)
++                if len(checked) <= 50 or required not in checked.index:
++                    raise DataUnavailableError(f'{name} bond history missing required close {required.date()}')
++                return (df, f'{name}:000012 direct bond index')
++            except _DATA_FETCH_ERRORS as exc:
++                last_err = exc
++                attempts.append(f'{name}:{exc}')
++        raise DataUnavailableError(f'000012 bond history unavailable at {required.date()}: ' + '; '.join(attempts))
+     if secid in CN_CSINDEX_PRICE_INDEX_CODES:
+         index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
+         required_date = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
+@@ -11772,7 +11787,7 @@
+
+ 
+ def _performance_basis_notes():
+     weights = _performance_combo_weight_label()
+-    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普使用月收益年化，夏普无风险基准为0。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格和国债代理另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债代理': '国债列目标为H11077（10年期国债）；源缺失或尾部补齐时可使用000012全期限国债收益拼接，该部分为代理研究，不能视为同久期10Y原指数；本次具体来源见行情获取输出。'}
++    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普使用月收益年化，夏普无风险基准为0。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格与国债指数口径另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债口径': '自2026-11-05起，国债腿明确改为000012上证国债指数（全期限，2003-01-02发布），直接使用该指数历史及当日报价，不再拼接H11077。与旧10年期国债组合属于不同标的口径，旧净值不能沿用；具体来源见行情获取输出。'}
+ 
+ def _write_performance_standard_window_table(w, daily_returns, end_date=None, first_period_starts=None):
+     rows = _performance_standard_window_rows(daily_returns, end_date=end_date, first_period_starts=first_period_starts)
+@@ -11786,7 +11801,7 @@
+
+         w(f"| {row['window']} | " + ' | '.join(cells) + ' |\n')
+     w('\n')
+     notes = _performance_basis_notes()
+-    for key in ('标准窗口PV组合', 'Sub-A样本', 'Sub-C样本', '国债代理'):
++    for key in ('标准窗口PV组合', 'Sub-A样本', 'Sub-C样本', '国债口径'):
+         w(f'> {notes[key]}\n\n')
+     w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
+     return rows
