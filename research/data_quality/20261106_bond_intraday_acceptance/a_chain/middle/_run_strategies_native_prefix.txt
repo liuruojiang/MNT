@@ -1,0 +1,34 @@
+cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
+
+cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
+
+suba_volume_signal = None
+
+suba_volume_feature = None
+
+if CN_SA_VOLUME_OVERLAY_ENABLED:
+            try:
+                suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
+                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date)
+                suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
+                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
+                    unknown = suba_volume_feature['combined_unresolved'].reindex(cn_result.index).fillna(True).astype(bool) if suba_volume_feature is not None and 'combined_unresolved' in suba_volume_feature else pd.Series(True, index=cn_result.index)
+                    unknown = unknown.loc[unknown.index <= suba_volume_expected_date]
+                    dates = unknown.index[unknown]
+                    details = [f'所需截至 {suba_volume_expected_date:%Y-%m-%d}；不可判定 {len(dates)} 日（{dates[0]:%Y-%m-%d} 至 {dates[-1]:%Y-%m-%d}）']
+                    for name in ('zz2000', 'cyb'):
+                        column = f'{name}_error'
+                        if suba_volume_feature is not None and column in suba_volume_feature:
+                            values = suba_volume_feature[column].dropna()
+                            if len(values):
+                                details.append(f'{name}: {_short_error(values.iloc[-1], 500)}')
+                    raise SubaVolumeDataError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。' + '；'.join(details))
+                cn_result = _apply_suba_volume_overlay_policy(cn_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
+            except _fetch_or_bot_errors() as exc:
+                if isinstance(exc, poe.BotError):
+                    raise
+                if not allow_unresolved_suba_volume:
+                    raise SubaVolumeDataError(f'Sub-A成交额风控数据不可用，正式回测/绩效查询已中止。所需截至 {suba_volume_expected_date:%Y-%m-%d}；来源原因：{_short_error(exc, 1200)}') from exc
+                cn_result = _mark_suba_volume_unavailable(cn_result, exc)
+
+cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'

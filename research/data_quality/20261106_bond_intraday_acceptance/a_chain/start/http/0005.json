@@ -1,0 +1,12 @@
+{
+  "request_url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000905&scale=240&ma=no&datalen=10000",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T01:37:50.033710+00:00",
+  "status": 200,
+  "final_url": "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000905&scale=240&ma=no&datalen=10000",
+  "raw_file": "0005.raw",
+  "sha256": "270b862652de790b3d7c1fffeea166c526e0ae3e906a178bbcb7373243183fd2",
+  "bytes": 610416,
+  "encoding": "gbk",
+  "completed_at_utc": "2026-11-06T01:37:50.953877+00:00"
+}

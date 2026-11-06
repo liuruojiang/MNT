@@ -1,0 +1,313 @@
+{
+  "started_at": "2026-11-06T09:36:55.151381+08:00",
+  "source_sha256": "606fd98bc0a7fde17a337fed0c67bd1179e1b03e1f6eecb78d643ff82198ba23",
+  "round_interval_seconds": 300,
+  "planned_rounds": 7,
+  "rounds": [
+    {
+      "round": 1,
+      "receipts": [
+        {
+          "round": 1,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T01:36:55.158334+00:00",
+          "retrieved_at_utc": "2026-11-06T01:36:57.697774+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 383,
+          "sha256": "66ba045a8326b9b1ba1b30c24381c0700eaf9a582620edb52b1ad2d02204aecf",
+          "quote_time": "2026-11-06T09:36:54+08:00",
+          "price": 232.31,
+          "lag_seconds": 3.697774,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 1,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T01:36:55.159119+00:00",
+          "retrieved_at_utc": "2026-11-06T01:36:57.349518+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 164,
+          "sha256": "0cdd44f5229470ae64385b0f071bf354efbda17559c1adea88c08cac44549a3f",
+          "quote_time": "2026-11-06T09:36:53+08:00",
+          "price": 232.309,
+          "lag_seconds": 4.349518,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.0010000000000047748,
+      "within_0_011": true
+    },
+    {
+      "round": 2,
+      "receipts": [
+        {
+          "round": 2,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T01:41:55.153992+00:00",
+          "retrieved_at_utc": "2026-11-06T01:41:57.242099+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 383,
+          "sha256": "605ea68ece04dd7f189c48ae96426a57575f203082ae69ddaeb5b0e5abc08788",
+          "quote_time": "2026-11-06T09:41:54+08:00",
+          "price": 232.32,
+          "lag_seconds": 3.242099,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 2,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T01:41:55.154769+00:00",
+          "retrieved_at_utc": "2026-11-06T01:41:56.686455+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 164,
+          "sha256": "36754964d409979e042d746e74d8287a7ee5155b04adee4f69190b98c4b37252",
+          "quote_time": "2026-11-06T09:41:54+08:00",
+          "price": 232.3243,
+          "lag_seconds": 2.686455,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.004300000000000637,
+      "within_0_011": true
+    },
+    {
+      "round": 3,
+      "receipts": [
+        {
+          "round": 3,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T01:46:55.155641+00:00",
+          "retrieved_at_utc": "2026-11-06T01:46:56.989238+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 389,
+          "sha256": "8c2c05e383a7be2559973a56c3b5806886c29554386386a0edc57c76b11ea79b",
+          "quote_time": "2026-11-06T09:46:54+08:00",
+          "price": 232.33,
+          "lag_seconds": 2.989238,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 3,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T01:46:55.156167+00:00",
+          "retrieved_at_utc": "2026-11-06T01:46:56.653208+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 166,
+          "sha256": "afaa341877d5628788cebebc058a45ab663ce35d0e3e6ede4f530ed0bf1da0c5",
+          "quote_time": "2026-11-06T09:46:54+08:00",
+          "price": 232.3283,
+          "lag_seconds": 2.653208,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.0016999999999995907,
+      "within_0_011": true
+    },
+    {
+      "round": 4,
+      "receipts": [
+        {
+          "round": 4,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T01:51:55.157492+00:00",
+          "retrieved_at_utc": "2026-11-06T01:51:56.975752+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 390,
+          "sha256": "a2f6b3c290a0b85a455a2b435fdc0789f12b75629c82cc48a8d8403655250b1f",
+          "quote_time": "2026-11-06T09:51:51+08:00",
+          "price": 232.33,
+          "lag_seconds": 5.975752,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 4,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T01:51:55.158103+00:00",
+          "retrieved_at_utc": "2026-11-06T01:51:56.704268+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 166,
+          "sha256": "f1e2564966c8470b40e64a6635e3b38109600385a122ae820ac332801e71e544",
+          "quote_time": "2026-11-06T09:51:54+08:00",
+          "price": 232.3254,
+          "lag_seconds": 2.704268,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.004600000000010596,
+      "within_0_011": true
+    },
+    {
+      "round": 5,
+      "receipts": [
+        {
+          "round": 5,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T01:56:55.159303+00:00",
+          "retrieved_at_utc": "2026-11-06T01:56:57.909105+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 389,
+          "sha256": "279934506128ede802fc9327aeaf051f0c22765b2e3e5509c8b7e8f9ddd9f16a",
+          "quote_time": "2026-11-06T09:56:54+08:00",
+          "price": 232.33,
+          "lag_seconds": 3.909105,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 5,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T01:56:55.159837+00:00",
+          "retrieved_at_utc": "2026-11-06T01:56:57.659237+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 166,
+          "sha256": "fad21b3e8b6c938689fb1c4f4162df043f4e6b28f7c0f1cdea2c85559256cfc1",
+          "quote_time": "2026-11-06T09:56:54+08:00",
+          "price": 232.3283,
+          "lag_seconds": 3.659237,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.0016999999999995907,
+      "within_0_011": true
+    },
+    {
+      "round": 6,
+      "receipts": [
+        {
+          "round": 6,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T02:01:55.161926+00:00",
+          "retrieved_at_utc": "2026-11-06T02:01:57.077311+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 390,
+          "sha256": "14506cd45c87cbf44c4fe0546fe5eb176a77b43c9ed2d6a4fe54a684c30b8cc8",
+          "quote_time": "2026-11-06T10:01:54+08:00",
+          "price": 232.32,
+          "lag_seconds": 3.077311,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 6,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T02:01:55.162613+00:00",
+          "retrieved_at_utc": "2026-11-06T02:01:56.803314+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 166,
+          "sha256": "5d2b671b6b5279efd75f00dc3ccae7c61ddb93d05181618a1e9b574c8424170f",
+          "quote_time": "2026-11-06T10:01:54+08:00",
+          "price": 232.3237,
+          "lag_seconds": 2.803314,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.0037000000000091404,
+      "within_0_011": true
+    },
+    {
+      "round": 7,
+      "receipts": [
+        {
+          "round": 7,
+          "provider": "tencent",
+          "symbol": "000012.SH",
+          "request_url": "https://qt.gtimg.cn/q=sh000012",
+          "request_started_utc": "2026-11-06T02:06:55.162038+00:00",
+          "retrieved_at_utc": "2026-11-06T02:06:56.912917+00:00",
+          "url": "https://qt.gtimg.cn/q=sh000012",
+          "http_status": 200,
+          "bytes": 390,
+          "sha256": "fdbc27a0d00f1cfa8c4c1e2a22e953d5935ede9a693d552605c1ba247cb5fa68",
+          "quote_time": "2026-11-06T10:06:54+08:00",
+          "price": 232.32,
+          "lag_seconds": 2.912917,
+          "native_time_gate": true,
+          "status": "PASS"
+        },
+        {
+          "round": 7,
+          "provider": "sina",
+          "symbol": "000012.SH",
+          "request_url": "https://hq.sinajs.cn/list=sh000012",
+          "request_started_utc": "2026-11-06T02:06:55.162588+00:00",
+          "retrieved_at_utc": "2026-11-06T02:06:56.778340+00:00",
+          "url": "https://hq.sinajs.cn/list=sh000012",
+          "http_status": 200,
+          "bytes": 166,
+          "sha256": "2205d675adbd783d988f5f5e28cf42d7244b1eb84f29ea24c3b0f2a46aca3471",
+          "quote_time": "2026-11-06T10:06:54+08:00",
+          "price": 232.3224,
+          "lag_seconds": 2.77834,
+          "native_time_gate": true,
+          "status": "PASS"
+        }
+      ],
+      "absolute_difference": 0.0023999999999944066,
+      "within_0_011": true
+    }
+  ],
+  "completed_at": "2026-11-06T10:06:57.067943+08:00",
+  "summary": {
+    "tencent": {
+      "passed": 7,
+      "failed": 0,
+      "max_lag_seconds": 5.975752,
+      "unique_quote_times": 7,
+      "strictly_advancing": true
+    },
+    "sina": {
+      "passed": 7,
+      "failed": 0,
+      "max_lag_seconds": 4.349518,
+      "unique_quote_times": 7,
+      "strictly_advancing": true
+    }
+  },
+  "pass": true
+}

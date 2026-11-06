@@ -1,0 +1,12 @@
+{
+  "Sub-A": {
+    "is_signal": false,
+    "signal_text": "A策略 中证红利低波100 / 1.2500x",
+    "note": "2026-11-06盘中假设，尚未确认；A策略"
+  },
+  "Sub-A-DK": {
+    "is_signal": false,
+    "signal_text": "状态不可用",
+    "note": "状态不可用；不生成正式调整指令"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "request_url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932000&startDate=20000101&endDate=20261206",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T02:07:56.299601+00:00",
+  "status": 200,
+  "final_url": "https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=932000&startDate=20000101&endDate=20261206",
+  "raw_file": "0028.raw",
+  "sha256": "97d4453dbd96ec45ac0bb7400bc388ccd359644f3029a935d99dfb77a9658854",
+  "bytes": 1059580,
+  "encoding": "UTF-8",
+  "completed_at_utc": "2026-11-06T02:07:57.633237+00:00"
+}

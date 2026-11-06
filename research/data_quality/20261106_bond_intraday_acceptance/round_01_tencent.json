@@ -1,0 +1,17 @@
+{
+  "round": 1,
+  "provider": "tencent",
+  "symbol": "000012.SH",
+  "request_url": "https://qt.gtimg.cn/q=sh000012",
+  "request_started_utc": "2026-11-06T01:36:55.158334+00:00",
+  "retrieved_at_utc": "2026-11-06T01:36:57.697774+00:00",
+  "url": "https://qt.gtimg.cn/q=sh000012",
+  "http_status": 200,
+  "bytes": 383,
+  "sha256": "66ba045a8326b9b1ba1b30c24381c0700eaf9a582620edb52b1ad2d02204aecf",
+  "quote_time": "2026-11-06T09:36:54+08:00",
+  "price": 232.31,
+  "lag_seconds": 3.697774,
+  "native_time_gate": true,
+  "status": "PASS"
+}

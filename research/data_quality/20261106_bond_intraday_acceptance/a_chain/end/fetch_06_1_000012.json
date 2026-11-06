@@ -1,0 +1,10 @@
+{
+  "source": "Sina:000012 direct bond index",
+  "secid": "1.000012",
+  "args": [],
+  "kwargs": {
+    "required_date": "2026-11-05 00:00:00"
+  },
+  "captured_at_utc": "2026-11-06T02:07:46.588223+00:00",
+  "attrs": {}
+}

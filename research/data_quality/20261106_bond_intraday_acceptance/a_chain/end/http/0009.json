@@ -1,0 +1,12 @@
+{
+  "request_url": "https://push2delay.eastmoney.com/api/qt/stock/get?secid=1.930955&fields=f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T02:07:20.279295+00:00",
+  "status": 200,
+  "final_url": "https://push2delay.eastmoney.com/api/qt/stock/get?secid=1.930955&fields=f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b",
+  "raw_file": "0009.raw",
+  "sha256": "8ad4de0133eda39cefc77a2f522b8e6a7b6b7d2538a9cc9a6d3cdc0727ac1bad",
+  "bytes": 91,
+  "encoding": "ISO-8859-1",
+  "completed_at_utc": "2026-11-06T02:07:22.312769+00:00"
+}

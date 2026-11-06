@@ -1,0 +1,17 @@
+{
+  "started_at_utc": "2026-11-06T01:38:30.132450+00:00",
+  "label": "start_bond",
+  "scope": "Native A-only method prefixes; not full multi-sleeve bot or Poe deployment",
+  "source_sha256": "606fd98bc0a7fde17a337fed0c67bd1179e1b03e1f6eecb78d643ff82198ba23",
+  "bond_code": "1.000012",
+  "bond_name": "上证国债（全期限）",
+  "last_confirmed_close": "2026-11-05 00:00:00",
+  "last_confirmed_value": 232.258,
+  "required_close": "2026-11-05 00:00:00",
+  "history_source": "Sina:000012 direct bond index",
+  "adopted_date": "2026-11-06 00:00:00",
+  "adopted_value": 232.31,
+  "status": "PASS_NATIVE_BOND",
+  "finished_at_utc": "2026-11-06T01:38:49.683940+00:00",
+  "http_requests": 4
+}

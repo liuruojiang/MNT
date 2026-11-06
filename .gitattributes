@@ -2,10 +2,13 @@
 research/data_quality/20261103_alternative_sources/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 research/data_quality/20261103_service_repair/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 research/data_quality/20261105_bond_replacement/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+research/data_quality/20261106_bond_intraday_acceptance/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 research/data_quality/20261103_alternative_sources/*.raw -diff -whitespace
 research/data_quality/20261103_alternative_sources/*.pdf -diff -whitespace
 research/data_quality/20261103_alternative_sources/vanguard_schedule_vgit_page24.txt -whitespace
 research/data_quality/20261103_service_repair/*.patch -whitespace
 research/data_quality/20261105_bond_replacement/*.raw -diff -whitespace
 research/data_quality/20261105_bond_replacement/**/*.raw -diff -whitespace
+research/data_quality/20261106_bond_intraday_acceptance/**/*.raw -diff -whitespace
+research/data_quality/20261106_bond_intraday_acceptance/a_chain/*/live_signal.md -whitespace
 research/data_quality/20261105_bond_replacement/*.patch -whitespace

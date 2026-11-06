@@ -1,0 +1,17 @@
+{
+  "round": 5,
+  "provider": "sina",
+  "symbol": "000012.SH",
+  "request_url": "https://hq.sinajs.cn/list=sh000012",
+  "request_started_utc": "2026-11-06T01:56:55.159837+00:00",
+  "retrieved_at_utc": "2026-11-06T01:56:57.659237+00:00",
+  "url": "https://hq.sinajs.cn/list=sh000012",
+  "http_status": 200,
+  "bytes": 166,
+  "sha256": "fad21b3e8b6c938689fb1c4f4162df043f4e6b28f7c0f1cdea2c85559256cfc1",
+  "quote_time": "2026-11-06T09:56:54+08:00",
+  "price": 232.3283,
+  "lag_seconds": 3.659237,
+  "native_time_gate": true,
+  "status": "PASS"
+}

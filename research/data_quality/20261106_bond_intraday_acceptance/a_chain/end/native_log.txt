@@ -1,0 +1,14 @@
+⏳ 正在获取A股数据...
+  ↳ 实时补充: 2026-11-06 close=11713.87 [snapshot]
+  ↳ 实时补充: 2026-11-06 close=2486.39 [snapshot]
+  ↳ 实时补充: 2026-11-06 close=2777.44 [snapshot]
+  ↳ 实时补充: 2026-11-06 close=6536.45 [snapshot]
+  ↳ 实时补充: 2026-11-06 close=6631.96 [snapshot]
+  中证红利低波100: 2026-11-06 [CN multi-source realtime snapshot]
+  创业板: 2026-11-06 [CN multi-source realtime snapshot]
+  上证50: 2026-11-06 [CN multi-source realtime snapshot]
+  中证1000: 2026-11-06 [CN multi-source realtime snapshot]
+  中证500: 2026-11-06 [CN multi-source realtime snapshot]
+  ↳ 实时补充: 2026-11-06 close=232.32 [snapshot]
+  上证国债（全期限）: 2026-11-06 [Sina:000012 direct bond index+realtime-snapshot]
+  合并截至: 2026-11-06

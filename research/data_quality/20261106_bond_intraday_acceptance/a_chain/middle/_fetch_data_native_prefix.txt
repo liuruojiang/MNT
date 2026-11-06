@@ -1,0 +1,93 @@
+msg.write('⏳ 正在获取A股数据...\n')
+
+_cn_clock = beijing_now()
+
+_cn_requested_close = _latest_cn_data_required_date(_cn_clock)
+
+_cn_fallback_close = _latest_cn_required_close_date(_cn_clock.date())
+
+_cn_fetch_required_close = _cn_fallback_close if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_cn_clock.date()).normalize() else _cn_requested_close
+
+cn_raw, cn_sources = ({}, {})
+
+for secid in CN_STOCK_CODES:
+            if allow_last_confirmed_cn_close:
+                df, source = fetch_cn_kline(secid, required_date=_cn_fetch_required_close)
+            else:
+                df, source = fetch_cn_kline(secid)
+            df, source = _ensure_cn_history_frame(secid, df, source, min_rows=CN_MIN_HISTORY_ROWS, write=msg.write)
+            cn_raw[secid] = df
+            cn_sources[secid] = source
+            time.sleep(0.2)
+
+_bj_today_cn = _cn_clock.date()
+
+if include_cn_live_snapshot:
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _supplement_today_close(cn_raw[secid], secid, _bj_today_cn, msg)
+        else:
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _drop_cn_unconfirmed_today(cn_raw[secid])
+
+_cn_input_cutoff = pd.Timestamp(_bj_today_cn).normalize() if include_cn_live_snapshot else _cn_requested_close
+
+for secid in CN_STOCK_CODES:
+            cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_input_cutoff)
+
+if include_cn_live_snapshot:
+            cn_raw = _align_partial_cn_intraday(cn_raw, CN_STOCK_CODES, _cn_clock, _cn_requested_close, msg)
+
+_cn_open_now, _bj_now_check = is_cn_market_open()
+
+_is_cn_trading_day = _is_cn_required_close_day(_bj_today_cn)
+
+_cn_after_close = _is_cn_trading_day and (not _cn_open_now) and (_bj_now_check.hour >= 15)
+
+_cn_required_close = _cn_requested_close
+
+_cn_latest_dates = [_latest_valid_close_date(cn_raw.get(secid)) for secid in CN_STOCK_CODES]
+
+_cn_latest_common = min(_cn_latest_dates) if all((value is not None for value in _cn_latest_dates)) else None
+
+if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_bj_today_cn).normalize() and (_cn_latest_common is not None) and (_cn_latest_common < _cn_requested_close) and (_cn_latest_common >= _cn_fallback_close):
+            _cn_required_close = _cn_fallback_close
+            msg.write(f'  ⚠️ A股当日最终收盘源尚未完整发布；本次绩效/净值查询按最近共同确认收盘 {_cn_required_close.date().isoformat()} 计算，不生成正式信号。\n')
+            for secid in CN_STOCK_CODES:
+                cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_required_close)
+
+_assert_cn_raw_prices_fresh(cn_raw, CN_STOCK_CODES, _cn_required_close, 'Sub-A')
+
+try:
+            zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID) if CN_ZZHL_INDEX_SECID == '1.H20955' else None
+            if zzhl_df is not None and len(zzhl_df) > 0:
+                zzhl_h00922 = None
+                try:
+                    df = _fetch_cn_csindex(CN_ZZHL_PRE_INDEX_CODE)
+                    if df is not None and len(df) > 50:
+                        zzhl_h00922 = df
+                except _DATA_FETCH_ERRORS:
+                    pass
+                if zzhl_h00922 is not None:
+                    h20955_start = zzhl_df.index[0]
+                    h00922_pre = zzhl_h00922[zzhl_h00922.index < h20955_start].copy()
+                    if len(h00922_pre) > 0:
+                        h00922_pre['close'] *= zzhl_df['close'].iloc[0] / h00922_pre['close'].iloc[-1]
+                        cn_raw[CN_ZZHL_INDEX_SECID] = pd.concat([h00922_pre, zzhl_df])
+                        msg.write(f"  ZZHL: H00922扩展 {h00922_pre.index[0].strftime('%Y-%m-%d')}~{h20955_start.strftime('%Y-%m-%d')}\n")
+        except _DATA_FETCH_ERRORS as e:
+            msg.write(f'  ⚠️ ZZHL H00922扩展失败({e})，仅用H20955数据\n')
+
+cn_close = _build_cn_stock_close_frame(cn_raw)
+
+if len(cn_close) < CN_BIAS_N + CN_MOM_DAY + 10:
+            detail = '；'.join((f'{CN_NAMES.get(s, s)} {len(cn_raw[s])}行({_cn_frame_range_text(cn_raw[s])})' for s in CN_STOCK_CODES))
+            raise poe.BotError(f'A股数据不足: 合并后仅{len(cn_close)}行；{detail}')
+
+for secid in CN_STOCK_CODES:
+            name = CN_NAMES.get(secid, secid)
+            source_label = _cn_latest_data_source_label(cn_raw[secid], cn_sources[secid])
+            msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{source_label}]\n")
+
+cn_close = _add_cn_bond_column(cn_close, msg, context='Sub-A国债避险', strict=_should_strict_cn_bond(include_cn_live_snapshot, _cn_after_close), include_live_snapshot=include_cn_live_snapshot)
+
+msg.write(f"  合并截至: {cn_close.index[-1].strftime('%Y-%m-%d')}\n")

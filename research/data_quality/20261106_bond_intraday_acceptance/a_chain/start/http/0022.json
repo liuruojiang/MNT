@@ -1,0 +1,12 @@
+{
+  "request_url": "https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=1.000905&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T01:38:25.279162+00:00",
+  "status": 200,
+  "final_url": "https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=1.000905&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0",
+  "raw_file": "0022.raw",
+  "sha256": "8edad63606e6b518b5a8404a1458a5ed3664080247a0833e157ed7d77f9fc0ff",
+  "bytes": 1117,
+  "encoding": "UTF-8",
+  "completed_at_utc": "2026-11-06T01:38:27.177229+00:00"
+}

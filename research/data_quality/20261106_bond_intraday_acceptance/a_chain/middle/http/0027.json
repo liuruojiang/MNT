@@ -1,0 +1,12 @@
+{
+  "request_url": "https://www.csindex.com.cn/indices/index-detail/932000",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T01:53:24.452304+00:00",
+  "status": 200,
+  "final_url": "https://www.csindex.com.cn/indices/index-detail/932000",
+  "raw_file": "0027.raw",
+  "sha256": "6fafb173ded9054df9b1f0e0580d752221190287670bf75678f90d0620dc0124",
+  "bytes": 19563,
+  "encoding": "ISO-8859-1",
+  "completed_at_utc": "2026-11-06T01:53:26.300486+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "request_url": "https://q.stock.sohu.com/hisHq?code=zs_399006&start=20000101&end=20261206&stat=1&order=D&period=d&rt=json",
+  "method": "GET",
+  "started_at_utc": "2026-11-06T02:07:57.779978+00:00",
+  "status": 200,
+  "final_url": "https://q.stock.sohu.com/hisHq?code=zs_399006&start=20000101&end=20261206&stat=1&order=D&period=d&rt=json",
+  "raw_file": "0029.raw",
+  "sha256": "db5e8502c1bf9d1e4c181226adfe56e50394c66134561deb9cb13220611cbc4e",
+  "bytes": 394969,
+  "encoding": null,
+  "completed_at_utc": "2026-11-06T02:08:00.455451+00:00"
+}

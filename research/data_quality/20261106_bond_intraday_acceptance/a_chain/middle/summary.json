@@ -1,0 +1,32 @@
+{
+  "started_at_utc": "2026-11-06T01:52:09.026110+00:00",
+  "label": "middle",
+  "scope": "Native A-only method prefixes; not full multi-sleeve bot or Poe deployment",
+  "source_sha256": "606fd98bc0a7fde17a337fed0c67bd1179e1b03e1f6eecb78d643ff82198ba23",
+  "harness_sha256": "3e6ef8912b2ea5f534f0609d6939c568c8ddbc6bc46e2764317d97158e57d127",
+  "bond_code": "1.000012",
+  "bond_name": "上证国债（全期限）",
+  "integrity_generation_before": 0,
+  "integrity_pending_before": false,
+  "input_end": "2026-11-06 00:00:00",
+  "input_start": "2020-02-10 00:00:00",
+  "input_rows": 1637,
+  "input_columns": [
+    "1.930955",
+    "0.399006",
+    "1.000016",
+    "1.000852",
+    "1.000905",
+    "1.000012"
+  ],
+  "bond_adopted": 232.33,
+  "result_end": "2026-11-06 00:00:00",
+  "volume_unresolved": false,
+  "today": "2026-11-06",
+  "current_date_signal": true,
+  "status": "PASS_A_NATIVE_SLICE",
+  "integrity_generation_after": 0,
+  "integrity_pending_after": false,
+  "finished_at_utc": "2026-11-06T01:53:36.450479+00:00",
+  "http_requests": 29
+}
