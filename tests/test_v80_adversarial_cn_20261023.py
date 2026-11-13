@@ -41,6 +41,8 @@ def load_amount_case(v80, monkeypatch, fault=None):
         zz = zz.drop(dates[-2])
     cyb = pd.DataFrame({"amount": np.linspace(100., 200., len(dates))}, index=dates)
     monkeypatch.setattr(v80, "_fetch_cn_csindex_amount", lambda *a, **kw: zz.copy())
+    # A gap must affect both same-index sources to remain unresolved after failover.
+    monkeypatch.setattr(v80, "_fetch_cn_eastmoney_amount", lambda *a, **kw: zz.assign(amount=zz["amount"] * 1e8))
     monkeypatch.setattr(v80, "_fetch_cn_sohu_amount", lambda *a, **kw: cyb.copy())
     signal, feature = v80._load_suba_volume_signal(expected_date=dates[-1])
     feature = v80._annotate_rule_freshness(feature, dates[-1], "suba_volume")

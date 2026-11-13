@@ -111,6 +111,8 @@ def test_leg_known_to_clear_can_resolve_other_missing_values(v80, monkeypatch):
     # CYB needs four below-MA observations; ZZ2000 needs three.
     clear.iloc[-4:] = [85., 80., 70., 60.]
     monkeypatch.setattr(v80, "_fetch_cn_csindex_amount", lambda *a, **k: bad.to_frame("amount"))
+    # Both ZZ2000 providers share this injected hole; CYB alone resolves the OR.
+    monkeypatch.setattr(v80, "_fetch_cn_eastmoney_amount", lambda *a, **k: (bad * 1e8).to_frame("amount"))
     monkeypatch.setattr(v80, "_fetch_cn_sohu_amount", lambda *a, **k: clear.to_frame("amount"))
     signal, feature = v80._load_suba_volume_signal(expected_date=clear.index[-1])
     assert signal.iloc[-1]

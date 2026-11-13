@@ -206,8 +206,8 @@
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
           "role": "formal_entrypoint",
-          "sha256": "c46f2a7f870a3d970b1c8bbd08ac93eb07e10622090fcfe20e13337a8b89f3d2",
-          "sha256_lf": "2f7543e5fc77221b42aa99856978b75284d529ee27a67f165a88071e7e911725"
+          "sha256": "a5711dbdfb13c5b30d24703ca82b85a288e071b49eacedc5e97f0eec0f12c66b",
+          "sha256_lf": "a5711dbdfb13c5b30d24703ca82b85a288e071b49eacedc5e97f0eec0f12c66b"
         }
       ],
       "source_evidence": [
@@ -513,6 +513,22 @@
             },
             "wind_alice": {
               "status": "NEEDS_FIELD_SCOPE_AND_HISTORY_ACCEPTANCE"
+            },
+            "eastmoney": {
+              "status": "VERIFIED_SAME_INDEX_BACKUP_IN_LOCAL_V80",
+              "instruments": [
+                "932000"
+              ],
+              "api_identity": "2.932000",
+              "raw_amount_unit": "CNY",
+              "native_amount_unit": "CNY 100000000",
+              "publication_start": "2023-08-11",
+              "overlap_end": "2026-11-11",
+              "overlap_sessions": 786,
+              "current_tail_end": "2026-11-13",
+              "evidence": "docs/v80_zz2000_amount_fallback_20261113.md",
+              "poe_deployment_verified": false,
+              "does_not_qualify_wind_turnover": true
             }
           },
           "active": true,
@@ -566,8 +582,8 @@
         "FRED 风险指标继续保留；不能以 ETF 价格替代。",
         "BTC 和其余 ETF 差异按独立口径处理。"
       ],
-      "field_contract_review_date": "2026-11-03",
-      "field_contract_review_evidence": "research/data_quality/20261103_service_repair/contract_review.json"
+      "field_contract_review_date": "2026-11-13",
+      "field_contract_review_evidence": "docs/v80_zz2000_adversarial_audit_20261113.md"
     },
     {
       "project_id": "cn_six_indices_v13",
@@ -1256,5 +1272,5 @@
       ]
     }
   ],
-  "last_field_contract_review_date": "2026-11-03"
+  "last_field_contract_review_date": "2026-11-13"
 }
