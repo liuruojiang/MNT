@@ -22,6 +22,7 @@ import time
 import threading
 import types
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict
 from zoneinfo import ZoneInfo
@@ -256,8 +257,11 @@ def _dk_is_official_pair(pair):
     return str(pair) in ADK_OFFICIAL_PAIRS
 CN_DK_INDEX_NAMES = {'SZ50': '上证50', 'HS300': '沪深300', 'ZZ500': '中证500', 'ZZ1000': '中证1000', 'CYB': '创业板'}
 CN_MARKET_HOLIDAYS = {'2026-01-01', '2026-01-02', '2026-01-03', '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23', '2026-04-04', '2026-04-05', '2026-04-06', '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05', '2026-06-19', '2026-06-20', '2026-06-21', '2026-09-25', '2026-09-26', '2026-09-27', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07'}
-CN_MARKET_HOLIDAY_YEARS = {2026}
-CN_MARKET_CALENDAR_COVERAGE_NOTE = f'A股交易日历当前维护年份: {min(CN_MARKET_HOLIDAY_YEARS)}-{max(CN_MARKET_HOLIDAY_YEARS)}；2027年交易所日历公布后需更新。'
+# 2027 baseline: State Council notice 2026 No. 10 and regular exchange weekends.
+# Reconcile with the SSE/SZSE annual closure notices once published.
+CN_MARKET_HOLIDAYS.update({'2027-01-01', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05', '2027-05-03', '2027-05-04', '2027-05-05', '2027-06-09', '2027-09-15', '2027-10-01', '2027-10-04', '2027-10-05', '2027-10-06', '2027-10-07'})
+CN_MARKET_HOLIDAY_YEARS = {2026, 2027}
+CN_MARKET_CALENDAR_COVERAGE_NOTE = 'A股交易日历覆盖2026–2027年；2027年按国办发明电〔2026〕10号和交易所周末规则编制，待交易所年度公告复核。'
 US_ROT_COMMISSION = 0.001
 US_TRADING_DAYS = 252
 US_ROT_FINANCING_BENCHMARK = 'BIL'
@@ -635,6 +639,8 @@ def _latest_cn_required_close_date(asof_date=None):
 
 def _latest_cn_data_required_date(asof_datetime=None):
     current = pd.Timestamp(beijing_now() if asof_datetime is None else asof_datetime)
+    if current.year not in CN_MARKET_HOLIDAY_YEARS:
+        raise poe.BotError(f'A股交易日历未配置 {current.year} 年；{CN_MARKET_CALENDAR_COVERAGE_NOTE}')
     current_day = current.normalize()
     after_close = current.hour > 15 or (current.hour == 15 and (current.minute > 0 or current.second > 0 or current.microsecond > 0))
     if after_close and _is_cn_required_close_day(current_day):
@@ -737,9 +743,6 @@ def _write_cn_after_close_stale_warning_or_raise(write, cn_raw, bj_today, includ
         return
     stale_names = '、'.join((CN_NAMES.get(s, s) for s in stale_codes))
     raise poe.BotError('A股收盘数据未完整更新，不能生成正式收盘信号: ' + stale_names)
-
-def _should_strict_cn_bond(include_cn_live_snapshot=False, cn_after_close=False):
-    return not bool(include_cn_live_snapshot) or bool(cn_after_close)
 
 def _latest_live_etf_price(us_close, proxy, live, expected_date=None, max_lag_days=0):
     if us_close is None or live not in us_close.columns:
@@ -1410,8 +1413,11 @@ def _fetch_cn_eastmoney(secid):
     resp.raise_for_status()
     data = resp.json()
     inner = data.get('data') if isinstance(data, dict) else None
-    if inner is None:
+    if not isinstance(inner, dict):
         raise ValueError(f'EastMoney returned null data for {secid}')
+    market, code = secid.split('.', 1)
+    if str(inner.get('market')) != market or str(inner.get('code')) != code:
+        raise DataSchemaError(f'EastMoney daily price identity mismatch for {secid}')
     klines = inner.get('klines')
     if not klines:
         raise ValueError(f'EastMoney returned empty klines for {secid}')
@@ -1427,16 +1433,14 @@ def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     resp.raise_for_status()
     data = resp.json()
     inner = data.get('data') if isinstance(data, dict) else None
-    if inner is None:
+    if not isinstance(inner, dict):
         raise ValueError(f'EastMoney returned null data for {secid}')
+    market, code = secid.split('.', 1)
+    if str(inner.get('market')) != market or str(inner.get('code')) != code:
+        raise DataSchemaError(f'EastMoney amount identity mismatch for {secid}')
     if secid == CN_SA_VOLUME_ZZ2000_SECID:
         if type(data.get('rc')) is not int or data['rc'] != 0:
             raise DataSchemaError(f'EastMoney amount business failure for {secid}')
-        if not isinstance(inner, dict):
-            raise DataSchemaError(f'EastMoney amount data must be an object for {secid}')
-        market, code = secid.split('.')
-        if str(inner.get('code', '')) != code or str(inner.get('market', '')) != market:
-            raise DataSchemaError(f'EastMoney amount identity mismatch for {secid}')
     klines = inner.get('klines')
     if secid == CN_SA_VOLUME_ZZ2000_SECID and (not isinstance(klines, list)):
         raise DataSchemaError(f'EastMoney amount klines must be a list for {secid}')
@@ -1776,7 +1780,15 @@ def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
         raise DataSchemaError('realtime proxy projection requires finite positive prices')
     return last_close * (quote / prev_proxy_close)
 
-def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None):
+def _cn_record_quote(price, stamp, source, receipt):
+    if receipt is not None:
+        stamp = pd.Timestamp(stamp)
+        if stamp.tzinfo is not None:
+            stamp = stamp.tz_convert('Asia/Shanghai').tz_localize(None)
+        receipt.update(time=stamp, source=source)
+    return price
+
+def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None, receipt=None):
     expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
     for candidate_secid in candidate_secids:
         parts = str(candidate_secid).split('.', 1)
@@ -1789,10 +1801,11 @@ def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None
             text = resp.content.decode('gbk', errors='ignore')
             payload = text.split('"', 2)[1] if '"' in text else ''
             fields = payload.split('~')
-            if len(fields) > 30 and fields[2] == parts[1] and text.startswith(f'v_{symbol}="') and _cn_quote_time_valid(pd.to_datetime(fields[30], format='%Y%m%d%H%M%S'), expected):
+            if len(fields) > 30 and fields[2] == parts[1] and text.startswith(f'v_{symbol}="'):
+                stamp = pd.to_datetime(fields[30], format='%Y%m%d%H%M%S')
                 price = float(fields[3])
-                if np.isfinite(price) and price > 0:
-                    return price
+                if np.isfinite(price) and price > 0 and _cn_quote_time_valid(stamp, expected):
+                    return _cn_record_quote(price, stamp, '腾讯', receipt)
         except _DATA_FETCH_ERRORS:
             pass
         try:
@@ -1801,15 +1814,16 @@ def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None
             text = resp.content.decode('gb18030', errors='ignore')
             payload = text.split('"', 2)[1] if '"' in text else ''
             fields = payload.split(',')
-            if len(fields) > 31 and text.startswith(f'var hq_str_{symbol}="') and _cn_quote_time_valid(pd.Timestamp(f'{fields[30]} {fields[31]}'), expected):
+            if len(fields) > 31 and text.startswith(f'var hq_str_{symbol}="'):
+                stamp = pd.Timestamp(f'{fields[30]} {fields[31]}')
                 price = float(fields[3])
-                if np.isfinite(price) and price > 0:
-                    return price
+                if np.isfinite(price) and price > 0 and _cn_quote_time_valid(stamp, expected):
+                    return _cn_record_quote(price, stamp, '新浪', receipt)
         except _DATA_FETCH_ERRORS:
             pass
     return None
 
-def _cn_quote_time_valid(quote_time, expected_date):
+def _cn_quote_time_valid(quote_time, expected_date, now=None):
     stamp = pd.Timestamp(quote_time)
     if pd.isna(stamp):
         return False
@@ -1817,7 +1831,7 @@ def _cn_quote_time_valid(quote_time, expected_date):
         stamp = stamp.tz_localize('Asia/Shanghai')
     else:
         stamp = stamp.tz_convert('Asia/Shanghai')
-    now = pd.Timestamp(beijing_now())
+    now = pd.Timestamp(beijing_now() if now is None else now)
     now = now.tz_localize('Asia/Shanghai') if now.tzinfo is None else now.tz_convert('Asia/Shanghai')
     if stamp.date() != expected_date or expected_date != now.date() or stamp > now or (not _is_cn_required_close_day(stamp.date())):
         return False
@@ -1829,49 +1843,223 @@ def _cn_quote_time_valid(quote_time, expected_date):
     reference = now.replace(hour=11, minute=30, second=0, microsecond=0) if (11, 30) <= (now.hour, now.minute) < (13, 0) else now
     return pd.Timedelta(0) <= reference - stamp <= pd.Timedelta(minutes=5)
 
-def _fetch_cn_realtime_trends(candidate_secids, expected_date):
+def _cn_latest_completed_minute(dates, expected_date):
+    if dates.empty or dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+        return None
+    now = pd.Timestamp(beijing_now())
+    if now.tzinfo is not None:
+        now = now.tz_convert('Asia/Shanghai').tz_localize(None)
+    if dates.tz is not None or any(day.date() != expected_date for day in dates) or dates[-1] > now.ceil('min'):
+        return None
+    eligible = np.flatnonzero(dates <= now)
+    if len(eligible) and _cn_quote_time_valid(dates[eligible[-1]], expected_date):
+        return eligible[-1]
+    return None
+
+def _fetch_cn_trend_rows(secid, host, ndays=1):
+    market, code = secid.split('.', 1)
+    url = f'https://{host}/api/qt/stock/trends2/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays={ndays}&iscr=0'
+    resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, dict) or type(payload.get('rc')) is not int or payload['rc'] != 0:
+        raise DataSchemaError(f'EastMoney trend request failed for {secid}')
+    data = payload.get('data')
+    if not isinstance(data, dict) or str(data.get('code')) != code or str(data.get('market')) != market:
+        raise DataSchemaError(f'EastMoney trend identity mismatch for {secid}')
+    rows = data.get('trends')
+    if not isinstance(rows, list) or not rows:
+        raise DataUnavailableError(f'EastMoney trends unavailable for {secid}')
+    fields = [row.split(',') for row in rows if isinstance(row, str)]
+    if len(fields) != len(rows) or any(len(row) < 3 for row in fields):
+        raise DataSchemaError(f'EastMoney trend rows malformed for {secid}')
+    return data, fields
+
+def _fetch_cn_realtime_trends(candidate_secids, expected_date, *, host='push2his.eastmoney.com', receipt=None):
     """Date-stamped same-index fallback for quotes whose f124 is absent/zero."""
     for candidate_secid in candidate_secids:
         try:
-            market, code = candidate_secid.split('.', 1)
-            url = f'https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={candidate_secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1&iscr=0'
-            resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
-            resp.raise_for_status()
-            payload = resp.json()
-            data = payload.get('data') if isinstance(payload, dict) else None
-            if not isinstance(data, dict) or str(data.get('code')) != code or str(data.get('market')) != market:
-                continue
-            rows = data.get('trends')
-            if not isinstance(rows, list) or not rows:
-                continue
-            fields = [row.split(',') for row in rows if isinstance(row, str)]
-            if len(fields) != len(rows) or any((len(row) < 3 for row in fields)):
-                continue
+            _, fields = _fetch_cn_trend_rows(candidate_secid, host)
             dates = pd.DatetimeIndex(pd.to_datetime([row[0] for row in fields], errors='coerce'))
-            if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing):
+            pos = _cn_latest_completed_minute(dates, expected_date)
+            if pos is None:
                 continue
-            now = pd.Timestamp(beijing_now())
-            if now.tzinfo is not None:
-                now = now.tz_convert('Asia/Shanghai').tz_localize(None)
-            if dates.tz is not None or any((day.date() != expected_date for day in dates)) or dates[-1] > now.ceil('min'):
-                continue
-            eligible = np.flatnonzero(dates <= now)
-            if not len(eligible) or not _cn_quote_time_valid(dates[eligible[-1]], expected_date):
-                continue
-            price = float(fields[eligible[-1]][2])
+            price = float(fields[pos][2])
             if np.isfinite(price) and price > 0:
-                return price
+                return _cn_record_quote(price, dates[pos], f'东方财富/{host}', receipt)
         except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
             continue
     return None
 
-def _fetch_cn_realtime_close(secid, expected_date=None):
-    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
-    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
-    candidate_secids = [proxy_secid] if proxy_secid else _vendor_secid_candidates(secid)
+def _fetch_cn_final_sessions(secid, expected_closes, clock):
+    """Verify terminal minute coverage for recent sessions, including across midnight."""
+    slots = {}
+    now = pd.Timestamp(clock)
+    for expected in expected_closes:
+        day = pd.Timestamp(expected).normalize()
+        end = day + pd.Timedelta(hours=15, minutes=30 if secid == CN_BOND_CODE else 0)
+        if now < end:
+            continue
+        morning = pd.date_range(day + pd.Timedelta(hours=9, minutes=30), day + pd.Timedelta(hours=11, minutes=30), freq='min')
+        afternoon = pd.date_range(day + pd.Timedelta(hours=13, minutes=1), end, freq='min')
+        slots[day] = morning.append(afternoon)
+    if not slots:
+        return {}
+    ndays = 5 if any(day < now.normalize() for day in slots) else 1
+    vendor_code = _vendor_secid_candidates(secid)[0]
+    verified = {}
+    require_amount = secid in {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
+    for host in ('push2his.eastmoney.com', 'push2.eastmoney.com'):
+        try:
+            data, rows = _fetch_cn_trend_rows(vendor_code, host, ndays)
+            stamp = data.get('time')
+            if type(stamp) not in (float, int) or not np.isfinite(stamp) or not 0 < stamp < 4102444800:
+                continue
+            stamped_at = pd.Timestamp(stamp, unit='s', tz='UTC').tz_convert('Asia/Shanghai').tz_localize(None)
+            if stamped_at > pd.Timestamp(beijing_now()):
+                continue
+            dates = pd.DatetimeIndex(pd.to_datetime([row[0] for row in rows], errors='coerce'))
+            if dates.hasnans or dates.tz is not None or dates.has_duplicates or not dates.is_monotonic_increasing:
+                continue
+            for day, sessions in slots.items():
+                existing = verified.get(day)
+                if (existing and (not require_amount or 'amount_cny' in existing)) or stamped_at < sessions[-1]:
+                    continue
+                mask = dates.normalize() == day
+                if not dates[mask].equals(sessions):
+                    continue
+                selected = [rows[i] for i in np.flatnonzero(mask)]
+                close = float(selected[-1][2])
+                if not np.isfinite(close) or close <= 0:
+                    continue
+                evidence = {'close': close}
+                if require_amount and all(len(row) >= 7 for row in selected):
+                    amounts = pd.to_numeric([row[6] for row in selected], errors='coerce')
+                    if np.isfinite(amounts).all() and (amounts >= 0).all() and amounts.sum() > 0:
+                        evidence['amount_cny'] = float(amounts.sum())
+                if existing is None:
+                    verified[day] = evidence
+                elif 'amount_cny' in evidence and np.isclose(close, existing['close'], rtol=0, atol=0.00501):
+                    existing['amount_cny'] = evidence['amount_cny']
+            if len(verified) == len(slots) and (not require_amount or all('amount_cny' in item for item in verified.values())):
+                break
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+            continue
+    for day, sessions in slots.items():
+        existing = verified.get(day)
+        if existing and (not require_amount or 'amount_cny' in existing):
+            continue
+        alternative = _fetch_cnfin_final_session(secid, day, sessions, now, require_amount)
+        if alternative and existing is None:
+            verified[day] = alternative
+        elif alternative and 'amount_cny' in alternative and np.isclose(alternative['close'], existing['close'], rtol=0, atol=0.00501):
+            existing['amount_cny'] = alternative['amount_cny']
+    return verified
+
+def _fetch_cnfin_candles(symbol, expected_date, fields):
+    date_text = expected_date.strftime('%Y%m%d')
+    resp = requests.get('https://quotedata.cnfin.com/quote/v1/kline', timeout=5,
+                        params={'prod_code': symbol, 'candle_period': '1', 'get_type': 'range',
+                                'start_date': date_text, 'end_date': date_text, 'fields': ','.join(fields)},
+                        headers={'Referer': 'https://www.cnfin.com/', 'User-Agent': 'Mozilla/5.0'})
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get('data') if isinstance(payload, dict) else None
+    candle = data.get('candle') if isinstance(data, dict) else None
+    if not isinstance(candle, dict) or candle.get('fields') != ['min_time', *fields]:
+        raise DataSchemaError(f'CNFin candle schema mismatch for {symbol}')
+    rows = candle.get(symbol)
+    if not isinstance(rows, list) or not rows or any(not isinstance(row, list) or len(row) != len(fields) + 1 for row in rows):
+        raise DataSchemaError(f'CNFin candle rows malformed for {symbol}')
+    dates = pd.DatetimeIndex(pd.to_datetime([str(row[0]) for row in rows], format='%Y%m%d%H%M', errors='coerce'))
+    return dates, rows
+
+def _fetch_cnfin_close_snapshot(symbol, day, session_end, close):
+    fields = ['market_date', 'data_timestamp', 'last_px', 'business_balance', 'trade_status']
+    resp = requests.get('https://quotedata.cnfin.com/quote/v1/real', timeout=5,
+                        params={'en_prod_code': symbol, 'fields': ','.join(fields)},
+                        headers={'Referer': 'https://www.cnfin.com/', 'User-Agent': 'Mozilla/5.0'})
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get('data') if isinstance(payload, dict) else None
+    snapshot = data.get('snapshot') if isinstance(data, dict) else None
+    if not isinstance(snapshot, dict):
+        return None
+    names, values = snapshot.get('fields'), snapshot.get(symbol)
+    if (not isinstance(names, list) or not all(isinstance(name, str) for name in names)
+            or not isinstance(values, list) or len(names) != len(values) or len(set(names)) != len(names)):
+        return None
+    quote = dict(zip(names, values))
+    stamp = quote.get('data_timestamp')
+    market_date = quote.get('market_date')
+    if (type(market_date) is not int or market_date != int(day.strftime('%Y%m%d'))
+            or quote.get('trade_status') != 'ENDTR' or type(stamp) is not int or not 0 <= stamp < 240000000):
+        return None
+    stamped_at = pd.to_datetime(f'{day:%Y%m%d}{stamp:09d}', format='%Y%m%d%H%M%S%f', errors='coerce')
+    price = quote.get('last_px')
+    if (pd.isna(stamped_at) or not session_end <= stamped_at <= pd.Timestamp(beijing_now())
+            or type(price) not in (int, float) or price != close):
+        return None
+    return quote
+
+def _fetch_cnfin_final_session(secid, day, eastmoney_minutes, clock, require_amount):
+    if secid == CN_ZZHL_INDEX_SECID:
+        symbol = '930955.CSI'
+    elif secid == CN_SA_VOLUME_ZZ2000_SECID:
+        symbol = '932000.CSI'
+    elif secid in CN_ALL_CODES or secid == CN_DK_HS300_SECID:
+        market, code = secid.split('.')
+        symbol = f"{code}.{'SH' if market == '1' else 'SZ'}"
+    else:
+        return None
+    fields = ['close_px', 'business_balance'] if require_amount else ['close_px']
+    try:
+        dates, rows = _fetch_cnfin_candles(symbol, day, fields)
+        # CNFin labels bars by period end, starting at 09:31.
+        if not dates.equals(eastmoney_minutes[1:]):
+            return None
+        prices = [row[1] for row in rows]
+        if not all(type(price) in (int, float) and np.isfinite(price) and price > 0 for price in prices):
+            return None
+        close = prices[-1]
+        snapshot = None
+        if day == clock.normalize():
+            snapshot = _fetch_cnfin_close_snapshot(symbol, day, dates[-1], close)
+            if snapshot is None:
+                return None
+        evidence = {'close': float(close)}
+        if require_amount:
+            amounts = [row[2] for row in rows]
+            if all(type(value) in (int, float) and np.isfinite(value) and value >= 0 for value in amounts):
+                total = sum(amounts)
+                snapshot_total = total if snapshot is None else snapshot.get('business_balance')
+                if np.isfinite(total) and total > 0 and type(snapshot_total) in (int, float) and total == snapshot_total:
+                    # CNFin publishes the CSI 932000 balance in units of CNY 10,000.
+                    amount_cny = float(total * (10000 if secid == CN_SA_VOLUME_ZZ2000_SECID else 1))
+                    if np.isfinite(amount_cny):
+                        evidence['amount_cny'] = amount_cny
+        return evidence
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+        return None
+
+def _fetch_cnfin_930955_minute(expected_date, receipt):
+    try:
+        dates, rows = _fetch_cnfin_candles('930955.CSI', expected_date, ['close_px'])
+        pos = _cn_latest_completed_minute(dates, expected_date)
+        if pos is not None:
+            if type(rows[pos][1]) not in (int, float):
+                return None
+            price = float(rows[pos][1])
+            if np.isfinite(price) and price > 0:
+                return _cn_record_quote(price, dates[pos], '新华财经', receipt)
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+        pass
+    return None
+
+def _fetch_cn_realtime_primary(candidate_secids, expected, receipt):
     for candidate_secid in candidate_secids:
         try:
-            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
+            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f13,f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
             resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
             resp.raise_for_status()
             payload = resp.json()
@@ -1880,32 +2068,66 @@ def _fetch_cn_realtime_close(secid, expected_date=None):
             data = payload.get('data')
             if not isinstance(data, dict):
                 continue
-            if str(data.get('f57')) != candidate_secid.split('.', 1)[1]:
+            market, code = candidate_secid.split('.', 1)
+            if str(data.get('f57')) != code or str(data.get('f13')) != market:
                 continue
             f43 = data.get('f43')
             f46 = data.get('f46')
             f124 = data.get('f124')
-            if f43 is None or f46 is None or f124 is None or (f43 == '-') or (f46 == '-'):
+            f59 = data.get('f59')
+            if any(type(value) not in (int, float) for value in (f43, f46, f124, f59)):
                 continue
             timestamp = float(f124)
             if not np.isfinite(timestamp) or not 0 < timestamp < 4102444800:
                 continue
             quote_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-            decimals = float(data.get('f59', 2))
+            decimals = float(f59)
             if not np.isfinite(decimals) or decimals != int(decimals) or (not 0 <= decimals <= 6):
                 continue
             price = float(f43) / 10 ** int(decimals)
             if not _cn_quote_time_valid(quote_time, expected) or not np.isfinite(float(f46)) or float(f46) <= 0 or (not np.isfinite(price)) or (price <= 0):
                 continue
-            return price
+            return _cn_record_quote(price, quote_time, '东方财富/实时报价', receipt)
         except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
             continue
-    price = _fetch_cn_realtime_trends(candidate_secids, expected)
+    return None
+
+def _fetch_cn_realtime_close(secid, expected_date=None, receipt=None):
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
+    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
+    candidate_secids = [proxy_secid] if proxy_secid else _vendor_secid_candidates(secid)
+    if secid == CN_ZZHL_INDEX_SECID:
+        # Start the independent source alongside the two timed EastMoney feeds.
+        # Do not wait for five serial timeouts before asking for a usable quote.
+        def query(fetch):
+            details = {}
+            return fetch(details), details
+
+        feeds = [
+            lambda meta: _fetch_cn_realtime_primary(candidate_secids[:1], expected, meta),
+            lambda meta: _fetch_cn_realtime_trends(candidate_secids[:1], expected, receipt=meta),
+            lambda meta: _fetch_cn_realtime_trends(candidate_secids[:1], expected, host='push2.eastmoney.com', receipt=meta),
+            lambda meta: _fetch_cnfin_930955_minute(expected, meta),
+        ]
+        with ThreadPoolExecutor(max_workers=len(feeds)) as executor:
+            pending = [executor.submit(query, feed) for feed in feeds]
+            quotes = [future.result() for future in pending]
+        usable = [(price, details) for price, details in quotes if price is not None]
+        if usable:
+            price, details = max(usable, key=lambda quote: quote[1]['time'])
+            if receipt is not None:
+                receipt.update(details)
+            return price
+        return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected, receipt=receipt)
+    price = _fetch_cn_realtime_primary(candidate_secids, expected, receipt)
     if price is not None:
         return price
-    return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected)
+    price = _fetch_cn_realtime_trends(candidate_secids, expected, receipt=receipt)
+    if price is not None:
+        return price
+    return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected, receipt=receipt)
 
-def _supplement_today_close(df, secid, bj_today, msg=None):
+def _supplement_today_close(df, secid, bj_today, msg=None, receipt=None):
     if df is None or len(df) == 0:
         return df
     last_date = df.index[-1].date() if hasattr(df.index[-1], 'date') else df.index[-1]
@@ -1922,7 +2144,7 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
         df = df.loc[df.index < pd.Timestamp(bj_today)].copy()
         if df.empty:
             return df
-    realtime_close = _fetch_cn_realtime_close(secid)
+    realtime_close = _fetch_cn_realtime_close(secid) if receipt is None else _fetch_cn_realtime_close(secid, None, receipt)
     if realtime_close is None:
         return df
     if secid in CN_H_PROXY_SECIDS:
@@ -1939,7 +2161,9 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
         if col != 'close' and col not in new_row.columns:
             new_row[col] = np.nan
     new_row['is_live_bar'] = True
-    new_row['source'] = f'CN multi-source realtime proxy:{CN_H_PROXY_SECIDS[secid]}' if secid in CN_H_PROXY_SECIDS else 'CN multi-source realtime snapshot'
+    source = receipt.get('source') if receipt else None
+    new_row['source'] = (f'CN multi-source realtime proxy:{CN_H_PROXY_SECIDS[secid]}' if secid in CN_H_PROXY_SECIDS else
+                         f'{source} realtime snapshot' if source else 'CN multi-source realtime snapshot')
     df = pd.concat([df, new_row])
     if 'is_live_bar' not in df.columns:
         df['is_live_bar'] = False
@@ -1947,6 +2171,14 @@ def _supplement_today_close(df, secid, bj_today, msg=None):
     if msg:
         msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
     return df
+
+def _attach_cn_bond_close(cn_close, bond_close, context):
+    aligned = bond_close.reindex(cn_close.index)
+    missing = aligned.isna()
+    if missing.any():
+        preview = ','.join(pd.Timestamp(day).date().isoformat() for day in aligned.index[missing][:3])
+        raise DataSchemaError(f'{context}: {CN_BOND_NAME} raw price history has missing sessions; refusing forward fill: {preview}')
+    cn_close[CN_BOND_CODE] = aligned
 
 def _add_cn_bond_column(cn_close, msg=None, context='Sub-A', strict=False, include_live_snapshot=False):
     cn_close_with_bond = cn_close.copy()
@@ -1981,12 +2213,7 @@ def _add_cn_bond_column(cn_close, msg=None, context='Sub-A', strict=False, inclu
                 latest_text = latest_bond_date.date().isoformat() if latest_bond_date is not None else 'missing'
                 raise poe.BotError(f'{context}: {CN_BOND_NAME}缺少目标日有效数据，latest={latest_text}, expected={expected_date.date().isoformat()}')
             bond_df = bond_df.loc[pd.DatetimeIndex(pd.to_datetime(bond_df.index)).normalize() <= expected_date]
-        aligned_bond = bond_close.reindex(cn_close_with_bond.index)
-        missing_bond = aligned_bond.isna()
-        if missing_bond.any():
-            preview = ','.join((pd.Timestamp(day).date().isoformat() for day in aligned_bond.index[missing_bond][:3]))
-            raise DataSchemaError(f'{context}: {CN_BOND_NAME} raw price history has missing sessions; refusing forward fill: {preview}')
-        cn_close_with_bond[CN_BOND_CODE] = aligned_bond
+        _attach_cn_bond_close(cn_close_with_bond, bond_close, context)
         if msg is not None:
             msg.write(f"  {CN_BOND_NAME}: {bond_df.index[-1].strftime('%Y-%m-%d')} [{source}]\n")
     except _fetch_or_bot_errors() as exc:
@@ -2089,6 +2316,8 @@ def _ensure_cn_history_frame(secid, df, source, min_rows=CN_MIN_HISTORY_ROWS, wr
         return (df, source)
     name = CN_NAMES.get(secid, secid)
     range_text = _cn_frame_range_text(df)
+    if secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        raise DataUnavailableError(f'{name}({secid}) 可核验的指数历史仅有 {rows} 行（{range_text}），需要至少 {min_rows} 行。')
     try:
         fallback = _load_cn_strategy_data_cache(secid)
         if len(fallback) >= min_rows:
@@ -2133,21 +2362,107 @@ def _price_column_frame(df, source_col, output_col):
     out.index = dates
     return out
 
-def _align_partial_cn_intraday(cn_raw, columns, clock, required_close, msg):
-    """Use one confirmed cutoff when today's optional quotes are incomplete."""
+def _align_partial_cn_intraday(cn_raw, columns, clock, required_close, msg, *,
+                               label='Sub-A', names=None, diagnostics=None, previous_close=None):
+    """Use the preceding confirmed session when optional live inputs are incomplete."""
     today = pd.Timestamp(clock.date())
     required = pd.Timestamp(required_close)
-    if not _is_cn_unconfirmed_at(clock) or required >= today:
+    awaiting_close = previous_close is not None and required == today
+    if not awaiting_close and (not _is_cn_unconfirmed_at(clock) or required >= today):
         return cn_raw
+    cutoff = pd.Timestamp(previous_close) if awaiting_close else required
     latest = {code: _latest_valid_close_date(cn_raw.get(code)) for code in columns}
-    if any((value is None or value < required for value in latest.values())):
+    if any(value is None or value < cutoff or cutoff not in cn_raw[code].index
+           for code, value in latest.items()):
         return cn_raw
     missing = [code for code, value in latest.items() if value < today]
     if not missing:
         return cn_raw
-    names = '、'.join((CN_NAMES.get(code, code) for code in missing))
-    msg.write(f'  ⚠️ Sub-A 当前实时信号不可用：{names}缺少今日快照；全部Sub-A价格统一截至 {required.date().isoformat()} 最近确认收盘，仅展示该日信号，不代表今日实时信号。\n')
-    return {code: _drop_cn_rows_after(frame, required) for code, frame in cn_raw.items()}
+    display_names = CN_NAMES if names is None else names
+    missing_names = '、'.join(display_names.get(code, code) for code in missing)
+    field = '当日确认收盘' if awaiting_close else '今日快照'
+    msg.write(f'  ⚠️ {label} 当前实时信号不可用：{missing_names}缺少{field}；全部{label}价格统一截至 {cutoff:%Y-%m-%d} 最近确认收盘，仅展示该日信号，不代表今日实时信号。\n')
+    if diagnostics is not None:
+        diagnostics['cn_confirmed_close'] = cutoff
+        diagnostics['cn_missing_live_inputs'] = tuple(
+            (display_names.get(code, code), latest[code].date().isoformat()) for code in missing
+        )
+        diagnostics['cn_missing_live_field'] = field
+    return {code: _drop_cn_rows_after(frame, cutoff) for code, frame in cn_raw.items()}
+
+def _prepare_cn_live_panel(raw, symbols, clock, required_close, previous_close, msg, label, names=None,
+                           *, include_snapshot=True, final_sessions=None, previous_sessions=None):
+    # Quarantine daily rows beyond the close required when this request started.
+    # Only the validated quote path may then add a date after that cutoff.
+    panel = {code: _drop_cn_rows_after(frame, required_close) for code, frame in raw.items()}
+    today = pd.Timestamp(clock.date())
+    diagnostics = {'cn_confirmed_close': required_close}
+    if previous_sessions is not None:
+        missing, conflicts = [], []
+        for code, secid in symbols.items():
+            frame = panel[code]
+            receipt = previous_sessions.get(secid)
+            name = (names or CN_NAMES).get(code, code)
+            if not receipt:
+                missing.append(name)
+                continue
+            price = frame.at[previous_close, 'close'] if previous_close in frame.index else np.nan
+            flag = frame.at[previous_close, 'is_live_bar'] if previous_close in frame.index and 'is_live_bar' in frame else False
+            if (pd.notna(flag) and bool(flag)) or not np.isclose(float(price), receipt['close'], rtol=0, atol=0.00501):
+                conflicts.append(name)
+        if missing or conflicts:
+            reasons = []
+            if missing:
+                reasons.append(f"收盘凭据缺失（{'、'.join(missing)}）")
+            if conflicts:
+                reasons.append(f"日线缺失或与收盘凭据不一致（{'、'.join(conflicts)}）")
+            raise DataUnavailableError(f"{label} {previous_close:%Y-%m-%d} 收盘核验失败：{'；'.join(reasons)}")
+    if required_close == today:
+        for code, secid in symbols.items():
+            frame = panel[code]
+            if today not in frame.index:
+                continue
+            verified = (final_sessions or {}).get(secid)
+            price = frame.at[today, 'close']
+            flag = frame.at[today, 'is_live_bar'] if 'is_live_bar' in frame else False
+            if not verified or pd.notna(flag) and bool(flag) or not np.isclose(float(price), verified['close'], atol=0.00501, rtol=0):
+                panel[code] = _drop_cn_rows_after(frame, previous_close)
+    elif include_snapshot and _is_cn_unconfirmed_at(clock):
+        def supplement(code, secid):
+            receipt = {}
+            frame = _supplement_today_close(panel[code], secid, clock.date(), None, receipt)
+            return frame, receipt
+        with ThreadPoolExecutor(max_workers=len(symbols)) as executor:
+            tasks = {code: executor.submit(supplement, code, secid) for code, secid in symbols.items()}
+            snapshots = {code: task.result() for code, task in tasks.items()}
+        reference = min(pd.Timestamp(beijing_now()), today + pd.Timedelta(hours=15) - pd.Timedelta(microseconds=1))
+        times = []
+        for code, (frame, receipt) in snapshots.items():
+            if receipt and _latest_valid_close_date(frame) == today and _cn_quote_time_valid(receipt['time'], clock.date(), reference):
+                panel[code] = frame
+                times.append(receipt['time'])
+        if times:
+            diagnostics['cn_quote_start'] = min(times)
+            diagnostics['cn_quote_end'] = max(times)
+    if include_snapshot or required_close == today:
+        panel = _align_partial_cn_intraday(panel, symbols, clock, required_close, msg,
+                                          label=label, names=names, diagnostics=diagnostics,
+                                          previous_close=previous_close)
+    _assert_cn_raw_prices_fresh(panel, symbols, diagnostics['cn_confirmed_close'], label)
+    return panel, diagnostics
+
+def _cn_missing_panel_sessions(index, *, include_verified_history=False):
+    if index.empty:
+        return index
+    dates = pd.bdate_range(index[0], index[-1])
+    maintained = dates[np.isin(dates.year, list(CN_MARKET_HOLIDAY_YEARS))]
+    closed = pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS)))
+    if include_verified_history:
+        historical = dates[(dates >= _CN_VERIFIED_CALENDAR_START) & (dates <= _CN_VERIFIED_CALENDAR_END)]
+        maintained = maintained.union(historical)
+        closed = closed.union(_CN_VERIFIED_CLOSED_DAYS)
+    expected = maintained[~maintained.isin(closed)]
+    return expected.difference(index)
 
 def _merge_cn_price_frames(frames, columns, label, formal_start=None):
     out = pd.concat(frames, axis=1).sort_index()
@@ -2163,14 +2478,10 @@ def _merge_cn_price_frames(frames, columns, label, formal_start=None):
             missing.append(f'{col}: {preview}')
     if missing:
         raise DataSchemaError(f'{label} raw price history has missing sessions; refusing forward fill: ' + '; '.join(missing))
-    if len(out):
-        dates = pd.bdate_range(out.index[0], out.index[-1])
-        maintained = dates[np.isin(dates.year, list(CN_MARKET_HOLIDAY_YEARS))]
-        expected = maintained[~maintained.isin(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS)))]
-        absent = expected.difference(out.index)
-        if len(absent):
-            preview = ','.join((pd.Timestamp(day).date().isoformat() for day in absent[:3]))
-            raise DataSchemaError(f'{label} all sources missing market sessions: {preview}')
+    absent = _cn_missing_panel_sessions(out.index)
+    if len(absent):
+        preview = ','.join(pd.Timestamp(day).date().isoformat() for day in absent[:3])
+        raise DataSchemaError(f'{label} all sources missing market sessions: {preview}')
     return out
 
 def _assert_cn_raw_prices_fresh(raw_dict, columns, expected_date, label):
@@ -2196,27 +2507,57 @@ def _build_cn_stock_close_frame(cn_raw):
     return out
 
 def _build_cn_dk_close_frame(dk_dfs):
-    frames = [_price_column_frame(dk_dfs[col], col, col) for col in CN_DK_COLS]
+    frames = [_price_column_frame(dk_dfs[col], 'close', col) for col in CN_DK_COLS]
     formal_start = max((CN_DK_PUBLICATION_DATES[col] for col in CN_DK_COLS))
     out = _merge_cn_price_frames(frames, CN_DK_COLS, 'A-DK', formal_start=formal_start)
     out.attrs['cn_unconfirmed_snapshot'] = any(('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in dk_dfs.values() if len(frame)))
     return out
 
-def _fetch_cn_dk_price_index(idx_code, secid):
+def _fetch_cn_index_history(secid, sources, required_date=None, *, verified_close=None, verified_prior=None, min_rows=51):
     attempts = []
-    for src_name, fetcher in [('Sina', lambda: _fetch_cn_sina(secid)), ('EastMoney', lambda: _fetch_cn_eastmoney(secid)), ('csindex', lambda: _fetch_cn_csindex(idx_code))]:
+    best = None
+    required = pd.Timestamp(required_date).normalize() if required_date is not None else None
+    for src_name, fetcher in sources:
         try:
             df = fetcher()
-            if df is not None and len(df) > 50:
-                _price_column_frame(df, 'close', secid)
-                return (df, src_name)
+            if df is not None and len(df) >= min_rows:
+                checked = _price_column_frame(df, 'close', secid)
+                latest = checked[secid].last_valid_index()
+                if required is None:
+                    return df, src_name
+                observed = checked.loc[:required, secid].dropna()
+                if len(observed) < min_rows or len(_cn_missing_panel_sessions(observed.index, include_verified_history=True)):
+                    attempts.append(f'{src_name}: insufficient or discontinuous history')
+                    continue
+                if verified_prior is not None:
+                    anchor, price = verified_prior
+                    if not np.isclose(observed.get(anchor, np.nan), price, rtol=0, atol=0.00501):
+                        attempts.append(f'{src_name}: does not match the completed {anchor:%Y-%m-%d} session')
+                        continue
+                candidate = checked[secid].get(required, np.nan)
+                if pd.notna(candidate) and (verified_close is None or np.isclose(candidate, verified_close, rtol=0, atol=0.00501)):
+                    return df, src_name
+                prior = checked.loc[checked.index < required, secid].last_valid_index()
+                if prior is not None and (best is None or prior > best[0]):
+                    best = (prior, df, src_name)
+                attempts.append(f'{src_name}: no verified close {required:%Y-%m-%d} (latest {latest:%Y-%m-%d})')
+                continue
             attempts.append(f'{src_name}:insufficient')
-        except _DATA_FETCH_ERRORS as e:
+        except _DATA_FETCH_ERRORS + (OSError, KeyError) as e:
             attempts.append(f'{src_name}:{e}')
             time.sleep(0.2)
-    raise ValueError(f"DK price index source failed for {secid}/{idx_code}: {'; '.join(attempts)}")
+    if best is not None:
+        return best[1], best[2]
+    raise DataUnavailableError(f"Index price sources failed for {secid}: {'; '.join(attempts)}")
 
-def fetch_cn_kline(secid, required_date=None):
+def _fetch_cn_dk_price_index(idx_code, secid, required_date=None, *, verified_close=None, verified_prior=None):
+    sources = [('Sina', lambda: _fetch_cn_sina(secid)),
+               ('EastMoney', lambda: _fetch_cn_eastmoney(secid)),
+               ('csindex', lambda: _fetch_cn_csindex(idx_code))]
+    min_rows = CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50 if required_date is not None else 51
+    return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows)
+
+def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_prior=None, required_history=None):
     code = secid.split('.')[1] if '.' in secid else secid
     last_err = None
     attempts = []
@@ -2229,6 +2570,14 @@ def fetch_cn_kline(secid, required_date=None):
                 checked = _price_column_frame(df, 'close', secid)
                 if len(checked) <= 50 or required not in checked.index:
                     raise DataUnavailableError(f'{name} bond history missing required close {required.date()}')
+                if verified_close is not None and not np.isclose(checked.at[required, secid], verified_close, atol=0.00501, rtol=0):
+                    raise DataUnavailableError(f'{name} bond history conflicts with completed session {required.date()}')
+                if verified_prior is not None:
+                    anchor, price = verified_prior
+                    if not np.isclose(checked[secid].get(anchor, np.nan), price, atol=0.00501, rtol=0):
+                        raise DataUnavailableError(f'{name} bond history conflicts with completed session {anchor.date()}')
+                if required_history is not None and len(required_history.difference(checked[secid].dropna().index)):
+                    raise DataUnavailableError(f'{name} bond history lacks stock panel sessions')
                 return (df, f'{name}:000012 direct bond index')
             except _DATA_FETCH_ERRORS as exc:
                 last_err = exc
@@ -2236,61 +2585,16 @@ def fetch_cn_kline(secid, required_date=None):
         raise DataUnavailableError(f'000012 bond history unavailable at {required.date()}: ' + '; '.join(attempts))
     if secid in CN_CSINDEX_PRICE_INDEX_CODES:
         index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
-        required_date = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
-        try:
-            df = _load_recent_cn_official_cache(secid)
-            cache_date = df.index[-1].strftime('%Y-%m-%d')
-            return (df, f'csindex-cache:{cache_date}')
-        except (OSError, ValueError, KeyError) as cache_err:
-            attempts.append(f'recent-cache:{cache_err}')
-        for vendor_secid in _vendor_secid_candidates(secid):
-            try:
-                df = _fetch_cn_eastmoney(vendor_secid)
-                if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
-                    return (df, f'EastMoney:{vendor_secid}')
-                if df is not None and len(df) > 50:
-                    attempts.append(f'EastMoney:{vendor_secid}:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f'EastMoney:{vendor_secid}:{e}')
-                time.sleep(1)
-        try:
-            df = _fetch_cn_sina(secid)
-            if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
-                return (df, 'Sina')
-            if df is not None and len(df) > 50:
-                attempts.append(f'Sina:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f'Sina:{e}')
-            time.sleep(1)
-        try:
-            base_df, base_source = _load_cn_official_base_with_embedded(secid)
-            proxy_df, proxy_source = _fetch_cn_price_index_proxy(secid)
-            stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
-            if len(stitched) > 50 and pd.Timestamp(stitched.index[-1]).normalize() >= required_date:
-                return (stitched, f'{base_source}+{proxy_source}')
-            attempts.append(f'proxy:stale {pd.Timestamp(stitched.index[-1]).date().isoformat()}')
-        except _DATA_FETCH_ERRORS + (OSError, KeyError) as proxy_err:
-            attempts.append(f'proxy:{proxy_err}')
-        try:
-            df = _fetch_cn_csindex(index_code)
-            if df is not None and len(df) > 50 and (pd.Timestamp(df.index[-1]).normalize() >= required_date):
-                _save_cn_official_cache(secid, df)
-                return (df, f'csindex:{index_code}')
-            if df is not None and len(df) > 50:
-                attempts.append(f'csindex:stale {pd.Timestamp(df.index[-1]).date().isoformat()}')
-        except _DATA_FETCH_ERRORS as e:
-            last_err = e
-            attempts.append(f'csindex:{e}')
-            time.sleep(1)
-        try:
-            df = _load_cn_official_cache(secid)
-            if df is not None and len(df) > 50:
-                cache_date = df.index[-1].strftime('%Y-%m-%d')
-                return (df, f'csindex-cache:{cache_date}')
-        except (OSError, ValueError, KeyError) as cache_err:
-            attempts.append(f'cache:{cache_err}')
+        required = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
+        sources = [('csindex-cache', lambda: _load_cn_official_base_with_embedded(secid)[0])]
+        sources.extend((f'EastMoney:{alias}', lambda alias=alias: _fetch_cn_eastmoney(alias))
+                       for alias in _vendor_secid_candidates(secid))
+        sources.extend([('Sina', lambda: _fetch_cn_sina(secid)),
+                        (f'csindex:{index_code}', lambda: _fetch_cn_csindex(index_code))])
+        frame, name = _fetch_cn_index_history(secid, sources, required, verified_close=verified_close, verified_prior=verified_prior, min_rows=CN_MIN_HISTORY_ROWS)
+        if name == f'csindex:{index_code}':
+            _save_cn_official_cache(secid, frame)
+        return frame, name
     elif code.startswith('H'):
         base_df = None
         base_source = None
@@ -2331,15 +2635,9 @@ def fetch_cn_kline(secid, required_date=None):
         if proxy_df is not None and len(proxy_df) > 50:
             return (proxy_df, proxy_source)
     else:
-        for name, fetcher in [('Sina', lambda: _fetch_cn_sina(secid)), ('EastMoney', lambda: _fetch_cn_eastmoney(secid))]:
-            try:
-                df = fetcher()
-                if df is not None and len(df) > 50:
-                    return (df, name)
-            except _DATA_FETCH_ERRORS as e:
-                last_err = e
-                attempts.append(f'{name}:{e}')
-                time.sleep(1)
+        sources = [('Sina', lambda: _fetch_cn_sina(secid)), ('EastMoney', lambda: _fetch_cn_eastmoney(secid))]
+        min_rows = CN_MIN_HISTORY_ROWS if required_date is not None else 51
+        return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows)
     attempts_text = ' | '.join(attempts[-5:]) if attempts else str(last_err)
     raise poe.BotError(f'获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}')
 
@@ -2511,7 +2809,7 @@ def _fetch_cn_zz2000_eastmoney_amount(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, o
     backup['source'] = source
     return (backup, source)
 
-def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=None):
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=None, *, final_amounts=None):
     errors = []
     zz2000_reference = None
     if secid == CN_SA_VOLUME_ZZ2000_SECID:
@@ -2531,6 +2829,16 @@ def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, l
                 df, source_name = value
             else:
                 df = value
+            if final_amounts is not None and isinstance(df, pd.DataFrame) and 'amount' in df and expected in df.index:
+                reference = final_amounts.get(secid)
+                unit = (1e8 if secid == CN_SA_VOLUME_ZZ2000_SECID or source_name.startswith('CSIndex')
+                        else 1e4 if source_name.startswith('Sohu') else 1.0)
+                raw_amount = pd.to_numeric(df.at[expected, 'amount'], errors='coerce')
+                # Minute contributions are rounded independently. CSI additionally rounds to .01 亿.
+                tolerance = max(unit * .0050001 if unit == 1e8 else unit * .5, 0 if reference is None else reference * 1e-8)
+                if reference is None or not np.isclose(raw_amount * unit, reference, atol=tolerance, rtol=0):
+                    errors.append(f'{source_name}: {expected:%Y-%m-%d} amount does not match the completed session')
+                    df = df.drop(index=expected)
             if secid == CN_SA_VOLUME_ZZ2000_SECID and source_name == 'CSIndex official amount' and (df is not None) and ('amount' in df.columns):
                 zz2000_reference = df
             if df is not None and len(df) > 50 and ('amount' in df.columns):
@@ -2540,9 +2848,12 @@ def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, l
                 if len(valid) < 50:
                     errors.append(f'{source_name}: valid amount rows={len(valid)}')
                     continue
-                latest_valid = pd.Timestamp(valid.index.max()).normalize()
-                if expected is not None and latest_valid < expected:
-                    errors.append(f'{source_name}: latest valid amount {latest_valid.date().isoformat()} < expected {expected.date().isoformat()}')
+                if expected is not None and expected not in valid.index:
+                    latest_valid = pd.Timestamp(valid.index.max()).normalize()
+                    if latest_valid < expected:
+                        errors.append(f'{source_name}: latest valid amount {latest_valid:%Y-%m-%d} < expected {expected:%Y-%m-%d}')
+                    else:
+                        errors.append(f'{source_name}: missing valid amount on {expected:%Y-%m-%d} (latest {latest_valid:%Y-%m-%d})')
                     continue
                 if secid == CN_SA_VOLUME_ZZ2000_SECID and source_name == 'CSIndex official amount' and (expected is not None):
                     rule = _suba_amount_rule_frame(amount, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS, CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE, expected)
@@ -2564,7 +2875,7 @@ def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, l
             time.sleep(0.5)
     raise DataUnavailableError(f"{label} amount data unavailable; verified same-index amount sources tried: {' | '.join(errors[-3:])}")
 
-def _load_suba_volume_signal(expected_date=None):
+def _load_suba_volume_signal(expected_date=None, *, final_amounts=None):
     specs = {}
     sources = {}
     errors = {}
@@ -2576,7 +2887,8 @@ def _load_suba_volume_signal(expected_date=None):
             sources[name] = 'not-yet-published'
             continue
         try:
-            df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date)
+            proof = {} if final_amounts is None else {'final_amounts': final_amounts}
+            df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date, **proof)
             if expected_date is not None:
                 df = _drop_cn_rows_after(df, expected_date)
             amount = df['amount']
@@ -2652,6 +2964,8 @@ def _load_suba_volume_signal(expected_date=None):
             ratio_unknown = feature['severe_ratio_unresolved'].fillna(True).astype(bool)
             ratio_unknown.loc[ratio_unknown.index < CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE] = False
             feature['combined_unresolved'] |= ratio_unknown
+        if final_amounts is not None and errors and expected_date in feature.index:
+            feature.loc[expected_date, 'combined_unresolved'] = True
         for name in ('zz2000', 'cyb'):
             if name in sources:
                 feature[f'{name}_source'] = sources[name]
@@ -2667,13 +2981,13 @@ def _load_suba_volume_signal(expected_date=None):
         feature['partial_unavailable'] = bool(errors)
     return (combined_signal, feature)
 
-def _suba_volume_feature_has_unresolved(feature, consumer_index=None):
+def _suba_volume_feature_has_unresolved(feature, consumer_index=None, *, confirmed_date=None):
     if feature is None or len(feature) == 0 or 'combined_unresolved' not in feature.columns:
         return consumer_index is not None and len(consumer_index) > 0
     unknown = feature['combined_unresolved']
     if consumer_index is not None:
         required = pd.DatetimeIndex(consumer_index)
-        confirmed = _latest_confirmed_cn_rule_date(required)
+        confirmed = confirmed_date if confirmed_date is not None else _latest_confirmed_cn_rule_date(required)
         if confirmed is not None:
             required = required[required <= confirmed]
         unknown = unknown.reindex(required)
@@ -2702,7 +3016,8 @@ def _write_suba_volume_query_warning(msg, cn_result):
         msg.write('⚠️ Sub-A成交额风控不可判定：本次查询继续显示主信号/净值，但未用成交额风控改写仓位；不应按正常仓位执行。\n\n')
 
 def _apply_suba_volume_overlay_policy(cn_result, close_df, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=False):
-    if _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
+    confirmed_date = getattr(close_df, 'attrs', {}).get('cn_confirmed_close')
+    if _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index, confirmed_date=confirmed_date):
         message = 'Sub-A成交额风控不可判定，本次不应用该风控改写仓位'
         if not allow_unresolved_suba_volume:
             raise poe.BotError('Sub-A成交额风控存在不可判定项，正式路径中止。')
@@ -7678,6 +7993,22 @@ def _write_adk_decision_explanation(w, cn_dk_result):
         conclusion = f"原始动量有效；score-hot下一状态={('开' if target_hot else '关')}；最终目标={item.get('target_final_text', '状态不可用')}。"
     w(f'- 结论：{conclusion}\n')
 
+def _write_cn_live_input_times(w, price_frame):
+    attrs = getattr(price_frame, 'attrs', {})
+    missing = attrs.get('cn_missing_live_inputs', ())
+    if missing:
+        legs = '；'.join(f'{name}（最近有效数据 {last_seen}）' for name, last_seen in missing)
+        w(f"缺少{attrs['cn_missing_live_field']}：{legs}。\n\n")
+    start, end = attrs.get('cn_quote_start'), attrs.get('cn_quote_end')
+    if start is not None and end is not None:
+        label = '其余品种有效盘中报价' if missing else '盘中报价时间'
+        span = f'{start:%H:%M:%S}' if start == end else f'{start:%H:%M:%S}–{end:%H:%M:%S}'
+        w(f'{label}：北京时间 {span}。\n\n')
+
+def _cn_expect_today_for_query(query_kind, clock):
+    required_time = (9, 30) if query_kind in {'live_signal', 'live_params'} else (15, 0)
+    return _is_cn_required_close_day(clock.date()) and (clock.hour, clock.minute) >= required_time
+
 def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False, dk_intraday=False, query_kind='signal', cn_price_frame=None, dk_price_frame=None):
     cn_intraday = cn_intraday or bool(getattr(cn_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
     dk_intraday = dk_intraday or bool(getattr(dk_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
@@ -7686,7 +8017,9 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w('> 参数核对页；下单只看“实时信号”。\n\n')
     suba = _suba_query_overview(cn_result, -1)
     suba_available = bool(suba['rows'])
-    suba_live_missing = query_kind in {'live_signal', 'live_params'} and _is_cn_required_close_day(beijing_now().date()) and ((beijing_now().hour, beijing_now().minute) >= (9, 30)) and (cn_result is not None) and (len(cn_result) > 0) and (pd.Timestamp(cn_result.index[-1]).date() < beijing_now().date())
+    now = beijing_now()
+    expect_today = _cn_expect_today_for_query(query_kind, now)
+    suba_live_missing = expect_today and cn_result is not None and len(cn_result) > 0 and pd.Timestamp(cn_result.index[-1]).date() < now.date()
     a_volume_unresolved = False
     if cn_result is not None and len(cn_result) > 0:
         a_row = cn_result.iloc[-1]
@@ -7697,6 +8030,8 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
     w(f'### A策略（Sub-A）｜{suba_mark} {suba_status}\n\n')
     if suba_live_missing:
         w('⚠️ 今日Sub-A实时数据不完整；以下仅为最近确认收盘的历史信号，不作为今日实时操作依据。\n\n')
+    if suba_live_missing or cn_intraday:
+        _write_cn_live_input_times(w, cn_price_frame)
     if cn_result is not None and len(cn_result) > 0:
         w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
     if query_kind in {'params', 'live_params'}:
@@ -7710,7 +8045,8 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
             action = '实时数据不完整；等待刷新' if suba_live_missing else '风控不可判定；停止执行并刷新数据' if a_volume_unresolved else item['action']
             w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
     else:
-        w('⚠️ A策略状态不可用。\n')
+        reason = getattr(cn_price_frame, 'attrs', {}).get('cn_panel_error')
+        w(f'⚠️ A策略状态不可用。{reason or ""}\n')
     _write_suba_decision_explanation(w, cn_result)
     if cn_result is not None and len(cn_result) > 0:
         a_row = cn_result.iloc[-1]
@@ -7726,10 +8062,15 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         suba_action = _query_action_instruction(suba['changed'], cn_intraday, query_kind) if suba_executable else '状态不可判定：停止执行并重试，不能按“维持”处理。'
         w(f'**现在怎么做：{suba_action}**\n\n')
     adk = _adk_query_overview(cn_dk_result, -1)
-    adk_available = bool(adk['rows'])
+    adk_live_missing = expect_today and cn_dk_result is not None and len(cn_dk_result) > 0 and pd.Timestamp(cn_dk_result.index[-1]).date() < now.date()
+    adk_available = bool(adk['rows']) and not adk_live_missing
     adk_mark = '🔴' if adk_available and adk['changed'] else '🟢' if adk_available else '⚠️'
     adk_status = '需要调整' if adk_available and adk['changed'] else '维持' if adk_available else '状态不可判定'
     w(f'### ADK策略（Sub-A-DK）｜{adk_mark} {adk_status}\n\n')
+    if adk_live_missing:
+        w('⚠️ 今日ADK实时数据不完整；以下仅为最近确认收盘的历史信号，不作为今日实时操作依据。\n\n')
+    if adk_live_missing or dk_intraday:
+        _write_cn_live_input_times(w, dk_price_frame)
     w('选拔口径：全10配对按绝对乖离动量固定 Top-1；R²仅供诊断展示，正式路径不以 R² 过滤配对。\n\n')
     if cn_dk_result is not None and len(cn_dk_result) > 0:
         w(f"数据日期：**{pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if dk_intraday else '最近已确认收盘')}）\n\n")
@@ -7737,14 +8078,17 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w(f'规则：**ADK策略（单一生产策略）**｜5指数全10对固定Top-1｜MA{CN_DK_BIAS_N}/动量{CN_DK_MOM_DAY}日｜score-hot进入/恢复/乘数={V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}/{V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x\n\n')
         w(f'风控/执行：目标波动{CN_DK_TARGET_VOL:.0%}/{CN_DK_VOL_WINDOW}日｜杠杆{CN_DK_MIN_LEV:.1f}–{CN_DK_MAX_LEV:.1f}x｜|Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整｜每条多/空腿单边成本{CN_DK_COMMISSION:.3%}｜A股收盘执行\n\n')
     if adk['rows']:
-        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | {('盘中参考目标（待收盘确认）' if dk_intraday else '收盘最终目标')} | 操作 |\n")
+        target_label = '历史收盘目标（非今日实时）' if adk_live_missing else '盘中参考目标（待收盘确认）' if dk_intraday else '收盘最终目标'
+        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | {target_label} | 操作 |\n")
         w('|:-|:-|:-|:-|\n')
         for item in adk['rows']:
-            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{item['action']}** |\n")
+            action = '实时数据不完整；等待刷新' if adk_live_missing else item['action']
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
     else:
-        w('⚠️ ADK策略状态不可用。\n')
+        reason = getattr(dk_price_frame, 'attrs', {}).get('cn_panel_error')
+        w(f'⚠️ ADK策略状态不可用。{reason or ""}\n')
     _write_adk_decision_explanation(w, cn_dk_result)
-    if adk['target_net']:
+    if adk['target_net'] and adk_available:
         w('\n**账户净敞口（实际执行优先看）**\n\n')
         w('| 指数 | 当前净敞口 | 目标净敞口 | 调整量 |\n')
         w('|:-|:-|:-|:-|\n')
@@ -7754,7 +8098,7 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
             target = float(adk['target_net'].get(asset, 0.0) or 0.0)
             delta = target - current
             w(f'| {_dk_leg_name(asset)} | {_format_signed_exposure(current)} | **{_format_signed_exposure(target)}** | {_format_signed_exposure(delta)} |\n')
-    elif adk['rows'] and (not adk['target_is_exact']):
+    elif adk_available and not adk['target_is_exact']:
         w('\n> 当前兼容路径只给出配对/方向变化；精确腿内敞口继续以下方 VolScale 与覆盖层状态表为准。\n')
     if cn_dk_result is not None and len(cn_dk_result) > 0:
         adk_row = cn_dk_result.iloc[-1]
@@ -13825,75 +14169,110 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
 
 class CombinedStrategyBase:
 
-    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False):
-        msg.write('⏳ 正在获取A股数据...\n')
-        _cn_clock = beijing_now()
-        _cn_requested_close = _latest_cn_data_required_date(_cn_clock)
-        _cn_fallback_close = _latest_cn_required_close_date(_cn_clock.date())
-        _cn_fetch_required_close = _cn_fallback_close if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_cn_clock.date()).normalize() else _cn_requested_close
-        cn_raw, cn_sources = ({}, {})
-        for secid in CN_STOCK_CODES:
-            if allow_last_confirmed_cn_close:
-                df, source = fetch_cn_kline(secid, required_date=_cn_fetch_required_close)
-            else:
-                df, source = fetch_cn_kline(secid)
-            df, source = _ensure_cn_history_frame(secid, df, source, min_rows=CN_MIN_HISTORY_ROWS, write=msg.write)
-            cn_raw[secid] = df
-            cn_sources[secid] = source
-            time.sleep(0.2)
-        _bj_today_cn = _cn_clock.date()
-        if include_cn_live_snapshot:
-            for secid in CN_STOCK_CODES:
-                cn_raw[secid] = _supplement_today_close(cn_raw[secid], secid, _bj_today_cn, msg)
+    def _fetch_cn_price_panel(self, msg, specifications, clock, required, previous, final_sessions,
+                              *, adk=False, include_snapshot=False):
+        label = 'ADK' if adk else 'Sub-A'
+        names = CN_DK_NAMES if adk else CN_NAMES
+        raw, sources = {}, {}
+        for column, secid, index_code in specifications:
+            evidence = final_sessions[required].get(secid)
+            confirmation = {'verified_close': evidence['close']} if evidence else {}
+            prior_evidence = final_sessions[previous].get(secid)
+            if prior_evidence and required != previous:
+                confirmation['verified_prior'] = (previous, prior_evidence['close'])
+            if secid == CN_BOND_CODE:
+                stock_days = pd.concat([_price_column_frame(raw[code], 'close', code) for code in CN_STOCK_CODES],
+                                       axis=1, join='inner').dropna().index
+                coverage = stock_days[(stock_days >= CN_STOCK_FORMAL_START) & (stock_days <= previous)]
+                confirmation['required_history'] = coverage
+            try:
+                if adk:
+                    frame, source = _fetch_cn_dk_price_index(index_code, secid, required_date=required, **confirmation)
+                else:
+                    frame, source = fetch_cn_kline(secid, required_date=required, **confirmation)
+            except DataUnavailableError:
+                if secid != CN_BOND_CODE or previous == required:
+                    raise
+                evidence = final_sessions[previous].get(secid)
+                fallback = {'verified_close': evidence['close']} if evidence else {}
+                frame, source = fetch_cn_kline(secid, required_date=previous, required_history=coverage, **fallback)
+            if not adk and secid != CN_BOND_CODE:
+                frame, source = _ensure_cn_history_frame(secid, frame, source, min_rows=CN_MIN_HISTORY_ROWS, write=msg.write)
+            raw[column], sources[column] = frame, source
+        symbols = {column: secid for column, secid, _ in specifications}
+        raw, diagnostics = _prepare_cn_live_panel(raw, symbols, clock, required, previous, msg, label, names,
+                                                  include_snapshot=include_snapshot, final_sessions=final_sessions[required],
+                                                  previous_sessions=final_sessions[previous])
+        if adk:
+            close = _build_cn_dk_close_frame(raw)
         else:
-            for secid in CN_STOCK_CODES:
-                cn_raw[secid] = _drop_cn_unconfirmed_today(cn_raw[secid])
-        _cn_input_cutoff = pd.Timestamp(_bj_today_cn).normalize() if include_cn_live_snapshot else _cn_requested_close
-        for secid in CN_STOCK_CODES:
-            cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_input_cutoff)
-        if include_cn_live_snapshot:
-            cn_raw = _align_partial_cn_intraday(cn_raw, CN_STOCK_CODES, _cn_clock, _cn_requested_close, msg)
-        _cn_open_now, _bj_now_check = is_cn_market_open()
-        _is_cn_trading_day = _is_cn_required_close_day(_bj_today_cn)
-        _cn_after_close = _is_cn_trading_day and (not _cn_open_now) and (_bj_now_check.hour >= 15)
-        _cn_required_close = _cn_requested_close
-        _cn_latest_dates = [_latest_valid_close_date(cn_raw.get(secid)) for secid in CN_STOCK_CODES]
-        _cn_latest_common = min(_cn_latest_dates) if all((value is not None for value in _cn_latest_dates)) else None
-        if allow_last_confirmed_cn_close and _cn_requested_close == pd.Timestamp(_bj_today_cn).normalize() and (_cn_latest_common is not None) and (_cn_latest_common < _cn_requested_close) and (_cn_latest_common >= _cn_fallback_close):
-            _cn_required_close = _cn_fallback_close
-            msg.write(f'  ⚠️ A股当日最终收盘源尚未完整发布；本次绩效/净值查询按最近共同确认收盘 {_cn_required_close.date().isoformat()} 计算，不生成正式信号。\n')
-            for secid in CN_STOCK_CODES:
-                cn_raw[secid] = _drop_cn_rows_after(cn_raw[secid], _cn_required_close)
-        _assert_cn_raw_prices_fresh(cn_raw, CN_STOCK_CODES, _cn_required_close, 'Sub-A')
-        try:
-            zzhl_df = cn_raw.get(CN_ZZHL_INDEX_SECID) if CN_ZZHL_INDEX_SECID == '1.H20955' else None
-            if zzhl_df is not None and len(zzhl_df) > 0:
-                zzhl_h00922 = None
-                try:
-                    df = _fetch_cn_csindex(CN_ZZHL_PRE_INDEX_CODE)
-                    if df is not None and len(df) > 50:
-                        zzhl_h00922 = df
-                except _DATA_FETCH_ERRORS:
-                    pass
-                if zzhl_h00922 is not None:
-                    h20955_start = zzhl_df.index[0]
-                    h00922_pre = zzhl_h00922[zzhl_h00922.index < h20955_start].copy()
-                    if len(h00922_pre) > 0:
-                        h00922_pre['close'] *= zzhl_df['close'].iloc[0] / h00922_pre['close'].iloc[-1]
-                        cn_raw[CN_ZZHL_INDEX_SECID] = pd.concat([h00922_pre, zzhl_df])
-                        msg.write(f"  ZZHL: H00922扩展 {h00922_pre.index[0].strftime('%Y-%m-%d')}~{h20955_start.strftime('%Y-%m-%d')}\n")
-        except _DATA_FETCH_ERRORS as e:
-            msg.write(f'  ⚠️ ZZHL H00922扩展失败({e})，仅用H20955数据\n')
-        cn_close = _build_cn_stock_close_frame(cn_raw)
-        if len(cn_close) < CN_BIAS_N + CN_MOM_DAY + 10:
-            detail = '；'.join((f'{CN_NAMES.get(s, s)} {len(cn_raw[s])}行({_cn_frame_range_text(cn_raw[s])})' for s in CN_STOCK_CODES))
-            raise poe.BotError(f'A股数据不足: 合并后仅{len(cn_close)}行；{detail}')
-        for secid in CN_STOCK_CODES:
-            name = CN_NAMES.get(secid, secid)
-            source_label = _cn_latest_data_source_label(cn_raw[secid], cn_sources[secid])
-            msg.write(f"  {name}: {cn_raw[secid].index[-1].strftime('%Y-%m-%d')} [{source_label}]\n")
-        cn_close = _add_cn_bond_column(cn_close, msg, context='Sub-A国债避险', strict=_should_strict_cn_bond(include_cn_live_snapshot, _cn_after_close), include_live_snapshot=include_cn_live_snapshot)
-        msg.write(f"  合并截至: {cn_close.index[-1].strftime('%Y-%m-%d')}\n")
+            close = _build_cn_stock_close_frame(raw)
+            if len(close) < CN_BIAS_N + CN_MOM_DAY + 10:
+                raise DataUnavailableError(f'Sub-A 合并后仅有 {len(close)} 行确认行情')
+            bond = _price_column_frame(raw[CN_BOND_CODE], 'close', CN_BOND_CODE)[CN_BOND_CODE]
+            _attach_cn_bond_close(close, bond, 'Sub-A国债避险')
+            diagnostics['cn_final_amounts'] = {
+                code: evidence['amount_cny'] for code, evidence in final_sessions[diagnostics['cn_confirmed_close']].items()
+                if 'amount_cny' in evidence
+            }
+        close.attrs.update(diagnostics)
+        for column, frame in raw.items():
+            msg.write(f"  {names[column]}: {frame.index[-1]:%Y-%m-%d} [{_cn_latest_data_source_label(frame, sources[column])}]\n")
+        msg.write(f"  {'A-DK' if adk else 'Sub-A'}合并截至: {close.index[-1]:%Y-%m-%d}\n")
+        return close
+
+    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False, allow_cn_panel_errors=False):
+        clock = beijing_now()
+        requested_close = _latest_cn_data_required_date(clock)
+        previous_close = _latest_cn_required_close_date(clock.date())
+        adk_specs = [
+            (CN_DK_COLS[0], CN_DK_ZZ1000_SECID, CN_DK_ZZ1000_CODE),
+            (CN_DK_COLS[1], CN_DK_SZ50_SECID, CN_DK_SZ50_CODE),
+            (CN_DK_COLS[2], CN_DK_HS300_SECID, CN_DK_HS300_CODE),
+            (CN_DK_COLS[3], CN_DK_ZZ500_SECID, CN_DK_ZZ500_CODE),
+            (CN_DK_COLS[4], CN_DK_CYB_SECID, CN_DK_CYB_CODE),
+        ]
+        stock_specs = [(secid, secid, None) for secid in CN_ALL_CODES]
+        partial = include_cn_live_snapshot or allow_cn_panel_errors
+        final_sessions = {day: {} for day in (previous_close, requested_close)}
+        msg.write('⏳ 正在核验A股收盘行情与成交额...\n')
+        codes = set(CN_ALL_CODES + [CN_DK_HS300_SECID, CN_SA_VOLUME_ZZ2000_SECID])
+        with ThreadPoolExecutor(max_workers=len(codes)) as executor:
+            tasks = {code: executor.submit(_fetch_cn_final_sessions, code, tuple(final_sessions), clock) for code in codes}
+            for code, task in tasks.items():
+                for day, evidence in task.result().items():
+                    final_sessions[day][code] = evidence
+        panels = []
+        for adk, label, specs in ((False, 'Sub-A', stock_specs), (True, 'ADK', adk_specs)):
+            msg.write(f'⏳ 正在获取{label}行情...\n')
+            try:
+                panel = self._fetch_cn_price_panel(msg, specs, clock, requested_close, previous_close,
+                                                   final_sessions, adk=adk, include_snapshot=include_cn_live_snapshot)
+            except _fetch_or_bot_errors() as exc:
+                if not partial or isinstance(exc, VerifiedDataRepairConflict):
+                    raise
+                panel = pd.DataFrame()
+                panel.attrs['cn_panel_error'] = _short_error(exc, 500)
+                msg.write(f"  ⚠️ {label}确认历史不可用：{panel.attrs['cn_panel_error']}\n")
+            panels.append(panel)
+        cn_close, cn_dk_close = panels
+        if allow_last_confirmed_cn_close:
+            cutoff = min(panel.attrs['cn_confirmed_close'] for panel in panels)
+            if cutoff == pd.Timestamp(clock.date()) and CN_SA_VOLUME_OVERLAY_ENABLED:
+                receipts = cn_close.attrs.get('cn_final_amounts', {})
+                amount_codes = {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
+                if not amount_codes.issubset(receipts):
+                    cutoff = previous_close
+            if cutoff < requested_close:
+                msg.write(f'  ⚠️ 当日收盘尚未完整核验；A与ADK按共同确认收盘 {cutoff:%Y-%m-%d} 计算。\n')
+                for i, panel in enumerate(panels):
+                    panels[i] = _drop_cn_rows_after(panel, cutoff)
+                    panels[i].attrs['cn_confirmed_close'] = cutoff
+                cn_close, cn_dk_close = panels
+                cn_close.attrs['cn_final_amounts'] = {
+                    code: evidence['amount_cny'] for code, evidence in final_sessions[cutoff].items()
+                    if 'amount_cny' in evidence
+                }
         msg.write('⏳ 正在获取美股数据...\n')
         us_raw, us_sources = ({}, {})
         _expected_us_date = _latest_us_required_close_date()
@@ -14018,32 +14397,9 @@ class CombinedStrategyBase:
         us_date = us_rot_close.index[-1]
         us_close_bj = beijing_time_str(us_date, 'US', 'close')
         msg.write(f'  美股: {len(us_raw)}个ETF | 收盘: {us_close_bj}\n')
-        msg.write('⏳ 正在获取A-DK多空数据(5个价格指数)...\n')
-        try:
-            dk_dfs = {}
-            _bj_today = beijing_now().date()
-            _dk_fetch_list = [(CN_DK_ZZ1000_CODE, CN_DK_ZZ1000_SECID, CN_DK_COLS[0]), (CN_DK_SZ50_CODE, CN_DK_SZ50_SECID, CN_DK_COLS[1]), (CN_DK_HS300_CODE, CN_DK_HS300_SECID, CN_DK_COLS[2]), (CN_DK_ZZ500_CODE, CN_DK_ZZ500_SECID, CN_DK_COLS[3]), (CN_DK_CYB_CODE, CN_DK_CYB_SECID, CN_DK_COLS[4])]
-            for idx_code, secid, col_name in _dk_fetch_list:
-                idx_df, src = _fetch_cn_dk_price_index(idx_code, secid)
-                if include_cn_live_snapshot:
-                    idx_df = _supplement_today_close(idx_df, secid, _bj_today, msg)
-                else:
-                    idx_df = _drop_cn_unconfirmed_today(idx_df)
-                idx_df = _drop_cn_rows_after(idx_df, pd.Timestamp(_bj_today).normalize() if include_cn_live_snapshot else _cn_required_close)
-                dk_dfs[col_name] = idx_df.rename(columns={'close': col_name})
-                msg.write(f"  {CN_DK_NAMES[col_name]}: {idx_df.index[0].strftime('%Y-%m-%d')}~{idx_df.index[-1].strftime('%Y-%m-%d')} [{src}]\n")
-                time.sleep(0.2)
-            _assert_cn_raw_prices_fresh(dk_dfs, CN_DK_COLS, _cn_required_close, 'A-DK')
-            cn_dk_raw_close = _build_cn_dk_close_frame(dk_dfs)
-            cn_dk_close = cn_dk_raw_close
-            msg.write(f"  A-DK合并截至: {cn_dk_close.index[-1].strftime('%Y-%m-%d')}\n")
-        except poe.BotError:
-            raise
-        except _fetch_or_bot_errors() as e:
-            raise poe.BotError(f'A-DK多空数据获取失败: {e}') from e
         return (cn_close, cn_dk_close, us_rot_close, us_prod_daily)
 
-    def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False):
+    def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False, allow_cn_panel_errors=False):
         generation = _v80_integrity_generation()
         if getattr(self, '_request_integrity_generation', None) != generation:
             self._request_data_cache = {}
@@ -14056,10 +14412,11 @@ class CombinedStrategyBase:
         if _v80_integrity_pending():
             cache.clear()
             self._request_strategy_cache = {}
-        key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot), bool(allow_last_confirmed_cn_close))
+        key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot), bool(allow_last_confirmed_cn_close), bool(allow_cn_panel_errors))
         if key not in cache:
             try:
-                data = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close)
+                options = {'allow_cn_panel_errors': True} if allow_cn_panel_errors else {}
+                data = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close, **options)
             except Exception:
                 _v80_assert_integrity(generation)
                 raise
@@ -14095,17 +14452,23 @@ class CombinedStrategyBase:
             _v80_assert_integrity(generation)
             return cache[key]
 
-    def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
+    def _run_suba(self, cn_close, allow_unresolved_suba_volume):
+        if cn_close.attrs.get('cn_panel_error'):
+            return pd.DataFrame()
         cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
         cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
         suba_volume_signal = None
         suba_volume_feature = None
         if CN_SA_VOLUME_OVERLAY_ENABLED:
             try:
-                suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
-                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date)
+                suba_volume_expected_date = cn_close_with_bond.attrs.get('cn_confirmed_close')
+                if suba_volume_expected_date is None:
+                    suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
+                amounts = cn_close_with_bond.attrs.get('cn_final_amounts')
+                proof = {} if amounts is None else {'final_amounts': amounts}
+                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date, **proof)
                 suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
-                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index):
+                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index, confirmed_date=suba_volume_expected_date):
                     unknown = suba_volume_feature['combined_unresolved'].reindex(cn_result.index).fillna(True).astype(bool) if suba_volume_feature is not None and 'combined_unresolved' in suba_volume_feature else pd.Series(True, index=cn_result.index)
                     unknown = unknown.loc[unknown.index <= suba_volume_expected_date]
                     dates = unknown.index[unknown]
@@ -14125,7 +14488,11 @@ class CombinedStrategyBase:
                     raise SubaVolumeDataError(f'Sub-A成交额风控数据不可用，正式回测/绩效查询已中止。所需截至 {suba_volume_expected_date:%Y-%m-%d}；来源原因：{_short_error(exc, 1200)}') from exc
                 cn_result = _mark_suba_volume_unavailable(cn_result, exc)
         cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'
-        cn_dk_result = run_v80_adk_new_only(cn_close, cn_dk_close)
+        return cn_result
+
+    def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
+        cn_result = self._run_suba(cn_close, allow_unresolved_suba_volume)
+        cn_dk_result = pd.DataFrame() if cn_dk_close.attrs.get('cn_panel_error') else run_v80_adk_new_only(cn_close, cn_dk_close)
         us_rot_result = _run_v80_subb_variants(us_rot_close, us_open=getattr(self, '_us_open', None), strict_open_execution=strict_subb_open_execution)
         prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
         if _subc_enabled():
@@ -14147,11 +14514,11 @@ class CombinedStrategyBase:
 
     def _compute_signal_data(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=True)
-        cn_date = cn_close.index[-1]
+        cn_date = cn_close.index[-1] if len(cn_close) else pd.NaT
         cn_display_state = _suba_signal_display_state(cn_result, -1)
         cn_current = cn_display_state['current_holding']
         is_cn_signal = bool(cn_display_state['is_signal'])
-        cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A展示')
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A展示') if len(cn_close) else cn_close
         all_codes_display = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
         bias_mom_cn = {}
         r2_cn = {}
@@ -14221,10 +14588,10 @@ class CombinedStrategyBase:
             all_a = set(list(hypo_us_w.keys()) + list(current_us_w.keys()))
             turnover_b = sum((abs(hypo_us_w.get(a, 0) - current_us_w.get(a, 0)) for a in all_a if a not in ('BIL', 'CASH')))
             would_rebalance = _subb_should_rebalance(turnover_b, US_ROT_MIN_TURNOVER)
-        dk_date = cn_dk_close.index[-1]
+        dk_date = cn_dk_close.index[-1] if len(cn_dk_close) else pd.NaT
         dk_top_pair = cn_dk_result['top_pair'].iloc[-1] if 'top_pair' in cn_dk_result.columns else 'none'
         dk_direction = int(cn_dk_result['direction'].iloc[-1]) if 'direction' in cn_dk_result.columns else 0
-        dk_current = cn_dk_result['holding'].iloc[-1]
+        dk_current = cn_dk_result['holding'].iloc[-1] if len(cn_dk_result) else 'none_0'
         is_dk_signal = bool(cn_dk_result['is_signal'].iloc[-1]) if 'is_signal' in cn_dk_result.columns else False
         dk_pair_changed = bool(cn_dk_result['pair_changed'].iloc[-1]) if 'pair_changed' in cn_dk_result.columns else False
         dk_direction_changed = bool(cn_dk_result['direction_changed'].iloc[-1]) if 'direction_changed' in cn_dk_result.columns else False
@@ -14345,7 +14712,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w = msg.write
             try:
                 w('⏳ 正在获取信号数据...\n')
-                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False)
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
                 w('⏳ 正在计算信号...\n')
             except Exception as exc:
                 w('## 📊 操作信号（收盘确认）\n\n')
@@ -14403,17 +14770,19 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w = msg.write
             w('## 📊 操作信号（收盘确认）\n\n')
             w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
-            signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=False, dk_intraday=False, query_kind='signal'))
+            signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, query_kind='signal', cn_price_frame=cn_close, dk_price_frame=cn_dk_close))
             signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close, is_signal_day=is_us_signal))
             subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
             signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
             _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
             _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
             w('> 前段仅显示可执行目标与关键风控；A/ADK基础评分统一置于C策略之后。\n\n')
-            cutoff = cn_date - timedelta(days=60)
+            cutoff = max(day for day in (cn_date, dk_date, us_date) if pd.notna(day)) - timedelta(days=60)
             all_rebalances = []
-            all_rebalances.extend([r for r in extract_v78_suba_rebalances(cn_result, cn_close) if pd.Timestamp(r['日期']) >= cutoff])
-            all_rebalances.extend([r for r in extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close) if pd.Timestamp(r['日期']) >= cutoff])
+            if len(cn_result):
+                all_rebalances.extend([r for r in extract_v78_suba_rebalances(cn_result, cn_close) if pd.Timestamp(r['日期']) >= cutoff])
+            if len(cn_dk_result):
+                all_rebalances.extend([r for r in extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close) if pd.Timestamp(r['日期']) >= cutoff])
             compact_us_open = getattr(self, '_us_open', None)
             subb_rebs = _v80_extract_subb_rebalances(d['us_rot_result'], us_rot_close=us_rot_close, us_open=compact_us_open, since_date=cutoff)
             all_rebalances.extend([r for r in subb_rebs if pd.Timestamp(r['日期']) >= cutoff])
@@ -14423,7 +14792,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
             all_rebalances.extend([r for r in vs_rebs if pd.Timestamp(r['日期']) >= cutoff])
             all_rebalances = _filter_confirmed_records(all_rebalances, bj_now=bj_now, us_schedule=compact_us_open)
             all_rebalances.sort(key=lambda x: x['日期'], reverse=True)
-            excel_bytes = generate_signal_excel(now_str, signal_info, all_rebalances, cn_dk_result=cn_dk_result, adk_net_row_idx=-1, adk_net_date_label='当前已生效')
+            adk_net = cn_dk_result
+            if _cn_expect_today_for_query('signal', bj_now) and (pd.isna(dk_date) or dk_date.date() < bj_now.date()):
+                adk_net = None
+            excel_bytes = generate_signal_excel(now_str, signal_info, all_rebalances, cn_dk_result=adk_net, adk_net_row_idx=-1, adk_net_date_label='当前已生效')
             filename = f'signal_{now_str}.xlsx'
             msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             w(f'📎 Excel调仓记录: **{filename}**\n')
@@ -14529,6 +14901,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
     def _handle_params(self):
         cn_result_params = None
         cn_dk_result_params = None
+        cn_close_p = cn_dk_close_p = None
         us_rot_result_params = None
         subc_info_params = {}
         us_rot_close_p = None
@@ -14537,7 +14910,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             msg.write('⏳ 正在读取当前Sub-A / ADK持仓...\n')
             try:
-                cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False)
+                cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
                 cn_result_params, cn_dk_result_params, us_rot_result_params, _, prod_sig_a_params, prod_sig_b_params, _, _ = self._cached_run_strategies(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p, allow_unresolved_suba_volume=True)
                 if prod_sig_a_params is not None:
                     subc_info_params = _compute_subc_production_snapshot(us_prod_daily_p, prod_sig_a_params, prod_sig_b_params, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info']
@@ -14548,7 +14921,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p))
             w = msg.write
             w('## ⚙️ 策略参数总览\n\n')
-            _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params')
+            _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params', cn_price_frame=cn_close_p, dk_price_frame=cn_dk_close_p)
             _write_v80_subb_overview(w, us_rot_result_params, query_kind='params', us_intraday=False, us_rot_close=us_rot_close_p)
             subc_clock = _subc_query_clock(us_prod_daily_p)
             _write_v80_subc_overview(w, subc_info_params, query_kind='params', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
@@ -14567,10 +14940,9 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
             w = msg.write
-            cn_date = cn_close.index[-1]
-            dk_date = cn_dk_close.index[-1]
+            cn_date = cn_close.index[-1] if len(cn_close) else pd.NaT
+            dk_date = cn_dk_close.index[-1] if len(cn_dk_close) else pd.NaT
             us_date = us_rot_close.index[-1]
-            cn_close_bj = beijing_time_str(cn_date, 'CN', 'close')
             us_close_bj = beijing_time_str(us_date, 'US', 'close')
             cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
             us_open, _ = is_us_market_open()
@@ -14591,8 +14963,14 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 w(f"⏱ **北京时间 {bj_ts}** 未确认行情快照（{'、'.join(live_mkts)}，须等确认收盘后重新查询）\n\n")
             else:
                 w(f'⏱ **北京时间 {bj_ts}** 基于收盘数据\n\n')
-            cn_time_label = f'A股数据日期: {cn_date.date()}（含未确认快照）' if any_cn_live else f'A股收盘: {cn_close_bj}'
-            w(f'{cn_time_label} | 美股收盘: {us_close_bj}\n\n')
+            labels = []
+            for label, frame, date in (('A', cn_close, cn_date), ('ADK', cn_dk_close, dk_date)):
+                if pd.isna(date):
+                    labels.append(f'{label}：数据不可用')
+                else:
+                    status = '盘中快照' if frame.attrs.get('cn_unconfirmed_snapshot') else '确认收盘'
+                    labels.append(f'{label}：{date:%Y-%m-%d}（{status}）')
+            w(' | '.join([*labels, f'美股收盘: {us_close_bj}']) + '\n\n')
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}

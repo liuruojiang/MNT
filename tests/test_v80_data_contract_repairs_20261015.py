@@ -318,7 +318,7 @@ def test_historical_cn_calendar_distinguishes_real_closures(v80):
     pd.testing.assert_index_equal(sessions, pd.DatetimeIndex(["2020-01-23", "2020-02-03", "2020-02-04"]))
 
 
-@pytest.mark.parametrize("date", ["2010-02-19", "2027-01-04"])
+@pytest.mark.parametrize("date", ["2010-02-19", "2028-01-04"])
 def test_cn_calendar_unknown_coverage_is_not_weekday_assumption(v80, date):
     with pytest.raises(ValueError):
         v80._expected_cn_sessions(date, date)

@@ -62,6 +62,9 @@ def synthetic_vendor_fetch(v80, monkeypatch, clock, include_us_live,
                         (cn.copy(), "SYNTHETIC_TEST_ONLY"))
     monkeypatch.setattr(v80, "_fetch_cn_dk_price_index", lambda *a, **k:
                         (cn.copy(), "SYNTHETIC_TEST_ONLY"))
+    monkeypatch.setattr(v80, "_fetch_cn_final_sessions",
+                        lambda code, dates, clock: {date: {"close": cn.at[date, "close"], "amount_cny": 10000.0}
+                                                    for date in dates if date in cn.index})
     fetch_counts = {}
     def vendor_us(ticker, *args, **kwargs):
         fetch_counts[ticker] = fetch_counts.get(ticker, 0) + 1
@@ -133,6 +136,10 @@ def test_formal_us_supplement_cannot_append_future_quote(v80, monkeypatch):
                                             (True, "2026-09-29")])
 def test_formal_cn_fetch_already_caps_future_vendor_dates(
         v80, monkeypatch, live, expected):
+    def quote(secid, expected_date=None, receipt=None):
+        receipt.update(time=pd.Timestamp("2026-09-29 10:00"), source="fixture")
+        return 102.0
+    monkeypatch.setattr(v80, "_fetch_cn_realtime_close", quote)
     result = synthetic_vendor_fetch(v80, monkeypatch, "2026-09-29 10:00", False,
                                     include_cn_live=live)
     assert result[0].index[-1] == pd.Timestamp(expected)

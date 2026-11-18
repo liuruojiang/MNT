@@ -28,7 +28,7 @@ def bot(monkeypatch):
     return m
 
 
-def install(bot, monkeypatch, quote=None, trends=None):
+def install(bot, monkeypatch, quote=None, trends=None, primary_trends_unavailable=False):
     q = copy.deepcopy(QUOTE['payload'] if quote is None else quote)
     t = copy.deepcopy(TRENDS['payload'] if trends is None else trends)
     class Response:
@@ -36,6 +36,8 @@ def install(bot, monkeypatch, quote=None, trends=None):
         def raise_for_status(self): pass
         def json(self): return self.payload
     def get(url, **kw):
+        if primary_trends_unavailable and 'push2his.eastmoney.com' in url:
+            raise bot.requests.Timeout('primary trends host unavailable')
         if 'secid=1.930955' in url: return Response({'data': None})
         return Response(t if 'trends2' in url else q)
     monkeypatch.setattr(bot.requests, 'get', get)
@@ -60,6 +62,59 @@ def test_real_supplement_merges_without_yesterday_fallback(bot, monkeypatch):
     assert base.index[-1] == pd.Timestamp('2026-10-28')
 
 
+def test_930955_uses_alternate_trends_host_when_primary_times_out(bot, monkeypatch):
+    install(bot, monkeypatch, primary_trends_unavailable=True)
+    assert bot._fetch_cn_realtime_close('1.930955') == 11496.27
+
+
+@pytest.mark.parametrize('fault', [None, 'wrong_symbol', 'stale', 'wrong_day', 'future', 'nan', 'bool', 'duplicate'])
+def test_930955_independent_cnfin_source_shares_the_live_gate(bot, monkeypatch, fault):
+    # Read-only CNFin response slice captured 2026-11-18 14:09:55 Beijing time.
+    rows = [[202611181405, 11932.16], [202611181406, 11932.40],
+            [202611181407, 11933.14], [202611181408, 11936.47],
+            [202611181409, 11930.85], [202611181410, 11926.39]]
+    symbol = '930955.CSI'
+    if fault == 'wrong_symbol':
+        symbol = '931157.CSI'
+    elif fault == 'stale':
+        rows = rows[:1]
+        rows[0][0] = 202611181404
+    elif fault == 'wrong_day':
+        rows[0][0] = 202611171405
+    elif fault == 'future':
+        rows[-1][0] = 202611181411
+    elif fault == 'nan':
+        rows[-2][1] = float('nan')
+    elif fault == 'bool':
+        rows[-2][1] = True
+    elif fault == 'duplicate':
+        rows.append(rows[-1])
+    candle = {'fields': ['min_time', 'close_px'], symbol: rows}
+    monkeypatch.setattr(bot, 'beijing_now', lambda: pd.Timestamp('2026-11-18 14:09:55.450555').to_pydatetime())
+
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {'data': {'candle': candle}}
+
+    def get(url, **kwargs):
+        if 'eastmoney.com' in url:
+            raise bot.requests.Timeout('both EastMoney hosts down')
+        assert url.startswith('https://quotedata.cnfin.com/')
+        params = kwargs['params']
+        assert params['prod_code'] == '930955.CSI'
+        assert params['start_date'] == params['end_date'] == '20261118'
+        return Response()
+
+    monkeypatch.setattr(bot.requests, 'get', get)
+    receipt = {}
+    quote = bot._fetch_cn_realtime_close('1.930955', receipt=receipt)
+    if fault is None:
+        assert quote == 11930.85
+        assert receipt == {'time': pd.Timestamp('2026-11-18 14:09'), 'source': '新华财经'}
+    else:
+        assert quote is None and not receipt
+
+
 @pytest.mark.parametrize('fault', ['wrong_code', 'wrong_market', 'yesterday', 'tomorrow', 'far_future', 'duplicate', 'unordered', 'nan', 'zero', 'negative', 'empty', 'malformed'])
 def test_bad_trends_rejected(bot, monkeypatch, fault):
     t = copy.deepcopy(TRENDS['payload']); d = t['data']
@@ -78,21 +133,24 @@ def test_bad_trends_rejected(bot, monkeypatch, fault):
     assert bot._fetch_cn_realtime_close('1.930955') is None
 
 
-def test_valid_primary_quote_retains_priority_and_decimal_scale(bot, monkeypatch):
+def test_valid_primary_quote_checks_market_and_decimal_scale(bot, monkeypatch):
     q = copy.deepcopy(QUOTE['payload'])
-    q['data'].update(f124=int(pd.Timestamp('2026-10-29 14:28', tz='Asia/Shanghai').timestamp()), f43=1149627, f59=2)
+    q['data'].update(f124=int(pd.Timestamp('2026-10-29 14:28', tz='Asia/Shanghai').timestamp()), f13=2, f43=1149627, f59=2)
     install(bot, monkeypatch, quote=q, trends={'data': None})
     assert bot._fetch_cn_realtime_close('1.930955') == 11496.27
 
 
-@pytest.mark.parametrize('fault', ['wrong_code', 'future', 'yesterday', 'invalid_scale', 'invalid_type', 'nan'])
+@pytest.mark.parametrize('fault', ['wrong_code', 'wrong_market', 'future', 'yesterday', 'invalid_scale', 'boolean_scale', 'invalid_type', 'nan'])
 def test_primary_quote_validation(bot, monkeypatch, fault):
     q = copy.deepcopy(QUOTE['payload']); d = q['data']
+    d['f13'] = 2
     d['f124'] = int(pd.Timestamp('2026-10-29 14:28', tz='Asia/Shanghai').timestamp())
     if fault == 'wrong_code': d['f57'] = '000905'
+    elif fault == 'wrong_market': d['f13'] = 0
     elif fault == 'future': d['f124'] += 3600
     elif fault == 'yesterday': d['f124'] -= 86400
     elif fault == 'invalid_scale': d['f59'] = 20
+    elif fault == 'boolean_scale': d['f59'] = True
     elif fault == 'invalid_type': d['f43'] = {}
     else: d['f43'] = float('nan')
     install(bot, monkeypatch, quote=q, trends={'data': None})
