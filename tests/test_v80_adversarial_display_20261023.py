@@ -29,7 +29,7 @@ def local_only(v80, monkeypatch):
     monkeypatch.setattr(v80.time, "sleep", lambda *args, **kwargs: None)
 
 
-def test_real_fetch_allows_c_previous_close_while_b_is_intraday(v80, monkeypatch):
+def test_missing_c_quote_keeps_b_and_c_on_last_confirmed_session(v80, monkeypatch):
     """Fault only upstream AVUV current-day bars and quotes; use real validation."""
     helper_path = Path(__file__).with_name("test_v80_doublecheck_data_math_20261007.py")
     spec = importlib.util.spec_from_file_location("v80_display_fetch_helper", helper_path)
@@ -58,8 +58,11 @@ def test_real_fetch_allows_c_previous_close_while_b_is_intraday(v80, monkeypatch
     frames = helper.synthetic_vendor_fetch(v80, FaultedVendorPatches(),
                                             "2026-09-30 00:00", True,
                                             us_end="2026-09-29")
-    assert frames[2].index[-1] == pd.Timestamp("2026-09-29")
-    assert frames[3].index[-1] == pd.Timestamp("2026-09-28")
+    for panel in frames[2:]:
+        assert panel.index[-1] == pd.Timestamp("2026-09-28")
+        status = panel.attrs['us_data_status']
+        assert status['status'] == 'partial_intraday' and not status['intraday_snapshot']
+        assert 'AVUV' in status['reason']
 
 
 @pytest.mark.parametrize("c_date", ["2026-10-21", "2026-10-22"])

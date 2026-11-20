@@ -162,3 +162,70 @@ def test_overlong_numeric_date_components_cannot_degrade_to_month(v80, text, ent
 ])
 def test_valid_chinese_and_english_query_surroundings_remain_accepted(v80, text, start, end):
     assert v80.parse_date_range(text) == (pd.Timestamp(start), pd.Timestamp(end))
+
+
+@pytest.mark.parametrize("query,start,end", [
+    ("表现 2024-01-01 至 2025-12", "2024-01-01", "2025-12-31"),
+    ("2024-01至2024-02-29", "2024-01-01", "2024-02-29"),
+    ("2023-12-31 至 2024", "2023-12-31", "2024-12-31"),
+    ("2024年到2024年2月", "2024-01-01", "2024-02-29"),
+    ("2024-2025", "2024-01-01", "2025-12-31"),
+    ("202401-202402", "2024-01-01", "2024-02-29"),
+    ("2024年2月29日至3月1日", "2024-02-29", "2024-03-01"),
+    ("表现 2024年2月10日到29日", "2024-02-10", "2024-02-29"),
+    ("表现 2024年3月以来", "2024-03-01", "2026-10-15"),
+])
+def test_mixed_date_precision_expands_both_endpoints(v80, query, start, end):
+    assert v80.parse_date_range(query) == (pd.Timestamp(start), pd.Timestamp(end))
+
+
+@pytest.mark.parametrize("label,method", [("表现", "_handle_performance"), ("", "_handle_performance"),
+    ("净值曲线", "_handle_nav_chart"), ("信号", "_handle_signal_history")])
+def test_dispatch_validates_every_interval_then_follows_requested_order(v80, monkeypatch, label, method):
+    from types import SimpleNamespace
+    bot = v80.CombinedStrategyV80()
+    calls = []
+    monkeypatch.setattr(bot, method, lambda query, _forced_range: calls.append(_forced_range))
+    monkeypatch.setattr(v80.poe, "query", SimpleNamespace(text=f"2024年和2025年{label}"))
+    bot._run_impl()
+    assert calls == [(pd.Timestamp(year, 1, 1), pd.Timestamp(year, 12, 31)) for year in (2024, 2025)]
+    calls.clear()
+    v80.poe.query.text = f"{label} 2023年和2024-02-30"
+    with pytest.raises(ValueError, match="日期"):
+        bot._run_impl()
+    assert not calls
+
+
+@pytest.mark.parametrize("query", ["2024年到", "2024年下半年", "2024-01-01 至 2025-12 至 2026年",
+    "2024-01-01 2025年", "2024-02-30", "2025-12 至 2024-12-31", "2024年和春季",
+    "2024年和", "2024年之前", "表现 2024-01-01以后", "2024年Q4", "2024年和3日",
+    "2024-06-01周一到周五"])
+def test_ambiguous_or_invalid_dates_never_shrink_to_one_match(v80, query):
+    with pytest.raises(ValueError, match="日期"):
+        v80.parse_all_date_ranges(query)
+
+
+@pytest.mark.parametrize("query,second", [
+    ("表现 2024年1月和2月", ("2024-02-01", "2024-02-29")),
+    ("表现 2024年5月2日、5月3日", ("2024-05-03", "2024-05-03")),
+    ("表现 2024年3月至5月、7月至8月", ("2024-07-01", "2024-08-31")),
+])
+def test_dispatch_inherits_explicit_year_across_list(v80, monkeypatch, query, second):
+    from types import SimpleNamespace
+    bot = v80.CombinedStrategyV80()
+    bounds = []
+    monkeypatch.setattr(v80.poe, "query", SimpleNamespace(text=query))
+    monkeypatch.setattr(bot, "_handle_performance", lambda query, _forced_range: bounds.append(_forced_range))
+    bot._run_impl()
+    assert len(bounds) == 2 and bounds[1] == tuple(map(pd.Timestamp, second))
+
+
+@pytest.mark.parametrize("qualifier", ["第一季度（2024年）", "Q1（2024年）", "Q1，2024年",
+    "2024年二三季度", "2024财年第二季度", "2024年与2025年第二季度"])
+def test_quarter_or_fiscal_qualifier_never_dispatches_a_calendar_year(v80, monkeypatch, qualifier):
+    from types import SimpleNamespace
+    bot = v80.CombinedStrategyV80()
+    monkeypatch.setattr(v80.poe, "query", SimpleNamespace(text="表现 " + qualifier))
+    monkeypatch.setattr(bot, "_handle_performance", lambda *args, **kw: pytest.fail("incorrect yearly report"))
+    with pytest.raises(ValueError, match="日期"):
+        bot._run_impl()

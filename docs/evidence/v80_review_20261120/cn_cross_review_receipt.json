@@ -1,0 +1,35 @@
+{
+  "input_sha256": {
+    "native_prices.csv": "88603a78fb7c10465def00b2b468628b4140d79fab95c401565a48de7ee28446",
+    "native_result.pkl": "1e4e5e88a8f01cc749708597774be8e739a67021c8d3deb08d61cb68070c70ae"
+  },
+  "first_source_rows": 163,
+  "longest_source_rows": 1637,
+  "formal_start": "2017-05-26",
+  "prepublication_input_rows": 661,
+  "admitted_rows_since_publication": 24,
+  "confirmed_day_gate": {
+    "minimum": 163,
+    "partial_final_session": "2026-11-06",
+    "accepted_through": "2026-11-05"
+  },
+  "long_history_source_requested": {
+    "history": true,
+    "performance": true,
+    "chart": true
+  },
+  "archived_trade": {
+    "date": "2026-10-13",
+    "sold": "上证国债（全期限）",
+    "bought": "Cash",
+    "time": "2026-10-13 收盘纸面计价（最早15:30起核验）",
+    "one_second_before": "excluded",
+    "at_1530_with_verified_inputs": "included",
+    "price_confirmation": "2026-10-13 15:30起，待各源日线核验",
+    "paper_price": "当日各指数收盘值，实际成交时刻未核验"
+  },
+  "workbook_roundtrips": [
+    "signal",
+    "performance"
+  ]
+}

@@ -1,0 +1,681 @@
+{
+  "healthy_perf18_early": {
+    "query": "表现 2025-11-19 至 2026-11-18",
+    "source_sha256": "555e2f692117c1b9b76a75558bf9a122931139a128e3ea26a74f1e4ea0bc4595",
+    "mode": "extend",
+    "test_clock_bj": "2026-11-20T04:30:00",
+    "seconds": 152.26,
+    "message_title": "## 📈 策略表现: 2025-11-19 至 2026-11-18",
+    "attachments": [
+      {
+        "name": "perf_nav_req_20251119_20261118_actual_20251119_20261118_70b902951358.png",
+        "bytes": 466155,
+        "sha256": "cf75bf100503009b46bd9db2903df9ee090d7a20201e589dfc3493200c5e4a50",
+        "size": [
+          1785,
+          1183
+        ]
+      },
+      {
+        "name": "performance_req_20251119_20261118_actual_20251119_20261118_70b902951358.xlsx",
+        "bytes": 28746,
+        "sha256": "6a0cf97270f6126859a8b0e5a2c128bff56fd7a131d54c25ae29ab53daef3636",
+        "sheets": {
+          "绩效概览": 9,
+          "月度收益": 14,
+          "调仓记录": 257,
+          "标准窗口指标": 6,
+          "数据与指标口径": 7,
+          "报告元数据": 17
+        }
+      }
+    ],
+    "verified_tickers": [],
+    "evidence": [
+      "> 请求区间：2025-11-19 至 2026-11-18；实际收益覆盖：2025-11-19 至 2026-11-18。"
+    ],
+    "network_calls": 16,
+    "replayed_calls": 45,
+    "metrics_A_ADK_B78_B79_C_PV": {
+      "累计收益": [
+        0.1986839738114132,
+        -0.03585822988071163,
+        0.1391483813503231,
+        0.1709858335403311,
+        0.07432579055130395,
+        0.1087484417331288
+      ],
+      "年化收益": [
+        0.1988327711446221,
+        -0.03588234430396775,
+        0.1392500361135396,
+        0.171112439983071,
+        0.07437854660956078,
+        0.1088268404992454
+      ],
+      "最大回撤": [
+        -0.1606754619382924,
+        -0.1734978687322369,
+        -0.1206082835241588,
+        -0.1300174991759216,
+        -0.101085073538834,
+        -0.0886960724209944
+      ],
+      "标准1Y组合（年化/最大回撤）": "11.40% / -8.95%"
+    }
+  },
+  "online_final_perf19": {
+    "query": "表现 2025-11-20 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "online",
+    "test_clock_bj": "2026-11-20T11:21:26.019353",
+    "seconds": 284.31,
+    "message_title": "## 📈 策略表现: 2025-11-20 至 2026-11-19",
+    "attachments": [
+      {
+        "name": "perf_nav_req_20251120_20261119_actual_20251120_20261119_8e5da4ad0567.png",
+        "bytes": 467240,
+        "sha256": "17e6d031559f8ba10f3a24ff676fdfa91b2d8eaf05dd9ceb7154a6feb38504ca",
+        "size": [
+          1785,
+          1183
+        ]
+      },
+      {
+        "name": "performance_req_20251120_20261119_actual_20251120_20261119_8e5da4ad0567.xlsx",
+        "bytes": 28884,
+        "sha256": "d9313ea2f3ade63e3f31b5655db60450029753f2ba57c1eb14b2ca929b604e95",
+        "sheets": {
+          "绩效概览": 9,
+          "月度收益": 14,
+          "调仓记录": 257,
+          "标准窗口指标": 6,
+          "数据与指标口径": 7,
+          "报告元数据": 18
+        }
+      }
+    ],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "> 请求区间：2025-11-20 至 2026-11-19；实际收益覆盖：2025-11-20 至 2026-11-19。"
+    ],
+    "network_calls": 63,
+    "replayed_calls": 0,
+    "report_dates": {
+      "requested_start": "2025-11-20",
+      "requested_end": "2026-11-19",
+      "actual_start": "2025-11-20",
+      "actual_end": "2026-11-19",
+      "run_id": "8e5da4ad0567"
+    },
+    "metrics_A_ADK_B78_B79_C_PV": {
+      "累计收益": [
+        0.1981167717813581,
+        -0.009365644314279664,
+        0.1381800110323559,
+        0.1739759016422162,
+        0.06239322673979175,
+        0.1094618196769148
+      ],
+      "年化收益": [
+        0.1982651102547968,
+        -0.009372028984872327,
+        0.1382809163363028,
+        0.1741048821975903,
+        0.06243726903602309,
+        0.109540757692302
+      ],
+      "最大回撤": [
+        -0.1606754619382932,
+        -0.173497868732237,
+        -0.12060825174034,
+        -0.1300174950698408,
+        -0.1114076425395159,
+        -0.08911145500714471
+      ],
+      "标准1Y组合（年化/最大回撤）": "11.78% / -8.95%"
+    }
+  },
+  "verified_recent": {
+    "query": "最近一年表现",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 199.16,
+    "message_title": "## 📈 策略表现: 2025-11-20 至 2026-11-19",
+    "attachments": [
+      {
+        "name": "perf_nav_req_20251120_20261120_actual_20251120_20261119_bea8bfbfc6bc.png",
+        "bytes": 467185,
+        "sha256": "7e0a0afcdcc2e729ee13d972c7ad7d768a3036769ed1d601f4f5db7a2e3ee1e9",
+        "size": [
+          1785,
+          1183
+        ]
+      },
+      {
+        "name": "performance_req_20251120_20261120_actual_20251120_20261119_bea8bfbfc6bc.xlsx",
+        "bytes": 28887,
+        "sha256": "ab5d912d582efb8c592c5e28324983c5e1d2c6d726dc74d6713f7be217285424",
+        "sheets": {
+          "绩效概览": 9,
+          "月度收益": 14,
+          "调仓记录": 257,
+          "标准窗口指标": 6,
+          "数据与指标口径": 7,
+          "报告元数据": 18
+        }
+      }
+    ],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "> 请求区间：2025-11-20 至 2026-11-20；实际收益覆盖：2025-11-20 至 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 63,
+    "report_dates": {
+      "requested_start": "2025-11-20",
+      "requested_end": "2026-11-20",
+      "actual_start": "2025-11-20",
+      "actual_end": "2026-11-19",
+      "run_id": "bea8bfbfc6bc"
+    },
+    "metrics_A_ADK_B78_B79_C_PV": {
+      "累计收益": [
+        0.1981167717813581,
+        -0.009365644314279664,
+        0.1381800359665317,
+        0.1739758453176374,
+        0.06239289786799485,
+        0.1094617147372916
+      ],
+      "年化收益": [
+        0.1982651102547968,
+        -0.009372028984872327,
+        0.138280941289769,
+        0.1741048258282407,
+        0.06243693992532862,
+        0.1095406526733309
+      ],
+      "最大回撤": [
+        -0.1606754619382932,
+        -0.173497868732237,
+        -0.1206082835241593,
+        -0.1300174991759216,
+        -0.1114076508528697,
+        -0.08911144760331285
+      ],
+      "标准1Y组合（年化/最大回撤）": "11.78% / -8.95%"
+    }
+  },
+  "final_signal": {
+    "query": "信号",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 181.85,
+    "message_title": "## 📊 操作信号（收盘确认）",
+    "attachments": [
+      {
+        "name": "signal_20261120.xlsx",
+        "bytes": 10368,
+        "sha256": "3ebc9aafcc46016ab635b70952bfbd48f90f4aa850adadb9cc761c8d47c631d9",
+        "sheets": {
+          "信号概览": 6,
+          "ADK净敞口": 9,
+          "调仓记录": 38
+        }
+      }
+    ],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 65
+  },
+  "final_live_signal": {
+    "query": "实时信号",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 175.3,
+    "message_title": "## 📡 实时信号",
+    "attachments": [],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "盘中报价时间：北京时间 11:09:00。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 89
+  },
+  "verified_params": {
+    "query": "参数",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "extend",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 228.22,
+    "message_title": "## ⚙️ 策略参数总览",
+    "attachments": [],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 63
+  },
+  "verified_live_params": {
+    "query": "实时参数",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "extend",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 225.1,
+    "message_title": "## 📐 实时参数值",
+    "attachments": [],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "盘中报价时间：北京时间 11:09:00。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 87
+  },
+  "verified_perf19": {
+    "query": "表现 2025-11-20 至 2026-11-19",
+    "source_sha256": "d2f5b1a505db12feecb29042f74dd2bebde68ad44267312fa43dcbe63103164d",
+    "mode": "extend",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 229.16,
+    "message_title": "## 📈 策略表现: 2025-11-20 至 2026-11-19",
+    "attachments": [
+      {
+        "name": "perf_nav_req_20251120_20261119_actual_20251120_20261119_663a6a643a3b.png",
+        "bytes": 467185,
+        "sha256": "7e0a0afcdcc2e729ee13d972c7ad7d768a3036769ed1d601f4f5db7a2e3ee1e9",
+        "size": [
+          1785,
+          1183
+        ]
+      },
+      {
+        "name": "performance_req_20251120_20261119_actual_20251120_20261119_663a6a643a3b.xlsx",
+        "bytes": 28885,
+        "sha256": "156d3380145d99fe7e7d136ce370b2939ecc1ad1b8e516e7f21bde041df171a0",
+        "sheets": {
+          "绩效概览": 9,
+          "月度收益": 14,
+          "调仓记录": 257,
+          "标准窗口指标": 6,
+          "数据与指标口径": 7,
+          "报告元数据": 18
+        }
+      }
+    ],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "> 请求区间：2025-11-20 至 2026-11-19；实际收益覆盖：2025-11-20 至 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 63,
+    "report_dates": {
+      "requested_start": "2025-11-20",
+      "requested_end": "2026-11-19",
+      "actual_start": "2025-11-20",
+      "actual_end": "2026-11-19",
+      "run_id": "663a6a643a3b"
+    },
+    "metrics_A_ADK_B78_B79_C_PV": {
+      "累计收益": [
+        0.1981167717813581,
+        -0.009365644314279664,
+        0.1381800359665339,
+        0.1739758453176377,
+        0.06239289786799485,
+        0.1094617147372963
+      ],
+      "年化收益": [
+        0.1982651102547968,
+        -0.009372028984872327,
+        0.1382809412897712,
+        0.1741048258282409,
+        0.06243693992532862,
+        0.1095406526733356
+      ],
+      "最大回撤": [
+        -0.1606754619382932,
+        -0.173497868732237,
+        -0.1206082835241585,
+        -0.1300174991759214,
+        -0.1114076508528697,
+        -0.08911144760331036
+      ],
+      "标准1Y组合（年化/最大回撤）": "11.78% / -8.95%"
+    }
+  },
+  "verified_chart": {
+    "query": "净值曲线 2025-11-20 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "extend",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 225.22,
+    "message_title": "## 📈 净值曲线: 2025-11-20至2026-11-19",
+    "attachments": [
+      {
+        "name": "nav_chart_req_20251120_20261119_actual_20251120_20261119_90884a542eec.png",
+        "bytes": 467185,
+        "sha256": "7e0a0afcdcc2e729ee13d972c7ad7d768a3036769ed1d601f4f5db7a2e3ee1e9",
+        "size": [
+          1785,
+          1183
+        ]
+      }
+    ],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。",
+      "> 请求区间：2025-11-20 至 2026-11-19；实际收益覆盖：2025-11-20 至 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 63
+  },
+  "final_history": {
+    "query": "信号 2026-11-16 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 169.97,
+    "message_title": "## 📋 信号历史: 2026-11-16 ~ 2026-11-19",
+    "attachments": [],
+    "verified_tickers": [
+      "AVDV",
+      "AVUV",
+      "DBMF",
+      "EMXC",
+      "GLDM",
+      "IBIT",
+      "KMLM",
+      "PDBC",
+      "QQQM"
+    ],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：已核验备用行情，可核验截至 2026-11-19，本次要求 2026-11-19。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 63
+  },
+  "no_key_signal": {
+    "query": "信号",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 134.74,
+    "message_title": "## 操作信号",
+    "attachments": [
+      {
+        "name": "signal_20261120.xlsx",
+        "bytes": 8868,
+        "sha256": "ac3a13cd6684033e389b0b4c3723f2ea208ff42ec1fe8d76a68bacb132d6589d",
+        "sheets": {
+          "信号概览": 6,
+          "ADK净敞口": 9,
+          "调仓记录": 20
+        }
+      }
+    ],
+    "verified_tickers": [],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credential",
+      "美股本次无可执行信号。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 45
+  },
+  "no_key_live_signal": {
+    "query": "实时信号",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 196.09,
+    "message_title": "## 实时信号",
+    "attachments": [],
+    "verified_tickers": [],
+    "evidence": [
+      "盘中报价时间：北京时间 11:09:00。",
+      "美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credential",
+      "美股本次无可执行信号。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 69
+  },
+  "no_key_params": {
+    "query": "参数",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 150.98,
+    "message_title": "## 策略参数",
+    "attachments": [],
+    "verified_tickers": [],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credential",
+      "美股本次无可执行信号。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 45
+  },
+  "no_key_live_params": {
+    "query": "实时参数",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 144.14,
+    "message_title": "## 实时参数",
+    "attachments": [],
+    "verified_tickers": [],
+    "evidence": [
+      "盘中报价时间：北京时间 11:09:00。",
+      "美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credential",
+      "美股本次无可执行信号。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 69
+  },
+  "no_key_perf19": {
+    "query": "表现 2025-11-20 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 233.31,
+    "message_title": "## 📈 策略表现: 2025-11-20 至 2026-11-18",
+    "attachments": [
+      {
+        "name": "perf_nav_req_20251120_20261119_actual_20251120_20261118_c36854a5d338.png",
+        "bytes": 466391,
+        "sha256": "c310445a2a982f00d3eb2795e8bea9c8583601c1ec94f51a353ba5045fe708e2",
+        "size": [
+          1785,
+          1183
+        ]
+      },
+      {
+        "name": "performance_req_20251120_20261119_actual_20251120_20261118_c36854a5d338.xlsx",
+        "bytes": 28890,
+        "sha256": "6d4a9b5a95ea57e8edaef78577e1eb470ccc2bfa71c91862a8469a3502a6c844",
+        "sheets": {
+          "绩效概览": 9,
+          "月度收益": 14,
+          "调仓记录": 256,
+          "标准窗口指标": 6,
+          "数据与指标口径": 7,
+          "报告元数据": 18
+        }
+      }
+    ],
+    "verified_tickers": [],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credenti",
+      "> 请求区间：2025-11-20 至 2026-11-19；实际收益覆盖：2025-11-20 至 2026-11-18。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 45,
+    "report_dates": {
+      "requested_start": "2025-11-20",
+      "requested_end": "2026-11-19",
+      "actual_start": "2025-11-20",
+      "actual_end": "2026-11-18",
+      "run_id": "c36854a5d338"
+    },
+    "metrics_A_ADK_B78_B79_C_PV": {
+      "累计收益": [
+        0.197971637553165,
+        -0.02829088934360036,
+        0.1374284793463088,
+        0.1729633432585884,
+        0.07473447703717229,
+        0.1099508198635673
+      ],
+      "年化收益": [
+        0.1987149635601322,
+        -0.02838664998856255,
+        0.1379315667364116,
+        0.1736061248616046,
+        0.07500051276834951,
+        0.1103485054635405
+      ],
+      "最大回撤": [
+        -0.1606754619382932,
+        -0.173497868732237,
+        -0.1206082835241583,
+        -0.1300174991759214,
+        -0.1010850735388341,
+        -0.0887098832640269
+      ],
+      "标准1Y组合（年化/最大回撤）": "11.40% / -8.95%"
+    }
+  },
+  "no_key_chart": {
+    "query": "净值曲线 2025-11-20 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 130.93,
+    "message_title": "## 📈 净值曲线: 2025-11-20至2026-11-18",
+    "attachments": [
+      {
+        "name": "nav_chart_req_20251120_20261119_actual_20251120_20261118_68cac5a1bc72.png",
+        "bytes": 466391,
+        "sha256": "c310445a2a982f00d3eb2795e8bea9c8583601c1ec94f51a353ba5045fe708e2",
+        "size": [
+          1785,
+          1183
+        ]
+      }
+    ],
+    "verified_tickers": [],
+    "evidence": [
+      "> 美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credenti",
+      "> 请求区间：2025-11-20 至 2026-11-19；实际收益覆盖：2025-11-20 至 2026-11-18。"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 45
+  },
+  "no_key_history": {
+    "query": "信号 2026-11-16 至 2026-11-19",
+    "source_sha256": "1764e7cd59fd244fb095058f48616e0e698707e53e73b493b33b456baa67a444",
+    "mode": "replay",
+    "test_clock_bj": "2026-11-20T11:09:50",
+    "seconds": 142.22,
+    "message_title": "## 📋 信号历史: 2026-11-16 ~ 2026-11-19",
+    "attachments": [],
+    "verified_tickers": [],
+    "evidence": [
+      "美股 B7.8 / B7.9 / Sub-C：仅有历史收盘，可核验截至 2026-11-18，本次要求 2026-11-19。EMXC Tiingo credential unavailable；DBMF Tiingo credential unavailable；KMLM Tiingo credential"
+    ],
+    "network_calls": 0,
+    "replayed_calls": 45
+  }
+}

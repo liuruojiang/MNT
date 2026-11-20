@@ -230,7 +230,9 @@ class IndependentReviewRegressions(unittest.TestCase):
   with patch.object(M,'_fetch_cn_amount_with_fallback',side_effect=amount):
    with self.assertRaises(M.VerifiedDataRepairConflict):M._load_suba_volume_signal(expected_date=pd.Timestamp('2026-10-23'))
  def test_allow_unresolved_signal_path_still_rejects_integrity_conflict(self):
-  cn=pd.read_csv(FIX/'cn_close_control.csv',index_col=0,parse_dates=True);cr=pd.read_csv(FIX/'cn_result_control.csv',index_col=0,parse_dates=True)
+  cr=pd.read_csv(FIX/'cn_result_control.csv',index_col=0,parse_dates=True)
+  archive=ROOT/'research/data_quality/20261106_bond_intraday_acceptance/a_chain/end/native_prices.csv'
+  cn=pd.read_csv(archive,index_col=0,parse_dates=True).loc[:cr.index[-1]].tail(M.CN_MIN_HISTORY_ROWS)
   for allow in [False,True]:
    with self.subTest(allow_unresolved=allow),patch.object(M,'_add_cn_bond_column',return_value=cn),patch.object(M,'run_cn_strategy',return_value=cr.copy()),patch.object(M,'_load_suba_volume_signal',side_effect=M.VerifiedDataRepairConflict('explicit deterministic conflict')):
     with self.assertRaises(M.VerifiedDataRepairConflict):M.CombinedStrategyV80()._run_strategies(cn,cn,cn,cn,allow_unresolved_suba_volume=allow)

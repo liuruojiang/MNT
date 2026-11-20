@@ -1,0 +1,78 @@
+{
+  "frozen_input_sha256": "182a5c54d5c81699d8e93038695a76febd15312aa48b5864e47a46318eeba00f",
+  "inputs": "Local frozen prices, adjusted opens and confirmed native bond. US variants computed once for the shared prefix.",
+  "checks": [
+    {
+      "query": "表现 2016-01-01 至 2016-12-30",
+      "png_bytes": 295636,
+      "omitted": [
+        "Sub-A",
+        "Sub-C",
+        "Combined"
+      ],
+      "workbook_available": [
+        "Sub-A-DK",
+        "B7.8",
+        "B7.9"
+      ]
+    },
+    {
+      "query": "净值曲线 2016-01-01 至 2016-12-30",
+      "png_bytes": 295636,
+      "omitted": [
+        "Sub-A",
+        "Sub-C",
+        "Combined"
+      ]
+    },
+    {
+      "query": "表现 2017-01-01 至 2017-06-30",
+      "png_bytes": 249436,
+      "omitted": [
+        "Sub-A",
+        "Sub-C",
+        "Combined"
+      ],
+      "workbook_available": [
+        "Sub-A-DK",
+        "B7.8",
+        "B7.9"
+      ]
+    },
+    {
+      "query": "净值曲线 2017-01-01 至 2017-06-30",
+      "png_bytes": 249436,
+      "omitted": [
+        "Sub-A",
+        "Sub-C",
+        "Combined"
+      ]
+    },
+    {
+      "range": [
+        "2025-01-31",
+        "2025-03-03"
+      ],
+      "complete_months": [
+        "2025-02"
+      ],
+      "vol": null,
+      "sharpe": null,
+      "all_days_total_pct": -1.6981378000392788
+    },
+    {
+      "range": [
+        "2025-01-01",
+        "2025-03-31"
+      ],
+      "complete_months": [
+        "2025-01",
+        "2025-02",
+        "2025-03"
+      ],
+      "vol": 10.104838140703263,
+      "sharpe": 1.923818952464448,
+      "all_days_total_pct": 4.851737996948846
+    }
+  ]
+}

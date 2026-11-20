@@ -32,9 +32,9 @@ def test_single_date_signal_routes_to_history(v80, monkeypatch, date_text):
     observed = []
     monkeypatch.setattr(v80.poe, "query", types.SimpleNamespace(text=f"信号 {date_text}"))
     monkeypatch.setattr(bot, "_handle_signal", lambda: observed.append("current"))
-    monkeypatch.setattr(bot, "_handle_signal_history", lambda query: observed.append("history"))
+    monkeypatch.setattr(bot, "_handle_signal_history", lambda query, _forced_range: observed.append(_forced_range))
     bot._run_impl()
-    assert observed == ["history"]
+    assert observed == [(pd.Timestamp("2026-09-28"), pd.Timestamp("2026-09-28"))]
 
 
 @pytest.mark.parametrize("start,end", [("2026-10-07", "2026-01-01"), ("NaT", "2026-10-07")])

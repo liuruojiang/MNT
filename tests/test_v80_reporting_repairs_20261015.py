@@ -262,7 +262,9 @@ def test_formal_amount_failure_keeps_provider_evidence_in_user_message(v80, monk
     bot = v80.CombinedStrategyV80()
     capture = Capture()
     dates = pd.to_datetime(["2026-10-22", "2026-10-23"])
-    prices = pd.DataFrame({"diagnostic": [100., 101.]}, index=dates)
+    # Exercise the amount failure after the price inputs satisfy the native warmup.
+    archive = Path(__file__).resolve().parents[1] / "research/data_quality/20261106_bond_intraday_acceptance/a_chain/end/native_prices.csv"
+    prices = pd.read_csv(archive, index_col=0, parse_dates=True).loc[:dates[-1]].tail(v80.CN_MIN_HISTORY_ROWS)
     result = pd.DataFrame({"return": 0.}, index=dates)
     reason = "ZZ2000: CSIndex official amount: latest valid amount 2026-10-22 < expected 2026-10-23"
     monkeypatch.setattr(v80, "DEBUG_MODE", False)

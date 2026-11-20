@@ -46,6 +46,92 @@ class Message:
         self.lines.append(text)
 
 
+@pytest.mark.parametrize("gap,cutoff", [
+    ("internal", "2026-11-16"), ("tail", "2026-11-17"), ("missing", None),
+    ("stooq", None), ("none", "2026-11-19"),
+])
+def test_verified_us_panel_uses_common_contiguous_prefix(v80, monkeypatch, gap, cutoff):
+    days = pd.date_range("2026-11-16", "2026-11-20", freq="B")
+    original = pd.DataFrame({"open": 100., "close": 101.}, index=days)
+    tickers = ["SPY", "QQQ"]
+    inputs = {symbol: original.copy() for symbol in tickers}
+    sources = dict.fromkeys(tickers, "Yahoo")
+    monkeypatch.setattr(v80, "_us_history_expected_start", lambda *args: days[0])
+    attempts = []
+
+    def unavailable(symbol, frame, required):
+        attempts.append(symbol)
+        raise v80.DataSchemaError("unavailable backup")
+
+    monkeypatch.setattr(v80, "_repair_us_verified_tiingo_tail", unavailable)
+    if gap == "internal":
+        inputs["QQQ"].at[days[1], "open"] = np.nan
+    elif gap == "tail":
+        inputs["QQQ"] = inputs["QQQ"].loc[:days[1]]
+    elif gap == "missing":
+        inputs.pop("QQQ")
+    elif gap == "stooq":
+        sources["QQQ"] = "Stooq"
+    panel, status = v80._v80_us_confirmed_prefix(inputs, sources, days[3], tickers, Message())
+    assert attempts == (["QQQ"] if gap == "tail" else [])
+    if cutoff is None:
+        assert status["status"] == "unavailable" and status["asof"] is None and panel == {}
+    else:
+        assert status["status"] == ("current" if gap == "none" else "historical")
+        assert status["asof"] == pd.Timestamp(cutoff)
+        for symbol in tickers:
+            pd.testing.assert_frame_equal(panel[symbol], original.loc[:cutoff])
+
+
+def test_data_cache_restores_the_matching_execution_opens_and_sources(v80, monkeypatch):
+    bot = v80.CombinedStrategyV80()
+    fetches = []
+
+    def fetch(msg, **options):
+        live = options["include_us_live_snapshot"]
+        fetches.append(live)
+        bot._us_open = {"SPY": pd.Series([101. if live else 100.])}
+        bot._us_sources = {"SPY": "intraday" if live else "close"}
+        return tuple(pd.DataFrame() for _ in range(4))
+
+    monkeypatch.setattr(bot, "_fetch_data", fetch)
+    formal = bot._cached_fetch_data(Message())
+    bot._cached_fetch_data(Message(), include_us_live_snapshot=True)
+    assert bot._us_open["SPY"].iloc[0] == 101.
+    assert bot._cached_fetch_data(Message()) is formal
+    assert fetches == [False, True]
+    assert bot._us_open["SPY"].iloc[0] == 100.
+    assert bot._us_sources == {"SPY": "close"}
+
+
+def test_realtime_us_missing_today_open_never_reads_yesterday(v80, monkeypatch):
+    from unittest.mock import Mock
+    stamps = [int(pd.Timestamp(day, tz="America/New_York").timestamp())
+              for day in ["2026-09-24 09:30", "2026-09-25 09:30", "2026-09-25 12:00"]]
+    result = {"meta": {"symbol": "SPY", "regularMarketPrice": 769., "regularMarketTime": stamps[2]},
+              "timestamp": stamps[:2], "indicators": {"quote": [{"open": [764.07, None]}]}}
+    response = Mock(status_code=200)
+    response.json.return_value = {"chart": {"result": [result]}}
+    monkeypatch.setattr(v80._session, "get", lambda *a, **kw: response)
+    assert v80._fetch_us_realtime_close("SPY") == (769., "2026-09-25", None)
+    result["indicators"]["quote"][0]["open"][1] = 768.78
+    assert v80._fetch_us_realtime_close("SPY") == (769., "2026-09-25", 768.78)
+
+
+def test_native_ibit_adjusted_open_survives_retired_proxy_tail_outage(v80):
+    archive = ROOT / "outputs/v80_recert_20260926/l1_final/us_raw_ohlc.pkl"
+    if not archive.is_file():
+        pytest.skip("September 2026 frozen market archive is not installed")
+    day = pd.Timestamp("2026-09-25")
+    data = {t: item["frame"].loc[:day] for t, item in pd.read_pickle(archive).items()}
+    expected = v80._build_us_open_execution_dict(data)["BTC-USD"].at[day]
+    data["BTC-USD"] = data["BTC-USD"].loc[:"2026-09-24"]
+    opens = v80._build_us_open_execution_dict(data)
+    actual = v80._us_open_row(day, ["BTC-USD"], opens, data["IBIT"], strict=True)
+    assert data["IBIT"].at[day, "open"] == pytest.approx(47.605)
+    assert actual["BTC-USD"] == expected
+
+
 def synthetic_vendor_fetch(v80, monkeypatch, clock, include_us_live,
                            include_cn_live=False, us_end="2026-10-09",
                            retry_spy_gap=False, probe_override=None):

@@ -132,7 +132,6 @@ CN_R2_THRESHOLD = 0.15
 CN_BIAS_MOM_WEIGHT_END = 3.0
 CN_ABS_MOM_DAY = 20
 CN_ABS_MOM_THRESHOLD = 0.02
-CN_MIN_HISTORY_ROWS = CN_BIAS_N + CN_MOM_DAY + 10
 CN_ENTRY_WAIT_DAYS = None
 CN_SWITCH_BUFFER = 1.0
 CN_BOND_CODE = '1.000012'
@@ -140,6 +139,11 @@ CN_BOND_PUBLICATION_DATE = pd.Timestamp('2003-01-02')
 CN_BOND_NAME = '上证国债（全期限）'
 CN_TARGET_VOL = 0.2
 CN_VOL_WINDOW = 80
+# Both displayed weights need lagged volatility from genuine prior holdings.
+# The first return after momentum warmup is initialized in cash.
+CN_MIN_HISTORY_ROWS = max(CN_BIAS_N + CN_MOM_DAY, CN_R2_WINDOW + 1) + CN_VOL_WINDOW + 3
+CN_BOND_SESSION_END = pd.Timedelta(hours=15, minutes=30)
+CN_SA_MODEL_CLOCK_NOTE = '股票观察至15:00，国债观察至15:30。全池日线信号最早15:30起核验。历史调仓按当日各指数收盘值纸面计价，实际成交时刻未核验。'
 CN_MAX_LEV = 1.25
 CN_MIN_LEV = 0.1
 CN_SCALE_THRESHOLD = 0.0
@@ -1376,6 +1380,9 @@ class VerifiedDataRepairConflict(RuntimeError):
 class DataUnavailableError(RuntimeError):
     pass
 
+class SubaInsufficientHistoryError(DataUnavailableError):
+    """Sub-A price series are continuous but too short to compute the position."""
+
 class SubaVolumeDataError(RuntimeError):
     """Keep provider evidence without touching Poe's runtime-only API at import."""
     pass
@@ -1897,7 +1904,7 @@ def _fetch_cn_final_sessions(secid, expected_closes, clock):
     now = pd.Timestamp(clock)
     for expected in expected_closes:
         day = pd.Timestamp(expected).normalize()
-        end = day + pd.Timedelta(hours=15, minutes=30 if secid == CN_BOND_CODE else 0)
+        end = day + (CN_BOND_SESSION_END if secid == CN_BOND_CODE else pd.Timedelta(hours=15))
         if now < end:
             continue
         morning = pd.date_range(day + pd.Timedelta(hours=9, minutes=30), day + pd.Timedelta(hours=11, minutes=30), freq='min')
@@ -2345,8 +2352,8 @@ def _price_column_frame(df, source_col, output_col):
         raise DataSchemaError(f'{output_col} price dates must be valid, unique and increasing')
     if dates.tz is not None or not dates.equals(dates.normalize()):
         raise DataSchemaError(f'{output_col} prices require timezone-naive daily dates')
-    known_closed = CN_MARKET_HOLIDAYS | {'2018-06-18'}
-    sessions = (dates.weekday < 5) & ~dates.isin(pd.to_datetime(sorted(known_closed)))
+    known_closed = _CN_VERIFIED_CLOSED_DAYS.union(pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS))))
+    sessions = (dates.weekday < 5) & ~dates.isin(known_closed)
     series = series.iloc[np.flatnonzero(sessions)]
     dates = dates[sessions]
     numeric = pd.to_numeric(series, errors='coerce')
@@ -2513,21 +2520,28 @@ def _build_cn_dk_close_frame(dk_dfs):
     out.attrs['cn_unconfirmed_snapshot'] = any(('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in dk_dfs.values() if len(frame)))
     return out
 
-def _fetch_cn_index_history(secid, sources, required_date=None, *, verified_close=None, verified_prior=None, min_rows=51):
+def _fetch_cn_index_history(secid, sources, required_date=None, *, verified_close=None, verified_prior=None, min_rows=51, formal_start=None, prefer_full_history=False, confirmed_through=None):
     attempts = []
+    short_sources = 0
     best = None
+    current = None
     required = pd.Timestamp(required_date).normalize() if required_date is not None else None
     for src_name, fetcher in sources:
         try:
             df = fetcher()
-            if df is not None and len(df) >= min_rows:
+            if df is not None and len(df):
                 checked = _price_column_frame(df, 'close', secid)
                 latest = checked[secid].last_valid_index()
                 if required is None:
-                    return df, src_name
+                    if len(checked) >= min_rows:
+                        return df, src_name
+                    attempts.append(f'{src_name}: {len(checked)} rows, need {min_rows}')
+                    continue
                 observed = checked.loc[:required, secid].dropna()
-                if len(observed) < min_rows or len(_cn_missing_panel_sessions(observed.index, include_verified_history=True)):
-                    attempts.append(f'{src_name}: insufficient or discontinuous history')
+                usable = observed.loc[formal_start:] if formal_start is not None else observed
+                warmup = usable.loc[:confirmed_through] if confirmed_through is not None else usable
+                if len(_cn_missing_panel_sessions(usable.index, include_verified_history=True)):
+                    attempts.append(f'{src_name}: missing sessions within price history')
                     continue
                 if verified_prior is not None:
                     anchor, price = verified_prior
@@ -2535,19 +2549,34 @@ def _fetch_cn_index_history(secid, sources, required_date=None, *, verified_clos
                         attempts.append(f'{src_name}: does not match the completed {anchor:%Y-%m-%d} session')
                         continue
                 candidate = checked[secid].get(required, np.nan)
-                if pd.notna(candidate) and (verified_close is None or np.isclose(candidate, verified_close, rtol=0, atol=0.00501)):
-                    return df, src_name
+                live_flag = df.at[required, 'is_live_bar'] if required in df.index and 'is_live_bar' in df else False
+                current_matches = pd.notna(candidate) and not (pd.notna(live_flag) and bool(live_flag)) and (verified_close is None or np.isclose(candidate, verified_close, rtol=0, atol=0.00501))
+                if len(warmup) < min_rows:
+                    short_sources += int(current_matches)
+                    attempts.append(f'{src_name}: {len(warmup)} usable rows, need {min_rows} continuous sessions')
+                    continue
+                if current_matches:
+                    if not prefer_full_history or usable.index[0] <= formal_start:
+                        return df, src_name
+                    if current is None or usable.index[0] < current[0]:
+                        current = (usable.index[0], df, src_name)
+                    continue
                 prior = checked.loc[checked.index < required, secid].last_valid_index()
-                if prior is not None and (best is None or prior > best[0]):
-                    best = (prior, df, src_name)
+                enough_prior = prior is not None and len(usable.loc[:prior]) >= min_rows
+                if enough_prior and (best is None or prior > best[0] or (prefer_full_history and prior == best[0] and usable.index[0] < best[1])):
+                    best = (prior, usable.index[0], df, src_name)
                 attempts.append(f'{src_name}: no verified close {required:%Y-%m-%d} (latest {latest:%Y-%m-%d})')
                 continue
-            attempts.append(f'{src_name}:insufficient')
+            attempts.append(f'{src_name}: {0 if df is None else len(df)} rows, need {min_rows}')
         except _DATA_FETCH_ERRORS + (OSError, KeyError) as e:
             attempts.append(f'{src_name}:{e}')
             time.sleep(0.2)
+    if current is not None:
+        return current[1], current[2]
     if best is not None:
-        return best[1], best[2]
+        return best[2], best[3]
+    if formal_start is not None and short_sources and short_sources == len(attempts):
+        raise SubaInsufficientHistoryError(f"Sub-A {secid} 各源确认行情不足 {min_rows} 个交易日，仓位预热不足。{' | '.join(attempts)}")
     raise DataUnavailableError(f"Index price sources failed for {secid}: {'; '.join(attempts)}")
 
 def _fetch_cn_dk_price_index(idx_code, secid, required_date=None, *, verified_close=None, verified_prior=None):
@@ -2557,7 +2586,7 @@ def _fetch_cn_dk_price_index(idx_code, secid, required_date=None, *, verified_cl
     min_rows = CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50 if required_date is not None else 51
     return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows)
 
-def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_prior=None, required_history=None):
+def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_prior=None, required_history=None, prefer_full_history=False, confirmed_through=None):
     code = secid.split('.')[1] if '.' in secid else secid
     last_err = None
     attempts = []
@@ -2591,7 +2620,7 @@ def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_p
                        for alias in _vendor_secid_candidates(secid))
         sources.extend([('Sina', lambda: _fetch_cn_sina(secid)),
                         (f'csindex:{index_code}', lambda: _fetch_cn_csindex(index_code))])
-        frame, name = _fetch_cn_index_history(secid, sources, required, verified_close=verified_close, verified_prior=verified_prior, min_rows=CN_MIN_HISTORY_ROWS)
+        frame, name = _fetch_cn_index_history(secid, sources, required, verified_close=verified_close, verified_prior=verified_prior, min_rows=CN_MIN_HISTORY_ROWS, formal_start=CN_STOCK_FORMAL_START, prefer_full_history=prefer_full_history, confirmed_through=confirmed_through)
         if name == f'csindex:{index_code}':
             _save_cn_official_cache(secid, frame)
         return frame, name
@@ -2637,7 +2666,7 @@ def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_p
     else:
         sources = [('Sina', lambda: _fetch_cn_sina(secid)), ('EastMoney', lambda: _fetch_cn_eastmoney(secid))]
         min_rows = CN_MIN_HISTORY_ROWS if required_date is not None else 51
-        return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows)
+        return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows, formal_start=CN_STOCK_FORMAL_START, prefer_full_history=prefer_full_history, confirmed_through=confirmed_through)
     attempts_text = ' | '.join(attempts[-5:]) if attempts else str(last_err)
     raise poe.BotError(f'获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}')
 
@@ -3523,6 +3552,9 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
             identity = (result.get('meta') or {}).get('symbol')
             if identity is not None and identity != ticker:
                 raise DataSchemaError('KMLM Yahoo symbol identity mismatch')
+        identity = (result.get('meta') or {}).get('symbol')
+        if identity is not None and identity != ticker:
+            raise DataSchemaError(f'{ticker}: Yahoo symbol identity mismatch')
         daily_dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
         if daily_dates.hasnans or daily_dates.has_duplicates or (not daily_dates.is_monotonic_increasing):
             raise DataSchemaError(f'{ticker} Yahoo invalid/duplicate daily date index')
@@ -3540,13 +3572,29 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
         if ticker == 'KMLM' and len(quote['close']) != len(timestamps):
             raise DataSchemaError('KMLM raw close length mismatch')
         rows = []
+        partial_raw = {}
+        provisional_day = None
+        market_time = (result.get('meta') or {}).get('regularMarketTime')
+        if ticker != 'BTC-USD' and market_time is not None:
+            if isinstance(market_time, (bool, np.bool_)) or not isinstance(market_time, (int, float, np.integer, np.floating)):
+                raise DataSchemaError(f'{ticker}: invalid Yahoo regular-market time')
+            market_et = pd.Timestamp(market_time, unit='s', tz='UTC').tz_convert('America/New_York')
+            if pd.isna(market_et):
+                raise DataSchemaError(f'{ticker}: invalid Yahoo regular-market time')
+            last_day = daily_dates[-1]
+            close_hour = 13 if _is_us_early_close_session(last_day) else 16
+            if market_et.date() == last_day.date() and market_et.hour < close_hour:
+                provisional_day = last_day.strftime('%Y-%m-%d')
         for i, ts in enumerate(timestamps):
             dt = pd.Timestamp.fromtimestamp(ts, tz='UTC').strftime('%Y-%m-%d')
             c = quote['close'][i]
             o = quote['open'][i] if 'open' in quote else None
-            if ticker == 'KMLM' and pd.isna(c) and pd.isna(adj_close[i]):
-                continue
-            if c is None:
+            if pd.isna(c) or pd.isna(o) or pd.isna(adj_close[i]) or dt == provisional_day:
+                partial_raw[dt] = {field: value for field, value in (('open', o), ('close', c))
+                                   if value is not None and pd.notna(value)}
+            if pd.isna(c) or pd.isna(adj_close[i]):
+                if ticker == 'KMLM' and pd.notna(c) and pd.isna(adj_close[i]):
+                    raise DataSchemaError(f'{ticker} Yahoo adjusted close missing at {dt}')
                 continue
             ac = adj_close[i]
             if ac is None:
@@ -3558,10 +3606,17 @@ def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
                 row = {'date': dt, 'close': ac}
                 if adj_o is not None:
                     row['open'] = adj_o
+                    if ticker == 'EMXC':
+                        row['raw_open'] = o
                 rows.append(row)
         df = pd.DataFrame(rows)
         df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date').sort_index()
+        if partial_raw:
+            df.attrs['yahoo_partial_raw'] = partial_raw
+        if provisional_day is not None:
+            df['is_live_bar'] = df.index == pd.Timestamp(provisional_day)
+            df.attrs['yahoo_provisional_market_time'] = market_et.isoformat()
         if verified_repair:
             df.attrs['verified_ca_repair'] = verified_repair
         first_trade = (result.get('meta') or {}).get('firstTradeDate')
@@ -3898,6 +3953,159 @@ def _retry_incomplete_us_price_history(us_raw, us_sources, tickers, *, reference
         if msg is not None and len(best_missing) < initial_missing:
             msg.write(f'  ↳ {ticker}: Yahoo历史缺口重试 {initial_missing}→{len(best_missing)}；未使用代理或前值填充\n')
 
+def _v80_us_required_history():
+    return list(dict.fromkeys([*SUBB_REQUIRED_PRICE_TICKERS, *SUBB_REQUIRED_LIVE_PRICE_TICKERS,
+                              US_ROT_EMXC_BT_PROXY, *PROD_PORTFOLIO,
+                              *(cfg['proxy'] for cfg in PROD_PORTFOLIO.values()),
+                              PROD_CASH, PROD_VS_SIGNAL_TICKER, PROD_GOLD_VS_SIGNAL_TICKER]))
+
+
+def _v80_us_confirmed_prefix(raw, sources, required, tickers, msg):
+    """Keep a contiguous, verified prefix across every dependency, before any forward fill."""
+    status = {'status': 'current', 'required': required, 'asof': required, 'reason': '',
+              'repaired': (), 'tail_evidence': {}, 'intraday_snapshot': False}
+    confirmed = {}
+    repaired = []
+    faults = {}
+    cutoff = required
+    for ticker in tickers:
+        frame = raw.get(ticker)
+        if frame is None or frame.empty or 'Stooq' in str(sources.get(ticker, '')):
+            faults[ticker] = '缺少可核验的复权历史'
+            cutoff = None
+            continue
+        index = frame.index
+        if (not isinstance(index, pd.DatetimeIndex) or index.tz is not None or index.hasnans
+                or index.has_duplicates or not index.is_monotonic_increasing or not index.equals(index.normalize())):
+            faults[ticker] = '日线日期无效'
+            cutoff = None
+            continue
+        frame = frame.loc[:required]
+        if 'is_live_bar' in frame:
+            frame = frame.loc[~frame['is_live_bar'].eq(True)]
+        # BTC supplies historical UTC bars and the IBIT close-to-close splice anchor only.
+        end = min(required, _ibit_first_trading_session()) if ticker == US_ROT_BTC_TICKER else required
+        start = _us_history_expected_start(ticker, '2003-01-01', frame)
+        expected = _expected_ticker_ohlc_index(ticker, start, end)
+        valid = _valid_us_ohlc_index(frame)
+        missing = expected.difference(valid)
+        extra = frame.loc[:end].index.difference(_expected_ticker_ohlc_index(ticker, min(start, index[0]), end))
+        if len(extra) or (ticker == 'IBIT' and index[0] < _ibit_first_trading_session()):
+            faults[ticker] = '存在非交易日或上市前行情'
+            cutoff = None
+            continue
+        if (ticker != US_ROT_BTC_TICKER and len(missing) and len(valid)
+                and missing[0] > valid[-1] and str(sources.get(ticker, '')).startswith('Yahoo')):
+            try:
+                frame = _repair_us_verified_tiingo_tail(ticker, frame, required)
+            except _DATA_FETCH_ERRORS as exc:
+                # Source helpers expose a credential-free reason, never relay a raw network exception.
+                faults[ticker] = str(exc) if isinstance(exc, DataSchemaError) else '备用行情未通过验证'
+            else:
+                repaired.append(ticker)
+                status['tail_evidence'][ticker] = frame.attrs['tiingo_tail_evidence']
+                sources[ticker] += '+Tiingo/Nasdaq(已核验尾部)'
+                valid = _valid_us_ohlc_index(frame)
+                missing = expected.difference(valid)
+        confirmed[ticker] = frame
+        if len(missing):
+            faults.setdefault(ticker, f'{missing[0]:%Y-%m-%d} 起缺少完整开收盘')
+            prior = valid[valid < missing[0]]
+            if not len(prior) or ticker == US_ROT_BTC_TICKER:
+                cutoff = None
+            elif cutoff is not None:
+                cutoff = min(cutoff, prior[-1])
+    if cutoff is not None and any(not len(_valid_us_ohlc_index(frame.loc[:cutoff])) for frame in confirmed.values()):
+        cutoff = None
+    status.update(repaired=tuple(repaired), asof=cutoff)
+    if faults:
+        status.update(status='unavailable' if cutoff is None else 'historical',
+                      reason='；'.join(f'{ticker} {reason}' for ticker, reason in faults.items()))
+    elif repaired:
+        status['status'] = 'verified_backup'
+    if repaired:
+        msg.write('  美股已核验补齐（Tiingo 复权开收盘、Nasdaq 独立核价）：' + '、'.join(repaired) + '\n')
+    if cutoff is None:
+        return {}, status
+    for ticker in raw.keys() - set(tickers):
+        frame = raw[ticker].loc[:cutoff]
+        if 'is_live_bar' in frame:
+            frame = frame.loc[~frame['is_live_bar'].eq(True)]
+        if not frame.empty:
+            confirmed[ticker] = frame
+    return {t: frame.loc[:cutoff].copy() for t, frame in confirmed.items()}, status
+
+
+def _v80_us_live_panel(confirmed, raw, tickers, live_day, status, msg):
+    """All-or-nothing intraday inputs. A partial snapshot cannot replace confirmed rows."""
+    candidate = {}
+    incomplete = {}
+    faults = {}
+    day_key = pd.Timestamp(live_day).strftime('%Y-%m-%d')
+    if not _is_us_market_session(live_day):
+        status.update(status='partial_intraday', intraday_snapshot=False, reason='目标日期不是美股交易日')
+        return confirmed
+    for ticker, history in confirmed.items():
+        source = raw[ticker]
+        today = source.loc[source.index == live_day]
+        if len(today) == 1 and live_day in _valid_us_ohlc_index(today):
+            candidate[ticker] = pd.concat([history, today.assign(is_live_bar=True)])
+            candidate[ticker].attrs.update(history.attrs)
+        else:
+            candidate[ticker] = history
+            incomplete[ticker] = today
+    if incomplete:
+        # Supplement only the provisional candidate. Its prices are raw Yahoo quotes.
+        _supplement_us_today_close(candidate, list(candidate))
+    for ticker, today in incomplete.items():
+        source = raw[ticker]
+        native = source.attrs.get('yahoo_partial_raw', {}).get(day_key, {})
+        quotes = candidate[ticker].loc[candidate[ticker].index == live_day]
+        if len(today) > 1 or len(quotes) > 1:
+            faults[ticker] = '重复盘中日期'
+            continue
+        quote = quotes.iloc[0] if len(quotes) else {}
+        prices = {}
+        factors = []
+        try:
+            for field in ('open', 'close'):
+                observed, supplement = native.get(field), quote.get(field)
+                if pd.notna(observed):
+                    observed = _verified_tail_number(observed)
+                    if pd.notna(supplement) and not np.isclose(observed, _verified_tail_number(supplement), rtol=1e-5, atol=0):
+                        raise ValueError('同日 Yahoo 原始行情与补充行情冲突')
+                    prices[field] = observed
+                    adjusted = today.iloc[0].get(field) if len(today) else None
+                    if pd.notna(adjusted):
+                        factors.append(_verified_tail_number(adjusted) / observed)
+                elif pd.notna(supplement):
+                    prices[field] = _verified_tail_number(supplement)
+            if len(prices) != 2:
+                raise ValueError('缺少同一交易日的完整开收盘')
+            if factors and not np.allclose(factors, factors[0], rtol=1e-5, atol=0):
+                raise ValueError('同日调整系数不一致')
+        except (ValueError, TypeError, OverflowError) as exc:
+            faults[ticker] = str(exc)
+            candidate[ticker] = confirmed[ticker]
+            continue
+        factor = factors[0] if factors else 1.0
+        history = confirmed[ticker]
+        row = pd.DataFrame([{**{field: price * factor for field, price in prices.items()}, 'is_live_bar': True}],
+                           index=pd.DatetimeIndex([live_day], name=history.index.name))
+        candidate[ticker] = pd.concat([history, row])
+        candidate[ticker].attrs.update(history.attrs)
+    required = [ticker for ticker in tickers if ticker != US_ROT_BTC_TICKER]
+    for ticker in required:
+        if live_day not in _valid_us_ohlc_index(candidate.get(ticker)):
+            faults.setdefault(ticker, '缺少同一交易日的完整开收盘')
+    missing = [f'{ticker} {faults[ticker]}' for ticker in required if ticker in faults]
+    if missing:
+        status.update(status='partial_intraday', intraday_snapshot=False, reason='；'.join(missing))
+        return confirmed
+    status['intraday_snapshot'] = True
+    return {ticker: frame.loc[:live_day] for ticker, frame in candidate.items()}
+
+
 def _fetch_us_realtime_close(ticker):
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d&includePrePost=false'
@@ -3914,18 +4122,27 @@ def _fetch_us_realtime_close(ticker):
         if open_price is None:
             quote_blocks = result.get('indicators', {}).get('quote') or []
             quote = quote_blocks[0] if quote_blocks else {}
-            quote_open = quote.get('open')
-            if isinstance(quote_open, (list, tuple)):
-                quote_open = next((v for v in reversed(quote_open) if v is not None), None)
-            if quote_open is not None:
-                open_price = quote_open
+            stamps = result.get('timestamp') or []
+            values = quote.get('open') or []
+            market_time = meta.get('regularMarketTime')
+            if market_time is not None and len(stamps) == len(values):
+                market_day = pd.Timestamp(market_time, unit='s', tz='UTC').tz_convert('America/New_York').date()
+                same_day = [v for stamp, v in zip(stamps, values)
+                            if pd.Timestamp(stamp, unit='s', tz='UTC').tz_convert('America/New_York').date() == market_day]
+                if len(same_day) == 1:
+                    open_price = same_day[0]
         mkt_ts = meta.get('regularMarketTime')
         if price is None or mkt_ts is None:
             return (None, None, None)
         trade_date = pd.Timestamp.fromtimestamp(mkt_ts, tz='UTC').tz_convert('America/New_York').strftime('%Y-%m-%d')
-        open_value = float(open_price) if open_price is not None else None
+        if (meta.get('symbol') is not None and meta['symbol'] != ticker
+                or not np.isfinite(float(price)) or float(price) <= 0 or isinstance(price, bool)):
+            return (None, None, None)
+        open_value = float(open_price) if open_price is not None and not isinstance(open_price, bool) else None
+        if open_value is not None and (not np.isfinite(open_value) or open_value <= 0):
+            open_value = None
         return (float(price), trade_date, open_value)
-    except _DATA_FETCH_ERRORS:
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
         return (None, None, None)
 
 def _coerce_us_realtime_close_result(result):
@@ -4092,6 +4309,12 @@ def _build_us_open_execution_dict(us_raw):
             us_open[proxy_ticker] = _build_proxy_live_open_spliced_series(us_open[proxy_ticker], proxy_df['close'], us_open[live_ticker], live_df['close'], name=proxy_ticker)
     if 'EMXC' in US_ROT_POOL and US_ROT_EMXC_BT_PROXY in us_open:
         emxc_open = us_open.get('EMXC')
+        # The model trades on a continuous EEM/EMXC scale. Retain the ETF's
+        # own open for quotes printed alongside its live ticker.
+        if emxc_open is not None:
+            us_open['EMXC_native_open'] = emxc_open
+            if 'raw_open' in us_raw['EMXC']:
+                us_open['EMXC_raw_open'] = us_raw['EMXC']['raw_open']
         emxc_close = (us_raw or {}).get('EMXC')
         proxy_close = (us_raw or {}).get(US_ROT_EMXC_BT_PROXY)
         if emxc_open is not None and emxc_close is not None and (proxy_close is not None):
@@ -4099,8 +4322,193 @@ def _build_us_open_execution_dict(us_raw):
         else:
             us_open['EMXC'] = _build_proxy_live_spliced_series(us_open[US_ROT_EMXC_BT_PROXY], emxc_open, switch_start=US_ROT_EMXC_BT_START, name='EMXC', live_name='EMXC')
     if US_ROT_BTC_TICKER in us_open and 'IBIT' in us_open:
-        us_open[US_ROT_BTC_TICKER] = _build_proxy_live_open_spliced_series(us_open[US_ROT_BTC_TICKER], us_raw[US_ROT_BTC_TICKER]['close'], us_open['IBIT'], us_raw['IBIT']['close'], name=US_ROT_BTC_TICKER)
+        proxy_open = us_open[US_ROT_BTC_TICKER]
+        price_dates = proxy_open.index.union(us_open['IBIT'].index)
+        us_open[US_ROT_BTC_TICKER] = _build_proxy_live_open_spliced_series(proxy_open.reindex(price_dates), us_raw[US_ROT_BTC_TICKER]['close'], us_open['IBIT'], us_raw['IBIT']['close'], name=US_ROT_BTC_TICKER)
     return us_open
+
+_TIINGO_TAIL_LOCK = threading.Lock()
+_TIINGO_TAIL_REQUEST_TIMES = []
+
+
+def _tiingo_tail_credential():
+    """Reserve one authenticated request. Tokens never enter URLs or receipts."""
+    token = os.environ.get('TIINGO_API_TOKEN', '').strip()
+    if os.name == 'nt':
+        try:
+            from tools.source_audit.config import DEFAULT_ROOT, load
+        except ImportError:
+            DEFAULT_ROOT = None  # Standalone Poe script outside the local repository.
+        if DEFAULT_ROOT is not None and (DEFAULT_ROOT / 'config.json').is_file():
+            try:
+                from tools.source_audit.store import Store
+                from tools.source_audit.transport import decrypt_dpapi
+                config = load(DEFAULT_ROOT / 'config.json')
+                token = token or decrypt_dpapi(config['credentials']['tiingo'])
+                if not token:
+                    raise ValueError('Empty credential')
+                store = Store(config['store_root'])
+                try:
+                    store.reserve_request('tiingo', config['local_hourly_budgets']['tiingo'])
+                finally:
+                    store.close()
+            except Exception:
+                raise DataSchemaError('Tiingo credential/shared request budget unavailable') from None
+            return token
+    if not token:
+        raise DataSchemaError('Tiingo credential unavailable')
+    with _TIINGO_TAIL_LOCK:
+        now = time.monotonic()
+        _TIINGO_TAIL_REQUEST_TIMES[:] = [t for t in _TIINGO_TAIL_REQUEST_TIMES if t > now - 3600]
+        if len(_TIINGO_TAIL_REQUEST_TIMES) >= 30:
+            raise DataSchemaError('Tiingo process request budget exhausted')
+        _TIINGO_TAIL_REQUEST_TIMES.append(now)
+    return token
+
+
+def _us_verified_tail_sources(ticker, dates):
+    """Use symbol-bound HTTPS endpoints. Neither request follows redirects or retries."""
+    start, end = dates[0].date().isoformat(), dates[-1].date().isoformat()
+    if ticker not in US_ALL_TICKERS or ticker == 'BTC-USD' or not re.fullmatch('[A-Z]{1,8}', ticker):
+        raise DataSchemaError('Unsupported ETF for verified US tail')
+    token = _tiingo_tail_credential()
+    try:
+        tiingo = requests.get(f'https://api.tiingo.com/tiingo/daily/{ticker}/prices',
+                              params={'startDate': start, 'endDate': end, 'resampleFreq': 'daily'},
+                              headers={'Authorization': 'Token ' + token}, timeout=15, allow_redirects=False)
+        if tiingo.status_code != 200:
+            raise ValueError('Tiingo HTTP failure')
+        prices = tiingo.json()
+    except Exception:
+        raise DataSchemaError(f'{ticker} Tiingo tail unavailable') from None
+    try:
+        nasdaq = requests.get(f'https://api.nasdaq.com/api/quote/{ticker}/historical',
+                              params={'assetclass': 'etf', 'fromdate': start, 'todate': end, 'limit': len(dates)},
+                              headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json, text/plain, */*',
+                                       'Referer': f'https://www.nasdaq.com/market-activity/etf/{ticker.lower()}/historical'},
+                              timeout=15, allow_redirects=False)
+        if nasdaq.status_code != 200:
+            raise ValueError('Nasdaq HTTP failure')
+        independent = nasdaq.json()['data']
+    except Exception:
+        raise DataSchemaError(f'{ticker} Nasdaq tail unavailable') from None
+    return prices, independent
+
+
+def _verified_tail_number(value, *, nasdaq=False, allow_zero=False):
+    if nasdaq and isinstance(value, str):
+        value = value.removeprefix('$').replace(',', '')
+    if isinstance(value, (bool, np.bool_)) or (isinstance(value, str) and not nasdaq):
+        raise ValueError('Invalid numeric field')
+    number = float(value)
+    if not np.isfinite(number) or number < 0 or (number == 0 and not allow_zero):
+        raise ValueError('Invalid numeric field')
+    return number
+
+
+def _us_verified_tail_prices(ticker, dates, tiingo, nasdaq, primary_raw):
+    # Nasdaq carries the symbol explicitly. Tiingo binds the prices to its
+    # requested symbol endpoint; its standard daily rows omit a symbol field.
+    if not isinstance(tiingo, list) or not isinstance(nasdaq, dict) or nasdaq.get('symbol') != ticker:
+        raise DataSchemaError(f'{ticker} invalid backup source identity or response')
+    try:
+        independent = {}
+        for row in nasdaq['tradesTable']['rows']:
+            day = pd.Timestamp(datetime.strptime(row['date'], '%m/%d/%Y'))
+            if day in independent:
+                raise ValueError('Duplicate Nasdaq date')
+            independent[day] = [_verified_tail_number(row[k], nasdaq=True) for k in ('open', 'close')]
+        adjusted, factors, conflicts = [], [], {}
+        if set(independent) != set(dates) or len(tiingo) != len(dates):
+            raise ValueError('Backup dates do not cover the required session sequence')
+        for day, row in zip(dates, tiingo):
+            if row.get('ticker', ticker) != ticker or row.get('symbol', ticker) != ticker:
+                raise ValueError('Wrong Tiingo symbol')
+            stamp = pd.Timestamp(row['date'])
+            if stamp.tzinfo is None or stamp.utcoffset() != timedelta(0) or stamp.tz_localize(None) != day:
+                raise ValueError('Wrong or duplicate Tiingo session')
+            if _verified_tail_number(row['splitFactor']) != 1 or _verified_tail_number(row['divCash'], allow_zero=True) != 0:
+                raise ValueError('Corporate action needs independent adjudication')
+            raw = np.array([_verified_tail_number(row[k]) for k in ('open', 'close')])
+            adj = np.array([_verified_tail_number(row[k]) for k in ('adjOpen', 'adjClose')])
+            if not np.allclose(raw, independent[day], rtol=1e-5, atol=0):
+                raise ValueError('Tiingo/Nasdaq raw OHLC mismatch')
+            raw_observed = primary_raw.get(day.date().isoformat(), {})
+            for position, field in enumerate(('open', 'close')):
+                if field in raw_observed:
+                    original = _verified_tail_number(raw_observed[field])
+                    if not np.isclose(original, raw[position], rtol=1e-5, atol=0):
+                        if day in dates[:3]:
+                            raise ValueError('Yahoo raw overlap conflicts with the backup sources')
+                        conflicts.setdefault(day.date().isoformat(), {})['raw_' + field] = {
+                            'yahoo': original, 'verified': float(raw[position]),
+                        }
+            adjusted.append(adj)
+            factors.extend(adj / raw)
+        if not np.allclose(factors, factors[0], rtol=1e-5, atol=0):
+            raise ValueError('Unexplained adjusted/raw factor change')
+    except (AttributeError, TypeError, ValueError, KeyError, IndexError, OverflowError):
+        # Vendor strings may contain untrusted content. Keep messages local and fixed.
+        raise DataSchemaError(f'{ticker} invalid backup dates, prices, identity or corporate actions') from None
+    return pd.DataFrame(adjusted, index=dates, columns=['open', 'close']), conflicts
+
+
+def _repair_us_verified_tiingo_tail(ticker, frame, expected_date):
+    """Preserve complete Yahoo sessions. Replace a disputed half-bar only as a verified pair."""
+    if ticker not in US_ALL_TICKERS or ticker == 'BTC-USD' or not isinstance(frame, pd.DataFrame):
+        raise DataSchemaError('Unsupported primary input for verified US tail')
+    cutoff = pd.Timestamp(expected_date)
+    index = frame.index
+    if (pd.isna(cutoff) or cutoff.tzinfo is not None or cutoff != cutoff.normalize() or not _is_us_market_session(cutoff)
+            or not isinstance(index, pd.DatetimeIndex) or index.tz is not None or index.hasnans or index.has_duplicates
+            or not index.is_monotonic_increasing or not index.equals(index.normalize())
+            or not {'open', 'close'}.issubset(frame.columns)):
+        raise DataSchemaError(f'{ticker} invalid primary OHLC index or fields')
+    observed = frame.loc[:cutoff, ['open', 'close']]
+    numeric = observed.apply(pd.to_numeric, errors='coerce')
+    valid = np.isfinite(numeric) & (numeric > 0)
+    complete = observed.index[valid.all(axis=1)]
+    if len(complete) < 3:
+        raise DataSchemaError(f'{ticker} insufficient verified tail overlap')
+    last_complete = complete[-1]
+    if last_complete == cutoff:
+        return frame
+    dates = _expected_us_ohlc_index(complete[-3], cutoff)
+    if len(dates) < 4 or not dates[:3].equals(complete[-3:]) or not index.intersection(
+            pd.date_range(dates[0], cutoff)).difference(dates).empty:
+        raise DataSchemaError(f'{ticker} needs three consecutive primary sessions before the missing tail')
+    source = observed.reindex(dates)
+    known = numeric.reindex(dates)
+    if ((source.notna() & ~(np.isfinite(known) & (known > 0))).any().any()
+            or (frame.get('is_live_bar', pd.Series(False, index=index)).reindex(dates).eq(True)).any()):
+        raise DataSchemaError(f'{ticker} unexpected invalid or provisional OHLC in confirmed tail')
+    tiingo, nasdaq = _us_verified_tail_sources(ticker, dates)
+    verified, conflicts = _us_verified_tail_prices(ticker, dates, tiingo, nasdaq, frame.attrs.get('yahoo_partial_raw', {}))
+    if not np.allclose(known.iloc[:3].to_numpy(dtype=float), verified.iloc[:3].to_numpy(), rtol=1e-5, atol=0):
+        raise DataSchemaError(f'{ticker} Yahoo/Tiingo adjusted OHLC mismatch')
+    repaired = frame.reindex(index.union(dates).sort_values()).copy()
+    fields = {}
+    for day in dates[3:]:
+        day_key = day.date().isoformat()
+        for field, original in known.loc[day].dropna().items():
+            if not np.isclose(original, verified.at[day, field], rtol=1e-5, atol=0):
+                conflicts.setdefault(day_key, {})['adjusted_' + field] = {
+                    'yahoo': float(original), 'verified': float(verified.at[day, field]),
+                }
+        chosen = list(source.columns) if day_key in conflicts else list(source.columns[source.loc[day].isna()])
+        if chosen:
+            repaired.loc[day, chosen] = verified.loc[day, chosen]
+            fields[day_key] = chosen
+    if ticker == 'EMXC' and 'raw_open' in frame:
+        repaired.loc[dates[3:], 'raw_open'] = [float(row['open']) for row in tiingo[3:]]
+    repaired.attrs.update(frame.attrs)
+    repaired.attrs['tiingo_tail_evidence'] = {
+        'ticker': ticker, 'overlap': [day.date().isoformat() for day in dates[:3]], 'filled_fields': fields,
+        'partial_conflicts': conflicts,
+        'adjusted_source': 'Tiingo', 'raw_corroboration': 'Nasdaq', 'rtol': 1e-5,
+    }
+    return repaired
+
 
 def _strategy_frame_cache_fingerprint(frame):
     if frame is None:
@@ -7946,6 +8354,7 @@ def _write_suba_decision_explanation(w, cn_result):
     else:
         conclusion = f"原始动量已通过；成交额风控{('已触发' if volume_on else '未触发')}；最终目标={final_weight:.2f}x。"
     w(f'- 结论：{conclusion}\n')
+    w(f'- 时点口径：{CN_SA_MODEL_CLOCK_NOTE}\n')
 
 def _write_adk_decision_explanation(w, cn_dk_result):
     if cn_dk_result is None or len(cn_dk_result) == 0:
@@ -8036,7 +8445,7 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
         w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
     if query_kind in {'params', 'live_params'}:
         w(f'规则：**A策略（单一生产策略）**｜MA{CN_BIAS_N}/动量{CN_MOM_DAY}日｜原始Top-1需score>0且R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD:.2f}，失败不递补｜目标波动{CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日｜杠杆{CN_MIN_LEV:.2f}–{CN_MAX_LEV:.2f}x\n\n')
-        w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜A股收盘执行｜现金收益与借款成本均按{CN_RF_ANNUAL:.0%}/年回测假设，非券商融资报价\n\n')
+        w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜收盘纸面计价｜现金收益与借款成本均按{CN_RF_ANNUAL:.0%}/年回测假设，非券商融资报价\n\n')
     if suba['rows']:
         target_label = '历史收盘目标（非今日实时）' if suba_live_missing else '诊断目标（不可执行）' if a_volume_unresolved else '盘中参考目标（待收盘确认）' if cn_intraday else '收盘最终目标'
         w(f'| 策略 | 当前已生效 | {target_label} | 操作 |\n')
@@ -8125,7 +8534,8 @@ def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False
     adk_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in adk['rows'])) or '状态不可用'
     a_date = pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d') if cn_result is not None and len(cn_result) else 'N/A'
     adk_date = pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d') if cn_dk_result is not None and len(cn_dk_result) else 'N/A'
-    return {'Sub-A': {'is_signal': bool(suba_executable and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': '状态不可用或风控不可判定；停止执行，不生成正式调整指令' if not suba_executable else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
+    a_note = '状态不可用或风控不可判定；停止执行，不生成正式调整指令' if not suba_executable else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"
+    return {'Sub-A': {'is_signal': bool(suba_executable and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': f'{a_note}。{CN_SA_MODEL_CLOCK_NOTE}'}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
 _v80_b78_US_ROT_COMMISSION = 0.001
 _v80_b78_US_TRADING_DAYS = 252
 _v80_b78_US_ROT_FINANCING_BENCHMARK = 'BIL'
@@ -9574,6 +9984,8 @@ def _v80_b78_lookup_open_on_date(ticker, date, us_open):
     live = _v80_b78_ROT_PROXY_TO_LIVE.get(ticker)
     if live:
         candidates = [live] + candidates
+    if ticker == 'EMXC' and US_ROT_EMXC_BT_PROXY in us_open:
+        candidates = ['EMXC_raw_open', 'EMXC_native_open']
     target = pd.Timestamp(date).normalize()
     for t in candidates:
         if t not in us_open:
@@ -9697,7 +10109,9 @@ def _v80_subb_account_rebalance_records(result, us_rot_close=None, us_open=None,
                 continue
             price = lookup_open(asset, date, us_open)
             price_label = '开'
-            if price is None and us_rot_close is not None and (date in us_rot_close.index):
+            if live == 'EMXC' and price is not None and lookup_open('EMXC_raw_open', date, us_open) is None:
+                price_label = '（ETF复权开）'
+            if price is None and live != 'EMXC' and us_rot_close is not None and (date in us_rot_close.index):
                 price = us_rot_close.loc[date].get(live, us_rot_close.loc[date].get(asset, np.nan))
                 price_label = '收'
             price_text = _rebalance_price_text(price, price_label)
@@ -9847,7 +10261,8 @@ def _v80_subb_results(us_rot_result):
 
 def _v80_performance_daily_returns(cn_return, adk_return, us_rot_result, subc_return, *, end_date):
     b78, b79 = _v80_subb_results(us_rot_result)
-    daily_returns = {'Sub-A': cn_return, 'Sub-A-DK': adk_return, 'B7.8': b78['return'], 'B7.9': b79['return'], 'Sub-C': subc_return}
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    daily_returns = {'Sub-A': cn_return, 'Sub-A-DK': adk_return, 'B7.8': empty if b78 is None else b78['return'], 'B7.9': empty if b79 is None else b79['return'], 'Sub-C': subc_return}
     cutoff = pd.Timestamp(end_date).normalize()
     daily_returns = {name: series.loc[series.index <= cutoff] for name, series in daily_returns.items()}
     daily_returns['Combined'] = _performance_combined_daily_returns(daily_returns)
@@ -10124,6 +10539,7 @@ def _write_v80_subb_risk_chain(w, result, label):
     w(f'- VolReg：本收盘SPY {short_w}/{long_w}日波动比={ratio_text}｜进入 **>{enter:.2f}**｜恢复 **<{recover:.2f}**｜当前生效Overlay={current_overlay:.2f}x（由上一收盘比率决定）｜下一目标Overlay={next_overlay:.2f}x。{conclusion}\n')
 
 def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intraday=False, us_rot_close=None, is_signal_day=None):
+    us_intraday = us_intraday or bool(getattr(us_rot_close, 'attrs', {}).get('us_data_status', {}).get('intraday_snapshot'))
     w('## 🇺🇸 B策略总览｜B7.8 / B7.9独立账户\n\n')
     w('> Sub-B内部各占50%（总组合各20%）；独立计算、扣费和执行。组合从50:50起始后随净值自然漂移，不做日频再平衡。\n\n')
     w('> 执行时序：**常规周四收盘确认周度信号，下一美股交易日（通常周五）开盘执行**；VolReg风控每日收盘检查，确认进入或恢复后于下一美股交易日开盘执行。盘中目标均须等收盘确认；非周度日的普通模型变化不执行。遇休市按实际交易日调整。\n\n')
@@ -10251,7 +10667,25 @@ def _subc_query_clock(us_prod_daily, now=None):
     current = current.tz_localize('Asia/Shanghai') if current.tzinfo is None else current.tz_convert('Asia/Shanghai')
     close_at = _subc_close_execution_at(asof)
     execution_at = _subc_open_execution_at(_next_session_day(asof))
-    return {'asof': asof, 'close_at': close_at, 'execution_at': execution_at, 'unconfirmed': current < close_at, 'execution_elapsed': current >= execution_at}
+    captured_intraday = bool(us_prod_daily.attrs.get('us_data_status', {}).get('intraday_snapshot'))
+    return {'asof': asof, 'close_at': close_at, 'execution_at': execution_at, 'unconfirmed': captured_intraday or current < close_at, 'execution_elapsed': current >= execution_at}
+
+def _us_query_coverage(frame):
+    status = frame.attrs.get('us_data_status', {})
+    state = status.get('status')
+    if state is None or state == 'current':
+        return ''
+    labels = {'historical': '仅有历史收盘', 'unavailable': '数据不可用', 'partial_intraday': '盘中报价不完整', 'verified_backup': '已核验备用行情'}
+    asof = status.get('asof')
+    required = status.get('required')
+    dates = f'可核验截至 {pd.Timestamp(asof):%Y-%m-%d}' if pd.notna(asof) else '无可核验历史日期'
+    if pd.notna(required):
+        dates += f'，本次要求 {pd.Timestamp(required):%Y-%m-%d}'
+    reason = status.get('reason') or ''
+    return f"美股 B7.8 / B7.9 / Sub-C：{labels.get(state, '状态不可判定')}，{dates}。{reason}"
+
+def _us_current_query_limited(frame):
+    return frame.attrs.get('us_data_status', {}).get('status', 'current') not in ('current', 'verified_backup')
 
 def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False, clock=None):
     w('## 🌐 C策略总览｜总组合30%\n\n')
@@ -11895,19 +12329,24 @@ def calc_daily_metrics(ret_series, rf_daily, td, *, history_returns=None, first_
             yearly[year] = ((1 + yr_data).prod() - 1) * 100
     return {'annual': annual, 'vol': vol, 'sharpe': sharpe, 'max_dd': dd, 'calmar': calmar, 'win_rate': win_rate, 'years': years, 'total_return': (nav.iloc[-1] - 1) * 100, 'yearly': yearly}
 
-def calc_monthly_metrics(ret_series, rf_monthly=0.0):
+def calc_monthly_metrics(ret_series, rf_monthly=0.0, *, complete_months=None):
     nav = (1 + ret_series).cumprod()
     n_months = len(ret_series)
     years = n_months / 12
     total_return = (nav.iloc[-1] - 1) * 100
     dd = _max_drawdown_pct_from_nav(nav)
-    win_rate = (ret_series > 0).mean() * 100
+    if complete_months is None:
+        complete_months = ret_series.attrs.get('complete_months')
+    sample = ret_series if complete_months is None else ret_series.loc[ret_series.index.isin(complete_months)]
+    win_rate = (sample > 0).mean() * 100 if len(sample) else None
     if n_months < 3:
         return {'annual': None, 'vol': None, 'sharpe': None, 'max_dd': dd, 'calmar': None, 'win_rate': win_rate, 'years': years, 'total_return': total_return, 'yearly': {}}
     annual = (nav.iloc[-1] ** (1 / years) - 1) * 100
-    excess = ret_series - rf_monthly
-    sharpe = excess.mean() / excess.std() * np.sqrt(12) if excess.std() > 0 else 0
-    vol = ret_series.std() * np.sqrt(12) * 100
+    excess = sample - rf_monthly
+    sharpe = vol = None
+    if len(sample) >= 3:
+        sharpe = excess.mean() / excess.std() * np.sqrt(12) if excess.std() > 0 else 0
+        vol = sample.std() * np.sqrt(12) * 100
     calmar = annual / abs(dd) if dd != 0 else 0
     yearly = {}
     for year in sorted(ret_series.index.year.unique()):
@@ -12006,11 +12445,21 @@ def _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_
     """One session-aware, confirmed cutoff for text, charts and workbooks."""
     start, requested_end = (pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize())
     sources = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close, 'B7.8': us_rot_close, 'B7.9': us_rot_close, 'Sub-C': us_prod_daily}
+    omit_us = _us_current_query_limited(us_rot_close) and (us_rot_close.empty or us_prod_daily.empty or min(us_rot_close.index[-1], us_prod_daily.index[-1]) < start)
+    if omit_us:
+        sources = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close}
+    panel_errors = {name: frame.attrs['cn_panel_error'] for name, frame in sources.items()
+                    if name in ('Sub-A', 'Sub-A-DK') and frame is not None and frame.attrs.get('cn_panel_error')}
     ends = {}
     for name, frame in sources.items():
         if frame is None or len(frame) == 0:
+            if name in ('Sub-A', 'Sub-A-DK'):
+                continue
             raise ValueError(f'{name}: 报告无可用源数据')
         ends[name] = pd.Timestamp(frame.index[-1]).normalize()
+    if not ends:
+        raise ValueError('请求区间没有可用的确认收盘数据')
+    sources = {name: sources[name] for name in ends}
     cutoff = min(requested_end, max(ends.values()))
     while True:
         earlier = cutoff
@@ -12028,7 +12477,7 @@ def _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_
     cutoff = pd.Timestamp(available[-1]).normalize()
     generated = pd.Timestamp(beijing_now())
     generated = generated.tz_localize('Asia/Shanghai') if generated.tzinfo is None else generated.tz_convert('Asia/Shanghai')
-    return {'requested_start': start, 'requested_end': requested_end, 'actual_start': start, 'actual_end': cutoff, 'sleeve_asof': {name: pd.Timestamp(frame.index[frame.index <= cutoff][-1]).normalize() for name, frame in sources.items() if len(frame.index[frame.index <= cutoff])}, 'generated_at': generated.isoformat(), 'run_id': uuid.uuid4().hex[:12]}
+    return {'requested_start': start, 'requested_end': requested_end, 'actual_start': start, 'actual_end': cutoff, 'sleeve_asof': {name: pd.Timestamp(frame.index[frame.index <= cutoff][-1]).normalize() for name, frame in sources.items() if len(frame.index[frame.index <= cutoff])}, 'generated_at': generated.isoformat(), 'run_id': uuid.uuid4().hex[:12], 'omit_us': omit_us, 'us_data_coverage': _us_query_coverage(us_rot_close), 'panel_errors': panel_errors}
 
 def _finalize_performance_report_context(context, daily_returns):
     ranges = {}
@@ -12039,6 +12488,10 @@ def _finalize_performance_report_context(context, daily_returns):
     if not ranges:
         raise ValueError('请求区间没有可用策略收益')
     context['sleeve_return_ranges'] = ranges
+    context['unavailable_returns'] = {name: context.get('panel_errors', {}).get(name, '区间内无已成立且完成预热的可用收益，或数据未覆盖该区间')
+                                      for name in PERFORMANCE_COLUMNS if name not in ranges}
+    if 'Combined' not in ranges:
+        context['unavailable_returns']['Combined'] = '五袖无共同可用收益区间'
     context['actual_start'] = min((bounds[0] for bounds in ranges.values()))
     context['actual_end'] = max((bounds[1] for bounds in ranges.values()))
     return context
@@ -12050,6 +12503,14 @@ def _performance_report_filename(prefix, extension, context):
     return f"{prefix}_req_{stamp('requested_start')}_{stamp('requested_end')}_actual_{stamp('actual_start')}_{stamp('actual_end')}_{context['run_id']}.{extension}"
 
 def _write_performance_report_context(w, context):
+    if 'Sub-A' in context.get('sleeve_return_ranges', {}):
+        w(f'> Sub-A 计价口径：{CN_SA_MODEL_CLOCK_NOTE}\n\n')
+    for name, reason in context.get('unavailable_returns', {}).items():
+        w(f'> {name}：N/A（{reason}）。\n')
+    if context.get('us_data_coverage'):
+        w(f"> {context['us_data_coverage']}\n\n")
+    if context.get('omit_us'):
+        w('> 请求区间内没有可核验的美股历史，本报告只列独立 A 股结果；美股各袖和 PV 组合缺少输入。\n\n')
     w(f"> 请求区间：{context['requested_start']:%Y-%m-%d} 至 {context['requested_end']:%Y-%m-%d}；实际收益覆盖：{context['actual_start']:%Y-%m-%d} 至 {context['actual_end']:%Y-%m-%d}。\n\n")
     w('> 各袖确认收盘：' + '；'.join((f'{name} {date:%Y-%m-%d}' for name, date in context['sleeve_asof'].items())) + '。真实休市按零收益承接，交易日缺行拒绝计算。\n\n')
     w('> 查询组合按区间起点重新配置初始权重；查询前已成立且状态完整的休市袖从首日承接零收益。尚未成立的袖仍限制共同起点；标准窗口沿用全历史资金漂移。\n\n')
@@ -12059,6 +12520,18 @@ def _performance_expected_sessions(name, start, end):
     if name in ('Sub-A', 'Sub-A-DK'):
         return _expected_cn_sessions(start, end)
     return _expected_us_ohlc_index(start, end)
+
+def _complete_performance_months(dates, name):
+    if not len(dates):
+        return pd.PeriodIndex([], freq='M')
+    periods = dates.to_period('M')
+    first, last = periods.min().start_time.normalize(), periods.max().end_time.normalize()
+    if name == 'Combined':
+        expected = _expected_cn_sessions(first, last).union(_expected_us_ohlc_index(first, last))
+    else:
+        expected = _performance_expected_sessions(name, first, last)
+    incomplete = expected.difference(dates).to_period('M').unique()
+    return periods.unique().difference(incomplete)
 
 def _performance_combined_daily_returns(daily_returns, *, expected_sessions=None, history_returns=None, query_start=None):
     empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
@@ -12185,7 +12658,7 @@ def _format_performance_standard_window_cell(metric):
 
 def _performance_basis_notes():
     weights = _performance_combo_weight_label()
-    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普使用月收益年化，夏普无风险基准为0。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格与国债指数口径另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债口径': '自2026-11-05起，国债腿明确改为000012上证国债指数（全期限，2003-01-02发布），直接使用该指数历史及当日报价，不再拼接H11077。与旧10年期国债组合属于不同标的口径，旧净值不能沿用；具体来源见行情获取输出。'}
+    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普仅用至少三个完整交易月的月收益年化，夏普无风险基准为0。月胜率仅统计完整月，累计收益保留首尾零头。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个完整交易月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格与国债指数口径另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债口径': '自2026-11-05起，国债腿明确改为000012上证国债指数（全期限，2003-01-02发布），直接使用该指数历史及当日报价，不再拼接H11077。与旧10年期国债组合属于不同标的口径，旧净值不能沿用；具体来源见行情获取输出。'}
 
 def _write_performance_standard_window_table(w, daily_returns, end_date=None, first_period_starts=None):
     rows = _performance_standard_window_rows(daily_returns, end_date=end_date, first_period_starts=first_period_starts)
@@ -12204,12 +12677,28 @@ def _write_performance_standard_window_table(w, daily_returns, end_date=None, fi
     w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
     return rows
 
-def _monthly_returns_from_daily_window(ret_series, start_date, end_date):
+def _monthly_returns_from_daily_window(ret_series, start_date, end_date, *, name='Combined'):
     ret_series = _performance_clean_daily_returns(ret_series, name='monthly aggregation')
     period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
     if len(period) == 0:
         return pd.Series(dtype=float, index=pd.PeriodIndex([], freq='M'))
-    return period.groupby(period.index.to_period('M')).apply(lambda x: (1 + x).prod() - 1)
+    monthly = period.groupby(period.index.to_period('M')).apply(lambda x: (1 + x).prod() - 1)
+    monthly.attrs['complete_months'] = tuple(_complete_performance_months(period.index, name))
+    return monthly
+
+def _cn_report_price_window(frame, end_date):
+    out = _drop_cn_rows_after(frame, end_date).copy()
+    out.attrs['historical_report_window'] = True
+    confirmation = out.attrs.get('cn_confirmed_close')
+    if len(out) and confirmation is not None and pd.Timestamp(confirmation) > out.index[-1]:
+        out.attrs['cn_confirmed_close'] = out.index[-1]
+        out.attrs.pop('cn_final_amounts', None)
+    return out
+
+def _empty_historical_sleeve(reason):
+    result = pd.DataFrame({'return': pd.Series(dtype=float)}, index=pd.DatetimeIndex([], name='date'))
+    result.attrs['report_unavailable_reason'] = reason
+    return result
 
 def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
     values = []
@@ -12238,10 +12727,11 @@ def _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end
     from matplotlib.ticker import PercentFormatter
     fig, (nav_ax, dd_ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, height_ratios=[3, 1])
     for name, nav in nav_series.items():
-        nav_ax.plot(nav.index, nav.values, label=f'{chart_labels[name]}  ({(nav.iloc[-1] - 1) * 100:+.1f}%)', color=colors[name], linewidth=1.8)
+        marker = 'o' if len(nav) == 1 else None
+        nav_ax.plot(nav.index, nav.values, label=f'{chart_labels[name]}  ({(nav.iloc[-1] - 1) * 100:+.1f}%)', color=colors[name], linewidth=1.8, marker=marker)
         peaks = pd.concat([pd.Series([1.0]), nav.reset_index(drop=True)], ignore_index=True).cummax().iloc[1:].set_axis(nav.index)
         drawdown = nav / peaks - 1.0
-        dd_ax.plot(drawdown.index, drawdown.values, color=colors[name], linewidth=1.2, alpha=0.85)
+        dd_ax.plot(drawdown.index, drawdown.values, color=colors[name], linewidth=1.2, alpha=0.85, marker=marker)
     nav_ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
     nav_ax.set_title(f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", fontsize=14, fontweight='bold')
     _apply_nav_axis_scale(nav_ax, nav_series)
@@ -12251,7 +12741,13 @@ def _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end
     dd_ax.set_ylabel('Drawdown', fontsize=11)
     dd_ax.yaxis.set_major_formatter(PercentFormatter(1.0))
     dd_ax.grid(True, alpha=0.3)
-    dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    if start_date == end_date:
+        margin = pd.Timedelta(hours=12)
+        dd_ax.set_xlim(start_date - margin, end_date + margin)
+        dd_ax.set_xticks([start_date])
+        dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    else:
+        dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     fig.autofmt_xdate(rotation=30)
     fig.tight_layout()
     buf = io.BytesIO()
@@ -12337,9 +12833,14 @@ def _latest_confirmed_cn_rule_date(index, bj_now=None):
             return pd.Timestamp(confirmed[-1]).normalize()
     return latest
 
-def _cn_record_close_confirmed(rec_date, bj_now, rec_time_text=None):
+def _cn_record_close_confirmed(rec_date, bj_now, rec_time_text=None, confirmation_not_before=None):
     if rec_date is None:
         return False
+    if confirmation_not_before is not None:
+        now_at = pd.Timestamp(bj_now)
+        now_at = now_at.tz_localize('Asia/Shanghai') if now_at.tzinfo is None else now_at
+        if now_at < confirmation_not_before:
+            return False
     rec_day = pd.Timestamp(rec_date).date()
     today = bj_now.date()
     if rec_time_text and '09:30' in str(rec_time_text):
@@ -12490,7 +12991,7 @@ def _filter_confirmed_records(records, bj_now=None, us_schedule=None):
             if execution_at > now_at:
                 continue
         is_cn = rec.get('strategy_family') in {'Sub-A', 'Sub-A-DK'} or strat in {'Sub-A', 'Sub-A-DK'}
-        if is_cn and (not _cn_record_close_confirmed(rec_date, bj_now, rec_time)):
+        if is_cn and (not _cn_record_close_confirmed(rec_date, bj_now, rec_time, rec.get('confirmation_not_before'))):
             continue
         is_subb = rec.get('strategy_family') == 'Sub-B' or strat in {'B7.8', 'B7.9'} or 'Sub-B' in strat
         if is_subb and rec.get('execution_at') is None:
@@ -12517,168 +13018,138 @@ def _parse_cn_num(s):
         return tens * 10 + ones
     return None
 
-def parse_date_range(text):
-    try:
-        _validate_date_tokens(text)
-        start, end = _parse_date_range_unchecked(text)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError('日期无效，请使用有效的年月日或完整起止日期。') from exc
-    if start is None:
-        return (None, None)
-    if end is None or pd.isna(start) or pd.isna(end):
-        raise ValueError('日期范围缺少有效起止日期。')
+_QUERY_RANGE_SEPARATOR = r'(?:到|至|—|–|-|~|～)'
+_QUERY_UNSUPPORTED_PERIOD = re.compile(
+    r'季度|财季|财年|[一二三四1234]季|[Qq][1-4]|[上下]半(?:年|年度)|'
+    r'[上中下]旬|(?:周|星期)[一二三四五六日天末]|[春夏秋冬]季'
+)
+_QUERY_DATE_TOKEN = re.compile(
+    r'(?<![A-Za-z0-9])(?:'
+    r'(?P<absolute>(?:19|20)\d{2})(?:'
+    r'(?P<compact>\d{2})(?!\d)|'
+    r'(?:[-/.]|年\s*)(?P<month>\d{1,2})(?!\d)'
+    r'(?:(?:[-/.]|月\s*)(?P<day>\d{1,2})(?!\d)[日号]?|月份?)?|年(?:度)?)?'
+    r'|(?P<relative>(?:最近|过去|近)\s*(?P<count>[一二两三四五六七八九十\d半]+)\s*个?\s*(?P<unit>[年月]))'
+    r'|(?P<named>今年|去年|前年|今天|(?<=[至到])现在|(?<=[至到])今(?!年))'
+    r'|(?P<short_month>\d{1,2})(?:[-/.月](?P<short_day>\d{1,2})[日号]?|月份?)'
+    r'|(?P<day_only>\d{1,2})[日号]'
+    r')(?!\d)'
+)
+
+
+def _query_date_bounds(token, now, anchor=None):
+    if token['relative']:
+        count = _parse_cn_num(token['count'])
+        if count is None or count <= 0:
+            raise ValueError('日期窗口长度无效。')
+        months = count * (12 if token['unit'] == '年' else 1)
+        return now - pd.DateOffset(months=max(1, int(months))), now
+    if token['named']:
+        if token['named'] in ('今天', '现在', '今'):
+            return now, now
+        year = now.year - {'今年': 0, '去年': 1, '前年': 2}[token['named']]
+        return pd.Timestamp(year, 1, 1), now if year == now.year else pd.Timestamp(year, 12, 31)
+    year = int(token['absolute']) if token['absolute'] else (anchor or now).year
+    month = token['compact'] or token['month'] or token['short_month']
+    day = token['day'] or token['short_day'] or token['day_only']
+    if token['day_only']:
+        if anchor is None:
+            raise ValueError('日期缺少年月。')
+        month = anchor.month
+    if month is None:
+        return pd.Timestamp(year, 1, 1), pd.Timestamp(year, 12, 31)
+    start = pd.Timestamp(year, int(month), int(day or 1))
+    return start, start if day else start + pd.offsets.MonthEnd(0)
+
+
+def _parse_query_date_clause(text, anchor):
+    text = re.sub(r'(?<=\d)\s+(?=[年月日号])|(?<=[年月至到])\s+(?=[\d今现])', '', text)
+    now = pd.Timestamp(beijing_now()).normalize()
+    dates = list(_QUERY_DATE_TOKEN.finditer(text))
+    if not dates:
+        if re.search(r'(?<!\d)(?:19|20)\d{2}(?:\d|[-/.年]\d)', text):
+            raise ValueError('日期格式无效。')
+        return None, None
+    first, last = dates[0], dates[-1]
+    if len(dates) > 2 or (len(dates) == 2 and
+            not re.fullmatch(r'\s*' + _QUERY_RANGE_SEPARATOR + r'\s*', text[first.end():last.start()])):
+        raise ValueError('日期表达式不明确，请用“至”连接区间，用“和”分隔多个区间。')
+    start, end = _query_date_bounds(first, now, anchor)
+    first_implicit = bool(first['short_month']) and anchor is None
+    tail = text[last.end():]
+    if len(dates) == 2:
+        _, end = _query_date_bounds(last, now, start)
+        if first_implicit and last['short_month']:
+            if end < start:
+                start = start.replace(year=start.year - 1)
+            elif end > now:
+                start = start.replace(year=start.year - 1)
+                _, end = _query_date_bounds(last, now, start)
+    else:
+        # A bare number after a month endpoint inherits its year (e.g. 2024-05 至 08).
+        abbreviated = re.match(r'\s*' + _QUERY_RANGE_SEPARATOR + r'\s*(\d{1,2})(?!\d)', tail)
+        if abbreviated and (first['month'] or first['compact']) and not first['day']:
+            end = pd.Timestamp(start.year, int(abbreviated[1]), 1) + pd.offsets.MonthEnd(0)
+            tail = tail[abbreviated.end():]
+        if first_implicit and end > now:
+            start = start.replace(year=start.year - 1)
+            end = start if first['short_day'] else start + pd.offsets.MonthEnd(0)
+        since = re.match(r'\s*(?:以来|开始至今|起(?:至今)?)', tail)
+        if since:
+            end = now
+            tail = tail[since.end():]
+    # Reject leftover temporal syntax before any report is emitted.
+    if (_QUERY_UNSUPPORTED_PERIOD.search(text)
+            or re.search(r'(?:截至|截止|[至到~～—–-])\s*$', text[:first.start()])
+            or re.match(r'\s*(?:[至到~～—–/.\d-]|[日号]|[以之][前后]|起|开始|[年月]?[初底末])', tail)
+            or re.match(r'[A-Za-z_]', tail) and (last['day'] or last['month'] or last['compact'])
+            or re.search(r'\d+\s*(?:个?月|年|日|号|季度|周)', tail)):
+        raise ValueError('日期表达式未完整识别，请明确起止年月日。')
     if start > end:
         raise ValueError('日期范围无效：开始日期晚于结束日期。')
-    return (start, end)
+    return start, end
 
-def _validate_date_tokens(text):
-    if re.search('(?<!\\d)\\d{4}[-年/.]\\d+(?:[-月/.]\\d+)?[日号月]?[A-Za-z_]', str(text)):
-        raise ValueError('日期无效：日期后不能紧接字母或科学计数法后缀。')
-    for token in re.finditer('(?=(?<!\\d)(\\d{4})[-年/.](\\d+)(?:([-月/.])(\\d+))?)', str(text)):
-        if len(token.group(2)) > 2:
-            raise ValueError('日期无效：月份不能超过两位。')
-        day = token.group(4)
-        if day and len(day) > 2:
-            next_year = token.group(3) == '-' and len(day) == 4 and re.match('[-年/.]\\d{1,2}(?!\\d)', str(text)[token.end(4):])
-            if not next_year:
-                raise ValueError('日期无效：日期日数不能超过两位。')
 
-def _parse_date_range_unchecked(text):
-    now = pd.Timestamp(beijing_now()).normalize()
-    _DAY_SUF = '[日号]?'
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF + '\\s*[到至—\\-~]+\\s*(\\d{4})[-年/.](\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF, text)
-    if m:
-        start = pd.Timestamp(f'{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}')
-        end = pd.Timestamp(f'{m.group(4)}-{int(m.group(5)):02d}-{int(m.group(6)):02d}')
-        return (start, end)
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF + '\\s*[到至—\\-~]+\\s*(\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF, text)
-    if m:
-        yr = int(m.group(1))
-        start = pd.Timestamp(f'{yr}-{int(m.group(2)):02d}-{int(m.group(3)):02d}')
-        end = pd.Timestamp(f'{yr}-{int(m.group(4)):02d}-{int(m.group(5)):02d}')
-        return (start, end)
-    m = re.search('(\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF + '\\s*[到至—\\-~]+\\s*(\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF, text)
-    if m:
-        yr = now.year
-        start = pd.Timestamp(f'{yr}-{int(m.group(1)):02d}-{int(m.group(2)):02d}')
-        end = pd.Timestamp(f'{yr}-{int(m.group(3)):02d}-{int(m.group(4)):02d}')
-        if start > end:
-            start = pd.Timestamp(f'{yr - 1}-{int(m.group(1)):02d}-{int(m.group(2)):02d}')
-        elif end > now.normalize():
-            start = pd.Timestamp(f'{yr - 1}-{int(m.group(1)):02d}-{int(m.group(2)):02d}')
-            end = pd.Timestamp(f'{yr - 1}-{int(m.group(3)):02d}-{int(m.group(4)):02d}')
-        return (start, end)
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF + '\\s*至今', text)
-    if m:
-        start = pd.Timestamp(f'{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}')
-        return (start, now)
-    m = re.search('(\\d{1,2})[-月/.](\\d{1,2})\\s*' + _DAY_SUF + '\\s*至今', text)
-    if m:
-        yr = now.year
-        start = pd.Timestamp(f'{yr}-{int(m.group(1)):02d}-{int(m.group(2)):02d}')
-        if start > now:
-            start = pd.Timestamp(f'{yr - 1}-{int(m.group(1)):02d}-{int(m.group(2)):02d}')
-        return (start, now)
-    m = re.search('(\\d{4})[-年/.]?(\\d{1,2})[-月]?\\s*至今', text)
-    if m:
-        start = pd.Timestamp(f'{m.group(1)}-{int(m.group(2)):02d}-01')
-        return (start, now)
-    m = re.search('(\\d{4})\\s*年?\\s*至今', text)
-    if m:
-        return (pd.Timestamp(f'{m.group(1)}-01-01'), now)
-    m = re.search('(?<!\\d)(\\d{4})[-年/.](\\d{1,2})[-月/.](\\d{1,2})\\s*[日号]?(?!\\d)', text)
-    if m:
-        day = pd.Timestamp(f'{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}')
-        return (day, day)
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})[-月]?\\s*[到至—\\-~]+\\s*(\\d{4})[-年/.](\\d{1,2})', text)
-    if m:
-        start = pd.Timestamp(f'{m.group(1)}-{int(m.group(2)):02d}-01')
-        end = pd.Timestamp(f'{m.group(3)}-{int(m.group(4)):02d}-01') + pd.offsets.MonthEnd(0)
-        return (start, end)
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})[-月]?\\s*[到至—\\-~]+\\s*(\\d{1,2})', text)
-    if m:
-        yr = int(m.group(1))
-        start = pd.Timestamp(f'{yr}-{int(m.group(2)):02d}-01')
-        end = pd.Timestamp(f'{yr}-{int(m.group(3)):02d}-01') + pd.offsets.MonthEnd(0)
-        return (start, end)
-    m = re.search('(\\d{1,2})\\s*月\\s*[到至\\-~]+\\s*(\\d{1,2})\\s*月', text)
-    if m:
-        yr = now.year
-        start = pd.Timestamp(f'{yr}-{int(m.group(1)):02d}-01')
-        end = pd.Timestamp(f'{yr}-{int(m.group(2)):02d}-01') + pd.offsets.MonthEnd(0)
-        if start > end:
-            start = pd.Timestamp(f'{yr - 1}-{int(m.group(1)):02d}-01')
-        elif end > now.normalize():
-            start = pd.Timestamp(f'{yr - 1}-{int(m.group(1)):02d}-01')
-            end = pd.Timestamp(f'{yr - 1}-{int(m.group(2)):02d}-01') + pd.offsets.MonthEnd(0)
-        return (start, end)
-    m = re.search('(\\d{4})(\\d{2})\\s*[-到至~]+\\s*(\\d{4})(\\d{2})', text)
-    if m:
-        start = pd.Timestamp(f'{m.group(1)}-{m.group(2)}-01')
-        end = pd.Timestamp(f'{m.group(3)}-{m.group(4)}-01') + pd.offsets.MonthEnd(0)
-        return (start, end)
-    m = re.search('(\\d{4})\\s*年?\\s*[到至—\\-~]+\\s*(\\d{4})\\s*年?', text)
-    if m:
-        return (pd.Timestamp(f'{m.group(1)}-01-01'), pd.Timestamp(f'{m.group(2)}-12-31'))
-    m = re.search('(?:最近|过去|近)\\s*([一二两三四五六七八九十\\d半]+)\\s*个?\\s*年', text)
-    if m:
-        n = _parse_cn_num(m.group(1))
-        if n is not None:
-            if isinstance(n, float):
-                return (now - pd.DateOffset(months=int(n * 12)), now)
-            return (now - pd.DateOffset(years=int(n)), now)
-    m = re.search('(?:最近|过去|近)\\s*([一二两三四五六七八九十\\d半]+)\\s*个?\\s*月', text)
-    if m:
-        n = _parse_cn_num(m.group(1))
-        if n is not None:
-            return (now - pd.DateOffset(months=int(n if n >= 1 else 1)), now)
-    if '今年' in text:
-        return (pd.Timestamp(f'{now.year}-01-01'), now)
-    if '去年' in text:
-        yr = now.year - 1
-        return (pd.Timestamp(f'{yr}-01-01'), pd.Timestamp(f'{yr}-12-31'))
-    if '前年' in text:
-        yr = now.year - 2
-        return (pd.Timestamp(f'{yr}-01-01'), pd.Timestamp(f'{yr}-12-31'))
-    m = re.search('(\\d{4})[-年/.](\\d{1,2})\\s*月?份?', text)
-    if m:
-        yr = int(m.group(1))
-        mon = int(m.group(2))
-        if 1 <= mon <= 12:
-            start = pd.Timestamp(f'{yr}-{mon:02d}-01')
-            end = start + pd.offsets.MonthEnd(0)
-            return (start, end)
-        raise ValueError('month must be in 1..12')
-    m = re.search('(\\d{4})\\s*年?\\s*全?年?', text)
-    if m:
-        yr = int(m.group(1))
-        if 2000 <= yr <= 2099:
-            return (pd.Timestamp(f'{yr}-01-01'), pd.Timestamp(f'{yr}-12-31'))
-    return (None, None)
+def parse_date_range(text, *, anchor=None):
+    try:
+        return _parse_query_date_clause(text, anchor)
+    except (TypeError, ValueError, OverflowError) as exc:
+        if isinstance(exc, ValueError) and '日期' in str(exc):
+            raise
+        raise ValueError('日期无效，请使用有效的年月日或完整起止日期。') from exc
+
 
 def parse_all_date_ranges(text):
-    _validate_date_tokens(text)
-    parts = re.split('以及|、|；|;\\s*', text)
-    if len(parts) == 1:
-        parts = re.split('(?<=[年月日\\d])\\s*和\\s*(?=[近最过])', text)
-    results = []
-    seen = set()
+    # Keep the user's order and validate all clauses before dispatching the first.
+    parts = re.split(r'以及|、|[；;]|(?<=[年月日号今\d])\s*(?:[，,]|和|与|及)\s*|'
+                     r'(?:和|与|及|[，,])\s*(?=(?:19|20)\d{2}|今年|去年|前年|最近|过去|近)', text)
+    if len(parts) > 1 and not parts[-1].strip():
+        raise ValueError('日期列表缺少最后一个区间。')
+    if parts and not _QUERY_DATE_TOKEN.search(parts[0]) and parts[0].strip() and len(parts) > 1:
+        # A polite introduction before a comma is not a requested period.
+        if re.match(r'^[^，,；;、]+[，,]', text) and not _QUERY_UNSUPPORTED_PERIOD.search(parts[0]):
+            parts = parts[1:]
+    ranges = []
+    anchor = None
+    has_month_anchor = False
     for part in parts:
-        part = part.strip()
-        if not part:
+        if not part.strip():
             continue
-        start, end = parse_date_range(part)
-        if start is not None:
-            key = (start.date(), end.date())
-            if key not in seen:
-                results.append((start, end))
-                seen.add(key)
-    if not results:
-        start, end = parse_date_range(text)
-        if start is not None:
-            results.append((start, end))
-    results.sort(key=lambda x: (x[1] - x[0]).days)
-    return results
+        tokens = list(_QUERY_DATE_TOKEN.finditer(part))
+        if tokens and tokens[0]['day_only'] and not has_month_anchor:
+            raise ValueError('日期缺少可继承的月份。')
+        start, end = parse_date_range(part.strip(), anchor=anchor)
+        ranges.append((start, end))
+        if tokens and end is not None:
+            last = tokens[-1]
+            has_month_anchor = bool(last['month'] or last['compact'] or last['short_month'] or last['day_only'])
+            if last['absolute'] or last['short_month'] or last['day_only'] or last['named'] in ('今年', '去年', '前年'):
+                anchor = end
+            else:
+                anchor = None
+    if len(ranges) > 1 and any(start is None for start, end in ranges) and any(start is not None for start, end in ranges):
+        raise ValueError('有日期区间未能辨识，请用明确日期分别列出。')
+    return list(dict.fromkeys((start, end) for start, end in ranges if start is not None))
 
 def _parse_json_from_response(text, required_fields=None):
     m = re.search('```json\\s*(\\{.*?\\})\\s*```', text, re.DOTALL)
@@ -12720,6 +13191,8 @@ def _lookup_open_on_date(ticker, date, us_open):
     live = _ROT_PROXY_TO_LIVE.get(ticker)
     if live:
         candidates = [live] + candidates
+    if ticker == 'EMXC' and US_ROT_EMXC_BT_PROXY in us_open:
+        candidates = ['EMXC_raw_open', 'EMXC_native_open']
     target = pd.Timestamp(date).normalize()
     for t in candidates:
         if t not in us_open:
@@ -12756,6 +13229,16 @@ def extract_cn_rebalances(cn_result, cn_close, strategy_name='Sub-A', names=None
             records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN', 'close'), 'strategy_family': 'Sub-A', 'record_kind': 'scale', '策略': strategy_name, '卖出': f'杠杆 {prev_weight:.4f}x', '卖出价格': None, '买入': f'杠杆 {weight:.4f}x ({h_name})', '买入价格': None})
         prev_holding = holding
         prev_weight = weight
+    if strategy_name == 'Sub-A':
+        for record in records:
+            earliest = pd.Timestamp(record['日期'], tz='Asia/Shanghai') + CN_BOND_SESSION_END
+            record.update({
+                '北京时间': f'{earliest:%Y-%m-%d} 收盘纸面计价（最早{earliest:%H:%M}起核验）',
+                'confirmation_not_before': earliest,
+                '信号观察': '股票15:00、国债15:30收盘后比较全池',
+                '价格确认': f'{earliest:%Y-%m-%d %H:%M}起，待各源日线核验',
+                '模型计价': '当日各指数收盘值，实际成交时刻未核验',
+            })
     return records
 
 def extract_v78_newa_rebalances(new_result, cn_close=None, since_date=None):
@@ -12787,13 +13270,22 @@ def extract_v78_newa_rebalances(new_result, cn_close=None, since_date=None):
 
 def extract_v78_suba_rebalances(v78_suba_result, cn_close=None, since_date=None):
     records = []
+    flag_columns = [name for name in ('suba_volume_unresolved', 'suba_volume_unavailable') if name in v78_suba_result]
+    if flag_columns:
+        unresolved = v78_suba_result[flag_columns].fillna(True).astype(bool).any(axis=1)
+        # A change of holdings or scale refers to both sides of the transition.
+        uncertain_dates = v78_suba_result.index[unresolved | unresolved.shift(1, fill_value=False)]
+        if len(uncertain_dates) == len(v78_suba_result):
+            return []
+    else:
+        uncertain_dates = pd.DatetimeIndex([])
     v77_component = v78_suba_result.attrs.get('v78_suba_v77')
     new_component = v78_suba_result.attrs.get('v78_suba_new')
     if v78_suba_result.attrs.get('suba_production_mode') == 'old_a_only_simplified' and v77_component is None and (new_component is None):
         records = extract_cn_rebalances(v78_suba_result, cn_close, strategy_name='Sub-A', scale_threshold=1e-12)
         if since_date is not None:
             records = [record for record in records if pd.Timestamp(record['日期']) >= pd.Timestamp(since_date)]
-        return records
+        return [item for item in records if pd.Timestamp(item['日期']) not in uncertain_dates]
     if v77_component is not None and len(v77_component) > 0:
         component_records = extract_cn_rebalances(v77_component, cn_close, strategy_name=f'V7.7A ({V78_SUBA_V77_WEIGHT:.0%})')
         for record in component_records:
@@ -12807,7 +13299,7 @@ def extract_v78_suba_rebalances(v78_suba_result, cn_close=None, since_date=None)
             records.append(record)
     records.extend(extract_v78_newa_rebalances(new_component, cn_close=cn_close, since_date=since_date))
     records.sort(key=lambda item: item.get('日期', ''))
-    return records
+    return [item for item in records if pd.Timestamp(item['日期']) not in uncertain_dates]
 
 def _dk_holding_prices(holding, cn_dk_close, date):
     if cn_dk_close is None or date not in cn_dk_close.index:
@@ -13170,6 +13662,27 @@ def extract_dk_rebalances(dk_result, strategy_name='Sub-A-DK', cn_dk_close=None)
 
 def extract_v78_adk_rebalances(v78_adk_result, cn_dk_close=None, since_date=None):
     records = []
+    if _v80_adk_is_new_only(v78_adk_result):
+        if v78_adk_result.empty:
+            return records
+        start = v78_adk_result.index.searchsorted(pd.Timestamp(since_date)) if since_date is not None else 0
+        close_meta = getattr(cn_dk_close, 'attrs', {})
+        confirmed = close_meta.get('cn_confirmed_close')
+        if confirmed is None and close_meta.get('cn_unconfirmed_snapshot') and len(cn_dk_close):
+            confirmed = cn_dk_close.index[-2] if len(cn_dk_close) > 1 else pd.Timestamp.min
+        dates = v78_adk_result.index[start:]
+        if confirmed is not None:
+            dates = dates[dates <= pd.Timestamp(confirmed)]
+        for date in dates:
+            for row in _v79_adk_leg_execution_rows(v78_adk_result, date):
+                if not row['changed'] or row['current_pair'] == row['target_pair'] == 'none':
+                    continue
+                records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN', 'close'),
+                                'strategy_family': 'Sub-A-DK', 'record_kind': 'close_target', '日期口径': 'signal_day',
+                                '策略': f"{row['leg']}（收盘信号）", '卖出': '当前 ' + row['current_final_text'],
+                                '买入': '收盘目标 ' + row['target_final_text'], '卖出价格': None, '买入价格': None,
+                                '说明': '按当日确认收盘计算的模型目标，成交待独立核实。'})
+        return records
     components = [(label, component_weight, component) for label, _scope, component_weight, component, _is_new in _v80_adk_component_specs(v78_adk_result)]
     for label, component_weight, component in components:
         if component is None or len(component) == 0:
@@ -14017,6 +14530,11 @@ def _write_rebalance_sheet(wb: Any, rebalance_records: list[RebalanceRecord], he
     ws.set_column('F:F', 30)
     ws.set_column('G:G', 12)
     headers = ['日期', '北京时间', '策略', '卖出', '卖出价格', '买入', '买入价格']
+    clock_fields = ['信号观察', '价格确认', '模型计价'] if any('模型计价' in rec for rec in rebalance_records) else []
+    if clock_fields:
+        ws.set_column('B:B', 46)
+        ws.set_column('H:J', 43)
+        headers.extend(clock_fields)
     for j, h in enumerate(headers):
         ws.write(0, j, h, header_fmt)
     for i, rec in enumerate(rebalance_records):
@@ -14029,6 +14547,8 @@ def _write_rebalance_sheet(wb: Any, rebalance_records: list[RebalanceRecord], he
         ws.write(i + 1, 5, rec.get('买入', ''), cell_fmt)
         buy_price = rec.get('买入价格')
         ws.write(i + 1, 6, buy_price if buy_price is not None else '', cell_fmt)
+        for j, field in enumerate(clock_fields, start=7):
+            ws.write(i + 1, j, rec.get(field, ''), cell_fmt)
 
 def _write_adk_net_exposure_sheet(wb, cn_dk_result, header_fmt, cell_fmt, row_idx=-1, date_label='当前已生效'):
     if cn_dk_result is None or 'adk_net_asset_exposure' not in cn_dk_result.columns or len(cn_dk_result) == 0:
@@ -14159,8 +14679,13 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
             metadata.set_column('A:A', 30)
             metadata.set_column('B:B', 68)
             fields = [(key, report_context[key]) for key in ('requested_start', 'requested_end', 'actual_start', 'actual_end', 'generated_at', 'run_id')]
+            if report_context.get('us_data_coverage'):
+                fields.append(('美股数据覆盖', report_context['us_data_coverage']))
             fields += [(f'{name} 确认收盘', date) for name, date in report_context.get('sleeve_asof', {}).items()]
             fields += [(f'{name} 收益覆盖', f'{bounds[0]:%Y-%m-%d} 至 {bounds[1]:%Y-%m-%d}') for name, bounds in report_context.get('sleeve_return_ranges', {}).items()]
+            fields += [(f'{name} 收益覆盖', f'N/A（{reason}）') for name, reason in report_context.get('unavailable_returns', {}).items()]
+            if 'Sub-A' in report_context.get('sleeve_return_ranges', {}):
+                fields.append(('Sub-A 计价口径', CN_SA_MODEL_CLOCK_NOTE))
             for i, (key, value) in enumerate(fields):
                 metadata.write(i, 0, key, header_fmt)
                 metadata.write(i, 1, value.strftime('%Y-%m-%d') if isinstance(value, pd.Timestamp) else str(value), cell_fmt)
@@ -14170,13 +14695,18 @@ def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalanc
 class CombinedStrategyBase:
 
     def _fetch_cn_price_panel(self, msg, specifications, clock, required, previous, final_sessions,
-                              *, adk=False, include_snapshot=False):
+                              *, adk=False, include_snapshot=False, prefer_full_history=False):
         label = 'ADK' if adk else 'Sub-A'
         names = CN_DK_NAMES if adk else CN_NAMES
         raw, sources = {}, {}
         for column, secid, index_code in specifications:
             evidence = final_sessions[required].get(secid)
             confirmation = {'verified_close': evidence['close']} if evidence else {}
+            if not adk and secid != CN_BOND_CODE:
+                if prefer_full_history:
+                    confirmation['prefer_full_history'] = True
+                if previous < required and any(code not in final_sessions[required] for _, code, _ in specifications):
+                    confirmation['confirmed_through'] = previous
             prior_evidence = final_sessions[previous].get(secid)
             if prior_evidence and required != previous:
                 confirmation['verified_prior'] = (previous, prior_evidence['close'])
@@ -14207,8 +14737,9 @@ class CombinedStrategyBase:
             close = _build_cn_dk_close_frame(raw)
         else:
             close = _build_cn_stock_close_frame(raw)
-            if len(close) < CN_BIAS_N + CN_MOM_DAY + 10:
-                raise DataUnavailableError(f'Sub-A 合并后仅有 {len(close)} 行确认行情')
+            confirmed_count = int((close.index <= diagnostics['cn_confirmed_close']).sum())
+            if confirmed_count < CN_MIN_HISTORY_ROWS:
+                raise SubaInsufficientHistoryError(f'Sub-A 合并后仅有 {confirmed_count} 个确认交易日；当前及前一日波动仓位需 {CN_MIN_HISTORY_ROWS} 日预热。')
             bond = _price_column_frame(raw[CN_BOND_CODE], 'close', CN_BOND_CODE)[CN_BOND_CODE]
             _attach_cn_bond_close(close, bond, 'Sub-A国债避险')
             diagnostics['cn_final_amounts'] = {
@@ -14247,25 +14778,30 @@ class CombinedStrategyBase:
             msg.write(f'⏳ 正在获取{label}行情...\n')
             try:
                 panel = self._fetch_cn_price_panel(msg, specs, clock, requested_close, previous_close,
-                                                   final_sessions, adk=adk, include_snapshot=include_cn_live_snapshot)
+                                                   final_sessions, adk=adk, include_snapshot=include_cn_live_snapshot,
+                                                   prefer_full_history=allow_last_confirmed_cn_close)
             except _fetch_or_bot_errors() as exc:
-                if not partial or isinstance(exc, VerifiedDataRepairConflict):
+                history_short = not adk and allow_last_confirmed_cn_close and isinstance(exc, SubaInsufficientHistoryError)
+                if (not partial and not history_short) or isinstance(exc, VerifiedDataRepairConflict):
                     raise
-                panel = pd.DataFrame()
+                panel = pd.DataFrame(index=pd.DatetimeIndex([], name='date'))
                 panel.attrs['cn_panel_error'] = _short_error(exc, 500)
                 msg.write(f"  ⚠️ {label}确认历史不可用：{panel.attrs['cn_panel_error']}\n")
             panels.append(panel)
         cn_close, cn_dk_close = panels
-        if allow_last_confirmed_cn_close:
-            cutoff = min(panel.attrs['cn_confirmed_close'] for panel in panels)
-            if cutoff == pd.Timestamp(clock.date()) and CN_SA_VOLUME_OVERLAY_ENABLED:
+        if allow_last_confirmed_cn_close and any(not panel.empty for panel in panels):
+            cutoff = min(panel.attrs['cn_confirmed_close'] for panel in panels if not panel.empty)
+            if not cn_close.empty and cutoff == pd.Timestamp(clock.date()) and CN_SA_VOLUME_OVERLAY_ENABLED:
                 receipts = cn_close.attrs.get('cn_final_amounts', {})
                 amount_codes = {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
                 if not amount_codes.issubset(receipts):
                     cutoff = previous_close
             if cutoff < requested_close:
-                msg.write(f'  ⚠️ 当日收盘尚未完整核验；A与ADK按共同确认收盘 {cutoff:%Y-%m-%d} 计算。\n')
+                available = 'A与ADK' if not cn_close.empty else 'ADK'
+                msg.write(f'  ⚠️ 当日收盘尚未完整核验；{available}按共同确认收盘 {cutoff:%Y-%m-%d} 计算。\n')
                 for i, panel in enumerate(panels):
+                    if panel.empty:
+                        continue
                     panels[i] = _drop_cn_rows_after(panel, cutoff)
                     panels[i].attrs['cn_confirmed_close'] = cutoff
                 cn_close, cn_dk_close = panels
@@ -14284,26 +14820,35 @@ class CombinedStrategyBase:
         for ticker in US_ALL_TICKERS:
             try:
                 df, source = fetch_yahoo(ticker)
-            except _DATA_FETCH_ERRORS as exc:
-                if ticker in SUBB_OPTIONAL_MACRO_TICKERS:
-                    msg.write(f'  ⚠️ 宏观数据{ticker}暂缺，将重试并按正式策略依赖检查完整性: {_short_error(exc)}\n')
-                    continue
-                raise
+            except _DATA_FETCH_ERRORS:
+                msg.write(f'  ⚠️ {ticker} 暂无可用历史，将按全池共同覆盖核验。\n')
+                continue
             if df is not None and len(df) > 50:
                 df = _drop_us_unconfirmed_rows(df, _us_input_cutoff)
                 us_raw[ticker] = df
                 us_sources[ticker] = source
             time.sleep(0.1)
-        _formal_us_history_tickers = list(dict.fromkeys(list(SUBB_REQUIRED_PRICE_TICKERS) + list(SUBB_REQUIRED_LIVE_PRICE_TICKERS) + [US_ROT_EMXC_BT_PROXY] + list(PROD_PORTFOLIO.keys()) + [cfg['proxy'] for cfg in PROD_PORTFOLIO.values()] + [PROD_CASH, PROD_VS_SIGNAL_TICKER, PROD_GOLD_VS_SIGNAL_TICKER]))
+        _formal_us_history_tickers = _v80_us_required_history()
         _retry_incomplete_us_price_history(us_raw, us_sources, _formal_us_history_tickers, msg=msg)
+        _v80_assert_integrity(_v80_integrity_generation())
+        confirmed, us_status = _v80_us_confirmed_prefix(us_raw, us_sources, _expected_us_date,
+                                                        _formal_us_history_tickers, msg)
         self._us_sources = dict(us_sources)
         msg.write('  美股来源: ' + '；'.join((f'{ticker}={source}' for ticker, source in sorted(us_sources.items()))) + '\n')
-        _stooq_tickers = [ticker for ticker, source in us_sources.items() if 'Stooq' in str(source)]
-        if _stooq_tickers:
-            msg.write('  ⚠️ Stooq后备行情: ' + '/'.join(_stooq_tickers) + '；分红/拆股复权口径尚未独立核验，涉及这些资产的结果须按来源差异审慎解读。\n')
-        if include_us_live_snapshot:
-            _supplement_us_today_close(us_raw, US_ALL_TICKERS, msg)
-        us_raw = {ticker: _drop_us_unconfirmed_rows(frame, _us_input_cutoff) for ticker, frame in us_raw.items()}
+        if us_status['status'] == 'unavailable':
+            msg.write('  美股无共同完整历史：' + us_status['reason'] + '\n')
+            self._us_open = {}
+            empty = pd.DataFrame(index=pd.DatetimeIndex([]))
+            empty.attrs['us_data_status'] = us_status
+            return cn_close, cn_dk_close, empty, empty.copy()
+        live_day = pd.Timestamp(_us_input_cutoff)
+        if include_us_live_snapshot and live_day > _expected_us_date and us_status['asof'] == _expected_us_date:
+            us_raw = _v80_us_live_panel(confirmed, us_raw, _formal_us_history_tickers, live_day, us_status, msg)
+        else:
+            us_raw = confirmed
+        _expected_us_date = us_status['asof']
+        if us_status['status'] in ('historical', 'partial_intraday'):
+            msg.write(f"  美股回退至共同确认收盘 {_expected_us_date:%Y-%m-%d}：{us_status['reason']}。\n")
         _assert_columns_fresh(us_raw, [ticker for ticker in SUBB_REQUIRED_PRICE_TICKERS if ticker != US_ROT_BTC_TICKER], expected_date=_expected_us_date, max_lag_days=0, label='Sub-B核心价格')
         _assert_columns_fresh(us_raw, SUBB_REQUIRED_LIVE_PRICE_TICKERS, expected_date=_expected_us_date, max_lag_days=0, label='Sub-B实盘ETF价格')
         _formal_validation_raw = dict(us_raw)
@@ -14393,6 +14938,8 @@ class CombinedStrategyBase:
         if _subc_enabled():
             _assert_price_frame_columns_fresh(us_prod_daily, prod_proxies, expected_date=us_prod_daily.index[-1], max_lag_days=1 if include_us_live_snapshot else 0, label='Sub-C最终价格', names={'BTC-USD': 'BTC/IBIT'})
         _assert_subb_final_price_frame_fresh(us_rot_close, expected_date=us_rot_close.index[-1], include_us_live_snapshot=include_us_live_snapshot)
+        us_rot_close.attrs['us_data_status'] = us_status
+        us_prod_daily.attrs['us_data_status'] = us_status.copy()
         self._us_open = _build_us_open_execution_dict(us_raw)
         us_date = us_rot_close.index[-1]
         us_close_bj = beijing_time_str(us_date, 'US', 'close')
@@ -14425,12 +14972,13 @@ class CombinedStrategyBase:
                 for frame in data:
                     if hasattr(frame, 'attrs'):
                         frame.attrs['verified_integrity_generation'] = generation
-                cache[key] = data
+                cache[key] = (data, getattr(self, '_us_open', None), getattr(self, '_us_sources', {}))
         else:
             _debug_write(msg, '  DEBUG: reuse fetched market data for this request\n')
         with _V80_INTEGRITY_LOCK:
             _v80_assert_integrity(generation)
-            return cache[key]
+            data, self._us_open, self._us_sources = cache[key]
+            return data
 
     def _cached_run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
         generation = _v80_integrity_generation()
@@ -14453,8 +15001,15 @@ class CombinedStrategyBase:
             return cache[key]
 
     def _run_suba(self, cn_close, allow_unresolved_suba_volume):
+        historical = cn_close.attrs.get('historical_report_window', False)
+        cutoff = cn_close.attrs.get('cn_confirmed_close')
+        confirmed_count = len(cn_close) if cutoff is None else int((cn_close.index <= pd.Timestamp(cutoff)).sum())
+        if historical and confirmed_count < CN_MIN_HISTORY_ROWS:
+            return _empty_historical_sleeve(cn_close.attrs.get('cn_panel_error') or 'Sub-A 样本尚未成立或目标波动未完成预热')
         if cn_close.attrs.get('cn_panel_error'):
             return pd.DataFrame()
+        if confirmed_count < CN_MIN_HISTORY_ROWS:
+            raise SubaInsufficientHistoryError(f'Sub-A 仅有 {confirmed_count} 个确认交易日，仓位计算需 {CN_MIN_HISTORY_ROWS} 日预热。')
         cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
         cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
         suba_volume_signal = None
@@ -14488,11 +15043,20 @@ class CombinedStrategyBase:
                     raise SubaVolumeDataError(f'Sub-A成交额风控数据不可用，正式回测/绩效查询已中止。所需截至 {suba_volume_expected_date:%Y-%m-%d}；来源原因：{_short_error(exc, 1200)}') from exc
                 cn_result = _mark_suba_volume_unavailable(cn_result, exc)
         cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'
+        if historical:
+            # Keep the native warmup for state reconstruction; expose returns only
+            # after both sides of the first reported holding transition are mature.
+            cn_result = cn_result.loc[cn_close.index[CN_MIN_HISTORY_ROWS - 1]:]
         return cn_result
 
     def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
         cn_result = self._run_suba(cn_close, allow_unresolved_suba_volume)
-        cn_dk_result = pd.DataFrame() if cn_dk_close.attrs.get('cn_panel_error') else run_v80_adk_new_only(cn_close, cn_dk_close)
+        if cn_dk_close.attrs.get('historical_report_window') and len(cn_dk_close) < CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50:
+            cn_dk_result = _empty_historical_sleeve('ADK 五指数共同样本尚未成立或配对未完成预热')
+        else:
+            cn_dk_result = pd.DataFrame() if cn_dk_close.attrs.get('cn_panel_error') else run_v80_adk_new_only(cn_close, cn_dk_close)
+        if us_rot_close.empty and us_rot_close.attrs.get('us_data_status', {}).get('status') == 'unavailable':
+            return cn_result, cn_dk_result, None, None, None, None, None, None
         us_rot_result = _run_v80_subb_variants(us_rot_close, us_open=getattr(self, '_us_open', None), strict_open_execution=strict_subb_open_execution)
         prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
         if _subc_enabled():
@@ -14659,6 +15223,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
 
     @staticmethod
     def _is_date_query(query):
+        if _QUERY_DATE_TOKEN.search(query):
+            return True
         if re.search('\\d{4}[-年/.]\\d{1,2}[-月/.]\\d{1,2}', query):
             return True
         return bool(re.search('\\d{4}[-年/.]?\\d{0,2}[-月]?\\s*[到至—\\-~]|\\d{1,2}月\\d{1,2}[日号]\\s*[到至—\\-~]|至今|今年|去年|前年|(?:最近|过去|近)\\s*[一二两三四五六七八九十\\d半]+\\s*个?\\s*[年月]|\\d{4}\\s*年', query))
@@ -14683,29 +15249,88 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     msg.write(f'可重新发送原查询“{_short_error(poe.query.text.strip(), 160)}”；若持续失败，请保留上方错误详情用于排查。\n')
 
+    def _dispatch_dated_view(self, query, handler):
+        ranges = parse_all_date_ranges(query)
+        if ranges:
+            for dates in ranges:
+                handler(query, _forced_range=dates)
+        else:
+            handler(query)
+
     def _run_impl(self):
         query = poe.query.text.strip()
         query_compact = re.sub('\\s+', '', query)
         if '净值曲线' in query:
-            self._handle_nav_chart(query)
+            self._dispatch_dated_view(query, self._handle_nav_chart)
         elif re.search('表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
             ranges = self._parse_all_dates_with_llm_fallback(query)
             for r in ranges or [(None, None)]:
                 self._handle_performance(query, _forced_range=r)
         elif re.search('收益曲线|走势', query):
-            self._handle_nav_chart(query)
+            self._dispatch_dated_view(query, self._handle_nav_chart)
         elif '实时信号' in query_compact or '信号实时' in query_compact:
             self._handle_live_signal()
         elif '实时参数' in query_compact or '参数实时' in query_compact:
             self._handle_live_params()
         elif '参数' in query:
             self._handle_params()
-        elif re.search('信号', query) and self._is_date_query(query):
-            self._handle_signal_history(query)
+        elif '信号' in query and self._is_date_query(query):
+            self._dispatch_dated_view(query, self._handle_signal_history)
         elif self._is_date_query(query):
-            self._handle_performance(query)
+            for dates in self._parse_all_dates_with_llm_fallback(query) or [(None, None)]:
+                self._handle_performance(query, _forced_range=dates)
         else:
             self._handle_signal()
+
+    def _write_limited_us_current(self, msg, frames, query_kind):
+        cn, dk, us, prod = frames
+        msg = _V80VerifiedMessage(msg, _v80_frames_generation(*frames))
+        result_a, result_dk, result_b, _, sig_a, sig_b, _, _ = self._cached_run_strategies(*frames, allow_unresolved_suba_volume=True)
+        labels = {'signal': '操作信号', 'live_signal': '实时信号', 'params': '策略参数', 'live_params': '实时参数'}
+        msg.write(f'## {labels[query_kind]}\n\n')
+        cn_intraday, now = is_cn_unconfirmed_intraday_snapshot()
+        live_query = query_kind in ('live_signal', 'live_params')
+        def intraday(frame):
+            return live_query and cn_intraday and len(frame) > 0 and frame.index[-1].date() == now.date()
+        info = _write_a_adk_query_overview(msg.write, result_a, result_dk, cn_intraday=intraday(cn), dk_intraday=intraday(dk), query_kind=query_kind, cn_price_frame=cn, dk_price_frame=dk)
+        _write_suba_volume_query_warning(msg, result_a)
+        note = _us_query_coverage(us)
+        msg.write(f'\n## 美股行情覆盖\n\n{note}\n\n美股本次无可执行信号。\n\n')
+        cutoff = us.attrs['us_data_status'].get('asof')
+        states = {}
+        if pd.notna(cutoff) and result_b is not None and len(result_b):
+            for label, frame in zip(('B7.8', 'B7.9'), _v80_subb_results(result_b)):
+                if frame is None or frame.empty or frame.index[-1] > pd.Timestamp(cutoff):
+                    continue
+                rows = _v80_subb_variant_rows(frame, -1, label=label, target_weights={})
+                positions = ', '.join(f"{row['live_name']} {row['current']:.1%}" for row in rows)
+                if positions:
+                    states[label] = f'{frame.index[-1]:%Y-%m-%d} 历史持仓：{positions}'
+        if pd.notna(cutoff) and len(prod) and prod.index[-1] <= pd.Timestamp(cutoff) and sig_a is not None:
+            snapshot = _compute_subc_production_snapshot(prod, sig_a, sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+            weights = snapshot['info'].get('current_asset_weights') or {}
+            if weights:
+                positions = ', '.join(f'{name} {weight:.1%}' for name, weight in weights.items())
+                states['Sub-C'] = f'{prod.index[-1]:%Y-%m-%d} 历史持仓：{positions}'
+        for label in ('B7.8', 'B7.9', 'Sub-C'):
+            message = states.get(label, '本次无可展示的已核验历史持仓')
+            msg.write(f'- {label}：{message}\n')
+            info[label] = {'is_signal': False, 'signal_text': message, 'note': note}
+        _write_v80_a_adk_score_details(msg.write, result_a, result_dk)
+        if query_kind == 'signal':
+            since = pd.Timestamp(now).normalize() - pd.Timedelta(days=60)
+            records = []
+            if result_a is not None and len(result_a):
+                records.extend(extract_v78_suba_rebalances(result_a, cn, since_date=since))
+            if result_dk is not None and len(result_dk):
+                records.extend(extract_v78_adk_rebalances(result_dk, cn_dk_close=dk, since_date=since))
+            confirmed = _filter_confirmed_records(records, bj_now=now)
+            dk_current = result_dk
+            if _cn_expect_today_for_query('signal', now) and (not len(dk) or dk.index[-1].date() < now.date()):
+                dk_current = None
+            stamp = now.strftime('%Y%m%d')
+            data = generate_signal_excel(stamp, info, sorted(confirmed, key=lambda r: r['日期'], reverse=True), cn_dk_result=dk_current)
+            msg.attach_file(name=f'signal_{stamp}.xlsx', contents=data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     def _handle_signal(self):
         with _sm() as msg:
@@ -14713,6 +15338,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
             try:
                 w('⏳ 正在获取信号数据...\n')
                 cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
+                if _us_current_query_limited(us_rot_close):
+                    return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'signal')
+                if _us_query_coverage(us_rot_close):
+                    w(_us_query_coverage(us_rot_close) + '\n')
                 w('⏳ 正在计算信号...\n')
             except Exception as exc:
                 w('## 📊 操作信号（收盘确认）\n\n')
@@ -14782,7 +15411,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
             if len(cn_result):
                 all_rebalances.extend([r for r in extract_v78_suba_rebalances(cn_result, cn_close) if pd.Timestamp(r['日期']) >= cutoff])
             if len(cn_dk_result):
-                all_rebalances.extend([r for r in extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close) if pd.Timestamp(r['日期']) >= cutoff])
+                all_rebalances.extend(extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=cutoff))
             compact_us_open = getattr(self, '_us_open', None)
             subb_rebs = _v80_extract_subb_rebalances(d['us_rot_result'], us_rot_close=us_rot_close, us_open=compact_us_open, since_date=cutoff)
             all_rebalances.extend([r for r in subb_rebs if pd.Timestamp(r['日期']) >= cutoff])
@@ -14799,9 +15428,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
             filename = f'signal_{now_str}.xlsx'
             msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             w(f'📎 Excel调仓记录: **{filename}**\n')
+            flags = [name for name in ('suba_volume_unresolved', 'suba_volume_unavailable') if name in cn_result]
+            if flags and cn_result[flags].fillna(True).astype(bool).any().any():
+                w('Sub-A 成交额无法核验的持仓变化已从确认调仓记录中排除。\n')
             if _LAST_SUBC_VS_REBALANCE_WARNING:
                 w(f'⚠️ Sub-C分袖缩放调仓记录跳过: {_LAST_SUBC_VS_REBALANCE_WARNING}\n')
-            w(f'含最近60天 {len(all_rebalances)} 条已确认调仓记录（北京时间）' if all_rebalances else '最近60天无已确认调仓记录')
+            w(f'含最近60天 {len(all_rebalances)} 条已确认记录（北京时间；ADK列示收盘目标）' if all_rebalances else '最近60天无已确认记录')
             return
 
     def _handle_live_signal(self):
@@ -14810,6 +15442,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
             try:
                 w('⏳ 正在获取实时信号数据...\n')
                 cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+                if _us_current_query_limited(us_rot_close):
+                    return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'live_signal')
+                if _us_query_coverage(us_rot_close):
+                    w(_us_query_coverage(us_rot_close) + '\n')
                 w('⏳ 正在计算实时信号...\n')
             except Exception as exc:
                 w('## 📡 实时信号\n\n')
@@ -14873,7 +15509,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
         dk_data_is_today = dk_date.date() == bj_now.date()
         us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
         any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today) or any((bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close)))
-        any_market_live = any_cn_live or (us_open and us_data_is_today)
+        us_snapshot = bool(us_rot_close.attrs.get('us_data_status', {}).get('intraday_snapshot')) or (us_open and us_data_is_today)
+        any_market_live = any_cn_live or us_snapshot
         bj_time_str_val = bj_now.strftime('%H:%M')
         bj_date_str = bj_now.strftime('%Y-%m-%d')
         with _sm() as msg:
@@ -14884,7 +15521,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 live_markets = []
                 if any_cn_live:
                     live_markets.append('A股')
-                if us_open and us_data_is_today:
+                if us_snapshot:
                     live_markets.append('美股')
                 w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 未确认行情快照（{'、'.join(live_markets)}，须等确认收盘后重新查询）\n\n")
             else:
@@ -14911,6 +15548,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
             msg.write('⏳ 正在读取当前Sub-A / ADK持仓...\n')
             try:
                 cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
+                if _us_current_query_limited(us_rot_close_p):
+                    return self._write_limited_us_current(msg, (cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p), 'params')
+                if _us_query_coverage(us_rot_close_p):
+                    msg.write(_us_query_coverage(us_rot_close_p) + '\n')
                 cn_result_params, cn_dk_result_params, us_rot_result_params, _, prod_sig_a_params, prod_sig_b_params, _, _ = self._cached_run_strategies(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p, allow_unresolved_suba_volume=True)
                 if prod_sig_a_params is not None:
                     subc_info_params = _compute_subc_production_snapshot(us_prod_daily_p, prod_sig_a_params, prod_sig_b_params, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info']
@@ -14935,6 +15576,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
         with _sm() as msg:
             w = msg.write
             cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+            if _us_current_query_limited(us_rot_close):
+                return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'live_params')
+            if _us_query_coverage(us_rot_close):
+                w(_us_query_coverage(us_rot_close) + '\n')
             w('⏳ 正在计算实时参数...\n')
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=True)
         with _sm() as msg:
@@ -14950,7 +15595,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
             dk_data_is_today = dk_date.date() == bj_now.date()
             us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
             any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today) or any((bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close)))
-            any_live = any_cn_live or (us_open and us_data_is_today)
+            us_snapshot = bool(us_rot_close.attrs.get('us_data_status', {}).get('intraday_snapshot')) or (us_open and us_data_is_today)
+            any_live = any_cn_live or us_snapshot
             bj_ts = bj_now.strftime('%Y-%m-%d %H:%M')
             w(f'## 📐 实时参数值\n\n')
             _write_suba_volume_query_warning(msg, cn_result)
@@ -14958,7 +15604,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 live_mkts = []
                 if any_cn_live:
                     live_mkts.append('A股')
-                if us_open and us_data_is_today:
+                if us_snapshot:
                     live_mkts.append('美股')
                 w(f"⏱ **北京时间 {bj_ts}** 未确认行情快照（{'、'.join(live_mkts)}，须等确认收盘后重新查询）\n\n")
             else:
@@ -14970,7 +15616,8 @@ class CombinedStrategyV78(CombinedStrategyBase):
                 else:
                     status = '盘中快照' if frame.attrs.get('cn_unconfirmed_snapshot') else '确认收盘'
                     labels.append(f'{label}：{date:%Y-%m-%d}（{status}）')
-            w(' | '.join([*labels, f'美股收盘: {us_close_bj}']) + '\n\n')
+            us_date_label = f'美股盘中快照：{us_date:%Y-%m-%d}' if us_snapshot else f'美股收盘: {us_close_bj}'
+            w(' | '.join([*labels, us_date_label]) + '\n\n')
             _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
             _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
             _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
@@ -14980,14 +15627,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；下单只看“实时信号”。\n')
             return
 
-    def _handle_signal_history(self, query):
-        start_date, end_date = self._parse_date_with_llm_fallback(query)
+    def _handle_signal_history(self, query, _forced_range=None):
+        start_date, end_date = _forced_range or self._parse_date_with_llm_fallback(query)
         if start_date is None:
             raise poe.BotError('无法解析日期范围。示例：\n- 2025年3月1日到3月15日的信号\n- 2024-06到2024-12的信号\n- 最近3个月的信号')
         with _sm() as msg:
             w = msg.write
-            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False)
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
             w('⏳ 正在计算策略...\n')
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         _cn_market_above_ma = pd.Series(True, index=cn_close.index)
         with _sm() as msg:
@@ -14996,8 +15645,12 @@ class CombinedStrategyV78(CombinedStrategyBase):
             w(f"## 📋 信号历史: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}\n\n")
             _write_suba_volume_query_warning(msg, cn_result)
             w('### Sub-A: A股轮动\n\n')
+            w(f'{CN_SA_MODEL_CLOCK_NOTE}\n\n')
             cn_period = cn_result[(cn_result.index >= start_date) & (cn_result.index <= end_date)]
-            if 'v78_suba_final_exposure' in cn_result.columns:
+            if cn_period.empty:
+                reason = cn_result.attrs.get('report_unavailable_reason', '该区间无完成预热的信号记录')
+                w(f'Sub-A：N/A（{reason}）。\n\n')
+            elif 'v78_suba_final_exposure' in cn_result.columns:
                 cn_rebs = extract_v78_suba_rebalances(cn_result, cn_close, since_date=start_date)
                 cn_rebs = [r for r in cn_rebs if pd.Timestamp(r.get('日期')) <= pd.Timestamp(end_date)]
                 if len(cn_rebs) == 0:
@@ -15060,19 +15713,21 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w('\n')
             w('### Sub-A-DK: 多空策略\n\n')
             dk_period = cn_dk_result[(cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
-            if 'v78_adk_final_exposure' in cn_dk_result.columns:
-                dk_rebs = extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=start_date)
+            if dk_period.empty:
+                w('Sub-A-DK：N/A（该区间无完成预热的信号记录）。\n\n')
+            elif 'v78_adk_final_exposure' in cn_dk_result.columns:
+                dk_rebs = extract_v78_adk_rebalances(cn_dk_result.loc[:end_date], cn_dk_close=cn_dk_close, since_date=start_date)
                 dk_rebs = [r for r in dk_rebs if pd.Timestamp(r.get('日期')) <= pd.Timestamp(end_date)]
-                _dk_history_unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿'
+                _dk_history_unit = '收盘目标变化' if _v80_adk_is_new_only(cn_dk_result) else '分腿配对/方向变化'
                 if len(dk_rebs) == 0:
-                    w(f'该时段无{_dk_history_unit}配对/方向变化。\n\n')
+                    w(f'该时段无{_dk_history_unit}。\n\n')
                 else:
-                    w(f'**{_dk_history_unit}配对/方向变化:**\n\n')
-                    w('| 日期 | 策略 | 卖出 | 买入 |\n')
+                    w(f'**{_dk_history_unit}**\n\n')
+                    w('| 日期 | 策略 | 变更前 | 变更后 |\n')
                     w('|:--|:--|:--|:--|\n')
                     for rec in dk_rebs:
                         w(f"| {rec.get('日期', '')} | {rec.get('策略', 'ADK')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
-                    w(f'\n共 **{len(dk_rebs)}** 次{_dk_history_unit}配对/方向变化\n\n')
+                    w(f'\n共 **{len(dk_rebs)}** 次{_dk_history_unit}\n\n')
                 if len(dk_period) > 0:
                     _dk_holding_label = '当前已生效持仓' if _v80_adk_is_new_only(cn_dk_result) else '当前已生效双腿持仓'
                     w(f'**区间期末 / {_dk_holding_label}:**\n\n')
@@ -15109,6 +15764,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
                         _h = dk_period.loc[tdate, 'holding']
                         w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_w:.2f}x → **{_new_w:.2f}x** | {_dk_pos_str(_h)} |\n")
                     w('\n')
+            if _us_query_coverage(us_rot_close):
+                w(_us_query_coverage(us_rot_close) + '\n\n')
+                for name, period in (('Sub-A', cn_period), ('Sub-A-DK', dk_period)):
+                    if len(period):
+                        w(f'{name} 区间内可核验日期：{period.index[0]:%Y-%m-%d} 至 {period.index[-1]:%Y-%m-%d}。\n')
+            if _us_current_query_limited(us_rot_close):
+                if us_rot_close.empty or us_prod_daily.empty or us_rot_result is None or us_rot_close.index[-1] < start_date:
+                    w('请求区间内无可核验美股记录，上方为独立 A 股历史。\n')
+                    return
+                w(f'美股历史记录实际截至 {min(end_date, us_rot_close.index[-1], us_prod_daily.index[-1]):%Y-%m-%d}。\n\n')
             w('### B策略双版本调仓历史（分开展示）\n\n')
             _us_open = getattr(self, '_us_open', None)
             _b78_result, _b79_result = _v80_subb_results(us_rot_result)
@@ -15124,10 +15789,10 @@ class CombinedStrategyV78(CombinedStrategyBase):
                     w(f"| {rec.get('日期', '')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
                 w(f'\n共 **{len(_records)}** 条记录\n\n')
 
-    def _handle_nav_chart(self, query, *, chart_only=False):
+    def _handle_nav_chart(self, query, *, chart_only=False, _forced_range=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
-        start_date, end_date = self._parse_date_with_llm_fallback(query)
+        start_date, end_date = _forced_range or self._parse_date_with_llm_fallback(query)
         if start_date is None:
             raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 净值曲线核心四袖 今年 / 去年\n- 净值曲线核心四袖 过去两年 / 最近6个月\n- 净值曲线核心四袖 2024-01到2025-01\n- 净值曲线核心四袖 2024至今\n- 净值曲线核心四袖 2024年\n- 净值曲线核心四袖 2024年3月15日到2025年1月20日')
         with _sm() as msg:
@@ -15136,15 +15801,16 @@ class CombinedStrategyV78(CombinedStrategyBase):
             report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
             end_date = report_context['actual_end']
             w('⏳ 正在计算策略净值...\n')
-        cn_close = _drop_cn_rows_after(cn_close, end_date)
-        cn_dk_close = _drop_cn_rows_after(cn_dk_close, end_date)
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         cn_daily_ret = cn_result['return']
         dk_daily_ret = cn_dk_result['return']
         b78_result, _ = _v80_subb_results(us_rot_result)
-        b78_daily_ret = b78_result['return']
-        us_daily_ret = us_rot_result['return']
-        subc_daily_ret = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+        empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        b78_daily_ret = empty if report_context['omit_us'] else b78_result['return']
+        us_daily_ret = empty if report_context['omit_us'] else us_rot_result['return']
+        subc_daily_ret = empty if report_context['omit_us'] or end_date < SUBC_FORMAL_START else _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
         cn_period = cn_daily_ret[(cn_daily_ret.index >= start_date) & (cn_daily_ret.index <= end_date)]
         dk_period = dk_daily_ret[(dk_daily_ret.index >= start_date) & (dk_daily_ret.index <= end_date)]
         b78_period = b78_daily_ret[(b78_daily_ret.index >= start_date) & (b78_daily_ret.index <= end_date)]
@@ -15216,44 +15882,41 @@ class CombinedStrategyV78(CombinedStrategyBase):
             report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
             end_date = report_context['actual_end']
             w('⏳ 正在计算策略...\n')
-        cn_close = _drop_cn_rows_after(cn_close, end_date)
-        cn_dk_close = _drop_cn_rows_after(cn_dk_close, end_date)
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
         cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         b78_result, _ = _v80_subb_results(us_rot_result)
         cn_daily_period = cn_result['return'][(cn_result.index >= start_date) & (cn_result.index <= end_date)]
         dk_daily_period = cn_dk_result['return'][(cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
-        b78_daily_period = b78_result['return'][(b78_result.index >= start_date) & (b78_result.index <= end_date)]
-        us_daily_period = us_rot_result['return'][(us_rot_result.index >= start_date) & (us_rot_result.index <= end_date)]
-        subc_daily_all = _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+        empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        b78_daily_all = empty if report_context['omit_us'] else b78_result['return']
+        b79_daily_all = empty if report_context['omit_us'] else us_rot_result['return']
+        b78_daily_period = b78_daily_all.loc[start_date:end_date]
+        us_daily_period = b79_daily_all.loc[start_date:end_date]
+        subc_unavailable = report_context['omit_us'] or end_date < SUBC_FORMAL_START
+        subc_daily_all = empty if subc_unavailable else _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
         subc_daily_period = subc_daily_all[(subc_daily_all.index >= start_date) & (subc_daily_all.index <= end_date)]
-        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], us_rot_result, subc_daily_all, end_date=end_date)
+        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], None if report_context['omit_us'] else us_rot_result, subc_daily_all, end_date=end_date)
         first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
         comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period}, history_returns=standard_daily_returns, query_start=start_date)
         _finalize_performance_report_context(report_context, {'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period, 'Combined': comb_daily})
         start_date, end_date = (report_context['actual_start'], report_context['actual_end'])
-        cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date)
-        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result['return'], start_date, end_date)
-        b78_monthly_period = _monthly_returns_from_daily_window(b78_result['return'], start_date, end_date)
-        us_monthly_period = _monthly_returns_from_daily_window(us_rot_result['return'], start_date, end_date)
-        subc_monthly_period = _monthly_returns_from_daily_window(subc_daily_all, start_date, end_date)
+        cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date, name='Sub-A')
+        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result['return'], start_date, end_date, name='Sub-A-DK')
+        b78_monthly_period = _monthly_returns_from_daily_window(b78_daily_all, start_date, end_date, name='B7.8')
+        us_monthly_period = _monthly_returns_from_daily_window(b79_daily_all, start_date, end_date, name='B7.9')
+        subc_monthly_period = _monthly_returns_from_daily_window(subc_daily_all, start_date, end_date, name='Sub-C')
         combined_monthly_period = _monthly_returns_from_daily_window(comb_daily, start_date, end_date)
         aligned = pd.DataFrame({'Sub-A': cn_monthly_period, 'Sub-A-DK': dk_monthly_period, 'B7.8': b78_monthly_period, 'B7.9': us_monthly_period, 'Sub-C': subc_monthly_period, 'Combined': combined_monthly_period}).sort_index()
         filtered = aligned
         if all((len(s) < 1 for s in (cn_monthly_period, dk_monthly_period, b78_monthly_period, us_monthly_period, subc_monthly_period))):
             raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间没有数据")
         metrics = {}
-        if len(cn_monthly_period) >= 1:
-            metrics['Sub-A'] = calc_monthly_metrics(cn_monthly_period)
-        if len(dk_monthly_period) >= 1:
-            metrics['Sub-A-DK'] = calc_monthly_metrics(dk_monthly_period)
-        if len(b78_monthly_period) >= 1:
-            metrics['B7.8'] = calc_monthly_metrics(b78_monthly_period)
-        if len(us_monthly_period) >= 1:
-            metrics['B7.9'] = calc_monthly_metrics(us_monthly_period)
-        if len(subc_monthly_period) >= 1:
-            metrics['Sub-C'] = calc_monthly_metrics(subc_monthly_period)
-        if len(combined_monthly_period) >= 1:
-            metrics['Combined'] = calc_monthly_metrics(combined_monthly_period)
+        for name, monthly in (('Sub-A', cn_monthly_period), ('Sub-A-DK', dk_monthly_period),
+                              ('B7.8', b78_monthly_period), ('B7.9', us_monthly_period),
+                              ('Sub-C', subc_monthly_period), ('Combined', combined_monthly_period)):
+            if len(monthly):
+                metrics[name] = calc_monthly_metrics(monthly)
         if len(cn_daily_period) > 1 and 'Sub-A' in metrics:
             nav_a = (1 + cn_daily_period).cumprod()
             metrics['Sub-A']['max_dd'] = _max_drawdown_pct_from_nav(nav_a)
@@ -15272,7 +15935,7 @@ class CombinedStrategyV78(CombinedStrategyBase):
         if 'Combined' in metrics and len(comb_daily) > 1:
             nav_comb = (1.0 + comb_daily).cumprod()
             metrics['Combined']['max_dd'] = _max_drawdown_pct_from_nav(nav_comb)
-        for _sname, _dret, _history in [('Sub-A', cn_daily_period, cn_result['return']), ('Sub-A-DK', dk_daily_period, cn_dk_result['return']), ('B7.8', b78_daily_period, b78_result['return']), ('B7.9', us_daily_period, us_rot_result['return']), ('Sub-C', subc_daily_period, subc_daily_all)]:
+        for _sname, _dret, _history in [('Sub-A', cn_daily_period, cn_result['return']), ('Sub-A-DK', dk_daily_period, cn_dk_result['return']), ('B7.8', b78_daily_period, b78_daily_all), ('B7.9', us_daily_period, b79_daily_all), ('Sub-C', subc_daily_period, subc_daily_all)]:
             if _sname in metrics and len(_dret) > 1:
                 _nav_d = (1 + _dret).cumprod()
                 _total = (_nav_d.iloc[-1] - 1) * 100
@@ -15321,32 +15984,25 @@ class CombinedStrategyV78(CombinedStrategyBase):
         all_rebalances = []
         cn_rebs = extract_v78_suba_rebalances(cn_result, cn_close)
         all_rebalances.extend([r for r in cn_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
-        dk_rebs = extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close)
+        dk_rebs = extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=start_date)
         all_rebalances.extend([r for r in dk_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
         _us_open = getattr(self, '_us_open', None)
-        subb_rebs = _v80_extract_subb_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open, since_date=start_date)
+        subb_rebs = [] if report_context['omit_us'] else _v80_extract_subb_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open, since_date=start_date)
         all_rebalances.extend([r for r in subb_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
-        prod_rebs = extract_prod_rebalances(prod_details, prod_monthly, us_prod_daily=us_prod_daily, us_open=_us_open)
+        prod_rebs = [] if subc_unavailable else extract_prod_rebalances(prod_details, prod_monthly, us_prod_daily=us_prod_daily, us_open=_us_open)
         all_rebalances.extend([r for r in prod_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
-        subc_vs_rebs = extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=_us_open)
+        subc_vs_rebs = [] if subc_unavailable else extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=_us_open)
         all_rebalances.extend([r for r in subc_vs_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
         all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
         all_rebalances.sort(key=lambda x: x['日期'])
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         nav_series = {}
-        if len(cn_daily_period) > 1:
-            nav_series['Sub-A'] = _nav_from_period_returns(cn_daily_period)
-        if len(dk_daily_period) > 1:
-            nav_series['Sub-A-DK'] = _nav_from_period_returns(dk_daily_period)
-        if len(b78_daily_period) > 1:
-            nav_series['B7.8'] = _nav_from_period_returns(b78_daily_period)
-        if len(us_daily_period) > 1:
-            nav_series['B7.9'] = _nav_from_period_returns(us_daily_period)
-        if len(subc_daily_period) > 1:
-            nav_series['Sub-C'] = _nav_from_period_returns(subc_daily_period)
-        if comb_daily is not None and len(comb_daily) > 1:
-            nav_series['Combined'] = _nav_from_period_returns(comb_daily)
+        for name, daily in (('Sub-A', cn_daily_period), ('Sub-A-DK', dk_daily_period),
+                            ('B7.8', b78_daily_period), ('B7.9', us_daily_period),
+                            ('Sub-C', subc_daily_period), ('Combined', comb_daily)):
+            if daily is not None and len(daily):
+                nav_series[name] = _nav_from_period_returns(daily)
         chart_bytes = None
         if nav_series:
             colors = {'Sub-A': '#E74C3C', 'Sub-A-DK': '#9B59B6', 'B7.8': '#3498DB', 'B7.9': '#1F4E79', 'Sub-C': '#16A085', 'Combined': '#F39C12'}

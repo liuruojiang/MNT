@@ -105,6 +105,19 @@ The code is synchronized locally/remotely; this does not deploy to Poe or trade.
 
 ## Verification
 
+### V8.0 发版必检
+
+每次发布 V8.0 前，以下两项离线检查必须通过。它们由完整的 `pytest tests` 自动收集。在本机只验收这两项时，从项目根目录运行：
+
+```powershell
+python -B run_tests.py --label v80-release-parity -- -q --tb=short tests/test_v80_release_rebalance_prefix.py tests/test_v80_release_report_parity.py
+```
+
+- **调仓记录**。用截至 T 日和下一交易日的真实行情分别运行“信号”和“表现”，回读两个入口各自发出的 Excel。T 日必须有已确认调仓，前后两次的记录数量和每个字段都要一致。
+- **报告与净值图**。用单收益日、仅 ADK 有收益两种样本，核对实际附件、文字与工作簿中的日期、策略、收益和最大回撤。检查 Excel 百分比显示、净值和回撤点是否落在绘图区内，以及最终图例是否对应曲线。下载文件名的请求区间、实际覆盖区间和报告编号必须与该次查询一致。
+
+### Repository verification
+
 Run these commands after touching production behavior:
 
 ```powershell

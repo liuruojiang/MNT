@@ -241,14 +241,15 @@ def test_performance_fetch_uses_previous_common_cn_close_without_relaxing_signal
     monkeypatch.setattr(module, "_ensure_cn_history_frame", lambda _secid, frame, source, **_kwargs: (frame, source))
 
     def cn_frame(end_date):
-        index = pd.bdate_range(end=end_date, periods=220)
+        index = module._expected_cn_sessions('2025-10-09', end_date)
         return pd.DataFrame({"close": range(100, 100 + len(index))}, index=index)
 
     def fetch_cn(secid, **_kwargs):
         return cn_frame("2026-09-11" if secid == module.CN_ZZHL_INDEX_SECID else "2026-09-10"), "fixture-cn"
 
     monkeypatch.setattr(module, "fetch_cn_kline", fetch_cn)
-    monkeypatch.setattr(module, "_fetch_cn_dk_price_index", lambda _idx, _secid: (cn_frame("2026-09-10"), "fixture-dk"))
+    monkeypatch.setattr(module, "_fetch_cn_dk_price_index", lambda _idx, _secid, **kwargs: (cn_frame("2026-09-10"), "fixture-dk"))
+    monkeypatch.setattr(module, "_fetch_cn_final_sessions", lambda *args: {})
     def us_fixture(ticker):
         # Synthetic prices isolate the CN freshness gate. US history must now
         # cover its verified start and genuine sessions, not CN business days.
@@ -267,9 +268,13 @@ def test_performance_fetch_uses_previous_common_cn_close_without_relaxing_signal
             self.chunks.append(value)
 
     formal_bot = module.CombinedStrategyV80()
-    with pytest.raises(module.poe.BotError, match="Sub-A 原始收盘价格过期/缺失"):
+    with pytest.raises(module.DataUnavailableError, match="收盘核验失败"):
         formal_bot._fetch_data(Sink([]), include_cn_live_snapshot=False, include_us_live_snapshot=False)
 
+    previous = pd.Timestamp("2026-09-10")
+    close = cn_frame(previous).at[previous, 'close']
+    monkeypatch.setattr(module, "_fetch_cn_final_sessions",
+                        lambda code, days, clock: {previous: {'close': close}})
     performance_bot = module.CombinedStrategyV80()
     chunks = []
     cn_close, cn_dk_close, _us_rot_close, _us_prod_daily = performance_bot._fetch_data(
@@ -281,7 +286,7 @@ def test_performance_fetch_uses_previous_common_cn_close_without_relaxing_signal
 
     assert cn_close.index[-1] == pd.Timestamp("2026-09-10")
     assert cn_dk_close.index[-1] == pd.Timestamp("2026-09-10")
-    assert "最近共同确认收盘 2026-09-10" in "".join(chunks)
+    assert "共同确认收盘 2026-09-10" in "".join(chunks)
 
 
 def test_short_cn_online_history_uses_local_strategy_csv_fallback(monkeypatch):

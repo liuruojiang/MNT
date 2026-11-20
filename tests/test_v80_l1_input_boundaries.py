@@ -21,12 +21,12 @@ def v80():
 
 
 def test_cn_stock_frame_starts_on_latest_component_publication(v80):
-    dates = pd.to_datetime(["2017-05-24", "2017-05-25", "2017-05-26", "2017-05-29"])
-    raw = {code: pd.DataFrame({"close": [100.0, 101.0, 102.0, 103.0]}, index=dates)
+    # May 29 was an exchange holiday. The next tradable observation was May 31.
+    dates = pd.to_datetime(["2017-05-24", "2017-05-25", "2017-05-26", "2017-05-29", "2017-05-31"])
+    raw = {code: pd.DataFrame({"close": [100.0, 101.0, 102.0, 103.0, 104.0]}, index=dates)
            for code in v80.CN_STOCK_CODES}
     frame = v80._build_cn_stock_close_frame(raw)
-    assert frame.index[0] == pd.Timestamp("2017-05-26")
-    assert len(frame) == 2
+    assert frame.index.tolist() == [pd.Timestamp("2017-05-26"), pd.Timestamp("2017-05-31")]
 
 
 def test_zz2000_amount_cannot_signal_before_publication(v80, monkeypatch):

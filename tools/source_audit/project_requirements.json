@@ -206,8 +206,8 @@
         {
           "path": "D:\\动量策略\\A股美股动量组合策略\\mnt_bot V 8.0 plus.py",
           "role": "formal_entrypoint",
-          "sha256": "d4531d3ef375cb6a7ec1e85b75857f07c1592972234269e06d3c2395e8eca8d3",
-          "sha256_lf": "d4531d3ef375cb6a7ec1e85b75857f07c1592972234269e06d3c2395e8eca8d3"
+          "sha256": "2e24c9447a3eba190851614c270d238e56ef3ad15bfbde77b3e53ff4bb791ed1",
+          "sha256_lf": "1388090a8b3069e0b4eb43ec45b8cb8abaab31c1a9ba9a54bb4a5b92e7a25e0b"
         }
       ],
       "source_evidence": [
@@ -570,7 +570,7 @@
       "gaps": [
         "ETF price/volume/action differences remain unresolved except exact independently adjudicated events",
         "BTC daily aggregation, missing-date handling and volume basis are not certified",
-        "No strategy production loader has been switched to either new provider",
+        "V8.0 verifies only missing ETF tail sessions against three consecutive Yahoo sessions plus independent Nasdaq raw prices; the archived Tiingo full history remains research only",
         "Wind 000852 long/short response conflict is known and must remain quarantined",
         "Wind 930955 full history, 000012 pre-2026 independent history and exact constituent-turnover field equivalence remain uncertified",
         "Existing FRED/risk path is retained; no claim of macro replacement"
@@ -582,8 +582,8 @@
         "FRED 风险指标继续保留；不能以 ETF 价格替代。",
         "BTC 和其余 ETF 差异按独立口径处理。"
       ],
-      "field_contract_review_date": "2026-11-13",
-      "field_contract_review_evidence": "docs/v80_zz2000_adversarial_audit_20261113.md"
+      "field_contract_review_date": "2026-11-20",
+      "field_contract_review_evidence": "docs/v80_remaining_seven_repairs_20261120.md"
     },
     {
       "project_id": "cn_six_indices_v13",
@@ -1272,5 +1272,5 @@
       ]
     }
   ],
-  "last_field_contract_review_date": "2026-11-13"
+  "last_field_contract_review_date": "2026-11-20"
 }

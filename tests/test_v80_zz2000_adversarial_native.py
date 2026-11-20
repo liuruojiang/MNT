@@ -6,7 +6,6 @@ counterexample/control inputs. These tests do not certify current signals,
 returns, complete provider history or deployment. Network/LLM are forbidden.
 """
 import ast
-import copy
 import importlib.util
 import sys
 from pathlib import Path
@@ -26,15 +25,6 @@ def bot():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    tree = ast.parse(SOURCE.read_text(encoding='utf-8-sig'))
-    klass = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'CombinedStrategyBase')
-    method = copy.deepcopy(next(n for n in klass.body if isinstance(n, ast.FunctionDef) and n.name == '_run_strategies'))
-    stop = next(i for i, n in enumerate(method.body) if isinstance(n, ast.Assign)
-                and any(isinstance(t, ast.Name) and t.id == 'cn_dk_result' for t in n.targets))
-    # Exact native A prefix, excluding only unrelated ADK/US/C consumers.
-    method.name = '_audit_run_native_a'
-    method.body = method.body[:stop] + [ast.Return(value=ast.Name(id='cn_result', ctx=ast.Load()))]
-    exec(compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), str(SOURCE), 'exec'), module.__dict__)
     return module
 
 
@@ -66,8 +56,7 @@ def native(bot, monkeypatch):
 
 
 def run(bot, prices, advisory=False):
-    return bot._audit_run_native_a(object(), prices, None, None, None,
-                                  allow_unresolved_suba_volume=advisory)
+    return bot.CombinedStrategyV80()._run_suba(prices, advisory)
 
 
 def test_backup_native_a_matches_complete_canonical_history(bot, native, monkeypatch):
