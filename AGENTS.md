@@ -27,7 +27,8 @@ This repo-local file is the active guidance for the A-share / US momentum combo 
 
 ## Local Verification
 
-- For a V8.0 release, run the required rebalance-history and report-parity tests under [V8.0 发版必检](README.md#v80-发版必检). Both must pass.
+- For a V8.0 release, run all four required gates under [V8.0 发版必检](README.md#v80-发版必检): market-data finality, calculation/execution reconciliation, rebalance-history and report-parity. All must pass on the exact candidate; require a complete receipt, candidate and fixture hashes, and no missing, skipped or xfailed cases. Verify current provider availability through the real Poe runtime before release.
+- V8.0 release tests and their fixtures are permanent assets. The smaller verification rule below does not authorize releasing V8.0 when a gate is missing or cannot run.
 - If `tests/` is absent or intentionally cleaned, run the smallest real verification available, usually `python -m py_compile "mnt_bot V X.Y plus.py"` plus `git diff --check` on touched docs/code.
 - For `poe_adk_16_spread_v1_0_bot.py`, keep and run `tests/test_poe_adk_16_spread_decay.py` when changing online rebuild, snapshot seeding, query routing, exposure display, performance labels, or combo-return behavior.
 

@@ -254,3 +254,200 @@ def test_cnfin_old_session_uses_exact_bond_minutes_and_requires_matching_daily_r
     with pytest.raises(bot.DataUnavailableError, match='日线缺失或与收盘凭据不一致'):
         bot._prepare_cn_live_panel(raw, {code: code}, clock, DAY, PREV, io.StringIO(), 'Sub-A',
                                    previous_sessions={code: proof[PREV]})
+
+
+@pytest.mark.parametrize('fault', [None, 'mismatch', 'missing', 'duplicate', 'live', 'one_source'])
+def test_historical_close_fallback_requires_two_exact_daily_sources(bot, monkeypatch, fault):
+    clock = pd.Timestamp('2026-11-25 23:53')
+    day = pd.Timestamp('2026-11-24')
+    code = bot.CN_BOND_CODE
+    monkeypatch.setattr(bot, 'beijing_now', lambda: clock)
+    monkeypatch.setattr(bot, '_fetch_cn_trend_rows', lambda *a: (_ for _ in ()).throw(bot.requests.ConnectionError('down')))
+    monkeypatch.setattr(bot, '_fetch_cnfin_final_session', lambda *a: None)
+    first = pd.DataFrame({'close': [232.19]}, index=[day])
+    second = first.copy()
+    if fault == 'mismatch':
+        second.at[day, 'close'] = 232.55
+    elif fault == 'missing':
+        second.index = [day - pd.Timedelta(days=1)]
+    elif fault == 'duplicate':
+        second = pd.concat([second, second])
+    elif fault == 'live':
+        second['is_live_bar'] = True
+    # A mutation that permits same-day fallback must actually encounter valid
+    # same-day rows, otherwise the negative control is vacuous.
+    today = clock.normalize()
+    first = pd.concat([first, pd.DataFrame({'close': [232.23]}, index=[today])])
+    second = pd.concat([second, pd.DataFrame({'close': [232.23]}, index=[today])])
+    monkeypatch.setattr(bot, '_fetch_cn_sina', lambda *a: first)
+    def qq(*args, **kwargs):
+        if fault == 'one_source':
+            raise bot.requests.ConnectionError('QQ down')
+        return second
+    monkeypatch.setattr(bot, '_fetch_cn_qq_kline', qq)
+    proof = bot._fetch_cn_final_sessions(code, [day, clock.normalize()], clock)
+    assert clock.normalize() not in proof  # no same-date daily fallback, even late at night
+    if fault is None:
+        assert proof[day]['close'] == 232.19
+        assert proof[day]['source'] == 'historical daily: Sina+QQ'
+        raw = {code: first}
+        panel, diagnostics = bot._prepare_cn_live_panel(raw, {code: code}, clock, day, day, io.StringIO(), 'Sub-A',
+                                                        previous_sessions={code: proof[day]})
+        assert panel[code].at[day, 'close'] == 232.19
+        assert diagnostics['cn_confirmed_close'] == day
+    else:
+        assert day not in proof and proof.diagnostics[day]
+
+
+@pytest.mark.parametrize('code,unit', [('0.399006', 1e4), ('2.932000', 1e8)])
+@pytest.mark.parametrize('mismatch', [False, True])
+def test_historical_amount_cross_check_requires_same_index_and_cny_units(bot, monkeypatch, code, unit, mismatch):
+    day = pd.Timestamp('2026-11-24')
+    clock = pd.Timestamp('2026-11-25 23:53')
+    total = 321_400_000_000.0
+    rounded = pd.DataFrame({'close': [1234.56], 'amount': [total / unit]}, index=[day])
+    exact = pd.DataFrame({'close': [1234.56], 'amount': [total + (1e9 if mismatch else 123)]}, index=[day])
+    monkeypatch.setattr(bot, '_fetch_cn_sohu_amount', lambda *a, **k: rounded)
+    monkeypatch.setattr(bot, '_fetch_cn_csindex_amount', lambda *a, **k: rounded)
+    monkeypatch.setattr(bot, '_fetch_cn_eastmoney_amount', lambda *a, **k: exact)
+    evidence, detail = bot._cn_historical_daily_receipt(code, day, clock, True)
+    assert evidence['close'] == 1234.56
+    if mismatch:
+        assert 'amount_cny' not in evidence and 'mismatch' in detail
+    else:
+        assert evidence['amount_cny'] == total + 123
+
+
+@pytest.mark.parametrize('fault', [None, 'wrong_date', 'not_final', 'wrong_price', 'early_time', 'wrong_amount'])
+def test_nov25_outage_replay_all_eight_codes(bot, monkeypatch, fault):
+    """Reproduce the observed 00:05 outage, not the earlier bond-only case.
+
+    Numbers here are synthetic; the outage pattern is from the user's Poe log.
+    CNFin quote parsing and all eight receipt decisions execute production code.
+    """
+    day = pd.Timestamp('2026-11-25')
+    clock = pd.Timestamp('2026-11-26 00:05')
+    codes = list(dict.fromkeys(bot.CN_ALL_CODES + [bot.CN_DK_HS300_SECID, bot.CN_SA_VOLUME_ZZ2000_SECID]))
+    prices = {code: 1000.0 + i for i, code in enumerate(codes)}
+    total = 321_400_000_000.
+    amounts = {bot.CN_SA_VOLUME_CYB_SECID: 1e4, bot.CN_SA_VOLUME_ZZ2000_SECID: 1e8}
+    minority = {bot.CN_ZZHL_INDEX_SECID, bot.CN_SA_VOLUME_ZZ2000_SECID}
+
+    def down(*args, **kwargs):
+        raise bot.requests.ConnectionError('EastMoney unavailable (observed outage)')
+
+    def daily(code, **kwargs):
+        return pd.DataFrame({'close': [prices[code]]}, index=[day])
+
+    def sina_qq(code, **kwargs):
+        if code in minority:
+            raise bot.DataUnavailableError('same index not available')
+        return daily(code)
+
+    def csi_price(code, **kwargs):
+        assert code == '930955'
+        return daily(bot.CN_ZZHL_INDEX_SECID)
+
+    def amount(code, **kwargs):
+        assert code in amounts
+        out = daily(code)
+        out['amount'] = total / amounts[code]
+        return out
+
+    def sohu(code, **kwargs):
+        if code != bot.CN_SA_VOLUME_CYB_SECID:
+            raise bot.DataUnavailableError('candidate not available')
+        return amount(code)
+
+    class SnapshotResponse:
+        def __init__(self, symbol):
+            self.symbol = symbol
+        def raise_for_status(self):
+            pass
+        def json(self):
+            code = {'930955.CSI': bot.CN_ZZHL_INDEX_SECID, '932000.CSI': bot.CN_SA_VOLUME_ZZ2000_SECID,
+                    '399006.SZ': bot.CN_SA_VOLUME_CYB_SECID}[self.symbol]
+            price = prices[code] + (1.0 if fault == 'wrong_price' else 0)
+            balance = total / (1e4 if code == bot.CN_SA_VOLUME_ZZ2000_SECID else 1)
+            if fault == 'wrong_amount':
+                balance *= 1.1
+            return {'data': {'snapshot': {'fields': ['market_date', 'data_timestamp', 'last_px', 'business_balance', 'trade_status'],
+                    self.symbol: [20261124 if fault == 'wrong_date' else 20261125,
+                                  145959999 if fault == 'early_time' else 150001000, price, balance,
+                                  'TRADE' if fault == 'not_final' else 'ENDTR']}}}
+
+    monkeypatch.setattr(bot, 'beijing_now', lambda: clock)
+    monkeypatch.setattr(bot, '_fetch_cn_trend_rows', down)
+    monkeypatch.setattr(bot, '_fetch_cnfin_final_session', lambda *a: None)
+    monkeypatch.setattr(bot, '_fetch_cn_eastmoney', down)
+    monkeypatch.setattr(bot, '_fetch_cn_eastmoney_amount', down)
+    monkeypatch.setattr(bot, '_fetch_cn_sina', sina_qq)
+    monkeypatch.setattr(bot, '_fetch_cn_qq_kline', sina_qq)
+    monkeypatch.setattr(bot, '_fetch_cn_csindex', csi_price)
+    monkeypatch.setattr(bot, '_fetch_cn_csindex_amount', amount)
+    monkeypatch.setattr(bot, '_fetch_cn_sohu_amount', sohu)
+    monkeypatch.setattr(bot.requests, 'get', lambda url, **kw: SnapshotResponse(kw['params']['en_prod_code']))
+    results = {code: bot._fetch_cn_final_sessions(code, [day], clock).get(day) for code in codes}
+    assert len(results) == 8
+    if fault in (None, 'wrong_amount'):
+        assert all(results.values())
+        assert all(r['close'] == prices[code] for code, r in results.items())
+    else:
+        assert results[bot.CN_ZZHL_INDEX_SECID] is None
+        assert results[bot.CN_SA_VOLUME_ZZ2000_SECID] is None
+    for code in amounts:
+        if fault is None:
+            assert results[code]['amount_cny'] == total
+        else:
+            assert results[code] is None or 'amount_cny' not in results[code]
+    if fault is None:
+        # Same receipts must survive the actual panel boundary, not merely exist.
+        raw = {code: daily(code) for code in bot.CN_ALL_CODES}
+        panel, diag = bot._prepare_cn_live_panel(raw, {code: code for code in raw}, clock, day, day,
+                                                 io.StringIO(), 'Sub-A', previous_sessions=results)
+        assert all(frame.index[-1] == day for frame in panel.values()) and diag['cn_confirmed_close'] == day
+
+
+def test_historical_red_dividend_alias_is_fallback_not_second_vote(bot, monkeypatch):
+    day = pd.Timestamp('2026-11-25')
+    clock = pd.Timestamp('2026-11-26 00:05')
+    frame = pd.DataFrame({'close': [1234.56]}, index=[day])
+    calls = []
+    def eastmoney(alias):
+        calls.append(alias)
+        return frame if alias == '1.930955' else frame.iloc[:0]
+    monkeypatch.setattr(bot, '_fetch_cn_eastmoney', eastmoney)
+    monkeypatch.setattr(bot, '_fetch_cn_csindex', lambda *a: frame)
+    evidence, detail = bot._cn_historical_daily_receipt(bot.CN_ZZHL_INDEX_SECID, day, clock, False)
+    assert calls == ['2.930955', '1.930955']
+    assert evidence == {'close': 1234.56, 'source': 'historical daily: CSIndex+EastMoney'}
+
+
+@pytest.mark.parametrize('fault', ['short_row', 'wrong_symbol', 'business_error'])
+def test_chinext_eastmoney_amount_rejects_malformed_raw_response(bot, monkeypatch, fault):
+    payload = {'rc': 19 if fault == 'business_error' else 0, 'data': {
+        'market': 0, 'code': '000001' if fault == 'wrong_symbol' else '399006',
+        'klines': ['2026-11-25,100,101' if fault == 'short_row' else '2026-11-25,100,101,102,99,1000,1234000']}}
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return payload
+    monkeypatch.setattr(bot._session, 'get', lambda *a, **kw: Response())
+    with pytest.raises(bot.DataSchemaError):
+        bot._fetch_cn_eastmoney_amount(bot.CN_SA_VOLUME_CYB_SECID)
+
+
+@pytest.mark.parametrize('fault', ['wrong_symbol', 'wrong_row', 'business_error', 'http_error'])
+def test_csindex_amount_rejects_untrusted_raw_response(bot, monkeypatch, fault):
+    payload = {'code': '500' if fault == 'business_error' else '200', 'success': fault != 'business_error',
+               'data': [False if fault == 'wrong_row' else {'tradeDate': '20261125',
+                        'indexCode': '930955' if fault == 'wrong_symbol' else '932000',
+                        'close': 1000., 'tradingValue': 1234.5, 'tradingVol': 1000000}]}
+    class Response:
+        status_code = 403 if fault == 'http_error' else 200
+        def raise_for_status(self):
+            if fault == 'http_error':
+                raise bot.requests.HTTPError('403')
+        def json(self): return payload
+    monkeypatch.setattr(bot.requests.sessions.Session, 'get', lambda *a, **kw: Response())
+    with pytest.raises((bot.DataSchemaError, bot.requests.HTTPError)):
+        bot._fetch_cn_csindex_amount(bot.CN_SA_VOLUME_ZZ2000_SECID, _max_retries=1)

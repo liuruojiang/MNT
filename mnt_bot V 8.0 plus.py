@@ -1420,14 +1420,18 @@ def _fetch_cn_eastmoney(secid):
     resp.raise_for_status()
     data = resp.json()
     inner = data.get('data') if isinstance(data, dict) else None
+    if not isinstance(data, dict) or type(data.get('rc')) is not int or data['rc'] != 0:
+        raise DataSchemaError(f'EastMoney daily price business failure for {secid}')
     if not isinstance(inner, dict):
         raise ValueError(f'EastMoney returned null data for {secid}')
     market, code = secid.split('.', 1)
     if str(inner.get('market')) != market or str(inner.get('code')) != code:
         raise DataSchemaError(f'EastMoney daily price identity mismatch for {secid}')
     klines = inner.get('klines')
-    if not klines:
+    if not isinstance(klines, list) or not klines:
         raise ValueError(f'EastMoney returned empty klines for {secid}')
+    if any(not isinstance(line, str) or len(line.split(',')) < 3 for line in klines):
+        raise DataSchemaError(f'EastMoney daily price row malformed for {secid}')
     rows = [{'date': p[0], 'close': float(p[2])} for line in klines for p in [line.split(',')]]
     df = pd.DataFrame(rows)
     df['date'] = pd.to_datetime(df['date'])
@@ -1445,20 +1449,19 @@ def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
     market, code = secid.split('.', 1)
     if str(inner.get('market')) != market or str(inner.get('code')) != code:
         raise DataSchemaError(f'EastMoney amount identity mismatch for {secid}')
-    if secid == CN_SA_VOLUME_ZZ2000_SECID:
-        if type(data.get('rc')) is not int or data['rc'] != 0:
-            raise DataSchemaError(f'EastMoney amount business failure for {secid}')
+    if type(data.get('rc')) is not int or data['rc'] != 0:
+        raise DataSchemaError(f'EastMoney amount business failure for {secid}')
     klines = inner.get('klines')
-    if secid == CN_SA_VOLUME_ZZ2000_SECID and (not isinstance(klines, list)):
+    if not isinstance(klines, list):
         raise DataSchemaError(f'EastMoney amount klines must be a list for {secid}')
     if not klines:
         raise ValueError(f'EastMoney returned empty klines for {secid}')
     rows = []
     for line in klines:
-        if secid == CN_SA_VOLUME_ZZ2000_SECID and (not isinstance(line, str)):
+        if not isinstance(line, str):
             raise DataSchemaError(f'EastMoney amount row must be CSV text for {secid}')
         p = line.split(',')
-        if secid == CN_SA_VOLUME_ZZ2000_SECID and len(p) < 7:
+        if len(p) < 7:
             raise DataSchemaError(f'EastMoney amount row has fewer than 7 fields for {secid}')
         rows.append({'date': p[0], 'close': float(p[2]), 'volume': float(p[5]), 'amount': float(p[6])})
     df = pd.DataFrame(rows)
@@ -1504,10 +1507,12 @@ def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, 
     first = data[0]
     if not isinstance(first, dict) or first.get('status') != 0 or (not first.get('hq')):
         raise ValueError(f"Sohu returned unavailable data for {symbol}: {(first.get('msg') if isinstance(first, dict) else first)}")
+    if first.get('code') != symbol or not isinstance(first['hq'], list):
+        raise DataSchemaError(f'Sohu daily identity/schema mismatch for {symbol}')
     rows = []
     for item in first['hq']:
-        if len(item) < 9:
-            continue
+        if not isinstance(item, list) or len(item) < 9:
+            raise DataSchemaError(f'Sohu daily row malformed for {symbol}')
         rows.append({'date': item[0], 'close': float(item[2]), 'volume': float(item[7]), 'amount': float(item[8]), 'source': source_name})
     if not rows:
         raise ValueError(f'Sohu returned no usable rows for {symbol}')
@@ -1564,8 +1569,10 @@ def _fetch_cn_qq_kline(secid, datalen=2000):
     if not isinstance(data, dict) or symbol not in data or 'day' not in data[symbol]:
         raise ValueError(f'QQ returned empty data for {symbol}')
     day = data[symbol]['day']
-    if not day:
+    if not isinstance(day, list) or not day:
         raise ValueError(f'QQ returned empty kline for {symbol}')
+    if any(not isinstance(item, list) or len(item) < 3 for item in day):
+        raise DataSchemaError(f'QQ daily price row malformed for {symbol}')
     rows = [{'date': item[0], 'close': float(item[2])} for item in day]
     df = pd.DataFrame(rows)
     df['date'] = pd.to_datetime(df['date'])
@@ -1626,8 +1633,10 @@ def _fetch_cn_csindex(index_code, _max_retries=3):
                 continue
             resp.raise_for_status()
             raise ValueError(f'csindex returned non-JSON for {index_code}')
-        if data.get('data'):
+        if resp.status_code == 200 and isinstance(data, dict) and data.get('code') == '200' and data.get('success') is True and isinstance(data.get('data'), list) and data['data']:
             try:
+                if any(not isinstance(item, dict) or str(item.get('indexCode')) != index_code for item in data['data']):
+                    raise DataSchemaError(f'CSIndex daily identity mismatch for {index_code}')
                 rows = [{'date': item['tradeDate'], 'close': float(item['close'])} for item in data['data'] if item is not None]
             except (TypeError, KeyError, ValueError) as e:
                 last_err = e
@@ -1667,11 +1676,14 @@ def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _ma
                 except requests.exceptions.RequestException:
                     pass
                 resp = sess.get(url, timeout=20, headers=headers)
+            resp.raise_for_status()
             data = resp.json()
+            if not isinstance(data, dict) or data.get('code') != '200' or data.get('success') is not True or not isinstance(data.get('data'), list):
+                raise DataSchemaError(f'CSIndex amount business/schema failure for {index_code}')
             rows = []
-            for item in data.get('data', []) if isinstance(data, dict) else []:
-                if not item:
-                    continue
+            for item in data['data']:
+                if not isinstance(item, dict) or str(item.get('indexCode')) != index_code:
+                    raise DataSchemaError(f'CSIndex amount identity mismatch for {index_code}')
                 trading_value = item.get('tradingValue')
                 if trading_value in (None, ''):
                     continue
@@ -1898,6 +1910,125 @@ def _fetch_cn_realtime_trends(candidate_secids, expected_date, *, host='push2his
             continue
     return None
 
+class _CNFinalSessions(dict):
+    """Keep verification diagnostics separate from usable close receipts."""
+
+    def __init__(self):
+        super().__init__()
+        self.diagnostics = {}
+
+
+def _cn_historical_daily_receipt(secid, day, clock, require_amount):
+    """Cross-check completed historical sessions using independent exact-index daily feeds.
+
+    Never use this path for the request date: a daily bar may still be provisional.
+    Amounts are compared in CNY, not across vendor-specific reporting units.
+    """
+    day = pd.Timestamp(day).normalize()
+    if day >= pd.Timestamp(clock).normalize() or not _is_cn_required_close_day(day):
+        return None, 'not a completed historical trading session'
+    date_text = day.strftime('%Y%m%d')
+    vendor_code = _vendor_secid_candidates(secid)[0]
+    code = secid.split('.', 1)[1]
+    def eastmoney_price():
+        errors = []
+        for alias in _vendor_secid_candidates(secid):
+            try:
+                frame = _fetch_cn_eastmoney(alias)
+                if day not in frame.index:
+                    raise DataUnavailableError(f'missing {day:%Y-%m-%d}')
+                return frame
+            except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+                errors.append(f'{alias}: {_short_error(exc)}')
+        raise DataUnavailableError('; '.join(errors))
+    if secid == CN_SA_VOLUME_ZZ2000_SECID:
+        sources = [('CSIndex', lambda: _fetch_cn_csindex_amount(secid, beg=date_text, lmt=10), 1e8),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney_amount(vendor_code, beg=date_text, lmt=10), 1.0),
+                   ('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), 1e4)]
+    elif secid == CN_SA_VOLUME_CYB_SECID:
+        sources = [('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), 1e4),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney_amount(vendor_code, beg=date_text, lmt=10), 1.0),
+                   ('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    elif secid == CN_BOND_CODE:
+        sources = [('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    elif secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        sources = [('CSIndex', lambda: _fetch_cn_csindex(code), None),
+                   ('EastMoney', eastmoney_price, None),
+                   ('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None),
+                   ('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), None)]
+    elif secid in CN_ALL_CODES or secid == CN_DK_HS300_SECID:
+        sources = [('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney(vendor_code), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    else:
+        return None, 'no exact-index daily sources configured'
+
+    prices, amounts, attempts = [], [], []
+    for name, fetcher, unit in sources:
+        try:
+            frame = fetcher()
+            dates = pd.DatetimeIndex(frame.index)
+            if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing or dates.tz is not None or not dates.equals(dates.normalize()):
+                raise DataSchemaError('invalid daily date index')
+            frame = frame.loc[:day]
+            checked = _price_column_frame(frame, 'close', secid)
+            if day not in checked.index:
+                raise DataUnavailableError(f'missing {day:%Y-%m-%d} daily close')
+            live_flag = frame.at[day, 'is_live_bar'] if 'is_live_bar' in frame else False
+            price = checked.at[day, secid]
+            if (pd.notna(live_flag) and bool(live_flag)) or not np.isfinite(price) or price <= 0:
+                raise DataSchemaError('invalid or provisional daily close')
+            if prices and not np.isclose(price, prices[0][1], atol=0.00501, rtol=0):
+                return None, f'{prices[0][0]} vs {name}: daily close mismatch ({prices[0][1]} vs {price})'
+            prices.append((name, float(price)))
+            if require_amount and unit is not None and 'amount' in frame:
+                amount = pd.to_numeric(frame.at[day, 'amount'], errors='coerce') * unit
+                if np.isfinite(amount) and amount > 0:
+                    amounts.append((name, float(amount), unit))
+                else:
+                    attempts.append(f'{name}: invalid daily amount')
+            if len(prices) >= 2 and (not require_amount or len(amounts) >= 2):
+                break
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+            attempts.append(f'{name}: {_short_error(exc)}')
+    # CNFin's date-stamped ENDTR quote is a separate provider. At midnight it
+    # may still publish yesterday's completed session even when minute history
+    # has rolled over. Require exact identity, date, final timestamp and close.
+    if prices and (len(prices) < 2 or require_amount and len(amounts) < 2) and secid in {CN_ZZHL_INDEX_SECID, CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_ZZ2000_SECID}:
+        symbol = ('930955.CSI' if secid == CN_ZZHL_INDEX_SECID else '932000.CSI' if secid == CN_SA_VOLUME_ZZ2000_SECID else '399006.SZ')
+        try:
+            quote = _fetch_cnfin_close_snapshot(symbol, day, day + pd.Timedelta(hours=15), prices[0][1])
+            if quote is not None:
+                prices.append(('CNFin ENDTR', float(quote['last_px'])))
+                raw = quote.get('business_balance')
+                if require_amount and type(raw) in (int, float) and np.isfinite(raw) and raw > 0:
+                    unit = 1e4 if secid == CN_SA_VOLUME_ZZ2000_SECID else 1.0
+                    amounts.append(('CNFin ENDTR', float(raw) * unit, unit))
+            else:
+                attempts.append('CNFin: previous session ENDTR snapshot unavailable or inconsistent')
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+            attempts.append(f'CNFin: {_short_error(exc)}')
+    if len(prices) < 2:
+        return None, '; '.join(attempts) or 'fewer than two independent daily closes'
+    evidence = {'close': prices[0][1], 'source': 'historical daily: ' + '+'.join(name for name, _ in prices)}
+    if require_amount:
+        if len(amounts) >= 2:
+            first, second = amounts[:2]
+            tolerance = max(first[2] * (0.0050001 if first[2] == 1e8 else 0.5),
+                            second[2] * (0.0050001 if second[2] == 1e8 else 0.5),
+                            max(first[1], second[1]) * 1e-8)
+            if np.isclose(first[1], second[1], atol=tolerance, rtol=0):
+                evidence['amount_cny'] = min(amounts, key=lambda item: item[2])[1]
+            else:
+                attempts.append(f'{first[0]} vs {second[0]}: daily amount mismatch after CNY conversion')
+        else:
+            attempts.append('fewer than two independent daily amounts')
+    return evidence, '; '.join(attempts)
+
+
 def _fetch_cn_final_sessions(secid, expected_closes, clock):
     """Verify terminal minute coverage for recent sessions, including across midnight."""
     slots = {}
@@ -1914,7 +2045,7 @@ def _fetch_cn_final_sessions(secid, expected_closes, clock):
         return {}
     ndays = 5 if any(day < now.normalize() for day in slots) else 1
     vendor_code = _vendor_secid_candidates(secid)[0]
-    verified = {}
+    verified = _CNFinalSessions()
     require_amount = secid in {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
     for host in ('push2his.eastmoney.com', 'push2.eastmoney.com'):
         try:
@@ -1961,6 +2092,23 @@ def _fetch_cn_final_sessions(secid, expected_closes, clock):
             verified[day] = alternative
         elif alternative and 'amount_cny' in alternative and np.isclose(alternative['close'], existing['close'], rtol=0, atol=0.00501):
             existing['amount_cny'] = alternative['amount_cny']
+    # Minute history may expire or be inaccessible the next day. Do not make
+    # historical queries depend exclusively on it, but never relax today's gate.
+    for day in slots:
+        existing = verified.get(day)
+        if day >= now.normalize() or (existing and (not require_amount or 'amount_cny' in existing)):
+            continue
+        evidence, detail = _cn_historical_daily_receipt(secid, day, now, require_amount)
+        if evidence and existing is None:
+            verified[day] = evidence
+        elif evidence and np.isclose(evidence['close'], existing['close'], atol=0.00501, rtol=0):
+            if 'amount_cny' in evidence:
+                existing['amount_cny'] = evidence['amount_cny']
+                existing['source'] = evidence['source'] + ' (amount cross-check)'
+        elif evidence:
+            detail = 'historical daily close conflicts with minute receipt'
+        if detail:
+            verified.diagnostics[day] = detail
     return verified
 
 def _fetch_cnfin_candles(symbol, expected_date, fields):
@@ -14771,8 +14919,13 @@ class CombinedStrategyBase:
         with ThreadPoolExecutor(max_workers=len(codes)) as executor:
             tasks = {code: executor.submit(_fetch_cn_final_sessions, code, tuple(final_sessions), clock) for code in codes}
             for code, task in tasks.items():
-                for day, evidence in task.result().items():
+                receipts = task.result()
+                for day, evidence in receipts.items():
                     final_sessions[day][code] = evidence
+                    if evidence.get('source'):
+                        msg.write(f"  ↳ {CN_NAMES.get(code, code)} {day:%Y-%m-%d} 收盘核验: {evidence['source']}\n")
+                for day, detail in getattr(receipts, 'diagnostics', {}).items():
+                    msg.write(f"  ⚠️ {CN_NAMES.get(code, code)} {day:%Y-%m-%d} 核验诊断: {detail}\n")
         panels = []
         for adk, label, specs in ((False, 'Sub-A', stock_specs), (True, 'ADK', adk_specs)):
             msg.write(f'⏳ 正在获取{label}行情...\n')

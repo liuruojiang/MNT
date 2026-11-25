@@ -112,12 +112,13 @@ def check_saved_chart(figure, expected, start, end):
 
 @pytest.mark.parametrize("adk_only,end", [
     pytest.param(False, START, id="one-return-day-all-sleeves"),
+    pytest.param(False, pd.Timestamp("2025-03-10"), id="five-return-days-all-sleeves-weight-drift"),
     pytest.param(True, pd.Timestamp("2025-03-10"), id="only-adk-five-return-days"),
 ])
 def test_release_report_text_workbook_and_nav(v80, monkeypatch, adk_only, end):
     frames, daily = archived_inputs(end, adk_only)
     expected = {name: (1 + returns).cumprod() for name, returns in daily.items()}
-    assert all(nav.size == (5 if adk_only else 1) and np.isfinite(nav).all() for nav in expected.values())
+    assert all(nav.size == len(pd.bdate_range(START, end)) and np.isfinite(nav).all() for nav in expected.values())
     if not adk_only:
         expected["Combined"] = sum(expected[name] * weight for name, weight in
                                    zip(NAMES[:5], (.15, .15, .20, .20, .30), strict=True))

@@ -110,13 +110,30 @@ The code is synchronized locally/remotely; this does not deploy to Poe or trade.
 每次发布 V8.0 前，以下两项离线检查必须通过。它们由完整的 `pytest tests` 自动收集。在本机只验收这两项时，从项目根目录运行：
 
 ```powershell
-python -B run_tests.py --label v80-release-parity -- -q --tb=short tests/test_v80_release_rebalance_prefix.py tests/test_v80_release_report_parity.py
+python -B tools/v80_release_gate.py
 ```
 
 - **调仓记录**。用截至 T 日和下一交易日的真实行情分别运行“信号”和“表现”，回读两个入口各自发出的 Excel。T 日必须有已确认调仓，前后两次的记录数量和每个字段都要一致。
 - **报告与净值图**。用单收益日、仅 ADK 有收益两种样本，核对实际附件、文字与工作簿中的日期、策略、收益和最大回撤。检查 Excel 百分比显示、净值和回撤点是否落在绘图区内，以及最终图例是否对应曲线。下载文件名的请求区间、实际覆盖区间和报告编号必须与该次查询一致。
 
 ### Repository verification
+
+V8.0 release status is **BLOCKED** unless all four gates are run on the exact
+candidate: (1) market-data finality, cross-source amount and calendar coverage;
+(2) independent calculation and execution reconciliation; (3) rebalance
+history prefix; (4) report, workbook, chart and standard-window parity.
+The suites and their fixture dependencies are permanent release assets, not
+disposable research files. A missing suite/fixture, collection error, skipped
+or xfailed case, permission failure, or nonzero exit code cannot be replaced
+by a syntax check or a prior release's pass. Record the candidate's SHA-256,
+fixture hashes, collected/passed test IDs and complete test receipt before any
+deployment. In addition, exercise the live Poe query in its actual runtime
+against the latest completed sessions; an offline test does not prove provider
+availability. The 2026-11-25 EastMoney outage replay is a permanent regression
+case, with synthetic values clearly distinguished from real market evidence.
+The gate launcher uses the existing managed test lifecycle and emits
+`V80_RELEASE_MANIFEST` and `V80_RELEASE_RESULT` in its test receipt. The offline
+pass is deliberately separate from the required live-runtime acceptance.
 
 Run these commands after touching production behavior:
 
