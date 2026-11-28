@@ -1,0 +1,56 @@
+{
+  "sha256": "ee980b865c8abf34867f01bbd7592249a0867eec51dc4ab351dbf654db71a8f5",
+  "b78_rows": 3822,
+  "b78_start": "2011-06-14",
+  "b79_rows": 4450,
+  "b79_start": "2008-12-15",
+  "cutoff": "2026-08-25",
+  "volume_source": "audited native Yahoo VGIT OHLCV fixture; no pre-inception fill",
+  "windows": [
+    {
+      "window": "Full",
+      "base_cagr": 0.1307438785695704,
+      "candidate_cagr": 0.13139447147821373,
+      "return_delta_pp": 0.06505929086433326,
+      "base_mdd": -0.12401511234135465,
+      "candidate_mdd": -0.11681656870776591,
+      "mdd_improvement_pp": 0.7198543633588739
+    },
+    {
+      "window": "10Y",
+      "base_cagr": 0.19025288510042498,
+      "candidate_cagr": 0.19108840809080138,
+      "return_delta_pp": 0.08355229903763972,
+      "base_mdd": -0.12401511234135476,
+      "candidate_mdd": -0.11681656870776513,
+      "mdd_improvement_pp": 0.7198543633589627
+    },
+    {
+      "window": "5Y",
+      "base_cagr": 0.2394368192548342,
+      "candidate_cagr": 0.2402674601316931,
+      "return_delta_pp": 0.08306408768588847,
+      "base_mdd": -0.11681656870776436,
+      "candidate_mdd": -0.11681656870776558,
+      "mdd_improvement_pp": -1.2212453270876722e-13
+    },
+    {
+      "window": "3Y",
+      "base_cagr": 0.3406637925514757,
+      "candidate_cagr": 0.34125025481262916,
+      "return_delta_pp": 0.0586462261153442,
+      "base_mdd": -0.11113592419886875,
+      "candidate_mdd": -0.11113592419886853,
+      "mdd_improvement_pp": 2.220446049250313e-14
+    },
+    {
+      "window": "1Y",
+      "base_cagr": 0.3750472013931074,
+      "candidate_cagr": 0.37504723147601415,
+      "return_delta_pp": 3.0082906776751628e-06,
+      "base_mdd": -0.10682721508068005,
+      "candidate_mdd": -0.10682721918440996,
+      "mdd_improvement_pp": -4.1037299114421444e-07
+    }
+  ]
+}

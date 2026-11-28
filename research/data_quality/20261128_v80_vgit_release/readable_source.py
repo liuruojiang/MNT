@@ -1,0 +1,16361 @@
+# poe: name=Strategy-Signal-V80
+# poe: privacy_shield=half
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import io
+import base64
+import struct
+import zlib
+import re
+import json
+import os
+import sys
+import atexit
+import warnings
+import xlsxwriter
+import time
+import threading
+import types
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from typing import Any, TypedDict
+from zoneinfo import ZoneInfo
+try:
+    from fastapi_poe.types import SettingsResponse
+except Exception:
+
+    class SettingsResponse:
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+if 'poe' not in globals():
+    try:
+        import fastapi_poe as poe
+    except Exception:
+
+        class _LocalPoe:
+
+            class BotError(Exception):
+                pass
+            query = types.SimpleNamespace(text=' '.join(sys.argv[1:]), attachments=[])
+            default_chat = []
+
+            @staticmethod
+            def update_settings(settings):
+                return None
+
+            @staticmethod
+            def start_message():
+                return _CompatStartMessage()
+
+            @staticmethod
+            def call(*_args, **_kwargs):
+                raise _LocalPoe.BotError('Local compatibility mode does not support poe.call; run LLM parsing paths in Poe.')
+        poe = _LocalPoe()
+
+class _CompatStartMessage:
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def write(self, value):
+        data = str(value).encode('utf-8', errors='replace')
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+
+    def attach_file(self, **kwargs):
+        name = kwargs.get('name', 'attachment')
+        data = f'\n[attachment: {name}]\n'.encode('utf-8', errors='replace')
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+
+def _install_poe_native_compat(poe_module):
+    required = ('update_settings', 'start_message', 'query', 'default_chat', 'call')
+    if all((hasattr(poe_module, attr) for attr in required)):
+        return poe_module
+
+    class _PoeNativeCompatProxy:
+
+        def __init__(self, wrapped):
+            self._wrapped = wrapped
+            self._settings = None
+            self.query = getattr(wrapped, 'query', types.SimpleNamespace(text=' '.join(sys.argv[1:]), attachments=[]))
+            self.default_chat = getattr(wrapped, 'default_chat', [])
+
+        def __getattr__(self, name):
+            return getattr(self._wrapped, name)
+
+        def update_settings(self, settings):
+            update_settings = getattr(self._wrapped, 'update_settings', None)
+            if update_settings is not None:
+                return update_settings(settings)
+            self._settings = settings
+            return None
+
+        def start_message(self):
+            start_message = getattr(self._wrapped, 'start_message', None)
+            if start_message is not None:
+                return start_message()
+            return _CompatStartMessage()
+
+        def call(self, *_args, **_kwargs):
+            call = getattr(self._wrapped, 'call', None)
+            if call is not None:
+                return call(*_args, **_kwargs)
+            bot_error = getattr(self._wrapped, 'BotError', RuntimeError)
+            raise bot_error('本地兼容模式不支持 poe.call，请在 Poe 原生环境运行需要 LLM 解析的指令。')
+    return _PoeNativeCompatProxy(poe_module)
+poe = _install_poe_native_compat(poe)
+DEBUG_MODE = os.getenv('STRATEGY_DEBUG', '0') == '1'
+
+def _debug_write(msg, text):
+    if DEBUG_MODE and msg is not None:
+        msg.write(text)
+CN_COMMISSION = 0.001
+CN_DK_COMMISSION = 0.0005
+CN_RF_ANNUAL = 0.03
+CN_TRADING_DAYS = 244
+CN_RF_DAILY = (1 + CN_RF_ANNUAL) ** (1 / CN_TRADING_DAYS) - 1
+CN_BIAS_N = 60
+CN_MOM_DAY = 20
+CN_R2_WINDOW = 20
+CN_R2_THRESHOLD = 0.15
+CN_BIAS_MOM_WEIGHT_END = 3.0
+CN_ABS_MOM_DAY = 20
+CN_ABS_MOM_THRESHOLD = 0.02
+CN_ENTRY_WAIT_DAYS = None
+CN_SWITCH_BUFFER = 1.0
+CN_BOND_CODE = '1.000012'
+CN_BOND_PUBLICATION_DATE = pd.Timestamp('2003-01-02')
+CN_BOND_NAME = '上证国债（全期限）'
+CN_TARGET_VOL = 0.2
+CN_VOL_WINDOW = 80
+# Both displayed weights need lagged volatility from genuine prior holdings.
+# The first return after momentum warmup is initialized in cash.
+CN_MIN_HISTORY_ROWS = max(CN_BIAS_N + CN_MOM_DAY, CN_R2_WINDOW + 1) + CN_VOL_WINDOW + 3
+CN_BOND_SESSION_END = pd.Timedelta(hours=15, minutes=30)
+CN_SA_MODEL_CLOCK_NOTE = '股票观察至15:00，国债观察至15:30。全池日线信号最早15:30起核验。历史调仓按当日各指数收盘值纸面计价，实际成交时刻未核验。'
+CN_MAX_LEV = 1.25
+CN_MIN_LEV = 0.1
+CN_SCALE_THRESHOLD = 0.0
+CN_ENTRY_INITIAL_FRACTION = 1.0
+CN_SA_SINGLE_GATE_ENABLED = False
+CN_SA_SINGLE_GATE_EXECUTION_SHIFT = -1
+CN_SA_SINGLE_GATE_CONFIGS = {'0.399006': {'name': 'cyb_long_momentum_v1_2', 'mode': 'cyb_v1_2', 'bias_ma': 50, 'mom_day': 27, 'weight_end': 1.0, 'abs_mom_day': 20, 'score_threshold': 0.0, 'abs_threshold': -0.025, 'nav_decay_threshold': 0.0875, 'nav_decay_scale': 0.25, 'hot_score_threshold': 120.0, 'hot_scale': 0.0, 'hot_volume_ma': 60, 'hot_volume_ratio_threshold': 1.75, 'cost_rate': 0.001}, '1.000016': {'name': 'sse50_long_momentum_v1_0', 'mode': 'sse50_v1_0', 'bias_ma': 110, 'mom_day': 60, 'weight_end': 2.0, 'r2_threshold': 0.2, 'abs_mom_day': 50, 'score_threshold': 0.0, 'abs_threshold': -0.13, 'volume_ma': 120, 'volume_ratio_threshold': 0.8, 'target_vol': 0.15, 'target_vol_window': 120, 'max_leverage': 1.5, 'nav_decay_threshold': 0.1, 'nav_decay_scale': 0.75, 'cost_rate': 0.001}, '1.000852': {'name': 'zz1000_long_momentum_v1_2', 'mode': 'zz1000_v1_2', 'bias_ma': 45, 'mom_day': 18, 'weight_end': 2.5, 'score_threshold': 0.0, 'abs_mom_day': 20, 'abs_reentry_threshold': 0.03, 'abs_exit_threshold': 0.0, 'nav_decay_threshold': 0.07, 'nav_decay_scale': 0.75, 'score_hot_threshold': 150.0, 'score_hot_scale': 0.0, 'volume_ma': 160, 'volume_ratio_threshold': 1.0, 'volume_exit_threshold': 0.9, 'volume_confirm_days': 1, 'cost_rate': 0.001}, '1.000905': {'name': 'zz500_long_momentum_v1_2', 'mode': 'zz500_v1_2', 'bias_ma': 110, 'mom_day': 24, 'weight_end': 2.0, 'score_threshold': 2.0, 'score_exit_threshold': 0.0, 'abs_mom_day': 20, 'abs_reentry_threshold': -0.04, 'abs_exit_threshold': -0.06, 'nav_decay_threshold': 0.06, 'nav_decay_scale': 0.5, 'hot_score_threshold': 90.0, 'hot_scale': 0.0, 'high_vol_window': 40, 'high_vol_threshold': 0.45, 'high_vol_scale': 0.5, 'volume_ma': 120, 'volume_ratio_threshold': 0.75, 'volume_exit_threshold': 0.75, 'volume_confirm_days': 1, 'cost_rate': 0.001}}
+CN_VOL_EMOTION_MA = 10
+CN_VOL_EMOTION_BEAR = 8
+CN_VOL_EMOTION_BULL = 3
+CN_VOL_MONITOR_SECID = '1.000001'
+CN_SA_VOLUME_OVERLAY_ENABLED = True
+CN_SA_VOLUME_RULE_MODE = 'or'
+CN_SA_VOLUME_SCALE = 0.0
+CN_SA_VOLUME_HISTORY_BEG = '20000101'
+CN_SA_VOLUME_ZZ2000_SECID = '2.932000'
+CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE = pd.Timestamp('2023-08-11')
+CN_SA_VOLUME_ZZ2000_MA = 20
+CN_SA_VOLUME_ZZ2000_DAYS = 3
+CN_SA_VOLUME_CYB_SECID = '0.399006'
+CN_SA_VOLUME_CYB_MA = 20
+CN_SA_VOLUME_CYB_DAYS = 4
+CN_SA_VOLUME_CLEAR_RATIO_ENABLED = False
+CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID = CN_SA_VOLUME_ZZ2000_SECID
+CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL = 'ZZ2000'
+CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID = '1.000016'
+CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL = 'SZ50'
+CN_SA_VOLUME_CLEAR_RATIO_MA = 30
+CN_SA_VOLUME_CLEAR_RATIO_DAYS = 15
+CN_SA_VOLUME_CLEAR_RATIO_SCALE = 0.0
+CN_SA_VOLUME_RULE_NAME = f'Sub-A amount OR: ZZ2000<MA{CN_SA_VOLUME_ZZ2000_MA}x{CN_SA_VOLUME_ZZ2000_DAYS} or CYB<MA{CN_SA_VOLUME_CYB_MA}x{CN_SA_VOLUME_CYB_DAYS}; scale={CN_SA_VOLUME_SCALE:.2f}'
+CN_CSI_AMOUNT_INDEX_CODES = {'2.932000': '932000', '1.000016': '000016', '1.000300': '000300', '1.000852': '000852', '1.000905': '000905'}
+CN_DK_VOLUME_POLICY = 'warning_only'
+CN_DK_VOLUME_YELLOW_SECID = '1.000905'
+CN_DK_VOLUME_YELLOW_LABEL = '中证500'
+CN_DK_VOLUME_YELLOW_MA = 28
+CN_DK_VOLUME_YELLOW_DAYS = 5
+CN_KNIFE_WINDOW = 3
+CN_KNIFE_THRESHOLD = -0.05
+CN_EQUITY_CODES = ['1.930955', '0.399006', '1.000016', '1.000852', '1.000905']
+CN_ALL_CODES = CN_EQUITY_CODES + [CN_BOND_CODE]
+CN_STOCK_CODES = CN_EQUITY_CODES
+CN_STOCK_FORMAL_START = pd.Timestamp('2017-05-26')
+CN_NAMES = {'1.930955': '中证红利低波100', '0.399006': '创业板', '1.000016': '上证50', '1.000852': '中证1000', '1.000905': '中证500', '1.H00300': '沪深300', '1.000012': CN_BOND_NAME, '1.H11077': '旧10Y国债', 'cash': 'Cash'}
+CN_ZZHL_INDEX_SECID = '1.930955'
+CN_CSINDEX_PRICE_INDEX_CODES = {'1.930955': '930955'}
+CN_VENDOR_SECID_ALIASES = {'1.930955': ['2.930955', '1.930955']}
+CN_CSINDEX_PRICE_PROXY_SECIDS = {'1.930955': '1.515100'}
+CN_EMBEDDED_930955_B85 = 'c-l4EdAv{M_6P9uwa+meL!@NNkW8tNGF3$8sY0euqEbkRAGdJ1)J<qGC1XkEA(=9i>2ed5G7}<0$k=2&zvsQL^Ur?m?|1M0JZpW{XMNUsp1luN&6<>daJHmG-;7B~iTj=mhk^H{r6t~LmXs6~Y97uqUJr*=--g5Hs^My#@o8yM`;>6jrg=ED{UKbKvN9Y}iiIbR<PZOS)GYjb<We}){xTf))(;oP><ecV%ZIDU=fc_gaC4$+I7{7lHvGKsc=*{gZ#Yzl!eP<nFvm|d!dbub;p!LJ!&#RW;p}ROFw}4BoK*<_<?Is<IdX(UkAmSsgWJQ|@xQ~>R93BVs2nVf#@`h#6wDS5X@;tmFC1Pj8ZNXi70!M=6YeXYA)Gz3J)CvV6)t>oHJtT46b`K#h6`shg+t@yq@?8Wg~M6?YvDrKUEwhMM6mStd%}N9u7sc0ONX=JH-*C!!TqS!w(#F@BUjxL&K~_U9Fl^$(G{4UW>5<-E&C%JZVsL&Pktc$_g_E%FD)GIUJyq4=caJ>t?)cnARH=Y4u{1T!-YP<(!|;e;p#0vL;SCBSP%w{9^>WY(?(%cJ{D97!$+;et;7@Iu!Ajg47w?x7R`0v{jPQnkEK*u9)2DL>`@-|Fvpr(!+n1wg`WjXv?5P9J7|vEehRjn5YV*&p~Re2NILrn_R)ReY&M&(<PL{1!u{`K;fZXbFsg1i95(1ibMy@NMSmv3&%(z9o>l9>nK{rWs*)v~6$SR#qv67y;^8bioNFHmKf7fOKO1qi0q72gXQQ?SIe44@u<kEl?+PT0mYH|n@$hqqP#iG%4nsA+h_Ohx*3BDn<GDbFsHC4;Ahez{drpO)?}sU)mF8U*z)3vi>a)iCDBu#U68*bS<#?DVB`bP=!lQB=+;dAfbYtWm_uVa)y#>Bk&Tw`z%#k|tULb<A((mCyPHz1e9E_#})+IXQ?hrg}55GHvXP#)i#f+)^eVj8%tgq(2B53g;=vE8fVp&$7GsQ6R-e1FoS|!6-*_*>qb(yhRGA;9L3C}JMw?s8z`ibC;=Xt98wo1P|aDIse8Fm0W<Z9w(`SJMH@UsuXJuiYo`4M5=_x}-(%hHeMJHHQyY=Jq^d+1XQ1)de;TcqEZ5ag&SbH5gfy2g8p=V^f;$;a^TEf$nyX>Y)OA}Di>{2ajMi)GP3`KSgamN!&(Q8@0F{NXGrZKCx;QJ4kS0+N}Ja^V#S-DS3V9xLx>xqv}*0+JIUexIwKL8J69;fc4%*S!*~ms<uxw@839`r)vIW#oA@dq)ZtLcQDuy+yb`274ue`ZZ7`>RbrohCdI#y)0NF=^mlBHHg9s!d;ooLs>N-h8RLGI6Hyfs{{X1c7n5#iFOc*77YJT80+HXYF4!lS`y_2Ne{XDHT$Z|!Cu(DiXU%yteMC9$+ryQmgG7ht|}|)8){!*Y}AQ*Kfr>Mt}X-i{9to53{34wX}{mXg+XSk9wv`2aG`|obms4i*t9tWCFPXaViBAeE=1Lskrx^XfuCF?97dvT5t&lm&4czTS#W8Mwhav0m2$O_h>=K_3T8ybRgD2gehOd<n3gZt9Noi$8U~m|2`h=#mjtSsIj*|;1cc@oZ+3`VlrZITe7=)PJ&KNfh4w?9&+%AB+`S#c2BGL=^X4(YA13PQZ~$}z0o##Ulo7m#9NLB=@;~UNad5w@-*c<BoOwa;N&x#$nsd@@rz?dElQ{SYb34bvZI1hb`_Um7bmLY_7uJaML7uO{uzE~;gEPlW-k7=HVNM-Chj@0o$0~-|qFo~Rjd@Sdzf#WDh47?4Eyz;=(S?0GLA(s951tHXKN)`i&G2*fJ5K(_g;5Z{>MYI3r?RL~2YBSZ55b-nxxNdB=xucT8^o1?Qv-+o&8inTy~ISz@b6#JssgNf%d&j3XCl)+)4vpSp^4;d;=ZyD^USfCWPHi+OCTA==_ibr<cT%r&A31O>@TVlncF-lP1I1N*OQ>w(vysQlvQVxor*+ZD$^#5^t3Qa@*LuO)p)O%sLM@a1c*f@U**62Mk%KTR1mEzYCt(p?1po<K!)fe7<?hmYYF@lqP0*@vx<>TiRvVcO}X9SP!gZdSK-#U@N=m)@5P<rkhNE^^lL_@k@_+rs+oTdBuadP=*3vtAV^T6g+xpt4^4^NjJUCpwPWyaGt+9y%ie<AhQF&=@DmW{YGSqv^2-SKVyps6)+2qxg`W{~$er|AP=0r|P$=@DK=we?M3?YH%KyRnhr7eoKY4zW;eQZ-ROO^U()1DJjMU<XP;sIaLffpOGU4ot@514+a7)VDn3Dpv{=tuEIBB_#Dh-vuc7`t)=o!tWa2a@1+=YrP_z#HxQX9((=pjm24)%BOav|TE$-I7_%UX@_jNn!@!OdSvjSABFL7hy#ufv7wgmDV|n(%0ktM$X60hRFItY^c|PZ?BJW4*-W*-cr&91l3_sN6Lv7cT7lFC&$SJPcaqiH*8~uLVA?0gIIApC1Zmqt8JIx!St9BMKZ5t(gyoq4wTEmVmv^L=^#cTgb-f3agHDW(YWQnX*+FAj%PnVWLre#gK20>k8)cBbMf_@O$zbvc%u}Kyrc8OR#Q%EZdG7W3g_nHogGtGZBDY*fcbxMwHPg_ekfneEZzhHk!}d;sJ1SEz<lbNe)w=MKJxWj1Gl>=5|ZA;C^yDwB3d(4LH3on34M7{BYJm4&FllT0N${l>4<X>>bH;l)1e*-M4zU(8I!HHMiEm?@k_Vi&r9Ya54}NQifbOo*%HwS<uVRCgS!4zO2@H6vWf7HPHtIr4#(xX`Z?o`TSCvO&R`>M}0q)IHEA$&r7JB*P`b3yz;!39*#<7<$iq^`T@4P1j|j)Tl2h}IjZecY}|Z}=kcno2olaBxe2J%XXyn3HAJs+IQ*BAZx8-)W<nrWbW~8fV@Yl!FOc1bsQe}5S|=~3VNQK1bdT1hC_3(E-){n+N2NPv?UF-~zjR+R&FSH4h7iHj7DTX;p-u^C9k=WaI7ch%g`blQKN2Km1$1!;a<pJ-__=~AFZbX47}zrSf?<WwJJP<5)>dq5tpBqxew(g!6Z0ltQ>h0mh^$=yf>2%ft&x%+YsIUQ*T$>$0-~^TvzGXoaA8lU@bfZ+GSSnvAw!er<JI685{Rc7e!dcY4Y0-JWnUcXqQNLbPm|Y#v)5%*A%Ja|7|#9<rbW+l=3KBe<GeZ;OOZ-gstzIR5epW}iYfB)rAjmrcU#N~&pv4QhiKDNQfN1Vw3IGqtVHJCoL>B6hP76ODx<}lqP5i%lLPF@C5>0UnS(iAlu@?^3!-tE(uvu`Ej^LCJVhTbMrDz3E#7b7(QlSehwe>ZOKvyiPR}+b&9_p~0V4Pity`tv_(^}79g=s`h!1FcH#O=G<Ugnotc=@p-0i@YZOFe!(%naa@8sLBaTgRkk8USqPp(xj**DQ+dC311{dlZbFCcY2S&<b?UsvXbdB4M}oi3blVX!ckP?N_Be7v077vw7%;=d)#&4O!}%~4Xbb46MeAzDj$Zt0dh4G>3hBVHe!mH`uV6o2fwp-71*fS6sT3=I}U2ZKkMD`Czkhn?#5H0)e2#rwofrIg&`ur5SDdc!CufU^Lp`#7r#rVP&JlH9FgG)TCA3`rN2WyT2USC8i(5Tn-#{9DMMES9w->@%F{p%t$#`Z>r~L10(o{sw;hlh(C0Z$}7aGf^M-)ewN6O_T+&o!Ju6(-{K#&v>gz;77RnY0!gcoq*P+_y00VTU9(>eiixAIv%>$-FzRzACYRusq)z{UWVlar4(ZR+bzAI_JMTnA_MjVwml0zMaL!Nzb-#k>X75ExsNvLaZ#u{CoL^&y`$Gdg}{xW<nUBcp<v5kHThn)jA!n5^76E0P&XOB9|n`5aYDOQQoi*<q;YK7WYI9iY>O6!q1JcS;;<^-^O!@bvRN@Nw*{A(FkX=h*Xhuzurn4lvL*GC;hWol7z&qypu4!rVt@rz%Mn2_pJR1gf<ZMvl35E|3uAKz4kdTC+NsFj*^+5DX4ggj2_k(8Rr0ZPg^)ds&zUhIUd32y#f@-uFkXwBZ7p`r4DraA6{RMN?=O1WT6nNX+PB2hWNcqd52{MU=|CL8qhXjmPX)Usc&RR|hVv0zE1)AgbbmOzfKroq^p!bgTKvpKm0LZw!9+>1SgQ6T**r(Wp7Yogv3y5RM!IFcDeVxX)CbN^&g>zt^;L*<_CVVoN?$VeRbujC=bf{|l#?joDN%T90e>erNTEruQEz4T4?t|7&jY4}3)>`YeQJ@ZtU<YTE5<HRQ#t^)GH|Yvn{xIe9x!D)N<CJlG(+XPaP2??egHPJOzCRxrc)kCXVCweJQIC+R0Q7%9!6*3vH%8;F=MI6P8_whq5B#qd)l#dg;@5r%hc1e#jd3HD*pm@_BvsxZw&thCcY>NZ*Jh06>}dhyp1XYLvCfcIUp42C=!Fw>?rXa7jNJMEspxA0mbOcW^!|{vxm)F((v1u`w3c{X6bsgcn(i5%8FQClMpW1&TLPVpUaj<aJL*6t`f#l)ohx0Y$g1vn4_PzyE3a{o<6I@G{?1RcOWai<QCdrSQRf{FRE&7q*^C7k41(Pu0999d*JtXyq;mfR!N+ngWq9${Xmt(yHfm7R&@vqqUZ}i<nl8g+RjrZ2DrH~ManJ6Lm}Q&q~Eu3zLd<BCOpeQY!4th%%d?W=^Ft>4e-WhNo-$v7}S~?zKs^5pC0`KBX=<QP94A@Ja`)#aU<M;w$BLc%-p4wuBE132>F&8Z^vNM8MwT@+&WnlUehU*(itU~`+QKis8@#ca6bi?!ELPV@!%P_ESI4L4Ydo$UxnX5t;-GsE(q-X&>gM#H<N0qnuO*|%g>pLVanuRIb8`PnV7Z!8pGVO)hNYfz%`LB6BIc5^>X^Y<1I!W2ETzeYg$URYUq6hCkHA@n}TT>-`2l;TtI(MEN8M{Ca|xezy=AM7j#Rg#ea2{Ys~wLnwQ}I&z7LcIdAOoBwny;D@`#68>)*b<2C15ONH62y6C=vTxbc&<zcqu^^|{?$0ne~a5s11%t_TR2korQnM~BION=;nPG`Y37fx6d&U4|I{&bltbWPT7@kG(H>8;RXCfW_PQmW*iGGHYK<7R9gy*g;`f5Qr5DcOHhQ~rT<!=N#kL9elNI|u8rpuP*=D1nRRRu$Y`=!rTC?hk&RN08%g*=b*3q&m}|`>&{yCCytCR&`<>kEI?RJ4*JU1k~a&`j_s%xi>J`H6l$(=}Ni(i~o{mkzp8|-Eo5lDc6a@GX$VW@F@D~lW?K57e;Hp(uf2$Wv(ktyDARttg#a;9V7~6wL+KJ*H2D2gHU#0=ayhSn7c=Rzs(c#0GrT<J;#}STC2<o&`Z1=x5rwIX}^H3Ffp%Eo8;=Mt_s;S8gUCab0GSnP{yK(gt4AncuQ@p#*Ayq&K^P8ApjjgvIqa})Eb-w-Do&JiN)h3`;~xr)LqP*nd2_wRhMs7O#ZfIZh|fQu%xTQtpvWjq|3sVg)(ZSFy0>OW%5L?r*4X?q(*78QdC$PYywV8LQzD8y(=_X(cRE^9EcC0d{12aZkuKT#8(F^UY1`Yv^^~Xrm0gXQW;v((T>tVW~6A89>nKNc$LbQ0aohg9}Sal;p%>E_uFt;p+q;tuqPRQRTQ$DqlRk#t)X%NV$i#GFE^@hSkeyS<ury%Ynh{iEe55sMN6*{Vn5LFpfJW#^&cDEW4-76-9+2<5si3xIM6ZW;YQ)?fzcL3^yO6<bxL!x6U{b=TMH}oU-)qme!Ujzv@D!T1Tl)Tw2=lhr-Nu!bXXl;>1ND9UT0blJ}Wg2X&mBhxvip~Ge}x=4w0(c?)Y1Z?}b4-%dfa{CdPQ5BIf@9@dC6hdMTZqYdCW;Ae5Zs=8sXYv;6pi=asBZMp=1v@wWMZ;;>2Z9-xUOF}pv7d(Dz|HNb}J|Mq&eDfd??376e+4*!1hMESV4FzC;5>td*)^6k3pDHp%?l+!gPT1?fkm7~55VA^FhF9+R-3H&s!9WmQdj~%i1Wotaq?qi!F()3qizDn6S?Uon$JC_*?AGGSQ`|&I@rpmW?CEU&$q9Q+D!nNrxOjIFSX{>XT($C|C7?vC%&7+LmNKs!WZttSSKh){(LA)jWO#X}0->6Kn^gTG$DuD}iS>K2si|I=}P4BqRyy_9|rJk6qe9i~~O&tNI)vU_Emb7>S(N@U{dVfgit<34;E=)F556g$Rm5g_f4g;~`XPQ7+aj&ROG2T4391k)a4WTdN89BmubzMDa<FYija>=d7jCay~?;-Wzlj$p<YDz*}+SXRk4-u3OHfs(*DBhl!CEN|4B306=m%=wiJaQ7+Q{tOb*{Oo#L#4|sU2f_ky9>m31UAKDc~~8M-k`g2t(#GHz^Z+ak>rhR=})vek*d?SKX-ffY362jwogzhak`rOR&%<zo?*YxwhpeQ)-&jSq^Ym6m*n|5s`3U&>xY;Nw6!^P6!*t(Gn_4ygF9u}gO(#5O+LJ-7l(4cInRfHBpH4c88nN`RdaP({HzZmHt?;mu5S!82AcfdFTDAo0^j24ZDei(5-tvmh{|KrW`0x`sExusS82;_39v-N{4$MLBdU*TvEMWAnJ{mLSIjnD6)!9Btz4+B^p;UhM%mh(qfcB7oVoFfdTcLj6ThMUZ@KJwR~tGa-X05@ld*0O`&SydqGFyy1anT;gBW0+m^XsP78lBhNBsWnSlH-^{xZ}rYIi34Ypr8m5$-0G`T}R}Rs*`akX>I=8FcSb(J5qeorT1E(%?>5z0ARr&T7Mck~PUe+rm{r+&OS9CDVF4RCZ=Rkx{uIKE+yhOT6a>=eZbrM6T}9V()@vKDjm6$iK&`hvV_<xCY|(0yNH9?0K;n<uvkaRj7yXY?epWl${-(ZADsMkKf9~p9RpN3*@ymHhnI!>l&bdeTId?eGxHFLE|VS|F)<pNUsX1_Komw3kRRKYtWnOjh5{1x+S{;enC5ZnA5q)^(I~}BRuc>&ZAGU8y+Rj^JuKu2Iv{a#gfan+ZCW63D46C#vSo?8=Bp3qH`fDvUZlRzf0%NqEG;@Hpq(n5-}E;Y&KH9`a<_=OJIQ-IuWHZYU%QW_*KiVr}P`C9vg*2pE(@Y`2WF-MIgCLMm<3Qa@pDW-^(UH^Rd1=n2G^*RQ!@(#vjJD3j(lGR<t$1ZddbYVW$YnDgs}_Y#CX4i3Ppm&!?1x#kL_w#QPhb?T$Iuy}W-t-j^4=ggJVe{AnwP_`{tR%sq$#OC2<o$>)ht9<9)N^G>(l{-=&-i-2B)X+@MT=Y@Gq;@021vwfLV1H}1k;B4!y#}vE+?Y%VXDuOiPCiA{6qkgxgoEf=F+M(ZS&!h31UVC;F<bZwFl~kZ1Nn5Oye4}9c`}o5GRZPA;Wy)Q2$UEZb9Uc|H><u!d5_Id^ntc3n`tBBrCbA^bWp0yOvSH#zfl75@i#^{%ES+Ykc$Ip>g-JpBqM2&rcM!kFo5IiCH(Intn|u$eW=Vq&^=sp$_|?|74Gn+ImvO1wFSz!`M^1^;hWbYLP#jB|1P3#g_s$^)+UAx*0|>ywUeHcP`HC)V725dC=-jea!k$fyE2q@>+_GQ-npLwBj>-QO`ou4b{|{q#YDiy%ZZ`(?RlNF!iIP9?vj#qAwN0?m%jXOvvO7`uQEqK=^Rwi-m_D`+tFp0Rr1juLPxP&6>mDwBk*2;H&;~9aIh#NtZ$p9V02_g3YY=HKfAg3;fn4un(_9@{A-w;CgDvS=+#?-B(P#A~b*1V3mu|eMj}9{TF+8p2uuCS-3|SHVC|d8cY8T0<qANWs<JY771|7h3zIBSXULd|0oWneJKhs(YXm@>VBns;s=73}|TRyS(aM~?r4Ny}9)HB14SBNQNB*Zdh`+%(7%<}@{!r{`RK4+Vv^RN}xx@00La|zqH6Q+j!;_hA{7Fy~(#H&I(*2@Sz^#C3G8Xd|;Hs7iu<`9ar@rEBQIqJXT)NHEAq#@jSHDx6hZ?r(&po|TBU8@l`h@(3w+{bD_J)$rj1rnN$=PZJcK;tRd*oj*``@>YA;<uJxX$^M7-(~m=tO88mS1;p_y5cWLN>#OY?b)-qd#iS<05WWv=H0Qg=`cOOj~`{;o4#*aXx@uDfL2gD#=)sx5*{E+d&AERRX@~ssv58Q@1#m{&>Y33S~G9b52D^~xpf;3U5{Uc6O<JizTxU>12h|HU0Z=}v<$T(%lvuPrtxQB7FaLFFKCHT{64vjp-RQeg0%FHe(ol;m1*&(5_=_XWarEhXjG=Lx7&(6fzRtLJ+|gde_`2LE@VdPhVENNn~H<@J?rk3N>RK8eA%F@sX&tDO%kW4L;PWrue_fAP3jh9dn%%rG*N{R{p4Cl0<V_$voC-VYvjiV$90zatEIZ2zHlzbqXlsdP(P{}B_kre<7_km_)si+%YditbG0IK`(5p1wmsJD&HUGq%>8NPLcnf*h{ncW46>kzP~>HJX%QSIzMmT4K?*#JGu{~{zvSn8H{IAhO58yO_M_v^@dq0cJJ~2RgnK>fzd?bNSfs`GXWEoi$WBSbWCrc?GndVa1nSLT>7~NypB*hl<yUS_Umm6r!FeLnp9^u{`KSeDc{jHe!Qt^McA9-zVr$tGjYaEu8_sXi;uJ}jODu;jN`E!@Z*Gke!K3`0VYc>`(oNj_DtSFgN-NQ!t}gWRpYK2t&p|vFG4DZIzBBn5<Z5oKxDN;SXrh}j@*}{0OH_vl-g>3{6^XbEl555CC^q#czJ=sbUKUh<ef7o4Cuu1z05yen9MY_FUwKwN6mK8~VrFTp(;7>l%DDMSR{h81_duht27IuP)iZhga&4!T!xu8XhS_rcdgG(p|9$e>Q?3>xGVuayU*;Q~LSmKHZ;+ji%h2e7SI;|3wa56AHtH`e=MwV{a$*16aA6u!H#GUnzo++g@e7_^l=>74hKj<?XVR<b3{SM=%u;FfiXu`Kur=9ofVq>5GLKbtJaNc>7vc|Rp_?byjeU#gWqolmBX<a-N%_D4XQ@gDK~7btZ-sOGDdy*R^{}dTZ~QWQclt-ItM$~irOPo+Z!u-OhCOOUutO5hwOzCUrp<lbmWf;U*xKlr^~QcqG(sAbhD&w+_M$njh25j9-`iJdqxb2;f+LvyBz0^mjBUS6@1<VW*bGM7-42_}r+-aw1vs}z$)fICKoft9KW_H^{2xziFnl0z#`aErL9S<I-H`lyXPx+fRWo6*E|kFJquk%lf@dl9WzshrR!MFdhdxE)?>wm4aiORumfH<=Rc_@rZ<%;IRf_+Db$5r1%Gg+pI_asW61*Al8xynTjNf01c^WqTlm4y4wLkFc2Nc+@vB?YACwbYxY_HP$3(b*VnO(>8)odQFKiFuFGNhn1IlN!=-xRV>^_Zg+;g6K<cg-;-ykAb<f<9>yHq#6=Q_DtL|F-u&xv;!^=3zUj@!p~J)*ux-S@T{9U>|9>p7Tk;1J)Y3EKnb`@@f^A9Sfqe&k+jut-_7AF#XfFB&*Q&Eo>TAUFGyxDP6%pPOtdXx|Und6Hwn;MMF{f5s@Arzh9uhGwcSGv!QWYoSbyS_ehDE>(kQyAD%4BY5'
+CN_EMBEDDED_930955_ROWS = 2585
+CN_EMBEDDED_930955_RAW_BYTES = 12928
+CN_EMBEDDED_930955_CRC32 = 4289036388
+CN_ZZHL_PRE_INDEX_CODE = 'H00922'
+CN_CSINDEX_CANDIDATES = {'H20955': ['H20955']}
+CN_H_PROXY_SECIDS = {'1.H00016': '1.000016', '1.H00852': '1.000852', '1.H00905': '1.000905', '1.H11077': '1.000012'}
+CN_DK_ZZ1000_CODE = '000852'
+CN_DK_SZ50_CODE = '000016'
+CN_DK_HS300_CODE = '000300'
+CN_DK_ZZ500_CODE = '000905'
+CN_DK_CYB_CODE = '399006'
+CN_DK_ZZ1000_SECID = '1.000852'
+CN_DK_SZ50_SECID = '1.000016'
+CN_DK_HS300_SECID = '1.000300'
+CN_DK_ZZ500_SECID = '1.000905'
+CN_DK_CYB_SECID = '0.399006'
+CN_DK_COLS = ['DK_ZZ1000', 'DK_SZ50', 'DK_HS300', 'DK_ZZ500', 'DK_CYB']
+CN_DK_PUBLICATION_DATES = {'DK_SZ50': pd.Timestamp('2004-01-02'), 'DK_HS300': pd.Timestamp('2005-04-08'), 'DK_ZZ500': pd.Timestamp('2007-01-15'), 'DK_CYB': pd.Timestamp('2010-06-01'), 'DK_ZZ1000': pd.Timestamp('2014-10-17')}
+CN_DK_NAMES = {'DK_ZZ1000': '中证1000', 'DK_SZ50': '上证50', 'DK_HS300': '沪深300', 'DK_ZZ500': '中证500', 'DK_CYB': '创业板'}
+CN_DK_BIAS_N = 45
+CN_DK_MOM_DAY = 20
+CN_DK_VOL_SCALE_ENABLED = True
+CN_DK_TARGET_VOL = 0.14
+CN_DK_VOL_WINDOW = 40
+CN_DK_MAX_LEV = 1.5
+CN_DK_MIN_LEV = 0.1
+CN_DK_TRADING_DAYS = CN_TRADING_DAYS
+CN_DK_SCALE_THRESHOLD = 0.25
+CN_DK_TOP_N = 1
+ADK_OFFICIAL_PAIR_ORDER = ('SZ50/ZZ500', 'SZ50/ZZ1000', 'SZ50/CYB', 'HS300/ZZ500', 'HS300/ZZ1000', 'HS300/CYB', 'ZZ500/CYB', 'ZZ1000/CYB')
+ADK_OFFICIAL_PAIRS = set(ADK_OFFICIAL_PAIR_ORDER)
+ADK_EXCLUDED_PAIR_ORDER = ('SZ50/HS300', 'ZZ500/ZZ1000')
+ADK_EXCLUDED_PAIRS = set(ADK_EXCLUDED_PAIR_ORDER)
+ADK_PRIMARY_PROFIT_PAIR_ORDER = ADK_OFFICIAL_PAIR_ORDER
+ADK_PRIMARY_PROFIT_PAIRS = ADK_OFFICIAL_PAIRS
+ADK_WEAK_PAIR_ORDER = ()
+ADK_WEAK_PAIRS = set(ADK_WEAK_PAIR_ORDER)
+ADK_INVALID_PAIR_ORDER = ADK_EXCLUDED_PAIR_ORDER
+ADK_INVALID_PAIRS = set(ADK_INVALID_PAIR_ORDER)
+CN_DK_RISK_GATE_ENABLED = False
+CN_DK_RISK_GATE_ENTER = 0.15
+CN_DK_RISK_GATE_EXIT = 0.08
+CN_DK_RISK_GATE_DEFENSE_SCALE = 0.5
+CN_DK_RISK_GATE_COOLDOWN_DAYS = 0
+CN_DK_PAIR_SCORE_DECAY_ENABLED = False
+CN_DK_PAIR_SCORE_DECAY_RATIO = 0.4
+CN_DK_PAIR_SCORE_RECOVERY_RATIO = 0.7
+CN_DK_PAIR_SCORE_DERISK_SCALE = 0.0
+CN_DK_PAIR_SCORE_DECAY_WARMUP_DAYS = 5
+CN_DK_R2_QUALITY_ENABLED = True
+CN_DK_R2_QUALITY_THRESHOLD = 0.05
+CN_DK_SAME_SIDE_OVERHEAT_ENABLED = True
+CN_DK_SAME_SIDE_OVERHEAT_ENTER = 0.22
+CN_DK_SAME_SIDE_OVERHEAT_EXIT = 0.18
+CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
+CN_DK_DD_WARNING_ORIGINAL_THRESHOLD = 0.07
+CN_DK_DD_WARNING_ORIGINAL_COOLDOWN_DAYS = 3
+
+def _dk_score_decay_status_text():
+    if CN_DK_PAIR_SCORE_DECAY_ENABLED:
+        return f'Score衰减/恢复 {CN_DK_PAIR_SCORE_DECAY_RATIO:.0%}/{CN_DK_PAIR_SCORE_RECOVERY_RATIO:.0%}'
+    return 'Score衰减关闭'
+CN_DK_INDICES = {'SZ50': {'col': 'DK_SZ50', 'src': 'dk'}, 'HS300': {'col': 'DK_HS300', 'src': 'dk'}, 'ZZ500': {'col': 'DK_ZZ500', 'src': 'dk'}, 'ZZ1000': {'col': 'DK_ZZ1000', 'src': 'dk'}, 'CYB': {'col': 'DK_CYB', 'src': 'dk'}}
+
+def _dk_is_official_pair(pair):
+    return str(pair) in ADK_OFFICIAL_PAIRS
+CN_DK_INDEX_NAMES = {'SZ50': '上证50', 'HS300': '沪深300', 'ZZ500': '中证500', 'ZZ1000': '中证1000', 'CYB': '创业板'}
+CN_MARKET_HOLIDAYS = {'2026-01-01', '2026-01-02', '2026-01-03', '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23', '2026-04-04', '2026-04-05', '2026-04-06', '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05', '2026-06-19', '2026-06-20', '2026-06-21', '2026-09-25', '2026-09-26', '2026-09-27', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07'}
+# 2027 baseline: State Council notice 2026 No. 10 and regular exchange weekends.
+# Reconcile with the SSE/SZSE annual closure notices once published.
+CN_MARKET_HOLIDAYS.update({'2027-01-01', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12', '2027-04-05', '2027-05-03', '2027-05-04', '2027-05-05', '2027-06-09', '2027-09-15', '2027-10-01', '2027-10-04', '2027-10-05', '2027-10-06', '2027-10-07'})
+CN_MARKET_HOLIDAY_YEARS = {2026, 2027}
+CN_MARKET_CALENDAR_COVERAGE_NOTE = 'A股交易日历覆盖2026–2027年；2027年按国办发明电〔2026〕10号和交易所周末规则编制，待交易所年度公告复核。'
+US_ROT_COMMISSION = 0.001
+US_TRADING_DAYS = 252
+US_ROT_FINANCING_BENCHMARK = 'BIL'
+US_ROT_FINANCING_SPREAD_BPS = 100
+US_ROT_BASE_ASSETS = {'QQQM': {'proxy': 'QQQ', 'label': 'Nasdaq 100'}, 'EMXC': {'proxy': 'EMXC', 'label': '新兴市场(除中国)'}, 'GLDM': {'proxy': 'GLD', 'label': '黄金'}, 'PDBC': {'proxy': 'DBC', 'label': '大宗商品'}, 'IBIT': {'proxy': 'BTC-USD', 'label': '比特币'}}
+US_ROT_MACRO_ASSETS = {'DBMF': {'proxy': 'DBMF', 'label': 'CTA/Managed Futures'}, 'KMLM': {'proxy': 'KMLM', 'label': 'CTA/KFA Managed Futures'}}
+US_ROT_ASSETS = {**US_ROT_BASE_ASSETS, **US_ROT_MACRO_ASSETS}
+US_ROT_BASE_POOL = [cfg['proxy'] for cfg in US_ROT_BASE_ASSETS.values()]
+US_ROT_MACRO_POOL = [cfg['proxy'] for cfg in US_ROT_MACRO_ASSETS.values()]
+US_ROT_POOL = US_ROT_BASE_POOL + US_ROT_MACRO_POOL
+SUBB_INFLATION_GATE_TICKERS = ('DBC', 'TLT')
+SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(US_ROT_POOL + ['BIL', 'SPY'] + list(SUBB_INFLATION_GATE_TICKERS)))
+SUBB_REQUIRED_LIVE_PRICE_TICKERS = tuple(US_ROT_ASSETS)
+SUBB_OPTIONAL_MACRO_TICKERS = ('UUP',)
+US_ROT_FUTURES = {'QQQM', 'GLDM'}
+_ROT_PROXY_TO_LIVE = {cfg['proxy']: live for live, cfg in US_ROT_ASSETS.items()}
+US_ROT_TARGET_VOL = 0.3
+US_ROT_MAX_LEV = 1.5
+US_ROT_VOL_WINDOW = 40
+US_ROT_LB = 160
+US_ROT_LBS = (160, 260, 390)
+US_ROT_LBS_DEFAULT = (160, 260, 390)
+US_ROT_WINDOW_WEIGHTS = {160: 0.6, 260: 0.3, 390: 0.1}
+US_ROT_WINDOW_WEIGHT_LABEL = '160/260/390=60%/30%/10%'
+US_ROT_LB = US_ROT_LBS[1]
+US_ROT_MAX_LB = max(US_ROT_LBS)
+US_ROT_VOL_LB = 20
+US_ROT_MIN_TURNOVER = 0.0
+US_ROT_ABS_THRESHOLD = 0.0
+US_ROT_TOP_N = 2
+US_ROT_REBALANCE_THRESHOLD = 1.0
+SUBB_V75_OFFICIAL_WEIGHT = 0.5
+SUBB_V75_EMA_WEIGHT = 0.5
+SUBB_V75_EMA_HALF_LIFE = 70
+SUBB_V75_EMA_ABS_THRESHOLD = 0.15
+SUBB_V75_EMA_VOL_MODE = 'ewma6m_1vol'
+SUBB_V75_EMA_VOL_HALFLIFE_DAYS = int(round(US_TRADING_DAYS * 6 / 12))
+SUBB_BLEND_VOL_NOTE = '混合后不再做组合级二次波动率归一；最终波动由官方腿与EMA腿各自VolScale及50/50日收益混合共同决定。'
+
+def _v78_subb_inflation_participation_note():
+    base_members = '/'.join(US_ROT_BASE_POOL)
+    macro_members = '/'.join(US_ROT_MACRO_POOL)
+    return f'V7.9池: {base_members}/{macro_members}；官方腿仅在通胀开关ON时纳入{macro_members}；EMA/Bias/LogVol腿始终US_ROT_POOL全池排名；UUP仅作观察指标。'
+
+def _subb_window_lbs_for_display():
+    try:
+        values = list(US_ROT_LBS)
+        values = [int(v) for v in values[:3]]
+        if len(values) == 3:
+            return tuple(values)
+    except Exception:
+        pass
+    return US_ROT_LBS_DEFAULT
+
+def _subb_window_label_for_display(separator='/'):
+    return separator.join((str(lb) for lb in _subb_window_lbs_for_display()))
+
+def _v78_subb_default_rule_text(include_ema_vol_mode=True):
+    ema_mode = f', {SUBB_V75_EMA_VOL_MODE}' if include_ema_vol_mode else ''
+    return f"V7.9 Sub-B四腿默认Top{US_ROT_TOP_N}：官方腿25%({_subb_window_label_for_display('/')}, {US_ROT_WINDOW_WEIGHT_LABEL}) + EMA腿25%(hl{SUBB_V75_EMA_HALF_LIFE}/{SUBB_V75_EMA_ABS_THRESHOLD:.0%}{ema_mode}) + Bias腿25% + LogVol腿25%；{_v78_subb_inflation_participation_note()}"
+
+def _v78_subb_inflation_status_text(pressure_on):
+    official = '🟢 官方腿宏观池开启：DBMF/KMLM参与官方腿候选' if bool(pressure_on) else '🔴 官方腿宏观池关闭：DBMF/KMLM不参与官方腿候选'
+    other = '🟢 EMA/Bias/LogVol全池开启：DBMF/KMLM始终参与这三条腿排名；UUP仅作观察指标'
+    return f'{official}\n{other}'
+V78_SUBA_V77_WEIGHT = 1.0
+V78_SUBA_NEW_TV10_WEIGHT = 0.0
+V80_ADK_PRODUCTION_MODE = 'new_adk_only_score_hot'
+V80_ADK_PRODUCTION_WEIGHT = 1.0
+V78_ADK_V77_WEIGHT = 0.5
+V78_ADK_NEW_PRIMARY_WEIGHT = 0.5
+V78_SUBB_V77_WEIGHT = 0.5
+V78_SUBB_NEW_BIAS_WEIGHT = 0.25
+V78_SUBB_NEW_LOGVOL_WEIGHT = 0.25
+V78_LABEL = 'V8.0'
+V78_SUBA_NEW_LABEL = 'New A TV1.0'
+V78_ADK_NEW_LABEL = 'New ADK all10 score-hot'
+V78_SUBB_BIAS_LABEL = 'New B bias-level'
+V78_SUBB_LOGVOL_LABEL = 'New B log-weighted'
+V78_SUBA_EXECUTION_MODE = 'component_net'
+V78_ADK_EXECUTION_MODE = 'component_net_with_net_exposure_display'
+V78_SUBB_EXECUTION_MODE = 'component_net_with_volreg'
+V80_QUERY_COMPACT_DISPLAY = True
+V78_ADK_NEW_SCORE_HOT_ENTER = 80.0
+V78_ADK_NEW_SCORE_HOT_EXIT = 40.0
+V78_ADK_NEW_SCORE_HOT_SCALE = 0.0
+V78_SUBA_NEW_MA = 40
+V78_SUBA_NEW_MOM_DAY = 20
+V78_SUBA_NEW_WEIGHT_END = 3.0
+V78_SUBA_NEW_SCORE_THRESHOLD = 10.0 / 10000.0
+V78_SUBA_NEW_ABS_DAY = 20
+V78_SUBA_NEW_ABS_THRESHOLD = 0.02
+V78_SUBA_NEW_TARGET_VOL = 0.3
+V78_SUBA_NEW_VOL_WINDOW = 80
+V78_SUBA_NEW_MAX_LEV = 1.0
+US_ROT_BTC_TICKER = 'BTC-USD'
+US_ROT_BTC_START = pd.Timestamp('2022-01-01')
+US_ROT_BTC_MAX_W = 0.3
+US_ROT_EMXC_BT_START = pd.Timestamp('2017-08-01')
+US_ROT_EMXC_BT_PROXY = 'EEM'
+US_ROT_VOLREG_ENABLED = True
+US_ROT_VOLREG_SHORT_W = 10
+US_ROT_VOLREG_LONG_W = 250
+US_ROT_VOLREG_THRESHOLD = 1.8
+US_ROT_VOLREG_EXIT_THRESHOLD = 1.4
+US_ROT_VOLREG_DEFENSE_SCALE = 0.0
+US_ROT_VOLREG_SCALE_ASSETS = ('QQQ', 'EMXC')
+SUBB_DBC_PROFIT_GUARD_ENABLED = False
+SUBB_DBC_PROFIT_GUARD_ASSET = 'DBC'
+SUBB_DBC_PROFIT_GUARD_CASH_ASSET = 'BIL'
+SUBB_DBC_PROFIT_GUARD_RETAIN_L1 = 0.5
+SUBB_DBC_PROFIT_GUARD_RETAIN_L2 = 0.25
+SUBB_DBC_PROFIT_GUARD_SCALE_L1 = 0.67
+SUBB_DBC_PROFIT_GUARD_SCALE_L2 = 0.0
+SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT = 1e-06
+US_ROT_VOLREG_BACKTEST_NOTE = f"VolReg回测口径: T日收盘信号 -> T+1调整后开盘执行；仅将{'/'.join(US_ROT_VOLREG_SCALE_ASSETS)}目标暴露清零，削减权重转BIL；黄金、CTA、BTC不直接降档。"
+PROD_USE_TIMING = False
+PROD_ABS_MOM_LB = 6
+PROD_SMA_WINDOW = 12
+PROD_SMA_BAND = 0.03
+PROD_BLEND_A = 0.5
+PROD_COMMISSION = 0.001
+PROD_REBAL_MONTH = 12
+PROD_CASH = 'BIL'
+PROD_PORTFOLIO = {'VTI': {'w': 0.2, 'label': 'US Total Market', 'proxy': 'VTI', 'cls': 'equity'}, 'QQQM': {'w': 0.1, 'label': 'US Nasdaq 100', 'proxy': 'QQQ', 'cls': 'equity'}, 'AVUV': {'w': 0.1, 'label': 'US Small Cap Value', 'proxy': 'AVUV', 'cls': 'equity'}, 'VEA': {'w': 0.1, 'label': 'Intl Developed', 'proxy': 'VEA', 'cls': 'equity'}, 'AVDV': {'w': 0.1, 'label': 'Intl Small Cap Value', 'proxy': 'AVDV', 'cls': 'equity'}, 'VGIT': {'w': 0.15, 'label': 'US Interm Treasury', 'proxy': 'VGIT', 'cls': 'bond'}, 'DBMF': {'w': 0.025, 'label': 'Managed Futures (DBMF)', 'proxy': 'DBMF', 'cls': 'alt'}, 'KMLM': {'w': 0.025, 'label': 'Managed Futures (KMLM)', 'proxy': 'KMLM', 'cls': 'alt'}, 'GLDM': {'w': 0.15, 'label': 'Gold', 'proxy': 'GLD', 'cls': 'commodity'}, 'IBIT': {'w': 0.05, 'label': 'Bitcoin', 'proxy': 'BTC-USD', 'cls': 'crypto'}}
+SUBC_FORMAL_START = pd.Timestamp('2020-12-03')
+SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE = pd.Timestamp('2024-01-12')
+PROD_VS_ENABLED = True
+PROD_VS_SIGNAL_TICKER = 'SPY'
+PROD_VS_SCALE_CLASSES = frozenset({'equity'})
+PROD_VS_TARGET_VOL = 0.15
+PROD_VS_VOL_WINDOW = 15
+PROD_VS_MAX_LEV = 1.5
+PROD_VS_MIN_LEV = 0.5
+PROD_VS_THRESHOLD = 0.35
+PROD_VS_SPREAD_BPS = 100
+PROD_VS_REBAL_COST_BPS = 6
+PROD_GOLD_VS_ENABLED = True
+PROD_GOLD_VS_SIGNAL_TICKER = 'GLD'
+PROD_GOLD_VS_SHORT_WINDOW = 30
+PROD_GOLD_VS_LONG_WINDOW = 252
+SUBC_STANDALONE_ENABLED = True
+US_ALL_TICKERS = sorted(set(list(SUBB_REQUIRED_PRICE_TICKERS) + list(SUBB_OPTIONAL_MACRO_TICKERS) + [US_ROT_EMXC_BT_PROXY] + [c['proxy'] for c in PROD_PORTFOLIO.values()] + list(US_ROT_ASSETS.keys()) + list(PROD_PORTFOLIO.keys())))
+ACTIVE_COMBINED_WEIGHTS = {'Sub-A': 0.15, 'Sub-A-DK': 0.15, 'Sub-B': 0.4, 'Sub-C': 0.3}
+ROLLBACK_COMBINED_WEIGHTS = {'Sub-A': 0.15, 'Sub-A-DK': 0.15, 'Sub-B': 0.4, 'Sub-C': 0.3}
+COMBINED_WEIGHTS = ACTIVE_COMBINED_WEIGHTS
+COMBINED_DISPLAY_ORDER = ['Sub-A', 'Sub-A-DK', 'Sub-B', 'Sub-C']
+PERFORMANCE_COMBO_WEIGHTS = {'Sub-A': 0.15, 'Sub-A-DK': 0.15, 'B7.8': 0.2, 'B7.9': 0.2, 'Sub-C': 0.3}
+PERFORMANCE_COMBO_ORDER = list(PERFORMANCE_COMBO_WEIGHTS)
+PERFORMANCE_COLUMNS = PERFORMANCE_COMBO_ORDER + ['Combined']
+PERFORMANCE_STANDARD_WINDOWS = (('Full', None), ('10Y', pd.DateOffset(years=10)), ('5Y', pd.DateOffset(years=5)), ('3Y', pd.DateOffset(years=3)), ('1Y', pd.DateOffset(years=1)))
+PERFORMANCE_STANDARD_MIN_DAILY_ROWS = 20
+
+def _combined_weight_label():
+    return '/'.join((str(int(round(COMBINED_WEIGHTS[name] * 100))) for name in COMBINED_DISPLAY_ORDER if COMBINED_WEIGHTS.get(name, 0) > 0))
+
+def _rollback_weight_label():
+    return '/'.join((str(int(round(ROLLBACK_COMBINED_WEIGHTS[name] * 100))) for name in COMBINED_DISPLAY_ORDER if ROLLBACK_COMBINED_WEIGHTS.get(name, 0) > 0))
+
+def _performance_combo_weights():
+    total = sum((PERFORMANCE_COMBO_WEIGHTS[name] for name in PERFORMANCE_COMBO_ORDER))
+    return {name: PERFORMANCE_COMBO_WEIGHTS[name] / total for name in PERFORMANCE_COMBO_ORDER}
+
+def _performance_combo_weight_label():
+    return '/'.join((str(int(round(PERFORMANCE_COMBO_WEIGHTS[name] * 100))) for name in PERFORMANCE_COMBO_ORDER))
+PORTFOLIO_ADVISORY_SCENARIO = 'advisory_dd_3_10_month_end'
+PORTFOLIO_SUBA_ADVISORY_SCENARIO = 'advisory_suba_dd_5_8_weekly'
+PORTFOLIO_ADVISORY_OUTPUT_DIR = os.path.join('outputs', 'portfolio_v77_current')
+PORTFOLIO_ADVISORY_CURVE_FILE = 'scenario_economic_curve.csv'
+PORTFOLIO_ADVISORY_RETURNS_FILE = 'aligned_sleeve_returns.csv'
+PORTFOLIO_RISK_GOVERNANCE_FILE = 'level8_risk_governance.csv'
+PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE = os.path.join('quant_param_scan_runs', '20260512_v77_five_sleeve_real_subd_v20_rebalance_validation', 'aligned_five_sleeve_real_subd_returns.csv')
+
+def _advisory_pct(value):
+    try:
+        if value is None or pd.isna(value):
+            return 'n/a'
+        return f'{float(value):.2%}'
+    except Exception:
+        return 'n/a'
+
+def _advisory_weight_pct(value):
+    try:
+        if value is None or pd.isna(value):
+            return 'n/a'
+        return f'{float(value):.0%}'
+    except Exception:
+        return 'n/a'
+
+def _advisory_target_weight(base_weight, prior_dd, boost_dd=0.03, cut_dd=0.1, step=0.05):
+    if prior_dd is None or pd.isna(prior_dd):
+        return base_weight
+    if prior_dd >= -boost_dd:
+        return base_weight + step
+    if prior_dd <= -cut_dd:
+        return max(base_weight - step, 0.0)
+    return base_weight
+
+def _latest_prior_nav_drawdown(ret_df, sleeve):
+    if sleeve not in ret_df.columns:
+        return None
+    nav = (1.0 + pd.to_numeric(ret_df[sleeve], errors='coerce').fillna(0.0)).cumprod()
+    prior_peak = nav.cummax().shift(1)
+    prior_dd = nav.shift(1) / prior_peak - 1.0
+    value = prior_dd.iloc[-1] if len(prior_dd) else np.nan
+    return float(value) if pd.notna(value) else None
+
+def _csv_latest_date(path):
+    if not os.path.exists(path):
+        return None
+    df = pd.read_csv(path, usecols=['date'], parse_dates=['date'])
+    if df.empty:
+        raise ValueError(f'{path} has no rows')
+    latest = pd.to_datetime(df['date'], errors='coerce').dropna()
+    if latest.empty:
+        raise ValueError(f'{path} has no valid date rows')
+    return latest.max().normalize()
+
+def _latest_required_close_date(asof_date=None, max_calendar_lag=None):
+    current = pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
+    if max_calendar_lag is not None:
+        return pd.Timestamp(current - pd.Timedelta(days=int(max_calendar_lag))).normalize()
+    return pd.Timestamp(current - pd.offsets.BDay(1)).normalize()
+
+def _us_observed_holiday(month, day, year):
+    holiday = pd.Timestamp(year=year, month=month, day=day)
+    if holiday.weekday() == 5:
+        return holiday - pd.Timedelta(days=1)
+    if holiday.weekday() == 6:
+        return holiday + pd.Timedelta(days=1)
+    return holiday
+
+def _us_nth_weekday(year, month, weekday, occurrence):
+    first = pd.Timestamp(year=year, month=month, day=1)
+    offset = (weekday - first.weekday()) % 7 + 7 * (occurrence - 1)
+    return first + pd.Timedelta(days=offset)
+
+def _us_last_weekday(year, month, weekday):
+    last = pd.Timestamp(year=year, month=month, day=1) + pd.offsets.MonthEnd(0)
+    return last - pd.Timedelta(days=(last.weekday() - weekday) % 7)
+
+def _gregorian_easter(year):
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = (h + l - 7 * m + 114) % 31 + 1
+    return pd.Timestamp(year=year, month=month, day=day)
+XNYS_AD_HOC_CLOSURES = frozenset(pd.to_datetime(['2004-06-11', '2007-01-02', '2012-10-29', '2012-10-30', '2018-12-05', '2025-01-09']).normalize())
+_US_MARKET_HOLIDAY_CACHE = {}
+
+def _us_market_holidays(year):
+    year = int(year)
+    cached = _US_MARKET_HOLIDAY_CACHE.get(year)
+    if cached is not None:
+        return cached
+    new_year = pd.Timestamp(year=year, month=1, day=1)
+    if new_year.weekday() == 6:
+        new_year += pd.Timedelta(days=1)
+    holidays = {new_year, _us_nth_weekday(year, 1, 0, 3), _us_nth_weekday(year, 2, 0, 3), _gregorian_easter(year) - pd.Timedelta(days=2), _us_last_weekday(year, 5, 0), _us_observed_holiday(7, 4, year), _us_nth_weekday(year, 9, 0, 1), _us_nth_weekday(year, 11, 3, 4), _us_observed_holiday(12, 25, year)}
+    if year >= 2022:
+        holidays.add(_us_observed_holiday(6, 19, year))
+    holidays.update((value for value in XNYS_AD_HOC_CLOSURES if value.year == year))
+    result = frozenset((pd.Timestamp(value).normalize() for value in holidays))
+    _US_MARKET_HOLIDAY_CACHE[year] = result
+    return result
+
+def _is_us_market_session(date_value):
+    session = pd.Timestamp(date_value).normalize()
+    return session.weekday() < 5 and session not in _us_market_holidays(session.year)
+
+def _assert_us_next_session(previous_date, date, *, context='US execution'):
+    previous, current = (pd.Timestamp(previous_date), pd.Timestamp(date))
+    for value in (previous, current):
+        if pd.isna(value) or value.tzinfo is not None or value != value.normalize() or (not _is_us_market_session(value)):
+            raise ValueError(f'{context}: invalid market session {value}')
+    expected = previous + pd.Timedelta(days=1)
+    while not _is_us_market_session(expected):
+        expected += pd.Timedelta(days=1)
+    if current != expected:
+        raise ValueError(f'{context}: missing/invalid next market session; expected {expected.date()}, got {current.date()}')
+
+def _assert_us_execution_session(date, close_df, *, context='US execution'):
+    current = pd.Timestamp(date)
+    if pd.isna(current) or current.tzinfo is not None or current != current.normalize() or (not _is_us_market_session(current)):
+        raise ValueError(f'{context}: invalid market session {current}')
+    if close_df is not None and len(close_df):
+        index = close_df.index
+        if not isinstance(index, pd.DatetimeIndex) or not index.is_monotonic_increasing or index.has_duplicates:
+            raise ValueError(f'{context}: invalid daily price index')
+        position = index.searchsorted(current)
+        if position == 0 or position == len(index) or index[position] != current:
+            raise ValueError(f'{context}: missing execution session or preceding close for {current.date()}')
+        _assert_us_next_session(index[position - 1], current, context=context)
+    else:
+        raise ValueError(f'{context}: missing preceding close history')
+
+def _is_us_early_close_session(date_value):
+    session = pd.Timestamp(date_value).normalize()
+    if not _is_us_market_session(session):
+        return False
+    thanksgiving = _us_nth_weekday(session.year, 11, 3, 4)
+    if session == thanksgiving + pd.Timedelta(days=1):
+        return True
+    if session.month == 12 and session.day == 24:
+        return True
+    july_fourth = pd.Timestamp(year=session.year, month=7, day=4)
+    return session == july_fourth - pd.Timedelta(days=1) and session.weekday() < 5
+
+def _latest_us_required_close_date(asof_date=None):
+    if asof_date is None:
+        bj_now = beijing_now()
+        if bj_now.tzinfo is None:
+            bj_now = bj_now.replace(tzinfo=ZoneInfo('Asia/Shanghai'))
+        else:
+            bj_now = bj_now.astimezone(ZoneInfo('Asia/Shanghai'))
+        now_et = bj_now.astimezone(ZoneInfo('America/New_York'))
+        current = pd.Timestamp(now_et.date()).normalize()
+        close_hour = 13 if _is_us_early_close_session(current) else 16
+        current_completed = _is_us_market_session(current) and (now_et.hour, now_et.minute) >= (close_hour, 0)
+        candidate = current if current_completed else current - pd.Timedelta(days=1)
+    else:
+        current = pd.Timestamp(asof_date).normalize()
+        candidate = current - pd.Timedelta(days=1)
+    for _ in range(14):
+        if _is_us_market_session(candidate):
+            return candidate
+        candidate -= pd.Timedelta(days=1)
+    raise poe.BotError(f'XNYS calendar cannot resolve a completed session before {current.date().isoformat()}.')
+
+def _drop_us_unconfirmed_rows(frame, expected_date):
+    if frame is None or len(frame) == 0:
+        return frame
+    dates = pd.DatetimeIndex(pd.to_datetime(frame.index)).normalize()
+    cutoff = pd.Timestamp(expected_date).normalize()
+    return frame.loc[dates <= cutoff].copy()
+
+def _is_cn_required_close_day(date_value):
+    dt = pd.Timestamp(date_value).normalize()
+    if dt.year not in CN_MARKET_HOLIDAY_YEARS:
+        warnings.warn(f'CN market holiday calendar is not configured for {dt.year}; treating the session as unavailable.', RuntimeWarning, stacklevel=2)
+        return False
+    return dt.weekday() < 5 and dt.strftime('%Y-%m-%d') not in CN_MARKET_HOLIDAYS
+_CN_VERIFIED_CALENDAR_START = pd.Timestamp('2010-02-22')
+_CN_VERIFIED_CALENDAR_END = pd.Timestamp('2025-12-31')
+_CN_VERIFIED_CLOSED_DAYS = pd.DatetimeIndex(pd.to_datetime('2010-04-05 2010-05-03 2010-06-14 2010-06-15 2010-06-16 2010-09-22 2010-09-23 2010-09-24 2010-10-01 2010-10-04 2010-10-05 2010-10-06 2010-10-07 2011-01-03 2011-02-02 2011-02-03 2011-02-04 2011-02-07 2011-02-08 2011-04-04 2011-04-05 2011-05-02 2011-06-06 2011-09-12 2011-10-03 2011-10-04 2011-10-05 2011-10-06 2011-10-07 2012-01-02 2012-01-03 2012-01-23 2012-01-24 2012-01-25 2012-01-26 2012-01-27 2012-04-02 2012-04-03 2012-04-04 2012-04-30 2012-05-01 2012-06-22 2012-10-01 2012-10-02 2012-10-03 2012-10-04 2012-10-05 2013-01-01 2013-01-02 2013-01-03 2013-02-11 2013-02-12 2013-02-13 2013-02-14 2013-02-15 2013-04-04 2013-04-05 2013-04-29 2013-04-30 2013-05-01 2013-06-10 2013-06-11 2013-06-12 2013-09-19 2013-09-20 2013-10-01 2013-10-02 2013-10-03 2013-10-04 2013-10-07 2014-01-01 2014-01-31 2014-02-03 2014-02-04 2014-02-05 2014-02-06 2014-04-07 2014-05-01 2014-05-02 2014-06-02 2014-09-08 2014-10-01 2014-10-02 2014-10-03 2014-10-06 2014-10-07 2015-01-01 2015-01-02 2015-02-18 2015-02-19 2015-02-20 2015-02-23 2015-02-24 2015-04-06 2015-05-01 2015-06-22 2015-09-03 2015-09-04 2015-10-01 2015-10-02 2015-10-05 2015-10-06 2015-10-07 2016-01-01 2016-02-08 2016-02-09 2016-02-10 2016-02-11 2016-02-12 2016-04-04 2016-05-02 2016-06-09 2016-06-10 2016-09-15 2016-09-16 2016-10-03 2016-10-04 2016-10-05 2016-10-06 2016-10-07 2017-01-02 2017-01-27 2017-01-30 2017-01-31 2017-02-01 2017-02-02 2017-04-03 2017-04-04 2017-05-01 2017-05-29 2017-05-30 2017-10-02 2017-10-03 2017-10-04 2017-10-05 2017-10-06 2018-01-01 2018-02-15 2018-02-16 2018-02-19 2018-02-20 2018-02-21 2018-04-05 2018-04-06 2018-04-30 2018-05-01 2018-06-18 2018-09-24 2018-10-01 2018-10-02 2018-10-03 2018-10-04 2018-10-05 2018-12-31 2019-01-01 2019-02-04 2019-02-05 2019-02-06 2019-02-07 2019-02-08 2019-04-05 2019-05-01 2019-05-02 2019-05-03 2019-06-07 2019-09-13 2019-10-01 2019-10-02 2019-10-03 2019-10-04 2019-10-07 2020-01-01 2020-01-24 2020-01-27 2020-01-28 2020-01-29 2020-01-30 2020-01-31 2020-04-06 2020-05-01 2020-05-04 2020-05-05 2020-06-25 2020-06-26 2020-10-01 2020-10-02 2020-10-05 2020-10-06 2020-10-07 2020-10-08 2021-01-01 2021-02-11 2021-02-12 2021-02-15 2021-02-16 2021-02-17 2021-04-05 2021-05-03 2021-05-04 2021-05-05 2021-06-14 2021-09-20 2021-09-21 2021-10-01 2021-10-04 2021-10-05 2021-10-06 2021-10-07 2022-01-03 2022-01-31 2022-02-01 2022-02-02 2022-02-03 2022-02-04 2022-04-04 2022-04-05 2022-05-02 2022-05-03 2022-05-04 2022-06-03 2022-09-12 2022-10-03 2022-10-04 2022-10-05 2022-10-06 2022-10-07 2023-01-02 2023-01-23 2023-01-24 2023-01-25 2023-01-26 2023-01-27 2023-04-05 2023-05-01 2023-05-02 2023-05-03 2023-06-22 2023-06-23 2023-09-29 2023-10-02 2023-10-03 2023-10-04 2023-10-05 2023-10-06 2024-01-01 2024-02-09 2024-02-12 2024-02-13 2024-02-14 2024-02-15 2024-02-16 2024-04-04 2024-04-05 2024-05-01 2024-05-02 2024-05-03 2024-06-10 2024-09-16 2024-09-17 2024-10-01 2024-10-02 2024-10-03 2024-10-04 2024-10-07 2025-01-01 2025-01-28 2025-01-29 2025-01-30 2025-01-31 2025-02-03 2025-02-04 2025-04-04 2025-05-01 2025-05-02 2025-05-05 2025-06-02 2025-10-01 2025-10-02 2025-10-03 2025-10-06 2025-10-07 2025-10-08 '.split()))
+
+def _expected_cn_sessions(start_date, end_date):
+    start, end = (pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize())
+    if end < start:
+        return pd.DatetimeIndex([])
+    days = pd.bdate_range(start, end)
+    historical = (days >= _CN_VERIFIED_CALENDAR_START) & (days <= _CN_VERIFIED_CALENDAR_END)
+    maintained = np.isin(days.year, list(CN_MARKET_HOLIDAY_YEARS))
+    if not (historical | maintained).all():
+        unknown = days[~(historical | maintained)][0]
+        raise ValueError(f'A股交易日历无可验证覆盖: {unknown.date()}')
+    closed = _CN_VERIFIED_CLOSED_DAYS.union(pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS))))
+    return days[~days.isin(closed)]
+
+def _latest_cn_required_close_date(asof_date=None):
+    current = pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
+    candidate = current - pd.Timedelta(days=1)
+    for _ in range(14):
+        if _is_cn_required_close_day(candidate):
+            return candidate.normalize()
+        candidate -= pd.Timedelta(days=1)
+    raise poe.BotError(f'A股交易日历无法在 {current.date().isoformat()} 前找到最近收盘日。')
+
+def _latest_cn_data_required_date(asof_datetime=None):
+    current = pd.Timestamp(beijing_now() if asof_datetime is None else asof_datetime)
+    if current.year not in CN_MARKET_HOLIDAY_YEARS:
+        raise poe.BotError(f'A股交易日历未配置 {current.year} 年；{CN_MARKET_CALENDAR_COVERAGE_NOTE}')
+    current_day = current.normalize()
+    after_close = current.hour > 15 or (current.hour == 15 and (current.minute > 0 or current.second > 0 or current.microsecond > 0))
+    if after_close and _is_cn_required_close_day(current_day):
+        return current_day
+    return _latest_cn_required_close_date(current_day)
+
+def _latest_portfolio_advisory_required_close_date(asof_date=None):
+    generic_required = _latest_required_close_date(asof_date)
+    cn_required = _latest_cn_required_close_date(asof_date)
+    return min(generic_required, cn_required).normalize()
+
+def _latest_valid_close_date(df):
+    if df is None or len(df) == 0 or 'close' not in df.columns:
+        return None
+    close = pd.to_numeric(df['close'], errors='coerce').dropna()
+    if close.empty:
+        return None
+    return pd.Timestamp(close.index.max()).normalize()
+
+def _assert_columns_fresh(raw_dict, required_tickers, expected_date=None, max_lag_days=1, label='US'):
+    latest_by_ticker = {}
+    stale = []
+    for ticker in required_tickers:
+        df = raw_dict.get(ticker) if isinstance(raw_dict, dict) else None
+        if df is None or len(df) == 0:
+            stale.append(f'{ticker}: missing')
+            continue
+        if 'close' not in df.columns:
+            stale.append(f'{ticker}: missing close column')
+            continue
+        latest = _latest_valid_close_date(df)
+        if pd.isna(latest):
+            stale.append(f'{ticker}: no valid close')
+            continue
+        latest_by_ticker[ticker] = latest
+    if expected_date is None and latest_by_ticker:
+        expected_date = max(latest_by_ticker.values())
+    if expected_date is not None:
+        cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=max_lag_days)
+        for ticker, latest in latest_by_ticker.items():
+            if latest < cutoff:
+                stale.append(f'{ticker}: latest {latest.date().isoformat()}')
+    if stale:
+        raise poe.BotError(f'{label} 数据过期/缺失，不能生成正式信号: ' + '; '.join(stale))
+    return pd.Timestamp(expected_date).normalize() if expected_date is not None else None
+
+def _assert_price_frame_columns_fresh(price_df, required_columns, expected_date, max_lag_days=0, label='price', names=None):
+    stale = []
+    cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=max_lag_days)
+    names = names or {}
+    for col in required_columns:
+        display = names.get(col, col)
+        if price_df is None or col not in price_df.columns:
+            stale.append(f'{display}: missing')
+            continue
+        close = pd.to_numeric(price_df[col], errors='coerce').dropna()
+        if close.empty:
+            stale.append(f'{display}: no valid close')
+            continue
+        latest = pd.Timestamp(close.index.max()).normalize()
+        if latest < cutoff:
+            stale.append(f'{display}: latest {latest.date().isoformat()}')
+    if stale:
+        raise poe.BotError(f'{label} 数据过期/缺失，不能生成正式信号: ' + '; '.join(stale))
+    return pd.Timestamp(expected_date).normalize()
+
+def _assert_subb_final_price_frame_fresh(us_rot_close, expected_date=None, include_us_live_snapshot=False):
+    if expected_date is None:
+        if us_rot_close is None or len(us_rot_close) == 0:
+            raise poe.BotError('Sub-B最终价格 数据过期/缺失，不能生成正式信号: empty frame')
+        expected_date = us_rot_close.index[-1]
+    return _assert_price_frame_columns_fresh(us_rot_close, SUBB_REQUIRED_PRICE_TICKERS, expected_date=pd.Timestamp(expected_date).normalize(), max_lag_days=1 if include_us_live_snapshot else 0, label='Sub-B最终价格', names={US_ROT_BTC_TICKER: 'BTC/IBIT'})
+
+def _cn_latest_data_source_label(df, fallback_source):
+    if df is None or len(df) == 0:
+        return fallback_source
+    latest = df.iloc[-1]
+    label = fallback_source
+    if 'source' in df.columns:
+        value = latest.get('source')
+        if value is not None and (not pd.isna(value)) and str(value).strip():
+            label = str(value).strip()
+    is_live = False
+    if 'is_live_bar' in df.columns:
+        value = latest.get('is_live_bar')
+        if value is not None and (not pd.isna(value)):
+            is_live = bool(value)
+    if is_live and 'realtime' not in label.lower() and ('snapshot' not in label.lower()):
+        label = f'{label}+realtime snapshot'
+    return label
+
+def _write_cn_after_close_stale_warning_or_raise(write, cn_raw, bj_today, include_cn_live_snapshot=False):
+    stale_codes = []
+    for secid in CN_STOCK_CODES:
+        df = cn_raw.get(secid) if isinstance(cn_raw, dict) else None
+        latest = _latest_valid_close_date(df)
+        if latest is None or pd.Timestamp(latest).date() < bj_today:
+            stale_codes.append(secid)
+    if not stale_codes:
+        return
+    stale_names = '、'.join((CN_NAMES.get(s, s) for s in stale_codes))
+    raise poe.BotError('A股收盘数据未完整更新，不能生成正式收盘信号: ' + stale_names)
+
+def _latest_live_etf_price(us_close, proxy, live, expected_date=None, max_lag_days=0):
+    if us_close is None or live not in us_close.columns:
+        return None
+    close = pd.to_numeric(us_close[live], errors='coerce').dropna()
+    if close.empty:
+        return None
+    if expected_date is not None:
+        latest_date = pd.Timestamp(close.index[-1]).normalize()
+        cutoff = pd.Timestamp(expected_date).normalize() - pd.Timedelta(days=int(max_lag_days))
+        if latest_date < cutoff:
+            return None
+    latest = float(close.iloc[-1])
+    if not np.isfinite(latest) or latest <= 0.0:
+        return None
+    return latest
+
+def _load_level8_governance_snapshot(out_dir):
+    governance_path = os.path.join(out_dir, PORTFOLIO_RISK_GOVERNANCE_FILE)
+    if not os.path.exists(governance_path):
+        return {'available': False, 'error': f'missing {PORTFOLIO_RISK_GOVERNANCE_FILE}'}
+    try:
+        governance = pd.read_csv(governance_path)
+    except Exception as exc:
+        return {'available': False, 'error': str(exc)}
+    if governance.empty or 'status' not in governance.columns:
+        return {'available': False, 'error': 'empty governance output'}
+    status_order = {'ROLLBACK_FIXED': 0, 'REVIEW': 1, 'ACTIVE_OK': 2, 'INFO': 3}
+    statuses = governance['status'].dropna().astype(str).str.strip()
+    statuses = [status for status in statuses if status]
+    if not statuses:
+        return {'available': False, 'error': 'governance status is empty'}
+    decision_status = sorted(statuses, key=lambda value: status_order.get(value, 9))[0]
+    rows = {str(row.get('rule', '')): row for row in governance.to_dict('records')}
+    return {'available': True, 'decision_status': decision_status, 'relative_nav_drawdown': str(rows.get('relative_nav_drawdown', {}).get('value', 'n/a')), 'execution_load': str(rows.get('execution_load', {}).get('value', 'n/a')), 'rollback_threshold': str(rows.get('relative_nav_drawdown', {}).get('threshold', 'n/a'))}
+
+def _load_combo_advisory_snapshot(asof_date=None):
+    out_dir = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_OUTPUT_DIR)
+    curve_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_CURVE_FILE)
+    returns_path = os.path.join(out_dir, PORTFOLIO_ADVISORY_RETURNS_FILE)
+    source_returns_path = os.path.join(_repo_base_dir(), PORTFOLIO_ADVISORY_SOURCE_RETURNS_FILE)
+    if not os.path.exists(curve_path):
+        return {'available': False, 'error': f'missing {PORTFOLIO_ADVISORY_CURVE_FILE}'}
+    if not os.path.exists(returns_path):
+        return {'available': False, 'error': f'missing {PORTFOLIO_ADVISORY_RETURNS_FILE}'}
+    if not os.path.exists(source_returns_path):
+        return {'available': False, 'error': f'missing source returns: {source_returns_path}'}
+    try:
+        curve = pd.read_csv(curve_path, parse_dates=['date']).set_index('date').sort_index()
+        returns = pd.read_csv(returns_path, parse_dates=['date']).set_index('date').sort_index()
+    except Exception as exc:
+        return {'available': False, 'error': str(exc)}
+    if curve.empty or returns.empty:
+        return {'available': False, 'error': 'empty portfolio advisory output'}
+    latest = curve.iloc[-1]
+    latest_date = curve.index[-1]
+    try:
+        source_latest_date = _csv_latest_date(source_returns_path)
+    except Exception as exc:
+        return {'available': False, 'error': f'invalid source returns: {exc}'}
+    required_close_date = _latest_portfolio_advisory_required_close_date(asof_date)
+    if latest_date.normalize() < required_close_date:
+        return {'available': False, 'error': f'stale portfolio advisory report: {PORTFOLIO_ADVISORY_CURVE_FILE} latest {latest_date.date().isoformat()} < required close {required_close_date.date().isoformat()}'}
+    if source_latest_date is not None and source_latest_date.normalize() < required_close_date:
+        return {'available': False, 'error': f'stale portfolio advisory source returns: {source_latest_date.date().isoformat()} < required close {required_close_date.date().isoformat()}'}
+    if source_latest_date is not None and latest_date.normalize() < source_latest_date:
+        return {'available': False, 'error': f'stale portfolio advisory report: {PORTFOLIO_ADVISORY_CURVE_FILE} latest {latest_date.date().isoformat()} < source returns latest {source_latest_date.date().isoformat()}'}
+    suba_prior_dd = _latest_prior_nav_drawdown(returns, 'Sub-A')
+    suba_daily_target = _advisory_target_weight(COMBINED_WEIGHTS['Sub-A'], suba_prior_dd, boost_dd=0.05, cut_dd=0.08)
+    governance = _load_level8_governance_snapshot(out_dir)
+    return {'available': True, 'latest_date': latest_date, 'suba_prior_dd': suba_prior_dd, 'suba_daily_target': suba_daily_target, 'suba_advisory_suba_weight': float(latest.get('suba_advisory_suba_weight', np.nan)), 'suba_advisory_subb_weight': float(latest.get('suba_advisory_subb_weight', np.nan)), 'suba_advisory_excess_nav': float(latest.get('suba_advisory_excess_nav', np.nan)), 'stacked_suba_weight': float(latest.get('stacked_advisory_suba_weight', np.nan)), 'stacked_subb_weight': float(latest.get('stacked_advisory_subb_weight', np.nan)), 'stacked_excess_nav': float(latest.get('stacked_advisory_excess_nav', np.nan)), 'governance': governance}
+
+def _subc_enabled():
+    return bool(SUBC_STANDALONE_ENABLED)
+STRATEGY_WEIGHTS = COMBINED_WEIGHTS
+SP500_RISK_REGIME_FILES = [('sp500_risk_regime_video_aligned_hyoas_output.csv', 'hy_oas', 'HY OAS(BAMLH0A0HYM2)'), ('sp500_risk_regime_video_aligned_baa10y_output.csv', 'baa10y', 'BAA10Y长历史代理')]
+SP500_RISK_REGIME_EMBEDDED_SNAPSHOT = None
+SP500_RISK_REGIME_FRED_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}'
+SP500_RISK_REGIME_FRED_TEXT = 'https://r.jina.ai/http://fred.stlouisfed.org/data/{series_id}.txt'
+SP500_RISK_REGIME_CREDIT_PROXY = {'series_id': 'BAMLH0A0HYM2', 'column': 'BAMLH0A0HYM2', 'label': 'HY OAS(BAMLH0A0HYM2)'}
+SP500_RISK_REGIME_WEIGHTS = {'vix': 0.25, 'credit': 0.25, 'term_spread': 0.15, 'spx_deviation': 0.15, 'ma_slope': 0.2}
+
+class Rule:
+
+    def __init__(self, name, policy, fail_mode, freshness_required=False, max_lag_days=1):
+        self.name = name
+        self.policy = policy
+        self.fail_mode = fail_mode
+        self.freshness_required = bool(freshness_required)
+        self.max_lag_days = int(max_lag_days)
+RISK_RULES = {'suba_volume': Rule(name='Sub-A volume overlay', policy='hard_trade_rule', fail_mode='halt', freshness_required=True, max_lag_days=1), 'dk_volume_warning': Rule(name='Sub-A-DK volume warning', policy='soft_warning', fail_mode='degrade', freshness_required=True, max_lag_days=1), 'sp500_risk_regime': Rule(name='S&P 500 risk regime', policy='dashboard_only', fail_mode='degrade', freshness_required=True, max_lag_days=7), 'subb_inflation_gate': Rule(name='Sub-B official leg inflation gate', policy='hard_trade_rule', fail_mode='halt', freshness_required=False, max_lag_days=1)}
+
+def _repo_base_dir():
+    return os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+
+def _feature_latest_date(feature):
+    if feature is None:
+        return None
+    if isinstance(feature, dict):
+        for key in ('latest_date', 'date', 'asof_date'):
+            if key in feature and feature.get(key) is not None:
+                return pd.Timestamp(feature[key]).normalize()
+        return None
+    if hasattr(feature, 'index'):
+        idx = getattr(feature, 'index')
+        if len(idx) == 0:
+            return None
+        latest = pd.to_datetime(idx, errors='coerce').max()
+        if pd.isna(latest):
+            return None
+        return pd.Timestamp(latest).normalize()
+    return None
+
+def _assert_feature_fresh(feature, expected_date, max_lag_days=1, name='feature'):
+    latest = _feature_latest_date(feature)
+    if latest is None:
+        raise poe.BotError(f'{name} 数据日期不可判定')
+    expected = pd.Timestamp(expected_date).normalize()
+    cutoff = expected - pd.Timedelta(days=int(max_lag_days))
+    if latest < cutoff:
+        raise poe.BotError(f'{name} 数据过期: latest={latest.date()}, expected={expected.date()}')
+    return latest
+
+def _feature_freshness_status(feature, expected_date, rule_key, name=None):
+    rule = RISK_RULES[rule_key]
+    expected = pd.Timestamp(expected_date).normalize()
+    latest = _feature_latest_date(feature)
+    out = {'freshness_expected_date': expected.date().isoformat(), 'freshness_latest_date': latest.date().isoformat() if latest is not None else None, 'freshness_ok': True, 'freshness_error': ''}
+    if not rule.freshness_required:
+        return out
+    try:
+        latest = _assert_feature_fresh(feature, expected_date=expected, max_lag_days=rule.max_lag_days, name=name or rule.name)
+        out['freshness_latest_date'] = latest.date().isoformat()
+    except poe.BotError as exc:
+        out['freshness_ok'] = False
+        out['freshness_error'] = str(exc)
+    return out
+
+def _annotate_rule_freshness(feature, expected_date, rule_key):
+    if feature is None or len(feature) == 0:
+        return feature
+    rule = RISK_RULES[rule_key]
+    out = feature.copy()
+    status = _feature_freshness_status(out, expected_date, rule_key, name=rule.name)
+    for key, value in status.items():
+        out[key] = value
+    if rule.policy == 'hard_trade_rule' and (not status['freshness_ok']):
+        out['combined_unresolved'] = True
+    return out
+
+def _annotate_status_freshness(status, expected_date, rule_key):
+    rule = RISK_RULES[rule_key]
+    checked = dict(status or {})
+    status_feature = {'date': checked.get('date') or checked.get('latest_date')}
+    checked.update(_feature_freshness_status(status_feature, expected_date, rule_key, name=rule.name))
+    return checked
+
+def _warning_feature_expected_date(asof_date=None):
+    return pd.Timestamp(beijing_now().date() if asof_date is None else asof_date).normalize()
+
+def _sp500_risk_regime_search_paths():
+    base_dir = _repo_base_dir()
+    learning_dir = os.path.join(os.path.dirname(base_dir), '新策略学习')
+    return [(os.path.join(learning_dir, filename), proxy, label) for filename, proxy, label in SP500_RISK_REGIME_FILES]
+
+def _sp500_risk_regime_robust_z(series, window=156, min_periods=52):
+    med = series.rolling(window, min_periods=min_periods).median()
+    mad = (series - med).abs().rolling(window, min_periods=min_periods).median()
+    sigma = 1.4826 * mad
+    z = (series - med) / sigma.replace(0, np.nan)
+    return z.replace([np.inf, -np.inf], np.nan)
+
+def _sp500_risk_regime_score_from_z(z):
+    return (50.0 + 20.0 * z.clip(-2.5, 2.5)).clip(0, 100)
+
+def _sp500_risk_regime_name(score):
+    if score < 20:
+        return '1-简单模式'
+    if score < 40:
+        return '2-普通模式'
+    if score < 55:
+        return '3-困难模式'
+    if score < 70:
+        return '4-噩梦模式'
+    if score < 85:
+        return '5-地狱模式'
+    return '6-炼狱模式'
+
+def _sp500_risk_regime_equity_budget(score):
+    if score < 20:
+        return '100%'
+    if score < 40:
+        return '85%'
+    if score < 55:
+        return '70%'
+    if score < 70:
+        return '50%'
+    if score < 85:
+        return '35%'
+    return '15%'
+
+def _fetch_sp500_risk_regime_fred_series(series_id):
+    errors = []
+    text_url = SP500_RISK_REGIME_FRED_TEXT.format(series_id=series_id)
+    try:
+        resp = requests.get(text_url, timeout=12, headers={'User-Agent': 'Mozilla/5.0'})
+        if resp.status_code != 200:
+            raise ValueError(f'status {resp.status_code}')
+        rows = []
+        for line in resp.text.splitlines():
+            match = re.match('^\\|?\\s*(\\d{4}-\\d{2}-\\d{2})\\s*(?:\\||\\t)\\s*([-.0-9]+|\\.)\\s*\\|?$', line.strip())
+            if not match:
+                continue
+            date_text, value_text = match.groups()
+            rows.append((pd.Timestamp(date_text), pd.to_numeric(value_text, errors='coerce')))
+        if rows:
+            out = pd.Series([v for _, v in rows], index=[d for d, _ in rows], name=series_id).dropna().sort_index()
+        else:
+            raise ValueError('no parseable rows')
+    except Exception as exc:
+        errors.append(f'FRED text mirror: {exc}')
+        url = SP500_RISK_REGIME_FRED_CSV.format(series_id=series_id)
+        resp = requests.get(url, timeout=12, headers={'User-Agent': 'Mozilla/5.0'})
+        if resp.status_code != 200:
+            raise ValueError(f"FRED {series_id} returned status {resp.status_code}; {'; '.join(errors)}")
+        df = pd.read_csv(io.StringIO(resp.text))
+        if df.empty or len(df.columns) < 2:
+            raise ValueError(f"FRED {series_id} returned empty CSV; {'; '.join(errors)}")
+        date_col, value_col = (df.columns[0], df.columns[1])
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df[value_col] = pd.to_numeric(df[value_col].replace('.', np.nan), errors='coerce')
+        out = df.dropna(subset=[date_col]).set_index(date_col)[value_col].dropna().sort_index()
+    if len(out) < 260:
+        raise ValueError(f'FRED {series_id} has too few usable rows: {len(out)}')
+    return out.rename(series_id)
+
+def _fetch_sp500_risk_regime_spx_close():
+    df, source = fetch_yahoo('^GSPC', start_date='1985-01-01')
+    if df is not None and len(df.dropna()) > 1000:
+        return (df['close'].dropna().rename('SPX'), source)
+    sp500 = _fetch_sp500_risk_regime_fred_series('SP500').dropna()
+    if len(sp500) < 1000:
+        raise ValueError('Could not fetch enough S&P 500 history')
+    return (sp500.rename('SPX'), 'FRED SP500')
+
+def _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source='Yahoo', credit_meta=None, source_file=None, source_type='live', live_error=None):
+    credit_meta = credit_meta or SP500_RISK_REGIME_CREDIT_PROXY
+    credit_col = credit_meta['column']
+    daily = pd.concat([spx.rename('SPX'), vix.rename('VIXCLS'), credit.rename(credit_col), term.rename('T10Y2Y')], axis=1).sort_index()
+    source_input_dates = {'SPX': spx.dropna().index[-1].strftime('%Y-%m-%d'), 'VIXCLS': vix.dropna().index[-1].strftime('%Y-%m-%d'), credit_col: credit.dropna().index[-1].strftime('%Y-%m-%d'), 'T10Y2Y': term.dropna().index[-1].strftime('%Y-%m-%d')}
+    weekly = daily.resample('W-FRI').last().ffill()
+    weekly['spx_ma'] = weekly['SPX'].rolling(40).mean()
+    weekly['spx_deviation'] = weekly['SPX'] / weekly['spx_ma'] - 1.0
+    weekly['ma_slope'] = weekly['spx_ma'].pct_change(13)
+    weekly['vix_z'] = _sp500_risk_regime_robust_z(np.log(weekly['VIXCLS']))
+    weekly['credit_change'] = weekly[credit_col].diff(4)
+    weekly['credit_change_z'] = _sp500_risk_regime_robust_z(weekly['credit_change'])
+    weekly['term_z'] = _sp500_risk_regime_robust_z(-weekly['T10Y2Y'])
+    weekly['dev_z'] = _sp500_risk_regime_robust_z(-weekly['spx_deviation'])
+    weekly['slope_z'] = _sp500_risk_regime_robust_z(-weekly['ma_slope'])
+    wgt = SP500_RISK_REGIME_WEIGHTS
+    weekly['risk_z'] = weekly['vix_z'] * wgt['vix'] + weekly['credit_change_z'] * wgt['credit'] + weekly['term_z'] * wgt['term_spread'] + weekly['dev_z'] * wgt['spx_deviation'] + weekly['slope_z'] * wgt['ma_slope']
+    weekly['base_score'] = _sp500_risk_regime_score_from_z(weekly['risk_z'])
+    feature_cols = ['vix_z', 'credit_change_z', 'term_z', 'dev_z', 'slope_z']
+    weekly['feature_veto'] = weekly[feature_cols].max(axis=1) >= 2.0
+    rolling_low = weekly['SPX'].rolling(8, min_periods=2).min()
+    weekly['rebound_from_8w_low'] = weekly['SPX'] / rolling_low - 1.0
+    recent_oversold = weekly['spx_deviation'].rolling(8, min_periods=2).min() <= -0.1
+    rebound_cross = (weekly['rebound_from_8w_low'] >= 0.02) & (weekly['rebound_from_8w_low'].shift(1) < 0.02)
+    weekly['oversold_turn_rule'] = recent_oversold & rebound_cross & (weekly['base_score'] >= 55.0)
+    score = pd.Series(np.maximum(weekly['base_score'], np.where(weekly['feature_veto'], 55.0, 0.0)), index=weekly.index)
+    score.loc[weekly['oversold_turn_rule']] = (score.loc[weekly['oversold_turn_rule']] - 10.0).clip(lower=0)
+    weekly['risk_score'] = score.clip(0, 100)
+    weekly = weekly.dropna(subset=['risk_score'])
+    if weekly.empty:
+        raise ValueError('S&P 500 risk regime model produced no usable weekly rows')
+    latest = weekly.iloc[-1]
+    latest_regime = _sp500_risk_regime_name(float(latest['risk_score']))
+    regime_series = weekly['risk_score'].apply(lambda x: _sp500_risk_regime_name(float(x)))
+    change_date = weekly.index[0]
+    previous_regime = latest_regime
+    different_before = np.flatnonzero((regime_series != latest_regime).to_numpy())
+    if len(different_before) > 0 and different_before[-1] + 1 < len(weekly):
+        change_date = weekly.index[different_before[-1] + 1]
+        previous_regime = regime_series.iloc[different_before[-1]]
+    return {'latest_date': weekly.index[-1], 'regime_changed_date': change_date, 'previous_regime': previous_regime, 'risk_score': float(latest['risk_score']), 'regime': latest_regime, 'suggested_equity_budget': _sp500_risk_regime_equity_budget(float(latest['risk_score'])), 'credit_proxy': credit_meta.get('proxy', 'hy_oas'), 'credit_series': credit_meta.get('series_id', credit_col), 'feature_veto': bool(latest['feature_veto']), 'oversold_turn_rule': bool(latest['oversold_turn_rule']), 'source_label': credit_meta.get('label', credit_col), 'source_type': source_type, 'source_file': source_file or 'FRED+Yahoo实时计算', 'spx_source': spx_source, 'input_dates': source_input_dates, 'credit_input_key': credit_col, 'live_error': live_error}
+
+def _fetch_yahoo_close_series_for_sp500_risk(ticker, start_date='2007-01-01'):
+    df, source = fetch_yahoo(ticker, start_date=start_date)
+    if df is None or 'close' not in df.columns:
+        raise ValueError(f'Yahoo proxy returned no close data for {ticker}')
+    close = df['close'].dropna().sort_index()
+    if len(close) < 1000:
+        raise ValueError(f'Yahoo proxy {ticker} has too few rows: {len(close)}')
+    return (close.rename(ticker), source)
+
+def _fetch_sp500_risk_regime_yahoo_proxy_snapshot(exact_error=None):
+    spx, spx_source = _fetch_sp500_risk_regime_spx_close()
+    vix, vix_source = _fetch_yahoo_close_series_for_sp500_risk('^VIX', start_date='2007-01-01')
+    hyg, hyg_source = _fetch_yahoo_close_series_for_sp500_risk('HYG', start_date='2007-01-01')
+    lqd, lqd_source = _fetch_yahoo_close_series_for_sp500_risk('LQD', start_date='2007-01-01')
+    ief, ief_source = _fetch_yahoo_close_series_for_sp500_risk('IEF', start_date='2007-01-01')
+    shy, shy_source = _fetch_yahoo_close_series_for_sp500_risk('SHY', start_date='2007-01-01')
+    credit = (np.log(lqd / hyg) * 100.0).dropna().rename('HYG_LQD_CREDIT_PROXY')
+    term = (-np.log(ief / shy) * 100.0).dropna().rename('IEF_SHY_TERM_PROXY')
+    credit_meta = {'series_id': 'HYG/LQD', 'column': 'HYG_LQD_CREDIT_PROXY', 'label': 'HYG/LQD信用代理', 'proxy': 'hyg_lqd'}
+    snapshot = _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source=spx_source, credit_meta=credit_meta, source_file='Yahoo代理实时计算', source_type='live_proxy', live_error=str(exact_error) if exact_error else None)
+    input_sources = snapshot.setdefault('input_sources', {})
+    input_sources.update({'SPX': spx_source, 'VIXCLS': vix_source, 'HYG': hyg_source, 'LQD': lqd_source, 'IEF': ief_source, 'SHY': shy_source})
+    return snapshot
+
+def _fetch_sp500_risk_regime_live_snapshot():
+    try:
+        spx, spx_source = _fetch_sp500_risk_regime_spx_close()
+        vix = _fetch_sp500_risk_regime_fred_series('VIXCLS')
+        credit = _fetch_sp500_risk_regime_fred_series(SP500_RISK_REGIME_CREDIT_PROXY['series_id'])
+        term = _fetch_sp500_risk_regime_fred_series('T10Y2Y')
+        return _build_sp500_risk_regime_snapshot_from_series(spx, vix, credit, term, spx_source=spx_source)
+    except Exception as exc:
+        return _fetch_sp500_risk_regime_yahoo_proxy_snapshot(exact_error=exc)
+
+def _sp500_risk_regime_expected_weekly_label(asof_date=None):
+    ts = pd.Timestamp(beijing_now()) if asof_date is None else pd.Timestamp(asof_date)
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert('Asia/Shanghai').tz_localize(None)
+    ts = ts.normalize()
+    return ts - pd.Timedelta(days=(ts.weekday() - 4) % 7)
+
+def _sp500_risk_regime_snapshot_is_current_week(snapshot, asof_date=None):
+    latest_date = snapshot.get('latest_date')
+    if latest_date is None:
+        return False
+    latest_ts = pd.Timestamp(latest_date)
+    if latest_ts.tzinfo is not None:
+        latest_ts = latest_ts.tz_convert('Asia/Shanghai').tz_localize(None)
+    return latest_ts.normalize() >= _sp500_risk_regime_expected_weekly_label(asof_date)
+
+def _annotate_sp500_risk_regime_freshness(snapshot, asof_date=None):
+    expected = _warning_feature_expected_date(asof_date)
+    return _annotate_status_freshness(snapshot, expected, 'sp500_risk_regime')
+
+def _load_sp500_risk_regime_csv_snapshot(search_paths=None, live_error=None):
+    paths = search_paths if search_paths is not None else _sp500_risk_regime_search_paths()
+    required = {'risk_score', 'regime', 'suggested_equity_budget', 'credit_proxy', 'credit_series'}
+    for path, fallback_proxy, source_label in paths:
+        if not os.path.exists(path):
+            continue
+        try:
+            df = pd.read_csv(path, index_col=0, encoding='utf-8-sig')
+            missing = required - set(df.columns)
+            if missing:
+                continue
+            df.index = pd.to_datetime(df.index, errors='coerce')
+            df = df[df.index.notna()].sort_index()
+            df = df.dropna(subset=['risk_score', 'regime'])
+            if df.empty:
+                continue
+            latest = df.iloc[-1]
+            latest_regime = str(latest['regime'])
+            regime_series = df['regime'].astype(str)
+            change_date = df.index[0]
+            previous_regime = latest_regime
+            different_before = np.flatnonzero((regime_series != latest_regime).to_numpy())
+            if len(different_before) > 0 and different_before[-1] + 1 < len(df):
+                change_date = df.index[different_before[-1] + 1]
+                previous_regime = regime_series.iloc[different_before[-1]]
+            return {'latest_date': df.index[-1], 'regime_changed_date': change_date, 'previous_regime': previous_regime, 'risk_score': float(latest['risk_score']), 'regime': latest_regime, 'suggested_equity_budget': str(latest['suggested_equity_budget']), 'credit_proxy': str(latest.get('credit_proxy', fallback_proxy)), 'credit_series': str(latest.get('credit_series', '')), 'feature_veto': bool(latest.get('feature_veto', False)), 'oversold_turn_rule': bool(latest.get('oversold_turn_rule', False)), 'source_label': source_label, 'source_type': 'csv', 'source_file': os.path.basename(path), 'live_error': live_error, 'path': path}
+        except (OSError, ValueError, KeyError, pd.errors.ParserError):
+            continue
+    return None
+
+def _load_sp500_risk_regime_snapshot(search_paths=None, live_fetch=True, prefer_recent_csv=False, asof_date=None, allow_embedded=True):
+    csv_snapshot = _load_sp500_risk_regime_csv_snapshot(search_paths=search_paths)
+    if prefer_recent_csv and csv_snapshot is not None and _sp500_risk_regime_snapshot_is_current_week(csv_snapshot, asof_date=asof_date):
+        return _annotate_sp500_risk_regime_freshness(csv_snapshot, asof_date=asof_date)
+    live_error = None
+    if live_fetch:
+        try:
+            return _annotate_sp500_risk_regime_freshness(_fetch_sp500_risk_regime_live_snapshot(), asof_date=asof_date)
+        except Exception as exc:
+            live_error = str(exc)
+    if csv_snapshot is not None:
+        csv_snapshot['live_error'] = live_error
+        return _annotate_sp500_risk_regime_freshness(csv_snapshot, asof_date=asof_date)
+    if not allow_embedded:
+        if live_error:
+            raise RuntimeError(f'S&P 500 risk regime live calculation failed: {live_error}')
+        raise RuntimeError('S&P 500 risk regime data unavailable')
+    if not SP500_RISK_REGIME_EMBEDDED_SNAPSHOT:
+        if live_error:
+            raise RuntimeError(f'S&P 500 risk regime live calculation failed: {live_error}')
+        raise RuntimeError('S&P 500 risk regime data unavailable')
+    embedded = dict(SP500_RISK_REGIME_EMBEDDED_SNAPSHOT)
+    embedded['latest_date'] = pd.Timestamp(embedded['latest_date'])
+    embedded['regime_changed_date'] = pd.Timestamp(embedded['regime_changed_date'])
+    embedded['path'] = embedded['source_file']
+    embedded['live_error'] = live_error
+    today = pd.Timestamp(asof_date).normalize() if asof_date is not None else pd.Timestamp(beijing_now().date())
+    embedded_age_days = int((today - embedded['latest_date'].normalize()).days)
+    embedded['embedded_age_days'] = embedded_age_days
+    if embedded_age_days > 7:
+        embedded['source_type'] = 'STALE_EMBEDDED_DO_NOT_TRADE'
+        embedded['stale_warning'] = 'Embedded S&P risk snapshot is older than 7 days; historical reference only.'
+    return _annotate_sp500_risk_regime_freshness(embedded, asof_date=asof_date)
+INFLATION_PRESSURE_LB = 126
+
+def _load_inflation_pressure_snapshot():
+    price_series = {}
+    price_sources = {}
+    for ticker in SUBB_INFLATION_GATE_TICKERS:
+        df, source = fetch_yahoo(ticker, start_date='2006-01-01')
+        if df is None or 'close' not in df.columns:
+            raise ValueError(f'{ticker} price data unavailable from Yahoo/Stooq')
+        close = df['close'].dropna().sort_index()
+        if len(close) <= INFLATION_PRESSURE_LB:
+            raise ValueError(f'{ticker} usable history is too short')
+        price_series[ticker] = close
+        price_sources[ticker] = source
+    for ticker in SUBB_OPTIONAL_MACRO_TICKERS:
+        try:
+            df, source = fetch_yahoo(ticker, start_date='2006-01-01')
+            if df is not None and 'close' in df.columns:
+                close = df['close'].dropna().sort_index()
+                if len(close) > INFLATION_PRESSURE_LB:
+                    price_series[ticker] = close
+                    price_sources[ticker] = source
+        except _fetch_or_bot_errors():
+            pass
+    aligned = pd.concat({ticker: price_series[ticker] for ticker in SUBB_INFLATION_GATE_TICKERS}, axis=1).dropna()
+    for ticker in SUBB_OPTIONAL_MACRO_TICKERS:
+        if ticker in price_series:
+            aligned[ticker] = price_series[ticker].reindex(aligned.index).ffill()
+    if len(aligned) <= INFLATION_PRESSURE_LB:
+        raise ValueError('inflation pressure price history is too short after alignment')
+    latest = aligned.iloc[-1]
+    previous = aligned.iloc[-(INFLATION_PRESSURE_LB + 1)]
+    mom = latest / previous - 1.0
+    latest_date = aligned.index[-1]
+    pressure_on = bool(mom['DBC'] > 0 and mom['TLT'] < 0)
+    usd_trend_on = bool(mom.get('UUP', np.nan) > 0) if 'UUP' in mom.index else None
+    if pressure_on and usd_trend_on is True:
+        label = '3-通胀压力+美元趋势'
+        action = 'DBMF/KMLM进入Sub-B官方腿候选池'
+    elif pressure_on:
+        label = '2-通胀压力'
+        action = '商品上行且长债承压，DBMF/KMLM进入Sub-B官方腿候选池'
+    else:
+        label = '1-未触发'
+        action = '市场型通胀预警未触发'
+    cpi_snapshot = {}
+    try:
+        cpi = _fetch_sp500_risk_regime_fred_series('CPIAUCSL').dropna().sort_index()
+        if len(cpi) >= 24:
+            yoy = cpi.pct_change(12)
+            three_month_ann = (cpi / cpi.shift(3)) ** 4 - 1.0
+            yoy_change_6m = yoy - yoy.shift(6)
+            cpi_frame = pd.DataFrame({'cpi_yoy': yoy, 'cpi_3m_ann': three_month_ann, 'cpi_yoy_change_6m': yoy_change_6m}).dropna()
+            if not cpi_frame.empty:
+                cpi_latest = cpi_frame.iloc[-1]
+                cpi_snapshot = {'cpi_latest_date': cpi_frame.index[-1], 'cpi_yoy': float(cpi_latest['cpi_yoy']), 'cpi_3m_ann': float(cpi_latest['cpi_3m_ann']), 'cpi_yoy_change_6m': float(cpi_latest['cpi_yoy_change_6m'])}
+    except Exception as exc:
+        cpi_snapshot = {'cpi_error': str(exc)}
+    return {'latest_date': latest_date, 'lookback': INFLATION_PRESSURE_LB, 'label': label, 'pressure_on': pressure_on, 'usd_trend_on': usd_trend_on, 'dbc_mom': float(mom['DBC']), 'tlt_mom': float(mom['TLT']), 'uup_mom': float(mom['UUP']) if 'UUP' in mom.index else np.nan, 'action': action, 'source': ' / '.join((f'{ticker}:{price_sources[ticker]}' for ticker in price_sources)), **cpi_snapshot}
+
+def _normalize_row_idx(index, row_idx):
+    return len(index) + row_idx if row_idx < 0 else row_idx
+
+def _inflation_pressure_state_from_prices(close_df, row_idx, lookback=INFLATION_PRESSURE_LB):
+    row_idx = _normalize_row_idx(close_df.index, row_idx)
+    if row_idx < lookback:
+        return None
+    if 'DBC' not in close_df.columns or 'TLT' not in close_df.columns:
+        return None
+    current = close_df.iloc[row_idx]
+    previous = close_df.iloc[row_idx - lookback]
+    if pd.isna(current.get('DBC')) or pd.isna(previous.get('DBC')):
+        return None
+    if pd.isna(current.get('TLT')) or pd.isna(previous.get('TLT')):
+        return None
+    dbc_mom = current['DBC'] / previous['DBC'] - 1.0
+    tlt_mom = current['TLT'] / previous['TLT'] - 1.0
+    return bool(dbc_mom > 0 and tlt_mom < 0)
+
+def _inflation_pressure_on_from_prices(close_df, row_idx, lookback=INFLATION_PRESSURE_LB):
+    return _inflation_pressure_state_from_prices(close_df, row_idx, lookback) is True
+
+def _subb_active_ranking_codes(close_df, row_idx, base_codes=None):
+    base = list(base_codes) if base_codes is not None else list(US_ROT_BASE_POOL)
+    state = _inflation_pressure_state_from_prices(close_df, row_idx)
+    if state is None:
+        raise poe.BotError('Sub-B通胀门控数据不可判定：DBC/TLT缺失或过期')
+    if state is False:
+        return base
+    available_macro = [code for code in US_ROT_MACRO_POOL if code in close_df.columns]
+    return base + [code for code in available_macro if code not in base]
+
+def _us_rot_late_history_tickers():
+    return {'BTC-USD', 'EMXC', 'VGIT', *US_ROT_MACRO_POOL}
+
+def _subb_inflation_gate_context(close_df, row_idx):
+    row_idx = _normalize_row_idx(close_df.index, row_idx)
+    state = _inflation_pressure_state_from_prices(close_df, row_idx)
+    if state is None:
+        raise poe.BotError('Sub-B通胀门控数据不可判定：DBC/TLT缺失或过期')
+    out = {'pressure_on': state, 'lookback': INFLATION_PRESSURE_LB, 'latest_date': close_df.index[row_idx]}
+    if row_idx >= INFLATION_PRESSURE_LB:
+        cur = close_df.iloc[row_idx]
+        prev = close_df.iloc[row_idx - INFLATION_PRESSURE_LB]
+        for ticker in ('DBC', 'TLT', 'UUP'):
+            if ticker in close_df.columns and (not pd.isna(cur.get(ticker))) and (not pd.isna(prev.get(ticker))):
+                out[f'{ticker.lower()}_mom'] = float(cur[ticker] / prev[ticker] - 1.0)
+    out['ranking_codes'] = _subb_active_ranking_codes(close_df, row_idx)
+    return out
+
+def _short_error(exc, max_len=120):
+    text = str(exc).replace('\n', ' ').replace('\r', ' ')
+    text = re.sub('https?://\\S+', '[url]', text)
+    return text if len(text) <= max_len else text[:max_len] + '...'
+
+def _write_sp500_risk_regime_note(msg, prefer_recent_csv=False, compact=False):
+    w = msg.write
+    w('### S&P 500风险等级与通胀开关（仅提示）\n')
+    snapshot = None
+    try:
+        snapshot = _load_sp500_risk_regime_snapshot(prefer_recent_csv=prefer_recent_csv, allow_embedded=False)
+        latest_date = snapshot['latest_date'].strftime('%Y-%m-%d')
+        changed_date = snapshot['regime_changed_date'].strftime('%Y-%m-%d')
+        flags = []
+        if snapshot['feature_veto']:
+            flags.append('单因子否决权触发')
+        if snapshot['oversold_turn_rule']:
+            flags.append('超跌拐头减分')
+        flag_text = f" | 规则: {'、'.join(flags)}" if flags else ''
+        if snapshot.get('source_type') in ('live', 'live_proxy'):
+            source_desc = snapshot.get('source_file', 'FRED+Yahoo实时计算')
+        elif snapshot.get('source_type') == 'csv':
+            source_desc = f"新策略学习/{snapshot['source_file']}"
+        else:
+            source_desc = snapshot.get('source_file', '脚本内置快照')
+        if snapshot.get('source_type') == 'STALE_EMBEDDED_DO_NOT_TRADE':
+            source_desc = f'{source_desc} (STALE_EMBEDDED_DO_NOT_TRADE)'
+        _prev_regime = snapshot.get('previous_regime')
+        if _prev_regime and _prev_regime != snapshot['regime']:
+            _change_text = f"{_prev_regime} → {snapshot['regime']} ({changed_date})"
+        else:
+            _change_text = changed_date
+        w(f'数据: {source_desc} | 周频标签: **{latest_date}** | 等级变化: **{_change_text}**\n')
+        if not snapshot.get('freshness_ok', True):
+            w(f"⚠️ 数据新鲜度: {snapshot.get('freshness_error', 'S&P风险等级数据过期')}；仅提示，不应按最新风控确认执行。\n")
+        w(f"等级: **{snapshot['regime']}** | 风险分数: **{snapshot['risk_score']:.1f}/100** | 建议美股风险资产预算上限: **{snapshot['suggested_equity_budget']}**{flag_text}\n")
+    except Exception as exc:
+        w(f'数据: FRED+Yahoo实时计算 | S&P风险等级: **UNKNOWN** | 本次实时计算失败: {_short_error(exc)}\n')
+    inflation = None
+    try:
+        inflation = _load_inflation_pressure_snapshot()
+        infl_state = '🟢 ON' if inflation['pressure_on'] else 'OFF'
+        macro_action = 'DBMF/KMLM 参与 Sub-B 官方腿候选池；EMA/Bias/LogVol腿始终US_ROT_POOL全池' if inflation['pressure_on'] else 'DBMF/KMLM 不进官方腿；EMA/Bias/LogVol腿仍始终US_ROT_POOL全池'
+        w(f"通胀开关: **{infl_state}** | {macro_action} | DBC {inflation['lookback']}日 {inflation['dbc_mom']:+.2%}, TLT {inflation['lookback']}日 {inflation['tlt_mom']:+.2%} | 数据日 {inflation['latest_date'].strftime('%Y-%m-%d')}\n")
+        if compact:
+            w('规则: DBC动量>0 且 TLT动量<0 时，通胀开关为 ON。\n\n---\n\n')
+            return
+    except Exception as exc:
+        w(f'通胀开关: **UNKNOWN** | 本次未取到 DBC/TLT/UUP 市场数据: {_short_error(exc)}\n')
+        if compact:
+            w('\n---\n\n')
+            return
+    if snapshot is not None:
+        w(f"信用口径: {snapshot['source_label']}（{snapshot['credit_series']}）\n")
+        if snapshot.get('source_type') in ('live', 'live_proxy'):
+            input_dates = snapshot.get('input_dates', {})
+            if input_dates:
+                credit_input_key = snapshot.get('credit_input_key', snapshot.get('credit_series', ''))
+                w(f"输入日期: SPX {input_dates.get('SPX', 'NA')} | VIX {input_dates.get('VIXCLS', 'NA')} | {snapshot['credit_series']} {input_dates.get(credit_input_key, 'NA')} | 10Y-2Y {input_dates.get('T10Y2Y', 'NA')}\n")
+            if snapshot.get('spx_source'):
+                macro_source = 'Yahoo代理' if snapshot.get('source_type') == 'live_proxy' else 'FRED文本镜像/CSV'
+                w(f"价格源: {snapshot['spx_source']} | 宏观源: {macro_source}\n")
+            if snapshot.get('source_type') == 'live_proxy':
+                w('⚠️ FRED本次未完整取到，S&P风险等级改用Yahoo代理实时计算；仅提示，不作为正式口径替代。\n')
+        elif snapshot.get('live_error'):
+            w('⚠️ 实时数据源本次未完整取到，当前显示为非实时备用快照；不要把它当作最新确认预警。\n')
+            w(f"实时取数失败原因: {_short_error(snapshot['live_error'])}\n")
+    try:
+        if inflation is None:
+            inflation = _load_inflation_pressure_snapshot()
+        w(f"通胀压力: **{inflation['label']}** | DBC {inflation['lookback']}日 **{inflation['dbc_mom']:.2%}** | TLT {inflation['lookback']}日 **{inflation['tlt_mom']:.2%}** | UUP {inflation['lookback']}日 **{inflation['uup_mom']:.2%}**\n")
+        w(f"通胀口径: **DBC动量>0 且 TLT动量<0**（{inflation['lookback']}日） | 数据日 {inflation['latest_date'].strftime('%Y-%m-%d')} | {inflation['source']} | {inflation['action']}\n")
+        if 'cpi_yoy' in inflation:
+            w(f"CPI背景: YoY **{inflation['cpi_yoy']:.2%}** | 3M年化 **{inflation['cpi_3m_ann']:.2%}** | YoY近6个月变化 **{inflation['cpi_yoy_change_6m']:.2%}**（{inflation['cpi_latest_date'].strftime('%Y-%m-%d')}，FRED CPIAUCSL）\n")
+        elif 'cpi_error' in inflation:
+            w(f"CPI背景: 本次未取到FRED CPIAUCSL，仅显示市场型通胀预警；原因: {inflation['cpi_error']}\n")
+    except Exception as exc:
+        w(f'⚠️ 通胀压力提示本次未取到 DBC/TLT/UUP 市场数据: {_short_error(exc)}\n')
+    w(f'定位: S&P风险等级只作组合级美股风险预算提示；通胀压力只控制 Sub-B 官方腿宏观候选池。{_v78_subb_inflation_participation_note()}\n\n---\n\n')
+
+def _sm():
+    return poe.start_message()
+
+def _get_session():
+    s = requests.Session()
+    retries = Retry(total=5, connect=3, read=3, backoff_factor=1.5, status_forcelist=[500, 502, 503, 504], allowed_methods=['GET'])
+    s.mount('https://', HTTPAdapter(max_retries=retries))
+    s.mount('http://', HTTPAdapter(max_retries=retries))
+    s.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'})
+    return s
+_session = _get_session()
+atexit.register(_session.close)
+_csindex_fail_state = threading.local()
+
+def _get_csindex_consecutive_fails():
+    return int(getattr(_csindex_fail_state, 'consecutive_fails', 0) or 0)
+
+def _set_csindex_consecutive_fails(value):
+    _csindex_fail_state.consecutive_fails = max(0, int(value))
+
+def _reset_csindex_consecutive_fails():
+    _set_csindex_consecutive_fails(0)
+
+def _increment_csindex_consecutive_fails():
+    _set_csindex_consecutive_fails(_get_csindex_consecutive_fails() + 1)
+
+class DataSchemaError(ValueError):
+    pass
+
+class VerifiedDataRepairConflict(RuntimeError):
+    """Deterministic integrity failure, outside transient fallback error tuples.
+
+    Never downgrade this to unavailable data or an ordinary position signal.
+    """
+    pass
+
+class DataUnavailableError(RuntimeError):
+    pass
+
+class SubaInsufficientHistoryError(DataUnavailableError):
+    """Sub-A price series are continuous but too short to compute the position."""
+
+class SubaVolumeDataError(RuntimeError):
+    """Keep provider evidence without touching Poe's runtime-only API at import."""
+    pass
+NETWORK_ERRORS = (requests.exceptions.RequestException, json.JSONDecodeError)
+DATA_VALIDATION_ERRORS = (ValueError, pd.errors.ParserError, DataSchemaError, DataUnavailableError)
+_DATA_FETCH_ERRORS = NETWORK_ERRORS + DATA_VALIDATION_ERRORS
+
+def _fetch_or_bot_errors():
+    try:
+        bot_error = poe.BotError
+    except AttributeError:
+        bot_error = None
+    return _DATA_FETCH_ERRORS + ((bot_error,) if isinstance(bot_error, type) else ())
+
+def _secid_to_sina(secid):
+    market, code = secid.split('.')
+    return ('sh' if market == '1' else 'sz') + code
+
+def _secid_to_sohu_index(secid):
+    _market, code = secid.split('.')
+    if code.startswith('H'):
+        code = code[1:].zfill(6)
+    return 'zs_' + code
+
+def _vendor_secid_candidates(secid):
+    aliases = CN_VENDOR_SECID_ALIASES.get(secid)
+    if aliases:
+        return list(dict.fromkeys(aliases))
+    return [secid]
+
+def _fetch_cn_eastmoney(secid):
+    end_date = (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')
+    url = f'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&beg=20050101&end={end_date}&lmt=10000'
+    resp = _session.get(url, timeout=30, headers={'Referer': 'https://quote.eastmoney.com/'})
+    resp.raise_for_status()
+    data = resp.json()
+    inner = data.get('data') if isinstance(data, dict) else None
+    if not isinstance(data, dict) or type(data.get('rc')) is not int or data['rc'] != 0:
+        raise DataSchemaError(f'EastMoney daily price business failure for {secid}')
+    if not isinstance(inner, dict):
+        raise ValueError(f'EastMoney returned null data for {secid}')
+    market, code = secid.split('.', 1)
+    if str(inner.get('market')) != market or str(inner.get('code')) != code:
+        raise DataSchemaError(f'EastMoney daily price identity mismatch for {secid}')
+    klines = inner.get('klines')
+    if not isinstance(klines, list) or not klines:
+        raise ValueError(f'EastMoney returned empty klines for {secid}')
+    if any(not isinstance(line, str) or len(line.split(',')) < 3 for line in klines):
+        raise DataSchemaError(f'EastMoney daily price row malformed for {secid}')
+    rows = [{'date': p[0], 'close': float(p[2])} for line in klines for p in [line.split(',')]]
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _fetch_cn_eastmoney_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000):
+    end_date = (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')
+    url = f'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&beg={beg}&end={end_date}&lmt={int(lmt)}'
+    resp = _session.get(url, timeout=30, headers={'Referer': 'https://quote.eastmoney.com/'})
+    resp.raise_for_status()
+    data = resp.json()
+    inner = data.get('data') if isinstance(data, dict) else None
+    if not isinstance(inner, dict):
+        raise ValueError(f'EastMoney returned null data for {secid}')
+    market, code = secid.split('.', 1)
+    if str(inner.get('market')) != market or str(inner.get('code')) != code:
+        raise DataSchemaError(f'EastMoney amount identity mismatch for {secid}')
+    if type(data.get('rc')) is not int or data['rc'] != 0:
+        raise DataSchemaError(f'EastMoney amount business failure for {secid}')
+    klines = inner.get('klines')
+    if not isinstance(klines, list):
+        raise DataSchemaError(f'EastMoney amount klines must be a list for {secid}')
+    if not klines:
+        raise ValueError(f'EastMoney returned empty klines for {secid}')
+    rows = []
+    for line in klines:
+        if not isinstance(line, str):
+            raise DataSchemaError(f'EastMoney amount row must be CSV text for {secid}')
+        p = line.split(',')
+        if len(p) < 7:
+            raise DataSchemaError(f'EastMoney amount row has fewer than 7 fields for {secid}')
+        rows.append({'date': p[0], 'close': float(p[2]), 'volume': float(p[5]), 'amount': float(p[6])})
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _fetch_cn_sina(secid):
+    symbol = _secid_to_sina(secid)
+    url = f'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen=10000'
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data or not isinstance(data, list) or len(data) == 0:
+        raise ValueError(f'Sina returned empty data for {symbol}')
+    rows = [{'date': item['day'], 'close': float(item['close'])} for item in data]
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _fetch_cn_sina_amount_proxy(secid):
+    symbol = _secid_to_sina(secid)
+    url = f'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol={symbol}&scale=240&ma=no&datalen=10000'
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data or not isinstance(data, list) or len(data) == 0:
+        raise ValueError(f'Sina returned empty data for {symbol}')
+    rows = []
+    for item in data:
+        rows.append({'date': item['day'], 'close': float(item['close']), 'volume': float(item.get('volume', 0) or 0), 'amount': float(item.get('volume', 0) or 0), 'source': 'Sina volume proxy'})
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _fetch_cn_sohu_amount_symbol(symbol, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300, source_name='Sohu amount'):
+    end_date = (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')
+    url = f'https://q.stock.sohu.com/hisHq?code={symbol}&start={beg}&end={end_date}&stat=1&order=D&period=d&rt=json'
+    resp = _session.get(url, timeout=30, headers={'Referer': 'https://q.stock.sohu.com/'})
+    resp.raise_for_status()
+    data = resp.json()
+    if not data or not isinstance(data, list):
+        raise ValueError(f'Sohu returned empty data for {symbol}')
+    first = data[0]
+    if not isinstance(first, dict) or first.get('status') != 0 or (not first.get('hq')):
+        raise ValueError(f"Sohu returned unavailable data for {symbol}: {(first.get('msg') if isinstance(first, dict) else first)}")
+    if first.get('code') != symbol or not isinstance(first['hq'], list):
+        raise DataSchemaError(f'Sohu daily identity/schema mismatch for {symbol}')
+    rows = []
+    for item in first['hq']:
+        if not isinstance(item, list) or len(item) < 9:
+            raise DataSchemaError(f'Sohu daily row malformed for {symbol}')
+        rows.append({'date': item[0], 'close': float(item[2]), 'volume': float(item[7]), 'amount': float(item[8]), 'source': source_name})
+    if not rows:
+        raise ValueError(f'Sohu returned no usable rows for {symbol}')
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index().tail(int(lmt))
+
+def _repair_verified_suba_amount_gap(secid, frame):
+    """Fill only the verified same-index Sohu gap, in its existing units.
+
+    CNI 399006 constituent aggregate, 2018-12-14: 16,910,087,992.04 CNY.
+    https://hq.cnindex.com.cn/market/market/getIndexDailyData?indexCode=399006&startDate=2018-12-10&endDate=2018-12-20
+    Sohu amount is CNY 10,000; adjacent source values certify this basis.
+    """
+    day = pd.Timestamp('2018-12-14')
+    if secid != CN_SA_VOLUME_CYB_SECID or frame.empty or frame.index.min() > day or (frame.index.max() < day):
+        return frame
+    if frame.index.has_duplicates or not frame.index.is_monotonic_increasing:
+        raise VerifiedDataRepairConflict('CYB amount has invalid date ordering/duplicates')
+    wanted = 16910087992.04 / 10000.0
+    current = float(frame.loc[day, 'amount']) if day in frame.index else np.nan
+    anchors = {'2018-12-13': 16789678896.88 / 10000.0, '2018-12-17': 14243867671.17 / 10000.0}
+    for date, expected in anchors.items():
+        stamp = pd.Timestamp(date)
+        if stamp not in frame.index or not np.isclose(float(frame.loc[stamp, 'amount']), expected, rtol=2e-07, atol=0.01):
+            raise VerifiedDataRepairConflict('CYB amount unit/constituent basis cannot be verified at ' + date)
+    if np.isfinite(current) and current > 0:
+        if not np.isclose(current, wanted, rtol=2e-07, atol=0.01):
+            raise VerifiedDataRepairConflict('CYB 2018-12-14 amount conflicts with verified CNI basis')
+        return frame
+    out = frame.copy()
+    out.loc[day, ['close', 'volume', 'amount', 'source']] = [1310.4576, 1282009120 / 100.0, wanted, 'CNI verified amount 2018-12-14']
+    out = out.sort_index()
+    out.attrs['verified_amount_repair'] = 'CNI-399006-20181214'
+    return out
+
+def _fetch_cn_sohu_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
+    symbol = _secid_to_sohu_index(secid)
+    frame = _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name='Sohu amount')
+    return _repair_verified_suba_amount_gap(secid, frame)
+
+def _fetch_cn_sohu_fund_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=300):
+    _market, code = secid.split('.')
+    symbol = 'cn_' + code
+    return _fetch_cn_sohu_amount_symbol(symbol, beg=beg, lmt=lmt, source_name='Sohu fund amount')
+
+def _fetch_cn_qq_kline(secid, datalen=2000):
+    market, code = secid.split('.')
+    symbol = ('sh' if market == '1' else 'sz') + code
+    url = f'https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param={symbol},day,,,{datalen}'
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json().get('data')
+    if not isinstance(data, dict) or symbol not in data or 'day' not in data[symbol]:
+        raise ValueError(f'QQ returned empty data for {symbol}')
+    day = data[symbol]['day']
+    if not isinstance(day, list) or not day:
+        raise ValueError(f'QQ returned empty kline for {symbol}')
+    if any(not isinstance(item, list) or len(item) < 3 for item in day):
+        raise DataSchemaError(f'QQ daily price row malformed for {symbol}')
+    rows = [{'date': item[0], 'close': float(item[2])} for item in day]
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _fetch_cn_qq_amount_proxy(secid, datalen=10000):
+    market, code = secid.split('.')
+    symbol = ('sh' if market == '1' else 'sz') + code
+    url = f'https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param={symbol},day,,,{datalen}'
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    data = resp.json().get('data')
+    if not isinstance(data, dict) or symbol not in data or 'day' not in data[symbol]:
+        raise ValueError(f'QQ returned empty data for {symbol}')
+    day = data[symbol]['day']
+    if not day:
+        raise ValueError(f'QQ returned empty kline for {symbol}')
+    rows = []
+    for item in day:
+        volume = float(item[5]) if len(item) > 5 and item[5] not in ('', None) else 0.0
+        rows.append({'date': item[0], 'close': float(item[2]), 'volume': volume, 'amount': volume, 'source': 'QQ volume proxy'})
+    df = pd.DataFrame(rows)
+    df['date'] = pd.to_datetime(df['date'])
+    return df.set_index('date').sort_index()
+
+def _csindex_detail_page_code(index_code):
+    special = {'H20955': '930955', 'H30269': '930769', 'H11077': '931077'}
+    if index_code in special:
+        return special[index_code]
+    if index_code.startswith('H'):
+        body = index_code[1:]
+        if body.isdigit():
+            return body.zfill(6)
+    return index_code
+
+def _fetch_cn_csindex(index_code, _max_retries=3):
+    effective_retries = 1 if _get_csindex_consecutive_fails() >= 2 else _max_retries
+    detail_code = _csindex_detail_page_code(index_code)
+    detail_url = f'https://www.csindex.com.cn/indices/index-detail/{detail_code}'
+    url = f"https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={index_code}&startDate=20050101&endDate={(datetime.now() + timedelta(days=30)).strftime('%Y%m%d')}"
+    doc_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8', 'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"Windows"', 'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1', 'Upgrade-Insecure-Requests': '1'}
+    api_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Referer': detail_url, 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8', 'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"Windows"', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Site': 'same-origin', 'X-Requested-With': 'XMLHttpRequest'}
+    last_err = None
+    for attempt in range(effective_retries):
+        if attempt > 0:
+            time.sleep(2 * attempt)
+        with requests.Session() as sess:
+            try:
+                sess.get(detail_url, timeout=15, headers=doc_headers)
+            except requests.exceptions.RequestException:
+                pass
+            resp = sess.get(url, timeout=30, headers=api_headers)
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError):
+            last_err = requests.exceptions.HTTPError(f'csindex returned HTTP {resp.status_code} non-JSON for {index_code}')
+            if resp.status_code == 403:
+                continue
+            resp.raise_for_status()
+            raise ValueError(f'csindex returned non-JSON for {index_code}')
+        if resp.status_code == 200 and isinstance(data, dict) and data.get('code') == '200' and data.get('success') is True and isinstance(data.get('data'), list) and data['data']:
+            try:
+                if any(not isinstance(item, dict) or str(item.get('indexCode')) != index_code for item in data['data']):
+                    raise DataSchemaError(f'CSIndex daily identity mismatch for {index_code}')
+                rows = [{'date': item['tradeDate'], 'close': float(item['close'])} for item in data['data'] if item is not None]
+            except (TypeError, KeyError, ValueError) as e:
+                last_err = e
+                if resp.status_code == 403:
+                    continue
+                raise
+            if rows:
+                df = pd.DataFrame(rows)
+                df['date'] = pd.to_datetime(df['date'])
+                _reset_csindex_consecutive_fails()
+                return df.set_index('date').sort_index()
+        last_err = ValueError(f'csindex returned no data for {index_code} (HTTP {resp.status_code})')
+        if resp.status_code == 403:
+            continue
+        resp.raise_for_status()
+        raise last_err
+    _increment_csindex_consecutive_fails()
+    raise last_err or ValueError(f'csindex failed after {effective_retries} retries for {index_code}')
+
+def _fetch_cn_csindex_amount(secid, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, _max_retries=2):
+    index_code = CN_CSI_AMOUNT_INDEX_CODES.get(secid)
+    if not index_code:
+        raise ValueError(f'no csindex amount mapping for {secid}')
+    detail_code = _csindex_detail_page_code(index_code)
+    detail_url = f'https://www.csindex.com.cn/indices/index-detail/{detail_code}'
+    end_date = (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')
+    url = f'https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode={index_code}&startDate={beg}&endDate={end_date}'
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Referer': detail_url, 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8', 'X-Requested-With': 'XMLHttpRequest'}
+    last_err = None
+    for attempt in range(int(_max_retries)):
+        if attempt > 0:
+            time.sleep(1.5 * attempt)
+        try:
+            with requests.Session() as sess:
+                try:
+                    sess.get(detail_url, timeout=10, headers=headers)
+                except requests.exceptions.RequestException:
+                    pass
+                resp = sess.get(url, timeout=20, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            if not isinstance(data, dict) or data.get('code') != '200' or data.get('success') is not True or not isinstance(data.get('data'), list):
+                raise DataSchemaError(f'CSIndex amount business/schema failure for {index_code}')
+            rows = []
+            for item in data['data']:
+                if not isinstance(item, dict) or str(item.get('indexCode')) != index_code:
+                    raise DataSchemaError(f'CSIndex amount identity mismatch for {index_code}')
+                trading_value = item.get('tradingValue')
+                if trading_value in (None, ''):
+                    continue
+                rows.append({'date': item.get('tradeDate'), 'close': float(item.get('close')), 'volume': float(item.get('tradingVol', 0) or 0), 'amount': float(trading_value), 'source': f'CSIndex official amount {index_code}'})
+            if rows:
+                df = pd.DataFrame(rows)
+                df['date'] = pd.to_datetime(df['date'])
+                return df.set_index('date').sort_index().tail(int(lmt))
+            last_err = ValueError(f'CSIndex returned no tradingValue rows for {index_code} (HTTP {resp.status_code})')
+            if resp.status_code != 403:
+                resp.raise_for_status()
+        except _DATA_FETCH_ERRORS as exc:
+            last_err = exc
+    raise last_err or ValueError(f'CSIndex amount failed for {index_code}')
+
+def _fetch_cn_csindex_with_candidates(index_code):
+    candidates = CN_CSINDEX_CANDIDATES.get(index_code, [index_code])
+    last_err = None
+    attempts = []
+    for candidate in candidates:
+        try:
+            df = _fetch_cn_csindex(candidate)
+            if df is not None and len(df) > 50:
+                source = 'csindex' if candidate == index_code else f'csindex:{candidate}'
+                return (df, source)
+        except poe.BotError:
+            raise
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f'{candidate}:{e}')
+            time.sleep(1)
+    attempts_text = ' | '.join(attempts[-4:]) if attempts else str(last_err)
+    raise last_err or ValueError(f'csindex returned no usable data for {index_code}; tried: {attempts_text}')
+
+def _fetch_cn_h_proxy(secid):
+    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
+    if not proxy_secid:
+        raise ValueError(f'no H proxy configured for {secid}')
+    last_err = None
+    for name, fetcher in [('Sina-proxy', lambda s=proxy_secid: _fetch_cn_sina(s)), ('EastMoney-proxy', lambda s=proxy_secid: _fetch_cn_eastmoney(s))]:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50:
+                return (df, f'{name}:{proxy_secid}')
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            time.sleep(1)
+    raise last_err or ValueError(f'H proxy returned no usable data for {secid} -> {proxy_secid}')
+
+def _fetch_cn_price_index_proxy(secid):
+    proxy_secid = CN_CSINDEX_PRICE_PROXY_SECIDS.get(secid)
+    if not proxy_secid:
+        raise ValueError(f'no price-index proxy configured for {secid}')
+    last_err = None
+    for name, fetcher in [('Sina ETF return proxy', lambda s=proxy_secid: _fetch_cn_sina(s)), ('QQ ETF return proxy', lambda s=proxy_secid: _fetch_cn_qq_kline(s)), ('EastMoney ETF return proxy', lambda s=proxy_secid: _fetch_cn_eastmoney(s))]:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50:
+                return (df, f'{name}:{proxy_secid}')
+        except _DATA_FETCH_ERRORS as exc:
+            last_err = exc
+    raise last_err or ValueError(f'price-index proxy returned no usable data for {secid} -> {proxy_secid}')
+
+def _stitch_cn_proxy_returns(base_df, proxy_df):
+    if base_df is None or len(base_df) == 0:
+        return proxy_df
+    if proxy_df is None or len(proxy_df) == 0:
+        return base_df
+    if 'close' not in base_df.columns or 'close' not in proxy_df.columns:
+        return base_df
+    base = base_df[['close']].copy().sort_index()
+    proxy = proxy_df[['close']].copy().sort_index()
+    overlap = base.index.intersection(proxy.index)
+    if len(overlap) == 0:
+        return base
+    if base.index.max() >= proxy.index.max():
+        return base
+    anchor = overlap[-1]
+    stitched = base.copy()
+    proxy_tail = proxy.loc[anchor:, 'close'].dropna()
+    if len(proxy_tail) <= 1:
+        return stitched
+    last_close = float(base.loc[anchor, 'close'])
+    base_latest = base.index.max()
+    rows = []
+    prev_proxy = float(proxy_tail.iloc[0])
+    for dt, px in proxy_tail.iloc[1:].items():
+        px = float(px)
+        if prev_proxy <= 0:
+            prev_proxy = px
+            continue
+        last_close *= px / prev_proxy
+        if dt > base_latest:
+            rows.append((dt, last_close))
+        prev_proxy = px
+    if rows:
+        ext = pd.DataFrame(rows, columns=['date', 'close']).set_index('date')
+        stitched = pd.concat([stitched, ext], axis=0)
+    return stitched[~stitched.index.duplicated(keep='last')].sort_index()
+
+def _project_proxy_realtime_close(df, proxy_df, realtime_proxy_close):
+    if df is None or len(df) == 0 or proxy_df is None or (len(proxy_df) == 0):
+        raise DataUnavailableError('realtime proxy projection requires both historical anchors')
+    if 'close' not in df.columns or 'close' not in proxy_df.columns:
+        raise DataSchemaError('realtime proxy projection requires close columns')
+    last_date = df.index[-1]
+    if last_date not in proxy_df.index or proxy_df.index.has_duplicates:
+        raise DataUnavailableError(f'realtime proxy projection missing exact anchor at {last_date}')
+    prev_proxy_close = float(proxy_df.loc[last_date, 'close'])
+    last_close = float(df.iloc[-1]['close'])
+    quote = float(realtime_proxy_close)
+    if not all((np.isfinite(value) and value > 0 for value in (prev_proxy_close, last_close, quote))):
+        raise DataSchemaError('realtime proxy projection requires finite positive prices')
+    return last_close * (quote / prev_proxy_close)
+
+def _cn_record_quote(price, stamp, source, receipt):
+    if receipt is not None:
+        stamp = pd.Timestamp(stamp)
+        if stamp.tzinfo is not None:
+            stamp = stamp.tz_convert('Asia/Shanghai').tz_localize(None)
+        receipt.update(time=stamp, source=source)
+    return price
+
+def _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=None, receipt=None):
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
+    for candidate_secid in candidate_secids:
+        parts = str(candidate_secid).split('.', 1)
+        if len(parts) != 2 or parts[0] not in {'0', '1'}:
+            continue
+        symbol = ('sh' if parts[0] == '1' else 'sz') + parts[1]
+        try:
+            resp = requests.get(f'https://qt.gtimg.cn/q={symbol}', timeout=5, headers={'Referer': 'https://gu.qq.com/'})
+            resp.raise_for_status()
+            text = resp.content.decode('gbk', errors='ignore')
+            payload = text.split('"', 2)[1] if '"' in text else ''
+            fields = payload.split('~')
+            if len(fields) > 30 and fields[2] == parts[1] and text.startswith(f'v_{symbol}="'):
+                stamp = pd.to_datetime(fields[30], format='%Y%m%d%H%M%S')
+                price = float(fields[3])
+                if np.isfinite(price) and price > 0 and _cn_quote_time_valid(stamp, expected):
+                    return _cn_record_quote(price, stamp, '腾讯', receipt)
+        except _DATA_FETCH_ERRORS:
+            pass
+        try:
+            resp = requests.get(f'https://hq.sinajs.cn/list={symbol}', timeout=5, headers={'Referer': 'https://finance.sina.com.cn/'})
+            resp.raise_for_status()
+            text = resp.content.decode('gb18030', errors='ignore')
+            payload = text.split('"', 2)[1] if '"' in text else ''
+            fields = payload.split(',')
+            if len(fields) > 31 and text.startswith(f'var hq_str_{symbol}="'):
+                stamp = pd.Timestamp(f'{fields[30]} {fields[31]}')
+                price = float(fields[3])
+                if np.isfinite(price) and price > 0 and _cn_quote_time_valid(stamp, expected):
+                    return _cn_record_quote(price, stamp, '新浪', receipt)
+        except _DATA_FETCH_ERRORS:
+            pass
+    return None
+
+def _cn_quote_time_valid(quote_time, expected_date, now=None):
+    stamp = pd.Timestamp(quote_time)
+    if pd.isna(stamp):
+        return False
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize('Asia/Shanghai')
+    else:
+        stamp = stamp.tz_convert('Asia/Shanghai')
+    now = pd.Timestamp(beijing_now() if now is None else now)
+    now = now.tz_localize('Asia/Shanghai') if now.tzinfo is None else now.tz_convert('Asia/Shanghai')
+    if stamp.date() != expected_date or expected_date != now.date() or stamp > now or (not _is_cn_required_close_day(stamp.date())):
+        return False
+    minute = (stamp.hour, stamp.minute, stamp.second)
+    if not ((9, 30, 0) <= minute <= (11, 30, 0) or (13, 0, 0) <= minute <= (15, 0, 0)):
+        return False
+    if (now.hour, now.minute) >= (15, 0):
+        return False
+    reference = now.replace(hour=11, minute=30, second=0, microsecond=0) if (11, 30) <= (now.hour, now.minute) < (13, 0) else now
+    return pd.Timedelta(0) <= reference - stamp <= pd.Timedelta(minutes=5)
+
+def _cn_latest_completed_minute(dates, expected_date):
+    if dates.empty or dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+        return None
+    now = pd.Timestamp(beijing_now())
+    if now.tzinfo is not None:
+        now = now.tz_convert('Asia/Shanghai').tz_localize(None)
+    if dates.tz is not None or any(day.date() != expected_date for day in dates) or dates[-1] > now.ceil('min'):
+        return None
+    eligible = np.flatnonzero(dates <= now)
+    if len(eligible) and _cn_quote_time_valid(dates[eligible[-1]], expected_date):
+        return eligible[-1]
+    return None
+
+def _fetch_cn_trend_rows(secid, host, ndays=1):
+    market, code = secid.split('.', 1)
+    url = f'https://{host}/api/qt/stock/trends2/get?secid={secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays={ndays}&iscr=0'
+    resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
+    resp.raise_for_status()
+    payload = resp.json()
+    if not isinstance(payload, dict) or type(payload.get('rc')) is not int or payload['rc'] != 0:
+        raise DataSchemaError(f'EastMoney trend request failed for {secid}')
+    data = payload.get('data')
+    if not isinstance(data, dict) or str(data.get('code')) != code or str(data.get('market')) != market:
+        raise DataSchemaError(f'EastMoney trend identity mismatch for {secid}')
+    rows = data.get('trends')
+    if not isinstance(rows, list) or not rows:
+        raise DataUnavailableError(f'EastMoney trends unavailable for {secid}')
+    fields = [row.split(',') for row in rows if isinstance(row, str)]
+    if len(fields) != len(rows) or any(len(row) < 3 for row in fields):
+        raise DataSchemaError(f'EastMoney trend rows malformed for {secid}')
+    return data, fields
+
+def _fetch_cn_realtime_trends(candidate_secids, expected_date, *, host='push2his.eastmoney.com', receipt=None):
+    """Date-stamped same-index fallback for quotes whose f124 is absent/zero."""
+    for candidate_secid in candidate_secids:
+        try:
+            _, fields = _fetch_cn_trend_rows(candidate_secid, host)
+            dates = pd.DatetimeIndex(pd.to_datetime([row[0] for row in fields], errors='coerce'))
+            pos = _cn_latest_completed_minute(dates, expected_date)
+            if pos is None:
+                continue
+            price = float(fields[pos][2])
+            if np.isfinite(price) and price > 0:
+                return _cn_record_quote(price, dates[pos], f'东方财富/{host}', receipt)
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+            continue
+    return None
+
+class _CNFinalSessions(dict):
+    """Keep verification diagnostics separate from usable close receipts."""
+
+    def __init__(self):
+        super().__init__()
+        self.diagnostics = {}
+
+
+def _cn_historical_daily_receipt(secid, day, clock, require_amount):
+    """Cross-check completed historical sessions using independent exact-index daily feeds.
+
+    Never use this path for the request date: a daily bar may still be provisional.
+    Amounts are compared in CNY, not across vendor-specific reporting units.
+    """
+    day = pd.Timestamp(day).normalize()
+    if day >= pd.Timestamp(clock).normalize() or not _is_cn_required_close_day(day):
+        return None, 'not a completed historical trading session'
+    date_text = day.strftime('%Y%m%d')
+    vendor_code = _vendor_secid_candidates(secid)[0]
+    code = secid.split('.', 1)[1]
+    def eastmoney_price():
+        errors = []
+        for alias in _vendor_secid_candidates(secid):
+            try:
+                frame = _fetch_cn_eastmoney(alias)
+                if day not in frame.index:
+                    raise DataUnavailableError(f'missing {day:%Y-%m-%d}')
+                return frame
+            except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+                errors.append(f'{alias}: {_short_error(exc)}')
+        raise DataUnavailableError('; '.join(errors))
+    if secid == CN_SA_VOLUME_ZZ2000_SECID:
+        sources = [('CSIndex', lambda: _fetch_cn_csindex_amount(secid, beg=date_text, lmt=10), 1e8),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney_amount(vendor_code, beg=date_text, lmt=10), 1.0),
+                   ('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), 1e4)]
+    elif secid == CN_SA_VOLUME_CYB_SECID:
+        sources = [('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), 1e4),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney_amount(vendor_code, beg=date_text, lmt=10), 1.0),
+                   ('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    elif secid == CN_BOND_CODE:
+        sources = [('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    elif secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        sources = [('CSIndex', lambda: _fetch_cn_csindex(code), None),
+                   ('EastMoney', eastmoney_price, None),
+                   ('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None),
+                   ('Sohu', lambda: _fetch_cn_sohu_amount(secid, beg=date_text, lmt=10), None)]
+    elif secid in CN_ALL_CODES or secid == CN_DK_HS300_SECID:
+        sources = [('Sina', lambda: _fetch_cn_sina(secid), None),
+                   ('EastMoney', lambda: _fetch_cn_eastmoney(vendor_code), None),
+                   ('QQ', lambda: _fetch_cn_qq_kline(secid), None)]
+    else:
+        return None, 'no exact-index daily sources configured'
+
+    prices, amounts, attempts = [], [], []
+    for name, fetcher, unit in sources:
+        try:
+            frame = fetcher()
+            dates = pd.DatetimeIndex(frame.index)
+            if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing or dates.tz is not None or not dates.equals(dates.normalize()):
+                raise DataSchemaError('invalid daily date index')
+            frame = frame.loc[:day]
+            checked = _price_column_frame(frame, 'close', secid)
+            if day not in checked.index:
+                raise DataUnavailableError(f'missing {day:%Y-%m-%d} daily close')
+            live_flag = frame.at[day, 'is_live_bar'] if 'is_live_bar' in frame else False
+            price = checked.at[day, secid]
+            if (pd.notna(live_flag) and bool(live_flag)) or not np.isfinite(price) or price <= 0:
+                raise DataSchemaError('invalid or provisional daily close')
+            if prices and not np.isclose(price, prices[0][1], atol=0.00501, rtol=0):
+                return None, f'{prices[0][0]} vs {name}: daily close mismatch ({prices[0][1]} vs {price})'
+            prices.append((name, float(price)))
+            if require_amount and unit is not None and 'amount' in frame:
+                amount = pd.to_numeric(frame.at[day, 'amount'], errors='coerce') * unit
+                if np.isfinite(amount) and amount > 0:
+                    amounts.append((name, float(amount), unit))
+                else:
+                    attempts.append(f'{name}: invalid daily amount')
+            if len(prices) >= 2 and (not require_amount or len(amounts) >= 2):
+                break
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+            attempts.append(f'{name}: {_short_error(exc)}')
+    # CNFin's date-stamped ENDTR quote is a separate provider. At midnight it
+    # may still publish yesterday's completed session even when minute history
+    # has rolled over. Require exact identity, date, final timestamp and close.
+    if prices and (len(prices) < 2 or require_amount and len(amounts) < 2) and secid in {CN_ZZHL_INDEX_SECID, CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_ZZ2000_SECID}:
+        symbol = ('930955.CSI' if secid == CN_ZZHL_INDEX_SECID else '932000.CSI' if secid == CN_SA_VOLUME_ZZ2000_SECID else '399006.SZ')
+        try:
+            quote = _fetch_cnfin_close_snapshot(symbol, day, day + pd.Timedelta(hours=15), prices[0][1])
+            if quote is not None:
+                prices.append(('CNFin ENDTR', float(quote['last_px'])))
+                raw = quote.get('business_balance')
+                if require_amount and type(raw) in (int, float) and np.isfinite(raw) and raw > 0:
+                    unit = 1e4 if secid == CN_SA_VOLUME_ZZ2000_SECID else 1.0
+                    amounts.append(('CNFin ENDTR', float(raw) * unit, unit))
+            else:
+                attempts.append('CNFin: previous session ENDTR snapshot unavailable or inconsistent')
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError, KeyError, IndexError, AttributeError, OSError) as exc:
+            attempts.append(f'CNFin: {_short_error(exc)}')
+    if len(prices) < 2:
+        return None, '; '.join(attempts) or 'fewer than two independent daily closes'
+    evidence = {'close': prices[0][1], 'source': 'historical daily: ' + '+'.join(name for name, _ in prices)}
+    if require_amount:
+        if len(amounts) >= 2:
+            first, second = amounts[:2]
+            tolerance = max(first[2] * (0.0050001 if first[2] == 1e8 else 0.5),
+                            second[2] * (0.0050001 if second[2] == 1e8 else 0.5),
+                            max(first[1], second[1]) * 1e-8)
+            if np.isclose(first[1], second[1], atol=tolerance, rtol=0):
+                evidence['amount_cny'] = min(amounts, key=lambda item: item[2])[1]
+            else:
+                attempts.append(f'{first[0]} vs {second[0]}: daily amount mismatch after CNY conversion')
+        else:
+            attempts.append('fewer than two independent daily amounts')
+    return evidence, '; '.join(attempts)
+
+
+def _fetch_cn_final_sessions(secid, expected_closes, clock):
+    """Verify terminal minute coverage for recent sessions, including across midnight."""
+    slots = {}
+    now = pd.Timestamp(clock)
+    for expected in expected_closes:
+        day = pd.Timestamp(expected).normalize()
+        end = day + (CN_BOND_SESSION_END if secid == CN_BOND_CODE else pd.Timedelta(hours=15))
+        if now < end:
+            continue
+        morning = pd.date_range(day + pd.Timedelta(hours=9, minutes=30), day + pd.Timedelta(hours=11, minutes=30), freq='min')
+        afternoon = pd.date_range(day + pd.Timedelta(hours=13, minutes=1), end, freq='min')
+        slots[day] = morning.append(afternoon)
+    if not slots:
+        return {}
+    ndays = 5 if any(day < now.normalize() for day in slots) else 1
+    vendor_code = _vendor_secid_candidates(secid)[0]
+    verified = _CNFinalSessions()
+    require_amount = secid in {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
+    for host in ('push2his.eastmoney.com', 'push2.eastmoney.com'):
+        try:
+            data, rows = _fetch_cn_trend_rows(vendor_code, host, ndays)
+            stamp = data.get('time')
+            if type(stamp) not in (float, int) or not np.isfinite(stamp) or not 0 < stamp < 4102444800:
+                continue
+            stamped_at = pd.Timestamp(stamp, unit='s', tz='UTC').tz_convert('Asia/Shanghai').tz_localize(None)
+            if stamped_at > pd.Timestamp(beijing_now()):
+                continue
+            dates = pd.DatetimeIndex(pd.to_datetime([row[0] for row in rows], errors='coerce'))
+            if dates.hasnans or dates.tz is not None or dates.has_duplicates or not dates.is_monotonic_increasing:
+                continue
+            for day, sessions in slots.items():
+                existing = verified.get(day)
+                if (existing and (not require_amount or 'amount_cny' in existing)) or stamped_at < sessions[-1]:
+                    continue
+                mask = dates.normalize() == day
+                if not dates[mask].equals(sessions):
+                    continue
+                selected = [rows[i] for i in np.flatnonzero(mask)]
+                close = float(selected[-1][2])
+                if not np.isfinite(close) or close <= 0:
+                    continue
+                evidence = {'close': close}
+                if require_amount and all(len(row) >= 7 for row in selected):
+                    amounts = pd.to_numeric([row[6] for row in selected], errors='coerce')
+                    if np.isfinite(amounts).all() and (amounts >= 0).all() and amounts.sum() > 0:
+                        evidence['amount_cny'] = float(amounts.sum())
+                if existing is None:
+                    verified[day] = evidence
+                elif 'amount_cny' in evidence and np.isclose(close, existing['close'], rtol=0, atol=0.00501):
+                    existing['amount_cny'] = evidence['amount_cny']
+            if len(verified) == len(slots) and (not require_amount or all('amount_cny' in item for item in verified.values())):
+                break
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+            continue
+    for day, sessions in slots.items():
+        existing = verified.get(day)
+        if existing and (not require_amount or 'amount_cny' in existing):
+            continue
+        alternative = _fetch_cnfin_final_session(secid, day, sessions, now, require_amount)
+        if alternative and existing is None:
+            verified[day] = alternative
+        elif alternative and 'amount_cny' in alternative and np.isclose(alternative['close'], existing['close'], rtol=0, atol=0.00501):
+            existing['amount_cny'] = alternative['amount_cny']
+    # Minute history may expire or be inaccessible the next day. Do not make
+    # historical queries depend exclusively on it, but never relax today's gate.
+    for day in slots:
+        existing = verified.get(day)
+        if day >= now.normalize() or (existing and (not require_amount or 'amount_cny' in existing)):
+            continue
+        evidence, detail = _cn_historical_daily_receipt(secid, day, now, require_amount)
+        if evidence and existing is None:
+            verified[day] = evidence
+        elif evidence and np.isclose(evidence['close'], existing['close'], atol=0.00501, rtol=0):
+            if 'amount_cny' in evidence:
+                existing['amount_cny'] = evidence['amount_cny']
+                existing['source'] = evidence['source'] + ' (amount cross-check)'
+        elif evidence:
+            detail = 'historical daily close conflicts with minute receipt'
+        if detail:
+            verified.diagnostics[day] = detail
+    return verified
+
+def _fetch_cnfin_candles(symbol, expected_date, fields):
+    date_text = expected_date.strftime('%Y%m%d')
+    resp = requests.get('https://quotedata.cnfin.com/quote/v1/kline', timeout=5,
+                        params={'prod_code': symbol, 'candle_period': '1', 'get_type': 'range',
+                                'start_date': date_text, 'end_date': date_text, 'fields': ','.join(fields)},
+                        headers={'Referer': 'https://www.cnfin.com/', 'User-Agent': 'Mozilla/5.0'})
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get('data') if isinstance(payload, dict) else None
+    candle = data.get('candle') if isinstance(data, dict) else None
+    if not isinstance(candle, dict) or candle.get('fields') != ['min_time', *fields]:
+        raise DataSchemaError(f'CNFin candle schema mismatch for {symbol}')
+    rows = candle.get(symbol)
+    if not isinstance(rows, list) or not rows or any(not isinstance(row, list) or len(row) != len(fields) + 1 for row in rows):
+        raise DataSchemaError(f'CNFin candle rows malformed for {symbol}')
+    dates = pd.DatetimeIndex(pd.to_datetime([str(row[0]) for row in rows], format='%Y%m%d%H%M', errors='coerce'))
+    return dates, rows
+
+def _fetch_cnfin_close_snapshot(symbol, day, session_end, close):
+    fields = ['market_date', 'data_timestamp', 'last_px', 'business_balance', 'trade_status']
+    resp = requests.get('https://quotedata.cnfin.com/quote/v1/real', timeout=5,
+                        params={'en_prod_code': symbol, 'fields': ','.join(fields)},
+                        headers={'Referer': 'https://www.cnfin.com/', 'User-Agent': 'Mozilla/5.0'})
+    resp.raise_for_status()
+    payload = resp.json()
+    data = payload.get('data') if isinstance(payload, dict) else None
+    snapshot = data.get('snapshot') if isinstance(data, dict) else None
+    if not isinstance(snapshot, dict):
+        return None
+    names, values = snapshot.get('fields'), snapshot.get(symbol)
+    if (not isinstance(names, list) or not all(isinstance(name, str) for name in names)
+            or not isinstance(values, list) or len(names) != len(values) or len(set(names)) != len(names)):
+        return None
+    quote = dict(zip(names, values))
+    stamp = quote.get('data_timestamp')
+    market_date = quote.get('market_date')
+    if (type(market_date) is not int or market_date != int(day.strftime('%Y%m%d'))
+            or quote.get('trade_status') != 'ENDTR' or type(stamp) is not int or not 0 <= stamp < 240000000):
+        return None
+    stamped_at = pd.to_datetime(f'{day:%Y%m%d}{stamp:09d}', format='%Y%m%d%H%M%S%f', errors='coerce')
+    price = quote.get('last_px')
+    if (pd.isna(stamped_at) or not session_end <= stamped_at <= pd.Timestamp(beijing_now())
+            or type(price) not in (int, float) or price != close):
+        return None
+    return quote
+
+def _fetch_cnfin_final_session(secid, day, eastmoney_minutes, clock, require_amount):
+    if secid == CN_ZZHL_INDEX_SECID:
+        symbol = '930955.CSI'
+    elif secid == CN_SA_VOLUME_ZZ2000_SECID:
+        symbol = '932000.CSI'
+    elif secid in CN_ALL_CODES or secid == CN_DK_HS300_SECID:
+        market, code = secid.split('.')
+        symbol = f"{code}.{'SH' if market == '1' else 'SZ'}"
+    else:
+        return None
+    fields = ['close_px', 'business_balance'] if require_amount else ['close_px']
+    try:
+        dates, rows = _fetch_cnfin_candles(symbol, day, fields)
+        # CNFin labels bars by period end, starting at 09:31.
+        if not dates.equals(eastmoney_minutes[1:]):
+            return None
+        prices = [row[1] for row in rows]
+        if not all(type(price) in (int, float) and np.isfinite(price) and price > 0 for price in prices):
+            return None
+        close = prices[-1]
+        snapshot = None
+        if day == clock.normalize():
+            snapshot = _fetch_cnfin_close_snapshot(symbol, day, dates[-1], close)
+            if snapshot is None:
+                return None
+        evidence = {'close': float(close)}
+        if require_amount:
+            amounts = [row[2] for row in rows]
+            if all(type(value) in (int, float) and np.isfinite(value) and value >= 0 for value in amounts):
+                total = sum(amounts)
+                snapshot_total = total if snapshot is None else snapshot.get('business_balance')
+                if np.isfinite(total) and total > 0 and type(snapshot_total) in (int, float) and total == snapshot_total:
+                    # CNFin publishes the CSI 932000 balance in units of CNY 10,000.
+                    amount_cny = float(total * (10000 if secid == CN_SA_VOLUME_ZZ2000_SECID else 1))
+                    if np.isfinite(amount_cny):
+                        evidence['amount_cny'] = amount_cny
+        return evidence
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+        return None
+
+def _fetch_cnfin_930955_minute(expected_date, receipt):
+    try:
+        dates, rows = _fetch_cnfin_candles('930955.CSI', expected_date, ['close_px'])
+        pos = _cn_latest_completed_minute(dates, expected_date)
+        if pos is not None:
+            if type(rows[pos][1]) not in (int, float):
+                return None
+            price = float(rows[pos][1])
+            if np.isfinite(price) and price > 0:
+                return _cn_record_quote(price, dates[pos], '新华财经', receipt)
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+        pass
+    return None
+
+def _fetch_cn_realtime_primary(candidate_secids, expected, receipt):
+    for candidate_secid in candidate_secids:
+        try:
+            url = f'https://push2.eastmoney.com/api/qt/stock/get?secid={candidate_secid}&fields=f13,f43,f44,f45,f46,f57,f59,f60,f124&ut=fa5fd1943c7b386f172d6893dbfba10b'
+            resp = requests.get(url, timeout=5, headers={'Referer': 'https://quote.eastmoney.com/'})
+            resp.raise_for_status()
+            payload = resp.json()
+            if not isinstance(payload, dict):
+                raise DataSchemaError('EastMoney realtime response is not an object')
+            data = payload.get('data')
+            if not isinstance(data, dict):
+                continue
+            market, code = candidate_secid.split('.', 1)
+            if str(data.get('f57')) != code or str(data.get('f13')) != market:
+                continue
+            f43 = data.get('f43')
+            f46 = data.get('f46')
+            f124 = data.get('f124')
+            f59 = data.get('f59')
+            if any(type(value) not in (int, float) for value in (f43, f46, f124, f59)):
+                continue
+            timestamp = float(f124)
+            if not np.isfinite(timestamp) or not 0 < timestamp < 4102444800:
+                continue
+            quote_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+            decimals = float(f59)
+            if not np.isfinite(decimals) or decimals != int(decimals) or (not 0 <= decimals <= 6):
+                continue
+            price = float(f43) / 10 ** int(decimals)
+            if not _cn_quote_time_valid(quote_time, expected) or not np.isfinite(float(f46)) or float(f46) <= 0 or (not np.isfinite(price)) or (price <= 0):
+                continue
+            return _cn_record_quote(price, quote_time, '东方财富/实时报价', receipt)
+        except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+            continue
+    return None
+
+def _fetch_cn_realtime_close(secid, expected_date=None, receipt=None):
+    expected = pd.Timestamp(beijing_now().date() if expected_date is None else expected_date).date()
+    proxy_secid = CN_H_PROXY_SECIDS.get(secid)
+    candidate_secids = [proxy_secid] if proxy_secid else _vendor_secid_candidates(secid)
+    if secid == CN_ZZHL_INDEX_SECID:
+        # Start the independent source alongside the two timed EastMoney feeds.
+        # Do not wait for five serial timeouts before asking for a usable quote.
+        def query(fetch):
+            details = {}
+            return fetch(details), details
+
+        feeds = [
+            lambda meta: _fetch_cn_realtime_primary(candidate_secids[:1], expected, meta),
+            lambda meta: _fetch_cn_realtime_trends(candidate_secids[:1], expected, receipt=meta),
+            lambda meta: _fetch_cn_realtime_trends(candidate_secids[:1], expected, host='push2.eastmoney.com', receipt=meta),
+            lambda meta: _fetch_cnfin_930955_minute(expected, meta),
+        ]
+        with ThreadPoolExecutor(max_workers=len(feeds)) as executor:
+            pending = [executor.submit(query, feed) for feed in feeds]
+            quotes = [future.result() for future in pending]
+        usable = [(price, details) for price, details in quotes if price is not None]
+        if usable:
+            price, details = max(usable, key=lambda quote: quote[1]['time'])
+            if receipt is not None:
+                receipt.update(details)
+            return price
+        return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected, receipt=receipt)
+    price = _fetch_cn_realtime_primary(candidate_secids, expected, receipt)
+    if price is not None:
+        return price
+    price = _fetch_cn_realtime_trends(candidate_secids, expected, receipt=receipt)
+    if price is not None:
+        return price
+    return _fetch_cn_realtime_close_quote_fallback(candidate_secids, expected_date=expected, receipt=receipt)
+
+def _supplement_today_close(df, secid, bj_today, msg=None, receipt=None):
+    if df is None or len(df) == 0:
+        return df
+    last_date = df.index[-1].date() if hasattr(df.index[-1], 'date') else df.index[-1]
+    if last_date > bj_today:
+        return df
+    if bj_today.weekday() >= 5:
+        return df
+    if not _is_cn_required_close_day(bj_today):
+        return df
+    bj_now = beijing_now()
+    if bj_today != bj_now.date() or not _is_cn_unconfirmed_at(bj_now):
+        return df
+    if last_date == bj_today:
+        df = df.loc[df.index < pd.Timestamp(bj_today)].copy()
+        if df.empty:
+            return df
+    realtime_close = _fetch_cn_realtime_close(secid) if receipt is None else _fetch_cn_realtime_close(secid, None, receipt)
+    if realtime_close is None:
+        return df
+    if secid in CN_H_PROXY_SECIDS:
+        try:
+            proxy_df, _ = _fetch_cn_h_proxy(secid)
+            realtime_close = _project_proxy_realtime_close(df, proxy_df, realtime_close)
+        except _DATA_FETCH_ERRORS as exc:
+            if msg:
+                msg.write(f'  ⚠️ {secid}实时代理缺少同日历史锚点，保留最近确认收盘: {_short_error(exc)}\n')
+            return df
+    today_ts = pd.Timestamp(bj_today)
+    new_row = pd.DataFrame([{'close': realtime_close}], index=pd.DatetimeIndex([today_ts], name=df.index.name))
+    for col in df.columns:
+        if col != 'close' and col not in new_row.columns:
+            new_row[col] = np.nan
+    new_row['is_live_bar'] = True
+    source = receipt.get('source') if receipt else None
+    new_row['source'] = (f'CN multi-source realtime proxy:{CN_H_PROXY_SECIDS[secid]}' if secid in CN_H_PROXY_SECIDS else
+                         f'{source} realtime snapshot' if source else 'CN multi-source realtime snapshot')
+    df = pd.concat([df, new_row])
+    if 'is_live_bar' not in df.columns:
+        df['is_live_bar'] = False
+    df['is_live_bar'] = df['is_live_bar'].where(df['is_live_bar'].notna(), False).astype(bool)
+    if msg:
+        msg.write(f"  ↳ 实时补充: {bj_today.strftime('%Y-%m-%d')} close={realtime_close:.2f} [snapshot]\n")
+    return df
+
+def _attach_cn_bond_close(cn_close, bond_close, context):
+    aligned = bond_close.reindex(cn_close.index)
+    missing = aligned.isna()
+    if missing.any():
+        preview = ','.join(pd.Timestamp(day).date().isoformat() for day in aligned.index[missing][:3])
+        raise DataSchemaError(f'{context}: {CN_BOND_NAME} raw price history has missing sessions; refusing forward fill: {preview}')
+    cn_close[CN_BOND_CODE] = aligned
+
+def _add_cn_bond_column(cn_close, msg=None, context='Sub-A', strict=False, include_live_snapshot=False):
+    cn_close_with_bond = cn_close.copy()
+    if len(cn_close_with_bond) == 0:
+        raise DataSchemaError(f'{context}: empty requested bond window')
+    if CN_BOND_CODE in cn_close_with_bond.columns:
+        _price_column_frame(cn_close_with_bond, CN_BOND_CODE, CN_BOND_CODE)
+        if cn_close_with_bond[CN_BOND_CODE].isna().any():
+            raise DataSchemaError(f'{context}: required bond history contains missing sessions')
+        return cn_close_with_bond
+    try:
+        target_date = pd.Timestamp(cn_close_with_bond.index.max()).normalize()
+        required_close = min(target_date, _latest_cn_data_required_date())
+        bond_df, source = fetch_cn_kline(CN_BOND_CODE, required_date=required_close)
+        if not include_live_snapshot:
+            bond_df = _drop_cn_unconfirmed_today(bond_df)
+        if include_live_snapshot:
+            before_latest = pd.Timestamp(bond_df.index.max()).normalize() if len(bond_df) > 0 else None
+            bond_df = _supplement_today_close(bond_df, CN_BOND_CODE, beijing_now().date(), msg)
+            after_latest = pd.Timestamp(bond_df.index.max()).normalize() if len(bond_df) > 0 else None
+            if before_latest is not None and after_latest is not None and (after_latest > before_latest):
+                source = f'{source}+realtime-snapshot'
+        bond_close = _price_column_frame(bond_df, 'close', CN_BOND_CODE)[CN_BOND_CODE]
+        if strict:
+            expected_date = pd.Timestamp(cn_close_with_bond.index.max()).normalize()
+            normalized = bond_close.copy()
+            normalized.index = pd.DatetimeIndex(pd.to_datetime(normalized.index)).normalize()
+            expected_values = normalized.loc[normalized.index == expected_date]
+            expected_value = float(expected_values.iloc[-1]) if len(expected_values) else np.nan
+            latest_bond_date = pd.Timestamp(normalized.index.max()).normalize() if not normalized.empty else None
+            if not np.isfinite(expected_value) or expected_value <= 0:
+                latest_text = latest_bond_date.date().isoformat() if latest_bond_date is not None else 'missing'
+                raise poe.BotError(f'{context}: {CN_BOND_NAME}缺少目标日有效数据，latest={latest_text}, expected={expected_date.date().isoformat()}')
+            bond_df = bond_df.loc[pd.DatetimeIndex(pd.to_datetime(bond_df.index)).normalize() <= expected_date]
+        _attach_cn_bond_close(cn_close_with_bond, bond_close, context)
+        if msg is not None:
+            msg.write(f"  {CN_BOND_NAME}: {bond_df.index[-1].strftime('%Y-%m-%d')} [{source}]\n")
+    except _fetch_or_bot_errors() as exc:
+        raise poe.BotError(f'{context}: {CN_BOND_NAME}({CN_BOND_CODE})数据获取失败，不能缺少国债腿继续生成信号或绩效: {_short_error(exc)}') from exc
+    return cn_close_with_bond
+
+def _cn_cache_path(secid):
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    cache_dir = os.path.join(base_dir, '.cn_official_cache')
+    return os.path.join(cache_dir, f"{secid.replace('.', '_')}.csv")
+
+def _save_cn_official_cache(secid, df):
+    if df is None or len(df) == 0 or 'close' not in df.columns:
+        return
+    path = _cn_cache_path(secid)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df[['close']].sort_index().to_csv(path, index_label='date', encoding='utf-8')
+
+def _load_cn_official_cache(secid):
+    path = _cn_cache_path(secid)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'no cache for {secid}')
+    df = pd.read_csv(path)
+    if 'date' not in df.columns or 'close' not in df.columns or len(df) == 0:
+        raise ValueError(f'invalid cache for {secid}')
+    df['date'] = pd.to_datetime(df['date'])
+    df['close'] = df['close'].astype(float)
+    return df.set_index('date').sort_index()
+
+def _load_recent_cn_official_cache(secid, min_rows=50):
+    df = _load_cn_official_cache(secid)
+    if df is None or len(df) <= int(min_rows):
+        raise ValueError(f'cache rows={(0 if df is None else len(df))} <= {min_rows}')
+    latest = pd.Timestamp(df.index[-1]).normalize()
+    required = _latest_cn_data_required_date()
+    if latest < required:
+        raise ValueError(f'cache latest {latest.date().isoformat()} < required {required.date().isoformat()}')
+    return df
+
+def _load_embedded_930955_official_cache():
+    raw = zlib.decompress(base64.b85decode(CN_EMBEDDED_930955_B85.encode('ascii')))
+    if len(raw) != CN_EMBEDDED_930955_RAW_BYTES or zlib.crc32(raw) & 4294967295 != CN_EMBEDDED_930955_CRC32:
+        raise DataSchemaError('embedded 930955 cache checksum mismatch')
+    ordinal, close_cents = struct.unpack_from('<II', raw, 0)
+    dates = [datetime.fromordinal(int(ordinal))]
+    closes = [float(close_cents) / 100.0]
+    offset = 8
+    for _ in range(CN_EMBEDDED_930955_ROWS - 1):
+        day_delta, price_delta = struct.unpack_from('<Bi', raw, offset)
+        offset += 5
+        ordinal += int(day_delta)
+        close_cents += int(price_delta)
+        dates.append(datetime.fromordinal(int(ordinal)))
+        closes.append(float(close_cents) / 100.0)
+    if offset != len(raw):
+        raise DataSchemaError('embedded 930955 cache length mismatch')
+    out = pd.DataFrame({'close': closes}, index=pd.DatetimeIndex(dates, name='date'))
+    if len(out) != CN_EMBEDDED_930955_ROWS or out.index[0] != pd.Timestamp('2016-01-04') or out.index[-1] != pd.Timestamp('2026-08-21'):
+        raise DataSchemaError('embedded 930955 cache date range mismatch')
+    return out
+
+def _load_cn_official_base_with_embedded(secid):
+    try:
+        df = _load_cn_official_cache(secid)
+        return (df, f'csindex-cache:{pd.Timestamp(df.index[-1]).date().isoformat()}')
+    except (OSError, ValueError, KeyError):
+        if secid != CN_ZZHL_INDEX_SECID:
+            raise
+        df = _load_embedded_930955_official_cache()
+        return (df, f'embedded csindex-cache:{pd.Timestamp(df.index[-1]).date().isoformat()}')
+
+def _cn_strategy_data_path():
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    return os.path.join(base_dir, 'mnt_strategy_data_cn.csv')
+
+def _load_cn_strategy_data_cache(secid):
+    path = _cn_strategy_data_path()
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'no local strategy csv: {path}')
+    df = pd.read_csv(path)
+    if 'date' not in df.columns or secid not in df.columns:
+        raise ValueError(f'local strategy csv missing {secid}')
+    out = pd.DataFrame({'date': pd.to_datetime(df['date']), 'close': pd.to_numeric(df[secid], errors='coerce')}).dropna(subset=['close'])
+    if out.empty:
+        raise ValueError(f'local strategy csv has no valid rows for {secid}')
+    return out.set_index('date').sort_index()
+
+def _cn_frame_range_text(df):
+    if df is None or len(df) == 0:
+        return 'empty'
+    try:
+        return f"{pd.Timestamp(df.index.min()).strftime('%Y-%m-%d')}~{pd.Timestamp(df.index.max()).strftime('%Y-%m-%d')}"
+    except Exception:
+        return 'unknown-range'
+
+def _ensure_cn_history_frame(secid, df, source, min_rows=CN_MIN_HISTORY_ROWS, write=None):
+    rows = 0 if df is None else len(df)
+    if df is not None and rows >= min_rows:
+        _price_column_frame(df, 'close', secid)
+        return (df, source)
+    name = CN_NAMES.get(secid, secid)
+    range_text = _cn_frame_range_text(df)
+    if secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        raise DataUnavailableError(f'{name}({secid}) 可核验的指数历史仅有 {rows} 行（{range_text}），需要至少 {min_rows} 行。')
+    try:
+        fallback = _load_cn_strategy_data_cache(secid)
+        if len(fallback) >= min_rows:
+            _price_column_frame(fallback, 'close', secid)
+            if write is not None:
+                write(f'  ↳ 历史兜底: {name} 在线源 {source} 仅{rows}行({range_text})，改用 mnt_strategy_data_cn.csv {len(fallback)}行 {_cn_frame_range_text(fallback)}\n')
+            return (fallback, f'{source}->local-cache:mnt_strategy_data_cn.csv')
+    except (OSError, ValueError, KeyError) as cache_err:
+        fallback_error = _short_error(cache_err)
+    else:
+        fallback_error = f'local cache rows={len(fallback)} < {min_rows}'
+    raise poe.BotError(f'A股历史数据不足: {name}({secid}) 在线源 {source} 仅{rows}行({range_text})；本地历史兜底不可用: {fallback_error}。已停止，避免把实时快照当历史K线生成错误信号。')
+
+def _price_column_frame(df, source_col, output_col):
+    if df is None or len(df) == 0:
+        raise DataSchemaError(f'{output_col} price frame is empty')
+    if source_col in df.columns:
+        series = df[source_col]
+    elif output_col in df.columns:
+        series = df[output_col]
+    else:
+        raise DataSchemaError(f'{output_col} price frame missing {source_col} column')
+    dates = pd.DatetimeIndex(pd.to_datetime(series.index, errors='coerce'))
+    if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing):
+        raise DataSchemaError(f'{output_col} price dates must be valid, unique and increasing')
+    if dates.tz is not None or not dates.equals(dates.normalize()):
+        raise DataSchemaError(f'{output_col} prices require timezone-naive daily dates')
+    known_closed = _CN_VERIFIED_CLOSED_DAYS.union(pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS))))
+    sessions = (dates.weekday < 5) & ~dates.isin(known_closed)
+    series = series.iloc[np.flatnonzero(sessions)]
+    dates = dates[sessions]
+    numeric = pd.to_numeric(series, errors='coerce')
+    invalid = series.notna() & (~np.isfinite(numeric) | (numeric <= 0.0))
+    first_valid = numeric.first_valid_index()
+    if first_valid is None:
+        raise DataSchemaError(f'{output_col} has no valid price history')
+    invalid |= numeric.isna() & (numeric.index >= first_valid)
+    if invalid.any():
+        bad_dates = ','.join((pd.Timestamp(day).date().isoformat() for day in numeric.index[invalid][:3]))
+        raise DataSchemaError(f'{output_col} invalid/missing finite positive close: {bad_dates}')
+    out = numeric.rename(output_col).to_frame()
+    out.index = dates
+    return out
+
+def _align_partial_cn_intraday(cn_raw, columns, clock, required_close, msg, *,
+                               label='Sub-A', names=None, diagnostics=None, previous_close=None):
+    """Use the preceding confirmed session when optional live inputs are incomplete."""
+    today = pd.Timestamp(clock.date())
+    required = pd.Timestamp(required_close)
+    awaiting_close = previous_close is not None and required == today
+    if not awaiting_close and (not _is_cn_unconfirmed_at(clock) or required >= today):
+        return cn_raw
+    cutoff = pd.Timestamp(previous_close) if awaiting_close else required
+    latest = {code: _latest_valid_close_date(cn_raw.get(code)) for code in columns}
+    if any(value is None or value < cutoff or cutoff not in cn_raw[code].index
+           for code, value in latest.items()):
+        return cn_raw
+    missing = [code for code, value in latest.items() if value < today]
+    if not missing:
+        return cn_raw
+    display_names = CN_NAMES if names is None else names
+    missing_names = '、'.join(display_names.get(code, code) for code in missing)
+    field = '当日确认收盘' if awaiting_close else '今日快照'
+    msg.write(f'  ⚠️ {label} 当前实时信号不可用：{missing_names}缺少{field}；全部{label}价格统一截至 {cutoff:%Y-%m-%d} 最近确认收盘，仅展示该日信号，不代表今日实时信号。\n')
+    if diagnostics is not None:
+        diagnostics['cn_confirmed_close'] = cutoff
+        diagnostics['cn_missing_live_inputs'] = tuple(
+            (display_names.get(code, code), latest[code].date().isoformat()) for code in missing
+        )
+        diagnostics['cn_missing_live_field'] = field
+    return {code: _drop_cn_rows_after(frame, cutoff) for code, frame in cn_raw.items()}
+
+def _prepare_cn_live_panel(raw, symbols, clock, required_close, previous_close, msg, label, names=None,
+                           *, include_snapshot=True, final_sessions=None, previous_sessions=None):
+    # Quarantine daily rows beyond the close required when this request started.
+    # Only the validated quote path may then add a date after that cutoff.
+    panel = {code: _drop_cn_rows_after(frame, required_close) for code, frame in raw.items()}
+    today = pd.Timestamp(clock.date())
+    diagnostics = {'cn_confirmed_close': required_close}
+    if previous_sessions is not None:
+        missing, conflicts = [], []
+        for code, secid in symbols.items():
+            frame = panel[code]
+            receipt = previous_sessions.get(secid)
+            name = (names or CN_NAMES).get(code, code)
+            if not receipt:
+                missing.append(name)
+                continue
+            price = frame.at[previous_close, 'close'] if previous_close in frame.index else np.nan
+            flag = frame.at[previous_close, 'is_live_bar'] if previous_close in frame.index and 'is_live_bar' in frame else False
+            if (pd.notna(flag) and bool(flag)) or not np.isclose(float(price), receipt['close'], rtol=0, atol=0.00501):
+                conflicts.append(name)
+        if missing or conflicts:
+            reasons = []
+            if missing:
+                reasons.append(f"收盘凭据缺失（{'、'.join(missing)}）")
+            if conflicts:
+                reasons.append(f"日线缺失或与收盘凭据不一致（{'、'.join(conflicts)}）")
+            raise DataUnavailableError(f"{label} {previous_close:%Y-%m-%d} 收盘核验失败：{'；'.join(reasons)}")
+    if required_close == today:
+        for code, secid in symbols.items():
+            frame = panel[code]
+            if today not in frame.index:
+                continue
+            verified = (final_sessions or {}).get(secid)
+            price = frame.at[today, 'close']
+            flag = frame.at[today, 'is_live_bar'] if 'is_live_bar' in frame else False
+            if not verified or pd.notna(flag) and bool(flag) or not np.isclose(float(price), verified['close'], atol=0.00501, rtol=0):
+                panel[code] = _drop_cn_rows_after(frame, previous_close)
+    elif include_snapshot and _is_cn_unconfirmed_at(clock):
+        def supplement(code, secid):
+            receipt = {}
+            frame = _supplement_today_close(panel[code], secid, clock.date(), None, receipt)
+            return frame, receipt
+        with ThreadPoolExecutor(max_workers=len(symbols)) as executor:
+            tasks = {code: executor.submit(supplement, code, secid) for code, secid in symbols.items()}
+            snapshots = {code: task.result() for code, task in tasks.items()}
+        reference = min(pd.Timestamp(beijing_now()), today + pd.Timedelta(hours=15) - pd.Timedelta(microseconds=1))
+        times = []
+        for code, (frame, receipt) in snapshots.items():
+            if receipt and _latest_valid_close_date(frame) == today and _cn_quote_time_valid(receipt['time'], clock.date(), reference):
+                panel[code] = frame
+                times.append(receipt['time'])
+        if times:
+            diagnostics['cn_quote_start'] = min(times)
+            diagnostics['cn_quote_end'] = max(times)
+    if include_snapshot or required_close == today:
+        panel = _align_partial_cn_intraday(panel, symbols, clock, required_close, msg,
+                                          label=label, names=names, diagnostics=diagnostics,
+                                          previous_close=previous_close)
+    _assert_cn_raw_prices_fresh(panel, symbols, diagnostics['cn_confirmed_close'], label)
+    return panel, diagnostics
+
+def _cn_missing_panel_sessions(index, *, include_verified_history=False):
+    if index.empty:
+        return index
+    dates = pd.bdate_range(index[0], index[-1])
+    maintained = dates[np.isin(dates.year, list(CN_MARKET_HOLIDAY_YEARS))]
+    closed = pd.DatetimeIndex(pd.to_datetime(sorted(CN_MARKET_HOLIDAYS)))
+    if include_verified_history:
+        historical = dates[(dates >= _CN_VERIFIED_CALENDAR_START) & (dates <= _CN_VERIFIED_CALENDAR_END)]
+        maintained = maintained.union(historical)
+        closed = closed.union(_CN_VERIFIED_CLOSED_DAYS)
+    expected = maintained[~maintained.isin(closed)]
+    return expected.difference(index)
+
+def _merge_cn_price_frames(frames, columns, label, formal_start=None):
+    out = pd.concat(frames, axis=1).sort_index()
+    common_start = max((out[col].first_valid_index() for col in columns))
+    if formal_start is not None:
+        common_start = max(common_start, pd.Timestamp(formal_start))
+    out = out.loc[out.index >= common_start]
+    missing = []
+    for col in columns:
+        holes = out.index[out[col].isna()]
+        if len(holes):
+            preview = ','.join((pd.Timestamp(day).date().isoformat() for day in holes[:3]))
+            missing.append(f'{col}: {preview}')
+    if missing:
+        raise DataSchemaError(f'{label} raw price history has missing sessions; refusing forward fill: ' + '; '.join(missing))
+    absent = _cn_missing_panel_sessions(out.index)
+    if len(absent):
+        preview = ','.join(pd.Timestamp(day).date().isoformat() for day in absent[:3])
+        raise DataSchemaError(f'{label} all sources missing market sessions: {preview}')
+    return out
+
+def _assert_cn_raw_prices_fresh(raw_dict, columns, expected_date, label):
+    expected = pd.Timestamp(expected_date).normalize()
+    missing = []
+    for col in columns:
+        raw = raw_dict.get(col)
+        frame = _price_column_frame(raw, 'close', col)
+        if raw is not None and 'is_live_bar' in raw and (expected in raw.index) and (expected <= _latest_cn_data_required_date()):
+            flag = raw.at[expected, 'is_live_bar']
+            if pd.notna(flag) and bool(flag):
+                raise DataSchemaError(f'{label} {col}: unconfirmed snapshot cannot satisfy required close {expected.date()}')
+        if expected not in frame.index or pd.isna(frame.at[expected, col]):
+            latest = frame[col].last_valid_index()
+            missing.append(f'{col}: latest={pd.Timestamp(latest).date().isoformat()}, required={expected.date().isoformat()}')
+    if missing:
+        raise poe.BotError(f'{label} 原始收盘价格过期/缺失，不能生成正式信号: ' + '; '.join(missing))
+
+def _build_cn_stock_close_frame(cn_raw):
+    frames = [_price_column_frame(cn_raw[secid], 'close', secid) for secid in CN_STOCK_CODES]
+    out = _merge_cn_price_frames(frames, CN_STOCK_CODES, 'Sub-A', formal_start=CN_STOCK_FORMAL_START)
+    out.attrs['cn_unconfirmed_snapshot'] = any(('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in cn_raw.values() if len(frame)))
+    return out
+
+def _build_cn_dk_close_frame(dk_dfs):
+    frames = [_price_column_frame(dk_dfs[col], 'close', col) for col in CN_DK_COLS]
+    formal_start = max((CN_DK_PUBLICATION_DATES[col] for col in CN_DK_COLS))
+    out = _merge_cn_price_frames(frames, CN_DK_COLS, 'A-DK', formal_start=formal_start)
+    out.attrs['cn_unconfirmed_snapshot'] = any(('is_live_bar' in frame and frame['is_live_bar'].fillna(False).iloc[-1] for frame in dk_dfs.values() if len(frame)))
+    return out
+
+def _fetch_cn_index_history(secid, sources, required_date=None, *, verified_close=None, verified_prior=None, min_rows=51, formal_start=None, prefer_full_history=False, confirmed_through=None):
+    attempts = []
+    short_sources = 0
+    best = None
+    current = None
+    required = pd.Timestamp(required_date).normalize() if required_date is not None else None
+    for src_name, fetcher in sources:
+        try:
+            df = fetcher()
+            if df is not None and len(df):
+                checked = _price_column_frame(df, 'close', secid)
+                latest = checked[secid].last_valid_index()
+                if required is None:
+                    if len(checked) >= min_rows:
+                        return df, src_name
+                    attempts.append(f'{src_name}: {len(checked)} rows, need {min_rows}')
+                    continue
+                observed = checked.loc[:required, secid].dropna()
+                usable = observed.loc[formal_start:] if formal_start is not None else observed
+                warmup = usable.loc[:confirmed_through] if confirmed_through is not None else usable
+                if len(_cn_missing_panel_sessions(usable.index, include_verified_history=True)):
+                    attempts.append(f'{src_name}: missing sessions within price history')
+                    continue
+                if verified_prior is not None:
+                    anchor, price = verified_prior
+                    if not np.isclose(observed.get(anchor, np.nan), price, rtol=0, atol=0.00501):
+                        attempts.append(f'{src_name}: does not match the completed {anchor:%Y-%m-%d} session')
+                        continue
+                candidate = checked[secid].get(required, np.nan)
+                live_flag = df.at[required, 'is_live_bar'] if required in df.index and 'is_live_bar' in df else False
+                current_matches = pd.notna(candidate) and not (pd.notna(live_flag) and bool(live_flag)) and (verified_close is None or np.isclose(candidate, verified_close, rtol=0, atol=0.00501))
+                if len(warmup) < min_rows:
+                    short_sources += int(current_matches)
+                    attempts.append(f'{src_name}: {len(warmup)} usable rows, need {min_rows} continuous sessions')
+                    continue
+                if current_matches:
+                    if not prefer_full_history or usable.index[0] <= formal_start:
+                        return df, src_name
+                    if current is None or usable.index[0] < current[0]:
+                        current = (usable.index[0], df, src_name)
+                    continue
+                prior = checked.loc[checked.index < required, secid].last_valid_index()
+                enough_prior = prior is not None and len(usable.loc[:prior]) >= min_rows
+                if enough_prior and (best is None or prior > best[0] or (prefer_full_history and prior == best[0] and usable.index[0] < best[1])):
+                    best = (prior, usable.index[0], df, src_name)
+                attempts.append(f'{src_name}: no verified close {required:%Y-%m-%d} (latest {latest:%Y-%m-%d})')
+                continue
+            attempts.append(f'{src_name}: {0 if df is None else len(df)} rows, need {min_rows}')
+        except _DATA_FETCH_ERRORS + (OSError, KeyError) as e:
+            attempts.append(f'{src_name}:{e}')
+            time.sleep(0.2)
+    if current is not None:
+        return current[1], current[2]
+    if best is not None:
+        return best[2], best[3]
+    if formal_start is not None and short_sources and short_sources == len(attempts):
+        raise SubaInsufficientHistoryError(f"Sub-A {secid} 各源确认行情不足 {min_rows} 个交易日，仓位预热不足。{' | '.join(attempts)}")
+    raise DataUnavailableError(f"Index price sources failed for {secid}: {'; '.join(attempts)}")
+
+def _fetch_cn_dk_price_index(idx_code, secid, required_date=None, *, verified_close=None, verified_prior=None):
+    sources = [('Sina', lambda: _fetch_cn_sina(secid)),
+               ('EastMoney', lambda: _fetch_cn_eastmoney(secid)),
+               ('csindex', lambda: _fetch_cn_csindex(idx_code))]
+    min_rows = CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50 if required_date is not None else 51
+    return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows)
+
+def fetch_cn_kline(secid, required_date=None, *, verified_close=None, verified_prior=None, required_history=None, prefer_full_history=False, confirmed_through=None):
+    code = secid.split('.')[1] if '.' in secid else secid
+    last_err = None
+    attempts = []
+    if secid == CN_BOND_CODE:
+        required = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
+        for name, fetcher in [('Sina', lambda: _fetch_cn_sina(secid)), ('QQ', lambda: _fetch_cn_qq_kline(secid, datalen=10000))]:
+            try:
+                df = fetcher()
+                df = df.loc[df.index >= CN_BOND_PUBLICATION_DATE].copy()
+                checked = _price_column_frame(df, 'close', secid)
+                if len(checked) <= 50 or required not in checked.index:
+                    raise DataUnavailableError(f'{name} bond history missing required close {required.date()}')
+                if verified_close is not None and not np.isclose(checked.at[required, secid], verified_close, atol=0.00501, rtol=0):
+                    raise DataUnavailableError(f'{name} bond history conflicts with completed session {required.date()}')
+                if verified_prior is not None:
+                    anchor, price = verified_prior
+                    if not np.isclose(checked[secid].get(anchor, np.nan), price, atol=0.00501, rtol=0):
+                        raise DataUnavailableError(f'{name} bond history conflicts with completed session {anchor.date()}')
+                if required_history is not None and len(required_history.difference(checked[secid].dropna().index)):
+                    raise DataUnavailableError(f'{name} bond history lacks stock panel sessions')
+                return (df, f'{name}:000012 direct bond index')
+            except _DATA_FETCH_ERRORS as exc:
+                last_err = exc
+                attempts.append(f'{name}:{exc}')
+        raise DataUnavailableError(f'000012 bond history unavailable at {required.date()}: ' + '; '.join(attempts))
+    if secid in CN_CSINDEX_PRICE_INDEX_CODES:
+        index_code = CN_CSINDEX_PRICE_INDEX_CODES[secid]
+        required = _latest_cn_data_required_date() if required_date is None else pd.Timestamp(required_date).normalize()
+        sources = [('csindex-cache', lambda: _load_cn_official_base_with_embedded(secid)[0])]
+        sources.extend((f'EastMoney:{alias}', lambda alias=alias: _fetch_cn_eastmoney(alias))
+                       for alias in _vendor_secid_candidates(secid))
+        sources.extend([('Sina', lambda: _fetch_cn_sina(secid)),
+                        (f'csindex:{index_code}', lambda: _fetch_cn_csindex(index_code))])
+        frame, name = _fetch_cn_index_history(secid, sources, required, verified_close=verified_close, verified_prior=verified_prior, min_rows=CN_MIN_HISTORY_ROWS, formal_start=CN_STOCK_FORMAL_START, prefer_full_history=prefer_full_history, confirmed_through=confirmed_through)
+        if name == f'csindex:{index_code}':
+            _save_cn_official_cache(secid, frame)
+        return frame, name
+    elif code.startswith('H'):
+        base_df = None
+        base_source = None
+        proxy_df = None
+        proxy_source = None
+        try:
+            proxy_df, proxy_source = _fetch_cn_h_proxy(secid)
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f'proxy:{e}')
+            time.sleep(0.2)
+        try:
+            base_df = _load_cn_official_cache(secid)
+            if base_df is not None and len(base_df) > 50:
+                cache_date = base_df.index[-1].strftime('%Y-%m-%d')
+                base_source = f'csindex-cache:{cache_date}'
+        except (OSError, ValueError, KeyError) as cache_err:
+            attempts.append(f'cache:{cache_err}')
+        if proxy_df is not None and len(proxy_df) > 50 and (base_df is not None) and (len(base_df) > 50):
+            stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
+            return (stitched, f'{base_source}+{proxy_source}')
+        try:
+            official_df, official_source = _fetch_cn_csindex_with_candidates(code)
+            if official_df is not None and len(official_df) > 50:
+                _save_cn_official_cache(secid, official_df)
+                if base_df is None or len(base_df) <= 50 or official_df.index[-1] > base_df.index[-1]:
+                    base_df = official_df
+                    base_source = official_source
+        except _DATA_FETCH_ERRORS as e:
+            last_err = e
+            attempts.append(f'csindex:{e}')
+            time.sleep(0.2)
+        if base_df is not None and len(base_df) > 50:
+            if proxy_df is not None and len(proxy_df) > 50:
+                stitched = _stitch_cn_proxy_returns(base_df, proxy_df)
+                return (stitched, f'{base_source}+{proxy_source}')
+            return (base_df, base_source)
+        if proxy_df is not None and len(proxy_df) > 50:
+            return (proxy_df, proxy_source)
+    else:
+        sources = [('Sina', lambda: _fetch_cn_sina(secid)), ('EastMoney', lambda: _fetch_cn_eastmoney(secid))]
+        min_rows = CN_MIN_HISTORY_ROWS if required_date is not None else 51
+        return _fetch_cn_index_history(secid, sources, required_date, verified_close=verified_close, verified_prior=verified_prior, min_rows=min_rows, formal_start=CN_STOCK_FORMAL_START, prefer_full_history=prefer_full_history, confirmed_through=confirmed_through)
+    attempts_text = ' | '.join(attempts[-5:]) if attempts else str(last_err)
+    raise poe.BotError(f'获取A股数据失败 ({secid}): {last_err}; tried: {attempts_text}')
+
+def fetch_volume_emotion():
+    try:
+        end_date = (datetime.now() + timedelta(days=5)).strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+        url = f'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={CN_VOL_MONITOR_SECID}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&beg={start_date}&end={end_date}&lmt=40'
+        resp = _session.get(url, timeout=15, headers={'Referer': 'https://quote.eastmoney.com/'})
+        resp.raise_for_status()
+        klines = resp.json()['data']['klines']
+        volumes = pd.Series([float(line.split(',')[5]) for line in klines])
+        vol_ma = volumes.rolling(CN_VOL_EMOTION_MA).mean()
+        vol_diff = volumes - vol_ma
+        consec_below, consec_above = (0, 0)
+        for i in range(len(vol_diff) - 1, -1, -1):
+            if pd.isna(vol_diff.iloc[i]):
+                break
+            if vol_diff.iloc[i] < 0:
+                if consec_above > 0:
+                    break
+                consec_below += 1
+            else:
+                if consec_below > 0:
+                    break
+                consec_above += 1
+        emotion = 0
+        if consec_below >= CN_VOL_EMOTION_BEAR:
+            emotion = -1
+        elif consec_above >= CN_VOL_EMOTION_BULL:
+            emotion = 1
+        return (emotion, consec_below, consec_above, True)
+    except Exception:
+        return (0, 0, 0, False)
+
+def check_knife_catch(cn_close, codes, names):
+    try:
+        result = {}
+        for code in codes:
+            if code not in cn_close.columns:
+                continue
+            series = cn_close[code].dropna()
+            if len(series) < CN_KNIFE_WINDOW + 1:
+                continue
+            ret_nd = series.iloc[-1] / series.iloc[-(CN_KNIFE_WINDOW + 1)] - 1
+            result[code] = {'ret3d': ret_nd, 'is_knife': ret_nd < CN_KNIFE_THRESHOLD, 'name': names.get(code, code)}
+        return (result, True)
+    except Exception:
+        return ({}, False)
+
+def _consecutive_below_amount(amount, ma):
+    amount = pd.Series(amount, dtype=float).sort_index()
+    ratio = amount / amount.rolling(int(ma)).mean()
+    below = ratio < 1.0
+    streak = []
+    cur = 0
+    for val in below.fillna(False):
+        cur = cur + 1 if bool(val) else 0
+        streak.append(cur)
+    return pd.Series(streak, index=amount.index, dtype=float)
+
+def _suba_amount_rule_frame(amount, ma, days, publication_date=None, expected_date=None):
+    """Preserve missing trading sessions and separate unknown from false.
+
+    Natural publication warmup cannot trigger the rule. A truncated vendor
+    history is unknown until the entire MA/streak dependency is observed.
+    """
+    amount = pd.Series(amount, dtype=float)
+    dates = amount.index
+    if not isinstance(dates, pd.DatetimeIndex) or dates.hasnans or dates.has_duplicates or (dates.tz is not None) or (not dates.is_monotonic_increasing) or (not dates.equals(dates.normalize())):
+        raise DataSchemaError('Sub-A amount has invalid daily date index')
+    if publication_date is not None:
+        amount = amount.loc[amount.index >= pd.Timestamp(publication_date)]
+    if expected_date is not None:
+        amount = amount.loc[amount.index <= pd.Timestamp(expected_date)]
+    if amount.empty:
+        raise DataSchemaError('Sub-A amount has no post-publication data')
+    end = max(amount.index[-1], pd.Timestamp(expected_date)) if expected_date is not None else amount.index[-1]
+    sessions = _expected_cn_sessions(amount.index[0], end)
+    if len(amount.index.difference(sessions)):
+        raise DataSchemaError('Sub-A amount contains a non-session observation')
+    amount = amount.where(np.isfinite(amount) & (amount > 0.0)).reindex(sessions)
+    width = int(ma) + int(days) - 1
+    if int(ma) < 1 or int(days) < 1:
+        raise ValueError('Sub-A amount MA and days must be positive')
+    valid = amount.notna()
+    known = valid.rolling(width, min_periods=1).sum().eq(pd.Series(np.minimum(np.arange(len(amount)) + 1, width), index=sessions))
+    if publication_date is not None:
+        publication_sessions = _expected_cn_sessions(pd.Timestamp(publication_date), amount.index[0])
+        if len(publication_sessions) and amount.index[0] > publication_sessions[0]:
+            known.iloc[:width - 1] = False
+    streak = _consecutive_below_amount(amount, ma)
+    return pd.DataFrame({'amount': amount, 'streak': streak.where(known), 'signal': (streak >= int(days)) & known, 'known': known}, index=sessions)
+
+def _build_consecutive_below_amount_signal(rule_specs, mode='or'):
+    if mode not in ('or', 'and'):
+        raise ValueError("mode must be 'or' or 'and'.")
+    frames = []
+    signals = []
+    known_values = []
+    for name, spec in rule_specs.items():
+        amount = spec['amount']
+        ma = int(spec['ma'])
+        days = int(spec['days'])
+        rule = _suba_amount_rule_frame(amount, ma, days, spec.get('publication_date'), spec.get('expected_date'))
+        frames.append(rule.rename(columns={col: f'{name}_{col}' for col in rule}))
+        signals.append(rule['signal'].rename(name))
+        known_values.append(rule['known'].rename(name))
+    if not signals:
+        return (pd.Series(dtype=bool), pd.DataFrame())
+    signal_df = pd.concat(signals, axis=1).fillna(False).astype(bool).sort_index()
+    known_df = pd.concat(known_values, axis=1).reindex(signal_df.index).fillna(False).astype(bool)
+    for name, spec in rule_specs.items():
+        publication = spec.get('publication_date')
+        if publication is not None:
+            known_df.loc[known_df.index < pd.Timestamp(publication), name] = True
+    known_true = signal_df & known_df
+    known_false = ~signal_df & known_df
+    signal = known_true.any(axis=1) if mode == 'or' else known_true.all(axis=1)
+    known = known_true.any(axis=1) | known_df.all(axis=1) if mode == 'or' else known_false.any(axis=1) | known_df.all(axis=1)
+    feature = pd.concat(frames, axis=1).reindex(signal.index)
+    feature['combined_signal'] = signal
+    feature['combined_unresolved'] = ~known
+    return (signal.astype(bool), feature)
+
+def _build_amount_ratio_below_ma_signal(numerator_amount, denominator_amount, ma, days):
+    numerator = pd.Series(numerator_amount, dtype=float)
+    denominator = pd.Series(denominator_amount, dtype=float)
+    for series in (numerator, denominator):
+        if series.empty or not isinstance(series.index, pd.DatetimeIndex) or series.index.has_duplicates or (not series.index.is_monotonic_increasing):
+            raise DataSchemaError('Sub-A amount ratio has invalid daily date index')
+    pair = pd.concat([numerator.rename('numerator'), denominator.rename('denominator')], axis=1)
+    pair = pair.loc[pair.index >= max(numerator.index[0], denominator.index[0])]
+    ratio = pair['numerator'].where(pair['numerator'] > 0) / pair['denominator'].where(pair['denominator'] > 0)
+    rule = _suba_amount_rule_frame(ratio, ma, days, CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE)
+    ratio = rule['amount'].rename('severe_ratio_value')
+    ratio_ma = ratio.rolling(int(ma)).mean().rename('severe_ratio_ma_value')
+    streak = rule['streak'].rename('severe_ratio_streak')
+    signal = rule['signal'].rename('severe_ratio_signal')
+    feature = pd.concat([ratio, ratio_ma, streak, signal, (~rule['known']).rename('severe_ratio_unresolved')], axis=1)
+    return (signal.astype(bool), feature)
+
+def _fetch_cn_zz2000_eastmoney_amount(beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, official_reference=None):
+    """Same-index backup; EastMoney f57 is CNY, CSI tradingValue is CNY 1e8.
+
+    All 786 published overlapping sessions matched CSI rounding on 2026-11-13.
+    Keep the official prefix and check its available overlap on every failover.
+    A primary transport outage may use the independently verified backup alone.
+    """
+    backup = _fetch_cn_eastmoney_amount(CN_SA_VOLUME_ZZ2000_SECID, beg=beg, lmt=lmt).copy()
+    backup['amount'] = pd.to_numeric(backup['amount'], errors='coerce') / 100000000.0
+    source = 'EastMoney amount 932000 (CNY/1e8)'
+    if official_reference is not None and len(official_reference):
+        reference_amount = pd.to_numeric(official_reference['amount'], errors='coerce')
+        overlap = pd.concat([reference_amount.rename('official'), backup['amount'].rename('backup')], axis=1)
+        overlap = overlap.loc[overlap.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
+        overlap = overlap.where(np.isfinite(overlap) & (overlap > 0)).dropna()
+        required_overlap = CN_SA_VOLUME_ZZ2000_MA + CN_SA_VOLUME_ZZ2000_DAYS - 1
+        if len(overlap) < required_overlap:
+            raise DataUnavailableError(f'ZZ2000 amount backup overlap {len(overlap)} < {required_overlap}')
+        matches = np.isclose(overlap['official'], overlap['backup'], rtol=0.0, atol=0.0050001)
+        if not matches.all():
+            first_bad = overlap.index[~matches][0]
+            raise VerifiedDataRepairConflict(f'ZZ2000 amount backup conflicts with CSIndex at {first_bad:%Y-%m-%d}')
+        reference = official_reference.copy()
+        reference['amount'] = reference_amount.where(np.isfinite(reference_amount) & (reference_amount > 0))
+        backup = reference.combine_first(backup).sort_index()
+        source = 'CSIndex official amount + EastMoney amount 932000 (CNY/1e8)'
+    backup['source'] = source
+    return (backup, source)
+
+def _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=None, *, final_amounts=None):
+    errors = []
+    zz2000_reference = None
+    if secid == CN_SA_VOLUME_ZZ2000_SECID:
+        sources = [('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)), ('EastMoney same-index amount', lambda: _fetch_cn_zz2000_eastmoney_amount(beg=beg, lmt=lmt, official_reference=zz2000_reference))]
+    elif secid == CN_SA_VOLUME_CYB_SECID:
+        sources = [('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))]
+    else:
+        sources = []
+        if secid in CN_CSI_AMOUNT_INDEX_CODES:
+            sources.append(('CSIndex official amount', lambda: _fetch_cn_csindex_amount(secid, beg=beg, lmt=lmt)))
+        sources.extend([('Sohu amount', lambda: _fetch_cn_sohu_amount(secid, beg=beg, lmt=lmt)), ('EastMoney amount', lambda: _fetch_cn_eastmoney_amount(secid, beg=beg, lmt=lmt))])
+    expected = pd.Timestamp(expected_date).normalize() if expected_date is not None else None
+    for source_name, fetcher in sources:
+        try:
+            value = fetcher()
+            if isinstance(value, tuple):
+                df, source_name = value
+            else:
+                df = value
+            if final_amounts is not None and isinstance(df, pd.DataFrame) and 'amount' in df and expected in df.index:
+                reference = final_amounts.get(secid)
+                unit = (1e8 if secid == CN_SA_VOLUME_ZZ2000_SECID or source_name.startswith('CSIndex')
+                        else 1e4 if source_name.startswith('Sohu') else 1.0)
+                raw_amount = pd.to_numeric(df.at[expected, 'amount'], errors='coerce')
+                # Minute contributions are rounded independently. CSI additionally rounds to .01 亿.
+                tolerance = max(unit * .0050001 if unit == 1e8 else unit * .5, 0 if reference is None else reference * 1e-8)
+                if reference is None or not np.isclose(raw_amount * unit, reference, atol=tolerance, rtol=0):
+                    errors.append(f'{source_name}: {expected:%Y-%m-%d} amount does not match the completed session')
+                    df = df.drop(index=expected)
+            if secid == CN_SA_VOLUME_ZZ2000_SECID and source_name == 'CSIndex official amount' and (df is not None) and ('amount' in df.columns):
+                zz2000_reference = df
+            if df is not None and len(df) > 50 and ('amount' in df.columns):
+                out = df.copy()
+                amount = pd.to_numeric(out['amount'], errors='coerce').replace([np.inf, -np.inf], np.nan)
+                valid = amount.where(amount > 0).dropna()
+                if len(valid) < 50:
+                    errors.append(f'{source_name}: valid amount rows={len(valid)}')
+                    continue
+                if expected is not None and expected not in valid.index:
+                    latest_valid = pd.Timestamp(valid.index.max()).normalize()
+                    if latest_valid < expected:
+                        errors.append(f'{source_name}: latest valid amount {latest_valid:%Y-%m-%d} < expected {expected:%Y-%m-%d}')
+                    else:
+                        errors.append(f'{source_name}: missing valid amount on {expected:%Y-%m-%d} (latest {latest_valid:%Y-%m-%d})')
+                    continue
+                if secid == CN_SA_VOLUME_ZZ2000_SECID and source_name == 'CSIndex official amount' and (expected is not None):
+                    rule = _suba_amount_rule_frame(amount, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS, CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE, expected)
+                    missing = rule.index[rule['amount'].isna()]
+                    if len(missing):
+                        errors.append(f'{source_name}: missing/invalid amount session {missing[0]:%Y-%m-%d}; trying same-index backup')
+                        continue
+                repair_note = out.attrs.get('verified_amount_repair')
+                if repair_note:
+                    source_name += '+' + repair_note
+                out['amount'] = amount
+                out['source'] = source_name
+                return (out, source_name)
+            errors.append(f'{source_name}: empty')
+        except VerifiedDataRepairConflict:
+            raise
+        except _DATA_FETCH_ERRORS as exc:
+            errors.append(f'{source_name}: {exc}')
+            time.sleep(0.5)
+    raise DataUnavailableError(f"{label} amount data unavailable; verified same-index amount sources tried: {' | '.join(errors[-3:])}")
+
+def _load_suba_volume_signal(expected_date=None, *, final_amounts=None):
+    specs = {}
+    sources = {}
+    errors = {}
+    inactive = set()
+    for name, label, secid, ma, days in [('zz2000', 'ZZ2000', CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS), ('cyb', 'CYB', CN_SA_VOLUME_CYB_SECID, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)]:
+        publication = CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE if name == 'zz2000' else CN_DK_PUBLICATION_DATES['DK_CYB']
+        if expected_date is not None and pd.Timestamp(expected_date) < publication:
+            inactive.add(name)
+            sources[name] = 'not-yet-published'
+            continue
+        try:
+            proof = {} if final_amounts is None else {'final_amounts': final_amounts}
+            df, source = _fetch_cn_amount_with_fallback(secid, label, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000, expected_date=expected_date, **proof)
+            if expected_date is not None:
+                df = _drop_cn_rows_after(df, expected_date)
+            amount = df['amount']
+            if name == 'zz2000':
+                amount = amount.loc[amount.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
+            _suba_amount_rule_frame(amount, ma, days, publication, expected_date)
+            specs[name] = {'amount': amount, 'ma': ma, 'days': days, 'publication_date': publication, 'expected_date': expected_date}
+            sources[name] = source
+        except _DATA_FETCH_ERRORS as exc:
+            errors[name] = str(exc)
+    if not specs:
+        raise DataUnavailableError('Sub-A volume data unavailable for all legs: ' + ' | '.join((f'{k}: {v}' for k, v in errors.items())))
+    old_signal, feature = _build_consecutive_below_amount_signal(specs, mode=CN_SA_VOLUME_RULE_MODE)
+    severe_signal = pd.Series(dtype=bool)
+    severe_feature = pd.DataFrame()
+    severe_error = None
+    severe_sources = {}
+    if CN_SA_VOLUME_CLEAR_RATIO_ENABLED:
+        try:
+            numerator = specs.get('zz2000', {}).get('amount')
+            if numerator is None:
+                numerator_df, numerator_source = _fetch_cn_amount_with_fallback(CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_SECID, CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000)
+                if expected_date is not None:
+                    numerator_df = _drop_cn_rows_after(numerator_df, expected_date)
+                numerator = numerator_df['amount'].loc[numerator_df.index >= CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE]
+                severe_sources['numerator'] = numerator_source
+            else:
+                severe_sources['numerator'] = sources.get('zz2000', 'unknown')
+            denominator_df, denominator_source = _fetch_cn_amount_with_fallback(CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_SECID, CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL, beg=CN_SA_VOLUME_HISTORY_BEG, lmt=10000)
+            if expected_date is not None:
+                denominator_df = _drop_cn_rows_after(denominator_df, expected_date)
+            severe_sources['denominator'] = denominator_source
+            severe_signal, severe_feature = _build_amount_ratio_below_ma_signal(numerator, denominator_df['amount'], CN_SA_VOLUME_CLEAR_RATIO_MA, CN_SA_VOLUME_CLEAR_RATIO_DAYS)
+        except _DATA_FETCH_ERRORS as exc:
+            severe_error = str(exc)
+    combined_index = old_signal.index.union(severe_signal.index).sort_values()
+    old_signal = old_signal.reindex(combined_index).fillna(False).astype(bool)
+    severe_signal = severe_signal.reindex(combined_index).fillna(False).astype(bool)
+    combined_signal = old_signal | severe_signal
+    combined_scale = pd.Series(np.where(severe_signal, CN_SA_VOLUME_CLEAR_RATIO_SCALE, np.where(old_signal, CN_SA_VOLUME_SCALE, 1.0)), index=combined_index, dtype=float)
+    feature = feature.reindex(combined_index)
+    if len(severe_feature) > 0:
+        severe_feature = severe_feature.reindex(combined_index)
+        for col in severe_feature.columns:
+            feature[col] = severe_feature[col]
+    feature['old_combined_signal'] = old_signal
+    feature['severe_ratio_signal'] = severe_signal
+    feature['combined_signal'] = combined_signal
+    feature['combined_scale'] = combined_scale
+    feature['clear_signal'] = severe_signal
+    feature['clear_ratio_rule'] = f'{CN_SA_VOLUME_CLEAR_RATIO_NUMERATOR_LABEL}/{CN_SA_VOLUME_CLEAR_RATIO_DENOMINATOR_LABEL} MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}'
+    feature['clear_ratio_enabled'] = bool(CN_SA_VOLUME_CLEAR_RATIO_ENABLED)
+    feature['clear_ratio_unavailable'] = severe_error is not None
+    if severe_sources:
+        feature['clear_ratio_numerator_source'] = severe_sources.get('numerator', 'unknown')
+        feature['clear_ratio_denominator_source'] = severe_sources.get('denominator', 'unknown')
+    if severe_error is not None:
+        feature['clear_ratio_error'] = severe_error
+    if len(feature) > 0:
+        rule_unresolved = feature['combined_unresolved'].fillna(True).astype(bool)
+        if severe_error is not None:
+            feature['combined_unresolved'] = True
+        elif errors:
+            if CN_SA_VOLUME_RULE_MODE == 'or':
+                feature['combined_unresolved'] = rule_unresolved | ~feature['old_combined_signal'].astype(bool)
+            elif CN_SA_VOLUME_RULE_MODE == 'and':
+                feature['combined_unresolved'] = rule_unresolved | feature['old_combined_signal'].astype(bool)
+            else:
+                feature['combined_unresolved'] = True
+        else:
+            feature['combined_unresolved'] = rule_unresolved
+        if CN_SA_VOLUME_CLEAR_RATIO_ENABLED and 'severe_ratio_unresolved' in feature:
+            ratio_unknown = feature['severe_ratio_unresolved'].fillna(True).astype(bool)
+            ratio_unknown.loc[ratio_unknown.index < CN_SA_VOLUME_ZZ2000_PUBLICATION_DATE] = False
+            feature['combined_unresolved'] |= ratio_unknown
+        if final_amounts is not None and errors and expected_date in feature.index:
+            feature.loc[expected_date, 'combined_unresolved'] = True
+        for name in ('zz2000', 'cyb'):
+            if name in sources:
+                feature[f'{name}_source'] = sources[name]
+                if name in inactive:
+                    feature[f'{name}_streak'] = 0.0
+                    feature[f'{name}_signal'] = False
+                    feature[f'{name}_known'] = True
+            else:
+                feature[f'{name}_source'] = 'unavailable'
+                feature[f'{name}_error'] = errors.get(name, 'unknown')
+                feature[f'{name}_streak'] = np.nan
+                feature[f'{name}_signal'] = False
+        feature['partial_unavailable'] = bool(errors)
+    return (combined_signal, feature)
+
+def _suba_volume_feature_has_unresolved(feature, consumer_index=None, *, confirmed_date=None):
+    if feature is None or len(feature) == 0 or 'combined_unresolved' not in feature.columns:
+        return consumer_index is not None and len(consumer_index) > 0
+    unknown = feature['combined_unresolved']
+    if consumer_index is not None:
+        required = pd.DatetimeIndex(consumer_index)
+        confirmed = confirmed_date if confirmed_date is not None else _latest_confirmed_cn_rule_date(required)
+        if confirmed is not None:
+            required = required[required <= confirmed]
+        unknown = unknown.reindex(required)
+        return bool(unknown.fillna(True).astype(bool).any())
+    return bool(unknown.fillna(True).astype(bool).any())
+
+def _mark_suba_volume_unavailable(cn_result, exc):
+    out = cn_result.copy()
+    out['suba_volume_rule_on'] = False
+    out['suba_volume_rule_scale'] = 1.0
+    out['suba_volume_rule_name'] = CN_SA_VOLUME_RULE_NAME
+    out['suba_volume_unavailable'] = True
+    out['suba_volume_unresolved'] = True
+    out['suba_volume_error'] = str(exc)
+    return out
+
+def _write_suba_volume_query_warning(msg, cn_result):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    unresolved = False
+    if 'suba_volume_unresolved' in cn_result.columns:
+        unresolved = bool(cn_result['suba_volume_unresolved'].fillna(False).astype(bool).any())
+    if not unresolved and 'suba_volume_unavailable' in cn_result.columns:
+        unresolved = bool(cn_result['suba_volume_unavailable'].fillna(False).astype(bool).any())
+    if unresolved:
+        msg.write('⚠️ Sub-A成交额风控不可判定：本次查询继续显示主信号/净值，但未用成交额风控改写仓位；不应按正常仓位执行。\n\n')
+
+def _apply_suba_volume_overlay_policy(cn_result, close_df, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=False):
+    confirmed_date = getattr(close_df, 'attrs', {}).get('cn_confirmed_close')
+    if _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index, confirmed_date=confirmed_date):
+        message = 'Sub-A成交额风控不可判定，本次不应用该风控改写仓位'
+        if not allow_unresolved_suba_volume:
+            raise poe.BotError('Sub-A成交额风控存在不可判定项，正式路径中止。')
+        return _mark_suba_volume_unavailable(cn_result, message)
+    return apply_suba_volume_overlay(cn_result, close_df, suba_volume_signal, suba_volume_feature, scale=CN_SA_VOLUME_SCALE, rule_name=CN_SA_VOLUME_RULE_NAME)
+
+def _apply_v78_suba_new_volume_overlay_policy(new_result, close_df, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=False):
+    if _suba_volume_feature_has_unresolved(suba_volume_feature, new_result.index):
+        message = 'Sub-A成交额风控不可判定，本次不应用该风控改写仓位'
+        if not allow_unresolved_suba_volume:
+            raise poe.BotError('Sub-A成交额风控存在不可判定项，正式路径中止。')
+        return _mark_suba_volume_unavailable(new_result, message)
+    return apply_v78_suba_new_volume_overlay(new_result, close_df, suba_volume_signal, suba_volume_feature)
+
+def _load_dk_volume_warning_feature():
+    df, source = _fetch_cn_amount_with_fallback(CN_DK_VOLUME_YELLOW_SECID, CN_DK_VOLUME_YELLOW_LABEL, beg=CN_SA_VOLUME_HISTORY_BEG)
+    amount = pd.to_numeric(df['amount'], errors='coerce').dropna().sort_index()
+    if amount.empty:
+        raise ValueError(f'{CN_DK_VOLUME_YELLOW_LABEL} amount has no usable rows')
+    feature = _build_dk_volume_warning_feature(amount, source)
+    return (feature['clear_signal'].astype(bool), feature)
+
+def _build_dk_volume_warning_feature(amount, source, ma=None, days=None):
+    ma = int(CN_DK_VOLUME_YELLOW_MA if ma is None else ma)
+    days = int(CN_DK_VOLUME_YELLOW_DAYS if days is None else days)
+    amount = pd.to_numeric(pd.Series(amount), errors='coerce').dropna().sort_index()
+    amount_ma = amount.rolling(ma).mean()
+    streak = _consecutive_below_amount(amount, ma)
+    signal = (streak >= days).astype(bool)
+    return pd.DataFrame({'amount': amount, 'amount_ma': amount_ma, 'below_ma_streak': streak, 'clear_signal': signal, 'source': source, 'policy': CN_DK_VOLUME_POLICY}, index=amount.index)
+
+def _volume_warning_status(secid, ma, days, label, expected_date=None, rule_key=None):
+    df, source = _fetch_cn_amount_with_fallback(secid, label, beg='20200101', lmt=max(120, int(ma) + int(days) + 30))
+    amount = pd.to_numeric(df['amount'], errors='coerce').dropna().sort_index()
+    if amount.empty:
+        raise ValueError(f'{label} amount has no usable rows')
+    ma_series = amount.rolling(int(ma)).mean()
+    streak = _consecutive_below_amount(amount, ma)
+    latest_date = amount.index[-1]
+    latest_value = float(amount.iloc[-1])
+    latest_ma = float(ma_series.iloc[-1]) if pd.notna(ma_series.iloc[-1]) else np.nan
+    latest_streak = int(streak.iloc[-1]) if pd.notna(streak.iloc[-1]) else 0
+    below = bool(pd.notna(latest_ma) and latest_value < latest_ma)
+    status = {'label': label, 'date': latest_date, 'value': latest_value, 'ma_value': latest_ma, 'below': below, 'streak': latest_streak, 'triggered': latest_streak >= int(days), 'ma': int(ma), 'days': int(days), 'source': source}
+    if expected_date is not None and rule_key is not None:
+        status = _annotate_status_freshness(status, expected_date, rule_key)
+    return status
+
+def _read_volume_csv(path, label):
+    df = pd.read_csv(path, encoding='utf-8-sig')
+    if df.empty:
+        raise ValueError(f'{label} volume csv is empty: {path}')
+    date_candidates = ['date', 'Date', '日期', 'trade_date', 'datetime', 'time', '交易日期']
+    value_candidates = ['amount', '成交额', 'turnover', 'volume', '成交量', 'vol', 'Volume']
+    date_col = next((c for c in date_candidates if c in df.columns), None)
+    if date_col is None:
+        date_col = df.columns[0]
+    value_col = next((c for c in value_candidates if c in df.columns), None)
+    if value_col is None:
+        numeric_cols = [c for c in df.columns if c != date_col and pd.to_numeric(df[c], errors='coerce').notna().sum() > 0]
+        if not numeric_cols:
+            raise ValueError(f'{label} volume csv has no numeric volume/amount column: {path}')
+        value_col = numeric_cols[-1]
+    out = pd.DataFrame({'date': pd.to_datetime(df[date_col], errors='coerce'), 'amount': pd.to_numeric(df[value_col], errors='coerce')}).dropna()
+    if out.empty:
+        raise ValueError(f'{label} volume csv has no usable rows: {path}')
+    out = out.set_index('date').sort_index()
+    out['source'] = f'CSV {os.path.basename(path)}'
+    return out
+
+def _parse_tonghuashun_line_volume_payload(payload, source):
+    dates_raw = str(payload.get('dates') or '').split(',')
+    volumes_raw = str(payload.get('volumn') or payload.get('volume') or '').split(',')
+    dates = [x.strip() for x in dates_raw if x.strip()]
+    volumes = [x.strip() for x in volumes_raw if x.strip()]
+    if not dates or not volumes:
+        raise ValueError('Tonghuashun returned empty dates/volumn')
+    if len(dates) != len(volumes):
+        raise ValueError(f'Tonghuashun dates/volumn length mismatch: {len(dates)} vs {len(volumes)}')
+    year_counts = payload.get('sortYear') or []
+    expanded = []
+    pos = 0
+    try:
+        for year, count in year_counts:
+            year = int(year)
+            count = int(count)
+            for mmdd in dates[pos:pos + count]:
+                expanded.append(pd.to_datetime(f'{year}{str(mmdd).zfill(4)}', format='%Y%m%d'))
+            pos += count
+    except Exception as exc:
+        raise ValueError(f'Tonghuashun sortYear parse failed: {exc}')
+    if len(expanded) != len(dates):
+        start = str(payload.get('start') or '')
+        if len(start) >= 4 and start[:4].isdigit():
+            year = int(start[:4])
+            expanded = []
+            prev_mmdd = None
+            for mmdd in dates:
+                mmdd = str(mmdd).zfill(4)
+                if prev_mmdd is not None and mmdd < prev_mmdd:
+                    year += 1
+                expanded.append(pd.to_datetime(f'{year}{mmdd}', format='%Y%m%d'))
+                prev_mmdd = mmdd
+        else:
+            raise ValueError('Tonghuashun sortYear does not cover all dates')
+    out = pd.DataFrame({'date': expanded, 'volume': pd.to_numeric(volumes, errors='coerce')}).dropna()
+    if out.empty:
+        raise ValueError('Tonghuashun returned no usable volume rows')
+    out['amount'] = out['volume']
+    out['source'] = source
+    return out.set_index('date').sort_index()
+
+def _adk_drawdown_watch_status(result, threshold, cooldown_days, label):
+    if result is None or len(result) == 0 or 'nav' not in result.columns:
+        return {'label': label, 'available': False, 'error': 'missing ADK nav series', 'threshold': float(threshold), 'cooldown_days': int(cooldown_days)}
+    nav = pd.to_numeric(result['nav'], errors='coerce').dropna().sort_index()
+    if nav.empty:
+        return {'label': label, 'available': False, 'error': 'empty ADK nav series', 'threshold': float(threshold), 'cooldown_days': int(cooldown_days)}
+    running_peak = nav.cummax()
+    dd = nav / running_peak - 1.0
+    latest_date = dd.index[-1]
+    peak_date = nav.loc[:latest_date].idxmax()
+    current_dd = float(dd.iloc[-1])
+    threshold = float(abs(threshold))
+    cooldown_days = int(cooldown_days)
+    armed = True
+    last_cross_date = None
+    last_cross_pos = None
+    for i, (_dt, _dd) in enumerate(dd.items()):
+        if pd.isna(_dd):
+            continue
+        cur_dd = float(_dd)
+        if cur_dd > -threshold:
+            armed = True
+        elif armed:
+            last_cross_date = _dt
+            last_cross_pos = i
+            armed = False
+    cooldown_start_date = None
+    cooldown_elapsed_days = 0
+    cooldown_pending_start = False
+    if last_cross_pos is not None:
+        start_pos = last_cross_pos + 1
+        if start_pos < len(dd):
+            cooldown_start_date = dd.index[start_pos]
+            cooldown_elapsed_days = min(max(len(dd) - start_pos, 0), cooldown_days)
+        else:
+            cooldown_pending_start = True
+    cooldown_remaining_days = max(cooldown_days - cooldown_elapsed_days, 0)
+    cooldown_active = bool(cooldown_elapsed_days > 0 and cooldown_elapsed_days < cooldown_days)
+    cooldown_completed = bool(last_cross_pos is not None and cooldown_elapsed_days >= cooldown_days)
+    return {'label': label, 'available': True, 'date': latest_date, 'peak_date': peak_date, 'current_dd': current_dd, 'threshold': threshold, 'cooldown_days': cooldown_days, 'triggered': last_cross_date is not None and current_dd <= -threshold, 'last_cross_date': last_cross_date, 'cooldown_start_date': cooldown_start_date, 'cooldown_elapsed_days': int(cooldown_elapsed_days), 'cooldown_remaining_days': int(cooldown_remaining_days), 'cooldown_active': cooldown_active, 'cooldown_completed': cooldown_completed, 'cooldown_pending_start': cooldown_pending_start, 'rearmed': bool(armed), 'policy': 'warning_only'}
+
+def _format_adk_drawdown_watch_line(status):
+    label = status.get('label', 'ADK')
+    threshold = float(status.get('threshold', 0.0))
+    cooldown_days = int(status.get('cooldown_days', 0))
+    if not status.get('available', False):
+        return f"- {label}回撤警示: **UNKNOWN** | 无法确认回撤穿越参考条件（阈值 {threshold:.0%} / 参考空仓{cooldown_days}个交易日）。原因: {status.get('error', 'unknown')}；仅警示，不改变ADK仓位、收益和净值曲线。\n"
+    mark = '🔴 警示触发' if status.get('triggered', False) else '未触发'
+    if status.get('triggered', False):
+        if status.get('cooldown_pending_start', False):
+            action = f'参考动作: 下一交易日起停止交易{cooldown_days}个交易日，当前已停止0/{cooldown_days}天'
+        elif status.get('cooldown_active', False):
+            action = f"参考动作: 停止交易{cooldown_days}个交易日，当前已停止{int(status.get('cooldown_elapsed_days', 0))}/{cooldown_days}天，剩余{int(status.get('cooldown_remaining_days', 0))}天"
+        else:
+            action = f"参考动作: 本轮停止交易{cooldown_days}个交易日已结束，当前已停止{int(status.get('cooldown_elapsed_days', 0))}/{cooldown_days}天；需DD回到-{threshold:.0%}上方后才会重新进入可触发状态"
+    else:
+        action = f'参考动作: 继续观察（未从上方跌破-{threshold:.0%}）'
+    date = status['date'].strftime('%Y-%m-%d')
+    peak_date = status['peak_date'].strftime('%Y-%m-%d')
+    cross = status.get('last_cross_date')
+    cross_text = f"；最近跌破日 {cross.strftime('%Y-%m-%d')}" if cross is not None else ''
+    return f"- {label}回撤警示: **{mark}** | 当前DD {status['current_dd']:.1%} / 触发阈值 -{threshold:.0%}；峰值日 {peak_date}，最新日 {date}{cross_text}。{action}；仅警示，不改变ADK仓位、收益和净值曲线。\n"
+
+def _write_adk_drawdown_warning_panel(msg, cn_dk_result, compact=False, consensus16_result=None):
+    w = msg.write
+    w('### ADK回撤穿越参考提醒\n')
+    if not compact:
+        w('定位: 下面两条只进警示板，不进入正式ADK仓位、收益或净值曲线；用于提示回撤穿越候选规则是否需要人工复核。\n')
+    original_status = _adk_drawdown_watch_status(cn_dk_result, CN_DK_DD_WARNING_ORIGINAL_THRESHOLD, CN_DK_DD_WARNING_ORIGINAL_COOLDOWN_DAYS, '原始ADK')
+    w(_format_adk_drawdown_watch_line(original_status))
+
+def _write_volume_warning_panel(msg, compact=False, cn_dk_result=None, consensus16_result=None):
+    w = msg.write
+    expected_date = _latest_cn_data_required_date()
+    w('### 成交额风险提醒\n')
+    if not compact:
+        w('定位: DK成交额只做风险警示；Sub-A成交额风控才正式参与仓位计算。\n')
+
+    def _status_pos(status):
+        return '低于' if bool(status.get('below', False)) else '高于或等于'
+
+    def _latest_vs_ma_text(status):
+        value = status.get('value')
+        ma_value = status.get('ma_value')
+        if value is None or ma_value is None or pd.isna(value) or pd.isna(ma_value):
+            return ''
+        return f"；最新{float(value):.4g} vs MA{status['ma']} {float(ma_value):.4g}"
+
+    def _freshness_note(status):
+        if status.get('freshness_ok', True):
+            return ''
+        return f"；数据过期/不可判定: {status.get('freshness_error', 'unknown')}"
+    try:
+        dk = _volume_warning_status(CN_DK_VOLUME_YELLOW_SECID, CN_DK_VOLUME_YELLOW_MA, CN_DK_VOLUME_YELLOW_DAYS, CN_DK_VOLUME_YELLOW_LABEL, expected_date=expected_date, rule_key='dk_volume_warning')
+        dk_mark = '🟡 警示触发' if dk['triggered'] else '未触发'
+        dk_pos = _status_pos(dk)
+        w(f"- Sub-A-DK成交额风险警示: **{dk_mark}** | {dk['label']}成交额当前{dk_pos}MA{dk['ma']}，连续低于MA{dk['ma']} {dk['streak']}/{dk['days']}天{_latest_vs_ma_text(dk)}；仅提示，不参与ADK仓位和净值曲线{_freshness_note(dk)}。\n")
+    except Exception as exc:
+        suffix = '' if compact else f' 原因: {_short_error(exc)}'
+        w(f'- Sub-A-DK成交额风险警示: **UNKNOWN** | 本次未取到{CN_DK_VOLUME_YELLOW_LABEL}成交额，无法确认警示条件。{suffix}\n')
+    _write_adk_drawdown_warning_panel(msg, cn_dk_result, compact=compact, consensus16_result=consensus16_result)
+    w('\n---\n\n')
+
+def _write_suba_non_momentum_threshold_alert(msg, cn_result, idx=-1, prefix=''):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    w = msg.write
+
+    def _cell_bool(value):
+        return False if pd.isna(value) else bool(value)
+    alerts = []
+    if 'suba_volume_rule_on' in cn_result.columns:
+        volume_on = _cell_bool(cn_result['suba_volume_rule_on'].iloc[idx])
+        volume_scale = cn_result['suba_volume_rule_scale'].iloc[idx] if 'suba_volume_rule_scale' in cn_result.columns else CN_SA_VOLUME_SCALE if volume_on else 1.0
+        if volume_on and pd.notna(volume_scale) and (float(volume_scale) < 1.0 - 1e-12):
+            action = '触发' if float(volume_scale) <= 1e-12 else '触发减仓'
+            alerts.append(f'Sub-A成交额风控{action}，当前执行仓位{float(volume_scale):.0%}')
+    if 'suba_same_side_overheat_on' in cn_result.columns:
+        overheat_on = _cell_bool(cn_result['suba_same_side_overheat_on'].iloc[idx])
+        if overheat_on:
+            action = '清仓' if CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE <= 1e-12 else '减仓'
+            bias = cn_result['suba_same_side_overheat_bias'].iloc[idx] if 'suba_same_side_overheat_bias' in cn_result.columns else np.nan
+            bias_text = f'，当前权益乖离{float(bias):.1%}' if pd.notna(bias) else ''
+            alerts.append(f'MA60过热止盈触发{action}{bias_text}')
+    if alerts:
+        w(f"{prefix}🔴 **Sub-A非动量阈值调仓:** {'；'.join(alerts)}。这不是原始动量换仓；最终执行按阈值风控后的仓位。\n")
+
+def _write_suba_volume_overlay_status(msg, cn_result, idx=-1, prefix='', compact=False):
+    if 'suba_volume_rule_on' not in cn_result.columns:
+        return
+    w = msg.write
+    _write_suba_non_momentum_threshold_alert(msg, cn_result, idx, prefix)
+
+    def _cell_bool(value):
+        return False if pd.isna(value) else bool(value)
+
+    def _cell_text(value, fallback='unavailable'):
+        return fallback if pd.isna(value) else str(value)
+
+    def _streak_status(label, streak, days):
+        if pd.isna(streak):
+            return f'{label}数据不可用'
+        return f'{label}连续{int(streak)}/{int(days)}天'
+    if 'suba_volume_unavailable' in cn_result.columns and _cell_bool(cn_result['suba_volume_unavailable'].iloc[idx]):
+        w(f'{prefix}**Sub-A成交额风控:** 风控启用；当前**UNKNOWN** | 本次不应用成交额风控，成交额调整比例暂按1.0；最终仓位请以Sub-A主表actual_weight为准。由于硬风控不可判定，不建议直接按正常信号执行。\n')
+        return
+    on = _cell_bool(cn_result['suba_volume_rule_on'].iloc[idx])
+    scale = cn_result['suba_volume_rule_scale'].iloc[idx] if 'suba_volume_rule_scale' in cn_result.columns else CN_SA_VOLUME_SCALE if on else 1.0
+    zz_streak = cn_result['suba_volume_zz2000_streak'].iloc[idx] if 'suba_volume_zz2000_streak' in cn_result.columns else np.nan
+    cyb_streak = cn_result['suba_volume_cyb_streak'].iloc[idx] if 'suba_volume_cyb_streak' in cn_result.columns else np.nan
+    old_on = _cell_bool(cn_result['suba_volume_old_combined_signal'].iloc[idx]) if 'suba_volume_old_combined_signal' in cn_result.columns else on
+    clear_enabled = bool(CN_SA_VOLUME_CLEAR_RATIO_ENABLED)
+    clear_on = clear_enabled and (_cell_bool(cn_result['suba_volume_clear_signal'].iloc[idx]) if 'suba_volume_clear_signal' in cn_result.columns else False)
+    ratio_streak = cn_result['suba_volume_severe_ratio_streak'].iloc[idx] if 'suba_volume_severe_ratio_streak' in cn_result.columns else np.nan
+    clear_unavailable = clear_enabled and (_cell_bool(cn_result['suba_volume_clear_ratio_unavailable'].iloc[idx]) if 'suba_volume_clear_ratio_unavailable' in cn_result.columns else False)
+    zz_text = _streak_status('中证2000', zz_streak, CN_SA_VOLUME_ZZ2000_DAYS)
+    cyb_text = _streak_status('创业板', cyb_streak, CN_SA_VOLUME_CYB_DAYS)
+    ratio_text = _streak_status('中证2000/上证50成交额比值', ratio_streak, CN_SA_VOLUME_CLEAR_RATIO_DAYS) if clear_enabled else '已关闭'
+    old_status = f'已触发{CN_SA_VOLUME_SCALE:.0%}' if old_on else '未触发'
+    clear_status = '已触发0%仓位' if clear_on else '未触发0%仓位' if clear_enabled else '已关闭'
+    data_note_parts = []
+    if 'suba_volume_partial_unavailable' in cn_result.columns and _cell_bool(cn_result['suba_volume_partial_unavailable'].iloc[idx]):
+        data_note_parts.append('部分数据不可用，当前正式规则按可用腿判断')
+    if clear_unavailable:
+        data_note_parts.append('0%仓位扩展风控不可判定，不应按正常仓位执行')
+    if 'suba_volume_freshness_ok' in cn_result.columns and (not _cell_bool(cn_result['suba_volume_freshness_ok'].iloc[idx])):
+        freshness_error = _cell_text(cn_result['suba_volume_freshness_error'].iloc[idx] if 'suba_volume_freshness_error' in cn_result.columns else 'Sub-A成交额数据过期')
+        data_note_parts.append(f'{freshness_error}，不应按正常仓位执行')
+    data_note = f" | {'；'.join(data_note_parts)}" if data_note_parts else ''
+    unresolved = 'suba_volume_unresolved' in cn_result.columns and _cell_bool(cn_result['suba_volume_unresolved'].iloc[idx])
+    if unresolved and (not on):
+        clear_unknown_text = f'扩展风控条件: {ratio_text}；' if clear_enabled else ''
+        w(f'{prefix}**Sub-A成交额风控:** 风控启用；当前**UNKNOWN** | 当前正式规则需要确认任一腿是否触发（{zz_text}；{cyb_text}）；{clear_unknown_text}本次不应用成交额风控，成交额调整比例暂按1.0；最终仓位请以Sub-A主表actual_weight为准{data_note}\n')
+        return
+    status = '0%仓位触发' if clear_on else f'{CN_SA_VOLUME_SCALE:.0%}触发' if old_on else '未触发'
+    clear_detail = f' | 扩展风控条件（中证2000/上证50成交额比值 MA{CN_SA_VOLUME_CLEAR_RATIO_MA}/{CN_SA_VOLUME_CLEAR_RATIO_DAYS}天）{clear_status}：{ratio_text}' if clear_enabled else ''
+    w(f'{prefix}**Sub-A成交额风控:** 风控启用；当前**{status}** | 当前执行仓位={float(scale):.0%} | 当前正式规则（中证2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 或 创业板 MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天；触发后{CN_SA_VOLUME_SCALE:.0%}）{old_status}：{zz_text}；{cyb_text}{clear_detail}{data_note}\n')
+
+def _ticker_to_stooq(ticker):
+    special = {'BTC-USD': 'btc.v'}
+    return special.get(ticker, f'{ticker.lower()}.us')
+_V80_INTEGRITY_LOCK = threading.RLock()
+_V80_INTEGRITY_GENERATION = 0
+_V80_INTEGRITY_CONFLICTS = {}
+_V80_INTEGRITY_COVERAGE = {}
+
+class _V80IntegrityStateChanged(VerifiedDataRepairConflict):
+    pass
+
+def _v80_integrity_generation():
+    with _V80_INTEGRITY_LOCK:
+        return _V80_INTEGRITY_GENERATION
+
+def _v80_integrity_pending(ticker=None):
+    with _V80_INTEGRITY_LOCK:
+        return bool(_V80_INTEGRITY_CONFLICTS if ticker is None else ticker in _V80_INTEGRITY_CONFLICTS)
+
+def _v80_assert_integrity(generation, ticker=None):
+    with _V80_INTEGRITY_LOCK:
+        pending = _V80_INTEGRITY_CONFLICTS if ticker is None else {ticker: _V80_INTEGRITY_CONFLICTS[ticker]} if ticker in _V80_INTEGRITY_CONFLICTS else {}
+        if pending:
+            raise _V80IntegrityStateChanged('Known data integrity conflict; old request caches and fallback sources quarantined: ' + '; '.join((f'{k}: {v}' for k, v in pending.items())))
+        if generation != _V80_INTEGRITY_GENERATION:
+            raise _V80IntegrityStateChanged('Data integrity generation changed; discard old in-flight inputs/results')
+
+def _v80_quarantine_integrity(ticker, error):
+    global _V80_INTEGRITY_GENERATION
+    with _V80_INTEGRITY_LOCK:
+        _V80_INTEGRITY_GENERATION += 1
+        _V80_INTEGRITY_CONFLICTS[ticker] = str(error)
+
+def _v80_accept_price_source(ticker, frame, source, generation):
+    if ticker != 'KMLM':
+        _v80_assert_integrity(generation, ticker)
+        return
+    valid = _valid_us_ohlc_index(frame)
+    required = _latest_us_required_close_date()
+    confirmed = valid[valid <= required]
+    expected = _expected_ticker_ohlc_index(ticker, valid[0], required) if len(valid) else pd.DatetimeIndex([])
+    missing = expected.difference(valid)
+    note = frame.attrs.get('verified_ca_repair', '')
+    with _V80_INTEGRITY_LOCK:
+        if generation != _V80_INTEGRITY_GENERATION:
+            raise _V80IntegrityStateChanged('Integrity changed during fresh price validation')
+        if ticker in _V80_INTEGRITY_CONFLICTS:
+            coverage = _V80_INTEGRITY_COVERAGE.get(ticker, pd.DatetimeIndex([]))
+            inception = pd.Timestamp(_US_VERIFIED_HISTORY_STARTS['KMLM'])
+            full_expected = _expected_ticker_ohlc_index(ticker, inception, required)
+            if source != 'Yahoo' or not note or len(valid) == 0 or len(missing) or (valid[-1] < required) or len(coverage.difference(valid)) or len(full_expected.difference(valid)):
+                raise VerifiedDataRepairConflict('KMLM recovery requires fresh complete Yahoo action anchors and confirmed historical coverage')
+            _V80_INTEGRITY_CONFLICTS.pop(ticker)
+        if source == 'Yahoo' and note and len(confirmed) and (not len(missing)):
+            prior = _V80_INTEGRITY_COVERAGE.get(ticker, pd.DatetimeIndex([]))
+            _V80_INTEGRITY_COVERAGE[ticker] = prior.union(confirmed).sort_values()
+        _v80_assert_integrity(generation, ticker)
+
+def _v80_frames_generation(*frames):
+    stamps = {frame.attrs['verified_integrity_generation'] for frame in frames if hasattr(frame, 'attrs') and 'verified_integrity_generation' in frame.attrs}
+    if len(stamps) > 1:
+        raise _V80IntegrityStateChanged('Market inputs mix integrity states; fetch complete data again')
+    return next(iter(stamps)) if stamps else _v80_integrity_generation()
+
+class _V80VerifiedMessage:
+
+    def __init__(self, message, generation):
+        self.message = message
+        self.generation = generation
+
+    def __getattr__(self, name):
+        return getattr(self.message, name)
+
+    def write(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.write(*args, **kwargs)
+
+    def attach_file(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.attach_file(*args, **kwargs)
+
+    def overwrite(self, *args, **kwargs):
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(self.generation)
+            return self.message.overwrite(*args, **kwargs)
+
+def _verify_kmlm_suffix_factor_basis(dates, quote, adjusted, defer_missing=False):
+    """Check all observed post-event seams against independently frozen actions.
+
+    Tiingo divCash/splitFactor and Yahoo events were compared through 2026-10-23.
+    Accept either verified vendor amount, retaining its own factor convention.
+    An unknown new action requires renewed source evidence rather than scaling.
+    """
+    positions = np.flatnonzero(dates >= pd.Timestamp('2022-12-28'))
+    try:
+        raw = np.asarray([quote['close'][i] for i in positions], dtype=float)
+        adj = np.asarray([adjusted[i] for i in positions], dtype=float)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise VerifiedDataRepairConflict('KMLM suffix factor schema invalid') from exc
+    valid = np.isfinite(raw) & np.isfinite(adj) & (raw > 0) & (adj > 0)
+    missing_pair = np.isnan(raw) & np.isnan(adj)
+    if not valid.all():
+        if not defer_missing or not (valid | missing_pair).all():
+            raise VerifiedDataRepairConflict('KMLM suffix factor contains unusable prices')
+        positions, raw, adj = (positions[valid], raw[valid], adj[valid])
+    factors = adj / raw
+    actions = {pd.Timestamp('2024-12-17'): (0.23, 0.2301), pd.Timestamp('2025-12-22'): (1.303, 1.3035)}
+    for j in range(1, len(positions)):
+        if positions[j] != positions[j - 1] + 1:
+            span = dates[positions[j - 1] + 1:positions[j] + 1]
+            if any((day in actions for day in span)):
+                raise VerifiedDataRepairConflict('KMLM cannot verify an action across a missing daily row')
+        day = dates[positions[j]]
+        if day in actions:
+            implied = raw[j - 1] * (1.0 - factors[j - 1] / factors[j])
+            if min((abs(implied - value) for value in actions[day])) > 5e-05:
+                raise VerifiedDataRepairConflict('KMLM suffix action factor conflicts on ' + str(day.date()))
+        elif abs(factors[j] / factors[j - 1] - 1.0) > 2e-06:
+            raise VerifiedDataRepairConflict('KMLM mixed/partially corrected suffix or unknown action at ' + str(day.date()))
+
+def _verify_kmlm_prefix_factor_basis(dates, quote, adjusted):
+    """Reject a partially repaired/mixed prefix before either repair branch.
+
+    KMLM started in 2020. Before the verified 2022 event, the sole earlier
+    recorded action is 2021-12-29: Yahoo 1.838, corroborated by Tiingo 1.838123.
+    Same-basis daily factors vary <2.2e-7 in the real archive; 2e-6 allows
+    quote rounding, but not the 4.88% seam of a partly repaired prefix.
+    Unknown historical actions require renewed evidence, never blind scaling.
+    """
+    before = np.flatnonzero(dates < pd.Timestamp('2022-12-28'))
+    if not len(before):
+        return
+    try:
+        raw = np.asarray([quote['close'][i] for i in before], dtype=float)
+        adj = np.asarray([adjusted[i] for i in before], dtype=float)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise VerifiedDataRepairConflict('KMLM prefix factor schema invalid') from exc
+    if not np.isfinite(raw).all() or not np.isfinite(adj).all() or (raw <= 0).any() or (adj <= 0).any():
+        raise VerifiedDataRepairConflict('KMLM prefix factor contains unusable prices')
+    factors = adj / raw
+    for j in range(1, len(before)):
+        day = dates[before[j]]
+        if day == pd.Timestamp('2021-12-29'):
+            implied = raw[j - 1] * (1.0 - factors[j - 1] / factors[j])
+            if abs(implied - 1.838) > 0.0006:
+                raise VerifiedDataRepairConflict('KMLM earlier action/prefix factor conflicts on 2021-12-29')
+        elif abs(factors[j] / factors[j - 1] - 1.0) > 2e-06:
+            raise VerifiedDataRepairConflict('KMLM mixed/partially corrected prefix at ' + day.date().isoformat())
+
+def _repair_verified_kmlm_distribution(ticker, timestamps, quote, adjusted):
+    """Correct only the verified 2022-12-28 Yahoo distribution omission.
+
+    Issuer: https://kraneshares.com/resources/2022_kraneshares_cap_gain.pdf
+    USD/share: ordinary 1.55675 + ST 0.63203 + LT 1.84892 = 4.03770.
+    Preserve the existing Yahoo backward-factor convention. Never add a
+    second repair if upstream already implies the complete distribution.
+    """
+    if ticker != 'KMLM':
+        return (adjusted, '')
+    dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+    ex_day, prior_day = (pd.Timestamp('2022-12-28'), pd.Timestamp('2022-12-27'))
+    if not len(dates):
+        return (adjusted, '')
+    if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing):
+        raise VerifiedDataRepairConflict('KMLM invalid daily factor dates')
+    _verify_kmlm_prefix_factor_basis(dates, quote, adjusted)
+    _verify_kmlm_suffix_factor_basis(dates, quote, adjusted, defer_missing=True)
+    if dates.min() >= ex_day or dates.max() < ex_day:
+        return (adjusted, '')
+    if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing) or (prior_day not in dates) or (ex_day not in dates):
+        raise VerifiedDataRepairConflict('KMLM verified distribution anchors missing/duplicated')
+    ip, ie = (dates.get_loc(prior_day), dates.get_loc(ex_day))
+    try:
+        p, e = (float(quote['close'][ip]), float(quote['close'][ie]))
+        ap, ae = (float(adjusted[ip]), float(adjusted[ie]))
+    except (TypeError, KeyError, IndexError, ValueError) as exc:
+        raise VerifiedDataRepairConflict('KMLM invalid corporate-action anchors') from exc
+    if not all((np.isfinite(v) and v > 0 for v in (p, e, ap, ae))):
+        raise VerifiedDataRepairConflict('KMLM nonpositive/nonfinite corporate-action anchors')
+    observed_factor = ap / p / (ae / e)
+    implied_distribution = p * (1.0 - observed_factor)
+    if min((abs(implied_distribution - full) for full in (4.0377, 4.038))) <= 5e-05:
+        return (adjusted, 'KMLM-20221228-upstream-complete')
+    if abs(implied_distribution - 2.481) > 5e-05 or p <= 4.0377:
+        raise VerifiedDataRepairConflict(f'KMLM unrecognized 2022-12-28 distribution factor: implied={implied_distribution:.8f}')
+    scale = (1.0 - 4.0377 / p) / observed_factor
+    out = list(adjusted)
+    for i in np.flatnonzero(dates < ex_day):
+        if out[i] is not None:
+            out[i] = float(out[i]) * scale
+    return (out, 'KMLM-20221228-verified-ordinary-income-repair')
+
+def _vgit_volume_value(value):
+    if isinstance(value, (bool, np.bool_)) or value is None:
+        return np.nan
+    try:
+        number = float(str(value).replace(',', ''))
+    except (TypeError, ValueError, OverflowError):
+        return np.nan
+    return number if np.isfinite(number) and number >= 0 and number.is_integer() else np.nan
+
+
+def _fetch_us_yahoo(ticker, start_date='2003-01-01'):
+    start_ts = int(pd.Timestamp(start_date).timestamp())
+    end_ts = int((datetime.now() + timedelta(days=30)).timestamp())
+    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start_ts}&period2={end_ts}&interval=1d&includeAdjustedClose=true'
+    resp = _session.get(url, timeout=30)
+    if resp.status_code != 200:
+        raise ValueError(f'Yahoo returned status {resp.status_code}')
+    data = resp.json()
+    try:
+        if 'chart' not in data or not data['chart'].get('result'):
+            raise ValueError('Yahoo returned empty result')
+        result = data['chart']['result'][0]
+        timestamps = result.get('timestamp', [])
+        if not timestamps:
+            raise ValueError('No timestamps')
+        if ticker == 'KMLM':
+            if not isinstance(timestamps, (list, tuple, np.ndarray)) or any((isinstance(t, (bool, np.bool_)) or not isinstance(t, (int, float, np.integer, np.floating)) or (not np.isfinite(t)) for t in timestamps)):
+                raise DataSchemaError('KMLM invalid raw daily timestamps')
+            identity = (result.get('meta') or {}).get('symbol')
+            if identity is not None and identity != ticker:
+                raise DataSchemaError('KMLM Yahoo symbol identity mismatch')
+        identity = (result.get('meta') or {}).get('symbol')
+        if (ticker == 'VGIT' and identity != ticker) or (identity is not None and identity != ticker):
+            raise DataSchemaError(f'{ticker}: Yahoo symbol identity mismatch')
+        daily_dates = pd.to_datetime(timestamps, unit='s', utc=True).tz_localize(None).normalize()
+        if daily_dates.hasnans or daily_dates.has_duplicates or (not daily_dates.is_monotonic_increasing):
+            raise DataSchemaError(f'{ticker} Yahoo invalid/duplicate daily date index')
+        indicators = result['indicators']
+        quote = indicators['quote'][0]
+        adj_blocks = indicators.get('adjclose')
+        if not adj_blocks or not adj_blocks[0]:
+            raise ValueError(f'{ticker} Yahoo adjusted close missing')
+        adj_close = adj_blocks[0].get('adjclose')
+        if adj_close is None:
+            raise ValueError(f'{ticker} Yahoo adjusted close missing')
+        if len(adj_close) != len(timestamps):
+            raise ValueError(f'{ticker} Yahoo adjusted close length mismatch: adjusted={len(adj_close)}, timestamps={len(timestamps)}')
+        adj_close, verified_repair = _repair_verified_kmlm_distribution(ticker, timestamps, quote, adj_close)
+        if ticker == 'KMLM' and len(quote['close']) != len(timestamps):
+            raise DataSchemaError('KMLM raw close length mismatch')
+        rows = []
+        partial_raw = {}
+        provisional_day = None
+        market_time = (result.get('meta') or {}).get('regularMarketTime')
+        if ticker != 'BTC-USD' and market_time is not None:
+            if isinstance(market_time, (bool, np.bool_)) or not isinstance(market_time, (int, float, np.integer, np.floating)):
+                raise DataSchemaError(f'{ticker}: invalid Yahoo regular-market time')
+            market_et = pd.Timestamp(market_time, unit='s', tz='UTC').tz_convert('America/New_York')
+            if pd.isna(market_et):
+                raise DataSchemaError(f'{ticker}: invalid Yahoo regular-market time')
+            last_day = daily_dates[-1]
+            close_hour = 13 if _is_us_early_close_session(last_day) else 16
+            if market_et.date() == last_day.date() and market_et.hour < close_hour:
+                provisional_day = last_day.strftime('%Y-%m-%d')
+        for i, ts in enumerate(timestamps):
+            dt = pd.Timestamp.fromtimestamp(ts, tz='UTC').strftime('%Y-%m-%d')
+            c = quote['close'][i]
+            o = quote['open'][i] if 'open' in quote else None
+            if pd.isna(c) or pd.isna(o) or pd.isna(adj_close[i]) or dt == provisional_day:
+                partial_raw[dt] = {field: value for field, value in (('open', o), ('close', c))
+                                   if value is not None and pd.notna(value)}
+            if pd.isna(c) or pd.isna(adj_close[i]):
+                if ticker == 'KMLM' and pd.notna(c) and pd.isna(adj_close[i]):
+                    raise DataSchemaError(f'{ticker} Yahoo adjusted close missing at {dt}')
+                continue
+            ac = adj_close[i]
+            if ac is None:
+                raise ValueError(f'{ticker} Yahoo adjusted close missing at {dt}')
+            if c is not None and ac is not None:
+                adj_o = None
+                if o is not None and c != 0:
+                    adj_o = o * (ac / c)
+                row = {'date': dt, 'close': ac}
+                if ticker == 'VGIT':
+                    volumes = quote.get('volume')
+                    row['volume'] = _vgit_volume_value(volumes[i]) if isinstance(volumes, (list, tuple, np.ndarray)) and len(volumes) == len(timestamps) else np.nan
+                if adj_o is not None:
+                    row['open'] = adj_o
+                    if ticker == 'EMXC':
+                        row['raw_open'] = o
+                rows.append(row)
+        df = pd.DataFrame(rows)
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.set_index('date').sort_index()
+        if partial_raw:
+            df.attrs['yahoo_partial_raw'] = partial_raw
+        if provisional_day is not None:
+            df['is_live_bar'] = df.index == pd.Timestamp(provisional_day)
+            df.attrs['yahoo_provisional_market_time'] = market_et.isoformat()
+        if verified_repair:
+            df.attrs['verified_ca_repair'] = verified_repair
+        first_trade = (result.get('meta') or {}).get('firstTradeDate')
+        if first_trade is not None:
+            first_trade = pd.Timestamp(first_trade, unit='s', tz='UTC')
+            if ticker != 'BTC-USD':
+                first_trade = first_trade.tz_convert('America/New_York')
+            df.attrs['provider_first_trade_date'] = first_trade.date().isoformat()
+        return df
+    except VerifiedDataRepairConflict:
+        raise
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError) as exc:
+        if ticker == 'KMLM':
+            raise VerifiedDataRepairConflict('KMLM corporate-action input/schema invalid: ' + str(exc)) from exc
+        raise
+
+def _fetch_us_stooq(ticker, start_date='2003-01-01'):
+    stooq_sym = _ticker_to_stooq(ticker)
+    d1 = pd.Timestamp(start_date).strftime('%Y%m%d')
+    d2 = (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')
+    url = f'https://stooq.com/q/d/l/?s={stooq_sym}&d1={d1}&d2={d2}&i=d'
+    resp = _session.get(url, timeout=30)
+    resp.raise_for_status()
+    text = resp.text.strip()
+    if not text or 'No data' in text or len(text) < 50:
+        raise ValueError(f'Stooq returned no data for {ticker}')
+    df = pd.read_csv(io.StringIO(text))
+    if df.empty or 'Close' not in df.columns:
+        raise ValueError(f'Stooq CSV invalid for {ticker}')
+    df = df.rename(columns={'Date': 'date', 'Close': 'close', 'Open': 'open'})
+    df['date'] = pd.to_datetime(df['date'])
+    cols = ['date', 'close']
+    if 'open' in df.columns:
+        cols.append('open')
+    return df[cols].dropna(subset=['close']).set_index('date').sort_index()
+
+def _fetch_us_nasdaq_history(ticker, start_date, end_date):
+    start = pd.Timestamp(start_date).normalize()
+    end = pd.Timestamp(end_date).normalize()
+    url = f'https://api.nasdaq.com/api/quote/{ticker}/historical'
+    resp = _session.get(url, params={'assetclass': 'etf', 'fromdate': start.strftime('%Y-%m-%d'), 'todate': end.strftime('%Y-%m-%d'), 'limit': 5000}, headers={'Accept': 'application/json, text/plain, */*', 'Referer': f'https://www.nasdaq.com/market-activity/etf/{ticker.lower()}/historical'}, timeout=30)
+    resp.raise_for_status()
+    payload = resp.json()
+    if ticker == 'VGIT' and (payload.get('data') or {}).get('symbol') != ticker:
+        raise DataSchemaError('VGIT Nasdaq symbol identity missing or mismatch')
+    rows = ((payload.get('data') or {}).get('tradesTable') or {}).get('rows') or []
+    if not rows:
+        raise ValueError(f'Nasdaq returned no historical rows for {ticker}')
+    frame = pd.DataFrame(rows)
+    if 'date' not in frame.columns or 'close' not in frame.columns or 'open' not in frame.columns:
+        raise DataSchemaError(f'Nasdaq OHLC schema changed for {ticker}')
+    frame['date'] = pd.to_datetime(frame['date'], format='%m/%d/%Y', errors='coerce')
+    if frame['date'].isna().any() or frame['date'].duplicated().any():
+        raise DataSchemaError(f'{ticker} Nasdaq invalid/duplicate daily date index')
+    for column in ('open', 'close'):
+        frame[column] = pd.to_numeric(frame[column].astype(str).str.replace('[$,]', '', regex=True), errors='coerce')
+    columns = ['date', 'open', 'close']
+    if ticker == 'VGIT':
+        frame['volume'] = frame['volume'].map(_vgit_volume_value) if 'volume' in frame else np.nan
+        columns.append('volume')
+    return frame[columns].set_index('date').sort_index()
+
+def _merge_same_ticker_gap_prices(primary, fallback, missing_dates, ticker):
+    """Fill adjusted OHLC using a verified factor for each individual session.
+
+    A window-wide median is not an adjustment factor across ex-dividend/split
+    boundaries. An entire missing row needs matching immediate session anchors;
+    an ambiguous gap stays missing for the formal history validator to reject.
+    """
+    merged = primary.copy().sort_index()
+    fallback = fallback.copy().sort_index()
+    for label, frame in (('Yahoo', merged), ('Nasdaq', fallback)):
+        if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.hasnans or frame.index.has_duplicates or (frame.index.tz is not None) or (not frame.index.equals(frame.index.normalize())):
+            raise DataSchemaError(f'{ticker} {label} gap repair requires unique daily dates')
+        if not {'open', 'close'}.issubset(frame.columns):
+            raise DataSchemaError(f'{ticker} {label} gap repair requires open/close')
+    missing = pd.DatetimeIndex(missing_dates).normalize().unique().sort_values()
+    common = merged.index.intersection(fallback.index)
+    primary_close = pd.to_numeric(merged.get('close'), errors='coerce').reindex(common)
+    fallback_close = pd.to_numeric(fallback.get('close'), errors='coerce').reindex(common)
+    valid_overlap = np.isfinite(primary_close) & np.isfinite(fallback_close) & (primary_close > 0.0) & (fallback_close > 0.0)
+    ratios = (primary_close[valid_overlap] / fallback_close[valid_overlap]).astype(float)
+    candidate_dates = missing.intersection(fallback.index)
+    if len(candidate_dates) == 0:
+        return (merged, 0)
+    merged = merged.reindex(merged.index.union(candidate_dates)).sort_index()
+    evidence = list(primary.attrs.get('nasdaq_gap_repair_evidence', []))
+
+    def positive_value(frame, date, column):
+        if date not in frame.index:
+            return np.nan
+        value = pd.to_numeric(pd.Series([frame.at[date, column]]), errors='coerce').iloc[0]
+        return float(value) if np.isfinite(value) and value > 0 else np.nan
+    for date in candidate_dates:
+        record = {'ticker': ticker, 'date': date.date().isoformat(), 'source': 'Nasdaq', 'basis': 'Yahoo adjusted OHLC', 'filled_columns': []}
+        scale = np.nan
+        if date in ratios.index:
+            scale = float(ratios.loc[date])
+            record['method'] = 'same_day_close_factor'
+        else:
+            adjusted_open = positive_value(primary, date, 'open')
+            raw_open = positive_value(fallback, date, 'open')
+            if np.isfinite(adjusted_open) and np.isfinite(raw_open):
+                scale = adjusted_open / raw_open
+                record['method'] = 'same_day_open_factor'
+            else:
+                sessions = _expected_ticker_ohlc_index(ticker, date - pd.Timedelta(days=14), date + pd.Timedelta(days=14))
+                before, after = (sessions[sessions < date], sessions[sessions > date])
+                if len(before) and len(after) and (before[-1] in ratios.index) and (after[0] in ratios.index):
+                    left, right = (float(ratios.loc[before[-1]]), float(ratios.loc[after[0]]))
+                    record['anchors'] = [{'date': before[-1].date().isoformat(), 'factor': left}, {'date': after[0].date().isoformat(), 'factor': right}]
+                    if np.isclose(left, right, rtol=1e-07, atol=0.0):
+                        scale = left
+                        record['method'] = 'matching_adjacent_session_close_factors'
+                    else:
+                        record['reason'] = 'adjacent_adjustment_factors_disagree'
+                else:
+                    record['reason'] = 'no_verified_immediate_session_factor_pair'
+        if not np.isfinite(scale) or scale <= 0:
+            record['status'] = 'unresolved'
+            evidence.append(record)
+            continue
+        record['factor'] = scale
+        for column in ('open', 'close'):
+            fallback_value = positive_value(fallback, date, column)
+            if not np.isfinite(fallback_value):
+                continue
+            if not np.isfinite(positive_value(merged, date, column)):
+                merged.at[date, column] = fallback_value * scale
+                record['filled_columns'].append(column)
+                record[column] = {'raw': fallback_value, 'adjusted': fallback_value * scale}
+        if ticker == 'VGIT' and date in _valid_us_ohlc_index(merged.loc[[date]]):
+            original = _vgit_volume_value(merged.at[date, 'volume']) if 'volume' in merged else np.nan
+            backup = _vgit_volume_value(fallback.at[date, 'volume']) if 'volume' in fallback else np.nan
+            if np.isfinite(original) and np.isfinite(backup) and (original > 0) != (backup > 0):
+                merged.at[date, 'volume'] = np.nan
+                record['volume_status'] = 'conflicting_native_liquidity'
+            elif not np.isfinite(original):
+                merged.at[date, 'volume'] = backup
+                record['volume_status'] = 'nasdaq_same_ticker' if np.isfinite(backup) else 'unverified'
+        record['status'] = 'repaired' if date in _valid_us_ohlc_index(merged.loc[[date]]) else 'unresolved'
+        evidence.append(record)
+    merged.attrs['nasdaq_gap_repair_evidence'] = evidence
+    before = len(missing)
+    remaining = missing.difference(_valid_us_ohlc_index(merged))
+    return (merged, before - len(remaining))
+
+def _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, frame):
+    valid = _valid_us_ohlc_index(frame)
+    if len(valid) < 2:
+        return (frame, 0, 0)
+    expected = _expected_ticker_ohlc_index(ticker, valid[0], valid[-1])
+    missing = expected.difference(valid)
+    if len(missing) == 0:
+        return (frame, 0, 0)
+    if ticker == 'BTC-USD':
+        return (frame, 0, len(missing))
+    fallback = _fetch_us_nasdaq_history(ticker, missing.min() - pd.Timedelta(days=14), missing.max() + pd.Timedelta(days=14))
+    repaired, repaired_count = _merge_same_ticker_gap_prices(frame, fallback, missing, ticker)
+    remaining = expected.difference(_valid_us_ohlc_index(repaired))
+    return (repaired, repaired_count, len(remaining))
+_US_VERIFIED_HISTORY_STARTS = {'AVDV': '2019-09-26', 'AVUV': '2019-09-26', 'BIL': '2007-05-30', 'BTC-USD': '2014-09-17', 'DBC': '2006-02-06', 'DBMF': '2019-05-08', 'EEM': '2003-04-14', 'EFA': '2003-01-02', 'EMXC': '2017-07-26', 'GLD': '2004-11-18', 'GLDM': '2018-06-26', 'IBIT': '2024-01-11', 'KMLM': '2020-12-02', 'PDBC': '2014-11-07', 'QQQ': '2003-01-02', 'QQQM': '2020-10-13', 'SPY': '2003-01-02', 'TLT': '2003-01-02', 'UUP': '2007-03-01', 'VEA': '2007-07-26', 'VGIT': '2009-11-23', 'VTI': '2003-01-02'}
+
+def fetch_yahoo(ticker, start_date='2003-01-01'):
+    generation = _v80_integrity_generation()
+    sources = [('Yahoo', lambda: _fetch_us_yahoo(ticker, start_date)), ('Stooq', lambda: _fetch_us_stooq(ticker, start_date))]
+    last_err = None
+    for name, fetcher in sources:
+        try:
+            df = fetcher()
+            if df is not None and len(df) > 50:
+                expected_start = _us_history_expected_start(ticker, start_date, df)
+                valid = _valid_us_ohlc_index(df)
+                if len(valid) == 0 or valid[0] > expected_start:
+                    raise DataSchemaError(f'{ticker}: missing requested history start {expected_start.date()}')
+                df.attrs['history_requested_start'] = pd.Timestamp(start_date).date().isoformat()
+                df.attrs['history_expected_start'] = expected_start.date().isoformat()
+                if name == 'Yahoo':
+                    try:
+                        df, repaired_count, remaining_count = _repair_us_yahoo_internal_gaps_with_nasdaq(ticker, df)
+                        if repaired_count > 0 and remaining_count == 0:
+                            _v80_accept_price_source(ticker, df, name, generation)
+                            repair_note = df.attrs.get('verified_ca_repair')
+                            return (df, 'Yahoo+Nasdaq-gap' + ('+' + repair_note if repair_note else ''))
+                    except _DATA_FETCH_ERRORS:
+                        pass
+                    except (KeyError, TypeError, IndexError):
+                        pass
+                _v80_accept_price_source(ticker, df, name, generation)
+                repair_note = df.attrs.get('verified_ca_repair')
+                return (df, name + ('+' + repair_note if repair_note else ''))
+        except VerifiedDataRepairConflict as exc:
+            if ticker == 'KMLM' and (not isinstance(exc, _V80IntegrityStateChanged)):
+                _v80_quarantine_integrity(ticker, exc)
+            raise
+        except _DATA_FETCH_ERRORS as e:
+            _v80_assert_integrity(generation, ticker)
+            last_err = e
+            time.sleep(1)
+        except (KeyError, TypeError, IndexError) as e:
+            _v80_assert_integrity(generation, ticker)
+            last_err = DataSchemaError(f'{name} schema changed for {ticker}: {e}')
+            time.sleep(1)
+    return (None, 'FAILED')
+
+def _us_history_expected_start(ticker, requested_start, frame=None):
+    bounds = []
+    if ticker in _US_VERIFIED_HISTORY_STARTS:
+        bounds.append(pd.Timestamp(_US_VERIFIED_HISTORY_STARTS[ticker]))
+    native = frame.attrs.get('provider_first_trade_date') if frame is not None else None
+    if native is not None:
+        date = pd.Timestamp(native)
+        if pd.isna(date):
+            raise DataSchemaError(f'{ticker}: invalid provider first trade date')
+        bounds.append(date)
+    start = pd.Timestamp(requested_start).normalize()
+    if ticker == 'VGIT':
+        start = max(start, pd.Timestamp('2009-11-23'))
+    elif bounds:
+        start = max(start, min(bounds))
+    expected = _expected_ticker_ohlc_index(ticker, start, start + pd.Timedelta(days=14))
+    if not len(expected):
+        raise DataSchemaError(f'{ticker}: no verified requested session')
+    return expected[0]
+
+def _valid_us_ohlc_index(frame):
+    if frame is None or not isinstance(frame, pd.DataFrame):
+        return pd.DatetimeIndex([])
+    if 'open' not in frame.columns or 'close' not in frame.columns:
+        return pd.DatetimeIndex([])
+    prices = frame[['open', 'close']].apply(pd.to_numeric, errors='coerce')
+    valid = np.isfinite(prices).all(axis=1) & (prices > 0.0).all(axis=1)
+    return pd.DatetimeIndex(frame.index[valid]).normalize().sort_values().unique()
+
+def _expected_us_ohlc_index(start_date, end_date):
+    start = pd.Timestamp(start_date).normalize()
+    end = pd.Timestamp(end_date).normalize()
+    days = pd.bdate_range(start, end)
+    holidays = set()
+    for year in range(start.year, end.year + 1):
+        holidays.update(_us_market_holidays(year))
+    return days[~days.normalize().isin(pd.DatetimeIndex(sorted(holidays)))]
+
+def _expected_ticker_ohlc_index(ticker, start_date, end_date):
+    if ticker == 'BTC-USD':
+        return pd.date_range(start_date, end_date, freq='D')
+    if ticker == 'BTC/IBIT':
+        boundary = _ibit_first_trading_session()
+        proxy = pd.date_range(start_date, min(pd.Timestamp(end_date), boundary - pd.Timedelta(days=1)), freq='D')
+        live = _expected_us_ohlc_index(max(pd.Timestamp(start_date), boundary), end_date)
+        return proxy.union(live)
+    return _expected_us_ohlc_index(start_date, end_date)
+
+def _ibit_first_trading_session():
+    return pd.Timestamp('2024-01-11')
+
+def _shared_us_ohlc_index(raw_dict, tickers):
+    bounds = []
+    for ticker in dict.fromkeys(tickers or ()):
+        if ticker == 'BTC-USD':
+            continue
+        valid = _valid_us_ohlc_index((raw_dict or {}).get(ticker))
+        if len(valid) > 0:
+            bounds.append((valid[0], valid[-1]))
+    if not bounds:
+        return pd.DatetimeIndex([])
+    return _expected_us_ohlc_index(min((start for start, _end in bounds)), max((end for _start, end in bounds)))
+
+def _assert_us_internal_price_history(raw_dict, tickers, label='US', *, expected_starts=None):
+    problems = []
+    for ticker in dict.fromkeys(tickers or ()):
+        frame = (raw_dict or {}).get(ticker)
+        valid = _valid_us_ohlc_index(frame)
+        if len(valid) == 0:
+            problems.append(f'{ticker}: no valid open/close history')
+            continue
+        dates = pd.DatetimeIndex(frame.index)
+        if dates.hasnans or dates.has_duplicates or (not dates.is_monotonic_increasing) or (dates.tz is not None) or (not dates.equals(dates.normalize())):
+            problems.append(f'{ticker}: invalid daily date index')
+            continue
+        if ticker == 'VGIT' and dates[0] < pd.Timestamp('2009-11-23'):
+            problems.append('VGIT: native OHLC before first trading session 2009-11-23')
+            continue
+        if ticker == 'IBIT' and dates[0] < _ibit_first_trading_session():
+            problems.append(f'{ticker}: native OHLC before first trading session {_ibit_first_trading_session().date()}')
+            continue
+        expected_start = (expected_starts or {}).get(ticker, frame.attrs.get('history_expected_start', dates[0]))
+        expected = _expected_ticker_ohlc_index(ticker, min(pd.Timestamp(expected_start), dates[0]), dates[-1])
+        extra = dates.difference(expected)
+        if len(extra):
+            problems.append(f'{ticker}: non-session OHLC {extra[0].date()}')
+        missing = expected.difference(valid)
+        if len(missing) > 0:
+            preview = ','.join((pd.Timestamp(day).date().isoformat() for day in missing[:3]))
+            problems.append(f'{ticker}: missing {preview}')
+    if problems:
+        raise poe.BotError(f'{label} internal OHLC gap after retry: ' + '; '.join(problems))
+
+def _retry_incomplete_us_price_history(us_raw, us_sources, tickers, *, reference_ticker='SPY', max_attempts=2, max_total_attempts=12, msg=None):
+    attempts_remaining = max(int(max_total_attempts), 0)
+    for ticker in dict.fromkeys(tickers or ()):
+        if ticker not in us_raw:
+            continue
+        if str((us_sources or {}).get(ticker, '')) != 'Yahoo':
+            continue
+        best = us_raw[ticker]
+        best_valid = _valid_us_ohlc_index(best)
+        if len(best_valid) == 0:
+            continue
+        expected = _expected_ticker_ohlc_index(ticker, best.index[0], best.index[-1])
+        best_missing = expected.difference(best_valid)
+        if len(best_missing) == 0:
+            continue
+        if attempts_remaining <= 0:
+            break
+        initial_missing = len(best_missing)
+        for attempt in range(min(max(int(max_attempts), 0), attempts_remaining)):
+            attempts_remaining -= 1
+            try:
+                if attempt == 0:
+                    retry, source = fetch_yahoo(ticker)
+                else:
+                    retry_start = pd.Timestamp(best_missing.min()) - pd.Timedelta(days=400)
+                    retry, source = fetch_yahoo(ticker, start_date=retry_start)
+            except _DATA_FETCH_ERRORS:
+                continue
+            except (KeyError, TypeError, IndexError):
+                continue
+            if retry is None or not str(source).startswith('Yahoo'):
+                continue
+            retry_valid = _valid_us_ohlc_index(retry)
+            if len(best_valid.difference(retry_valid)) == 0:
+                merged = retry.combine_first(best).sort_index()
+            else:
+                overlap = best_valid.intersection(retry_valid)
+                if len(overlap) == 0:
+                    continue
+                old_prices = best.loc[overlap, ['open', 'close']].apply(pd.to_numeric, errors='coerce')
+                retry_prices = retry.loc[overlap, ['open', 'close']].apply(pd.to_numeric, errors='coerce')
+                if not np.allclose(old_prices.to_numpy(), retry_prices.to_numpy(), rtol=1e-08, atol=1e-10):
+                    if msg is not None:
+                        msg.write(f'  ⚠️ {ticker}: Yahoo局部重试与已有OHLC复权尺度不一致，拒绝混接\n')
+                    continue
+                merged = best.combine_first(retry).sort_index()
+            merged_valid = _valid_us_ohlc_index(merged)
+            merged_missing = expected.difference(merged_valid)
+            if len(merged_missing) < len(best_missing):
+                best = merged
+                best_valid = merged_valid
+                best_missing = merged_missing
+            if len(best_missing) == 0:
+                break
+        us_raw[ticker] = best
+        if msg is not None and len(best_missing) < initial_missing:
+            msg.write(f'  ↳ {ticker}: Yahoo历史缺口重试 {initial_missing}→{len(best_missing)}；未使用代理或前值填充\n')
+
+def _v80_us_required_history():
+    return list(dict.fromkeys([*SUBB_REQUIRED_PRICE_TICKERS, *SUBB_REQUIRED_LIVE_PRICE_TICKERS,
+                              US_ROT_EMXC_BT_PROXY, *PROD_PORTFOLIO,
+                              *(cfg['proxy'] for cfg in PROD_PORTFOLIO.values()),
+                              PROD_CASH, PROD_VS_SIGNAL_TICKER, PROD_GOLD_VS_SIGNAL_TICKER]))
+
+
+def _v80_us_confirmed_prefix(raw, sources, required, tickers, msg):
+    """Keep a contiguous, verified prefix across every dependency, before any forward fill."""
+    status = {'status': 'current', 'required': required, 'asof': required, 'reason': '',
+              'repaired': (), 'tail_evidence': {}, 'intraday_snapshot': False}
+    confirmed = {}
+    repaired = []
+    faults = {}
+    cutoff = required
+    for ticker in tickers:
+        frame = raw.get(ticker)
+        if frame is None or frame.empty or 'Stooq' in str(sources.get(ticker, '')):
+            faults[ticker] = '缺少可核验的复权历史'
+            cutoff = None
+            continue
+        index = frame.index
+        if (not isinstance(index, pd.DatetimeIndex) or index.tz is not None or index.hasnans
+                or index.has_duplicates or not index.is_monotonic_increasing or not index.equals(index.normalize())):
+            faults[ticker] = '日线日期无效'
+            cutoff = None
+            continue
+        frame = frame.loc[:required]
+        if 'is_live_bar' in frame:
+            frame = frame.loc[~frame['is_live_bar'].eq(True)]
+        # BTC supplies historical UTC bars and the IBIT close-to-close splice anchor only.
+        end = min(required, _ibit_first_trading_session()) if ticker == US_ROT_BTC_TICKER else required
+        start = _us_history_expected_start(ticker, '2003-01-01', frame)
+        expected = _expected_ticker_ohlc_index(ticker, start, end)
+        valid = _valid_us_ohlc_index(frame)
+        missing = expected.difference(valid)
+        extra = frame.loc[:end].index.difference(_expected_ticker_ohlc_index(ticker, min(start, index[0]), end))
+        if len(extra) or (ticker == 'IBIT' and index[0] < _ibit_first_trading_session()) or (ticker == 'VGIT' and index[0] < pd.Timestamp('2009-11-23')):
+            faults[ticker] = '存在非交易日或上市前行情'
+            cutoff = None
+            continue
+        if (ticker != US_ROT_BTC_TICKER and len(missing) and len(valid)
+                and missing[0] > valid[-1] and str(sources.get(ticker, '')).startswith('Yahoo')):
+            try:
+                frame = _repair_us_verified_tiingo_tail(ticker, frame, required)
+            except _DATA_FETCH_ERRORS as exc:
+                # Source helpers expose a credential-free reason, never relay a raw network exception.
+                faults[ticker] = str(exc) if isinstance(exc, DataSchemaError) else '备用行情未通过验证'
+            else:
+                repaired.append(ticker)
+                status['tail_evidence'][ticker] = frame.attrs['tiingo_tail_evidence']
+                sources[ticker] += '+Tiingo/Nasdaq(已核验尾部)'
+                valid = _valid_us_ohlc_index(frame)
+                missing = expected.difference(valid)
+        confirmed[ticker] = frame
+        if len(missing):
+            faults.setdefault(ticker, f'{missing[0]:%Y-%m-%d} 起缺少完整开收盘')
+            prior = valid[valid < missing[0]]
+            if not len(prior) or ticker == US_ROT_BTC_TICKER:
+                cutoff = None
+            elif cutoff is not None:
+                cutoff = min(cutoff, prior[-1])
+    if cutoff is not None and any(not len(_valid_us_ohlc_index(frame.loc[:cutoff])) for frame in confirmed.values()):
+        cutoff = None
+    status.update(repaired=tuple(repaired), asof=cutoff)
+    if faults:
+        status.update(status='unavailable' if cutoff is None else 'historical',
+                      reason='；'.join(f'{ticker} {reason}' for ticker, reason in faults.items()))
+    elif repaired:
+        status['status'] = 'verified_backup'
+    if repaired:
+        msg.write('  美股已核验补齐（Tiingo 复权开收盘、Nasdaq 独立核价）：' + '、'.join(repaired) + '\n')
+    if cutoff is None:
+        return {}, status
+    for ticker in raw.keys() - set(tickers):
+        frame = raw[ticker].loc[:cutoff]
+        if 'is_live_bar' in frame:
+            frame = frame.loc[~frame['is_live_bar'].eq(True)]
+        if not frame.empty:
+            confirmed[ticker] = frame
+    return {t: frame.loc[:cutoff].copy() for t, frame in confirmed.items()}, status
+
+
+def _v80_us_live_panel(confirmed, raw, tickers, live_day, status, msg):
+    """All-or-nothing intraday inputs. A partial snapshot cannot replace confirmed rows."""
+    candidate = {}
+    incomplete = {}
+    faults = {}
+    day_key = pd.Timestamp(live_day).strftime('%Y-%m-%d')
+    if not _is_us_market_session(live_day):
+        status.update(status='partial_intraday', intraday_snapshot=False, reason='目标日期不是美股交易日')
+        return confirmed
+    for ticker, history in confirmed.items():
+        source = raw[ticker]
+        today = source.loc[source.index == live_day]
+        if len(today) == 1 and live_day in _valid_us_ohlc_index(today):
+            candidate[ticker] = pd.concat([history, today.assign(is_live_bar=True)])
+            candidate[ticker].attrs.update(history.attrs)
+        else:
+            candidate[ticker] = history
+            incomplete[ticker] = today
+    if incomplete:
+        # Supplement only the provisional candidate. Its prices are raw Yahoo quotes.
+        _supplement_us_today_close(candidate, list(candidate))
+    for ticker, today in incomplete.items():
+        source = raw[ticker]
+        native = source.attrs.get('yahoo_partial_raw', {}).get(day_key, {})
+        quotes = candidate[ticker].loc[candidate[ticker].index == live_day]
+        if len(today) > 1 or len(quotes) > 1:
+            faults[ticker] = '重复盘中日期'
+            continue
+        quote = quotes.iloc[0] if len(quotes) else {}
+        prices = {}
+        factors = []
+        try:
+            for field in ('open', 'close'):
+                observed, supplement = native.get(field), quote.get(field)
+                if pd.notna(observed):
+                    observed = _verified_tail_number(observed)
+                    if pd.notna(supplement) and not np.isclose(observed, _verified_tail_number(supplement), rtol=1e-5, atol=0):
+                        raise ValueError('同日 Yahoo 原始行情与补充行情冲突')
+                    prices[field] = observed
+                    adjusted = today.iloc[0].get(field) if len(today) else None
+                    if pd.notna(adjusted):
+                        factors.append(_verified_tail_number(adjusted) / observed)
+                elif pd.notna(supplement):
+                    prices[field] = _verified_tail_number(supplement)
+            if len(prices) != 2:
+                raise ValueError('缺少同一交易日的完整开收盘')
+            if factors and not np.allclose(factors, factors[0], rtol=1e-5, atol=0):
+                raise ValueError('同日调整系数不一致')
+        except (ValueError, TypeError, OverflowError) as exc:
+            faults[ticker] = str(exc)
+            candidate[ticker] = confirmed[ticker]
+            continue
+        factor = factors[0] if factors else 1.0
+        history = confirmed[ticker]
+        row = pd.DataFrame([{**{field: price * factor for field, price in prices.items()}, 'is_live_bar': True}],
+                           index=pd.DatetimeIndex([live_day], name=history.index.name))
+        candidate[ticker] = pd.concat([history, row])
+        candidate[ticker].attrs.update(history.attrs)
+    required = [ticker for ticker in tickers if ticker != US_ROT_BTC_TICKER]
+    for ticker in required:
+        if live_day not in _valid_us_ohlc_index(candidate.get(ticker)):
+            faults.setdefault(ticker, '缺少同一交易日的完整开收盘')
+    if 'VGIT' in required:
+        vgit = candidate.get('VGIT')
+        vol = _vgit_volume_value(vgit.at[live_day, 'volume']) if vgit is not None and 'volume' in vgit and live_day in vgit.index else np.nan
+        if not np.isfinite(vol) or vol <= 0:
+            faults['VGIT'] = '盘中原生成交量不可核验，保留已确认行情'
+    missing = [f'{ticker} {faults[ticker]}' for ticker in required if ticker in faults]
+    if missing:
+        status.update(status='partial_intraday', intraday_snapshot=False, reason='；'.join(missing))
+        return confirmed
+    status['intraday_snapshot'] = True
+    return {ticker: frame.loc[:live_day] for ticker, frame in candidate.items()}
+
+
+def _fetch_us_realtime_close(ticker):
+    try:
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d&includePrePost=false'
+        resp = _session.get(url, timeout=10)
+        if resp.status_code != 200:
+            return (None, None, None)
+        data = resp.json()
+        result = data.get('chart', {}).get('result', [None])[0]
+        if result is None:
+            return (None, None, None)
+        meta = result.get('meta', {})
+        price = meta.get('regularMarketPrice')
+        open_price = meta.get('regularMarketOpen')
+        if open_price is None:
+            quote_blocks = result.get('indicators', {}).get('quote') or []
+            quote = quote_blocks[0] if quote_blocks else {}
+            stamps = result.get('timestamp') or []
+            values = quote.get('open') or []
+            market_time = meta.get('regularMarketTime')
+            if market_time is not None and len(stamps) == len(values):
+                market_day = pd.Timestamp(market_time, unit='s', tz='UTC').tz_convert('America/New_York').date()
+                same_day = [v for stamp, v in zip(stamps, values)
+                            if pd.Timestamp(stamp, unit='s', tz='UTC').tz_convert('America/New_York').date() == market_day]
+                if len(same_day) == 1:
+                    open_price = same_day[0]
+        mkt_ts = meta.get('regularMarketTime')
+        if price is None or mkt_ts is None:
+            return (None, None, None)
+        trade_date = pd.Timestamp.fromtimestamp(mkt_ts, tz='UTC').tz_convert('America/New_York').strftime('%Y-%m-%d')
+        if (meta.get('symbol') is not None and meta['symbol'] != ticker
+                or not np.isfinite(float(price)) or float(price) <= 0 or isinstance(price, bool)):
+            return (None, None, None)
+        open_value = float(open_price) if open_price is not None and not isinstance(open_price, bool) else None
+        if open_value is not None and (not np.isfinite(open_value) or open_value <= 0):
+            open_value = None
+        return (float(price), trade_date, open_value)
+    except _DATA_FETCH_ERRORS + (TypeError, OverflowError):
+        return (None, None, None)
+
+def _coerce_us_realtime_close_result(result):
+    if result is None:
+        return (None, None, None)
+    try:
+        values = tuple(result)
+    except TypeError:
+        return (None, None, None)
+    if len(values) >= 3:
+        return (values[0], values[1], values[2])
+    if len(values) == 2:
+        return (values[0], values[1], None)
+    return (None, None, None)
+
+def _supplement_us_today_close(us_raw, us_tickers, msg=None):
+    if not us_raw:
+        return
+    _stock_tickers = [t for t in us_tickers if t in us_raw and t != 'BTC-USD']
+    if not _stock_tickers:
+        return
+    kline_last_date = max((us_raw[t].index[-1] for t in _stock_tickers))
+    kline_last_str = kline_last_date.strftime('%Y-%m-%d')
+    probe = 'SPY' if 'SPY' in us_raw else _stock_tickers[0]
+    probe_price, probe_trade_date, _probe_open = _coerce_us_realtime_close_result(_fetch_us_realtime_close(probe))
+    if probe_price is None or probe_trade_date is None:
+        return
+    supplemented = []
+    for ticker in us_tickers:
+        if ticker not in us_raw:
+            continue
+        df = us_raw[ticker]
+        df_last = df.index[-1].strftime('%Y-%m-%d')
+        if df_last >= probe_trade_date:
+            continue
+        rt_price, rt_date, rt_open = _coerce_us_realtime_close_result(_fetch_us_realtime_close(ticker))
+        if rt_price is None or rt_date is None:
+            continue
+        if rt_date <= df_last:
+            continue
+        new_ts = pd.Timestamp(rt_date)
+        new_payload = {'close': rt_price}
+        if rt_open is not None:
+            new_payload['open'] = rt_open
+        new_row = pd.DataFrame([new_payload], index=pd.DatetimeIndex([new_ts], name=df.index.name))
+        new_row['is_live_bar'] = True
+        merged = pd.concat([df, new_row])
+        if 'is_live_bar' not in merged.columns:
+            merged['is_live_bar'] = False
+        merged['is_live_bar'] = merged['is_live_bar'].where(merged['is_live_bar'].notna(), False).astype(bool)
+        us_raw[ticker] = merged
+        supplemented.append(ticker)
+        time.sleep(0.2)
+    if supplemented and msg:
+        msg.write(f"  ↳ 美股实时补充 ({probe_trade_date}): {', '.join(supplemented[:5])}{('...' if len(supplemented) > 5 else '')} 共{len(supplemented)}个 [snapshot]\n")
+
+def build_ibit_spliced(frame, proxy_ticker='BTC-USD', live_ticker='IBIT'):
+    if proxy_ticker not in frame.columns:
+        raise ValueError(f'{proxy_ticker} column is required to build IBIT splice')
+    proxy = pd.to_numeric(frame[proxy_ticker], errors='coerce').astype(float).copy().rename(proxy_ticker)
+    if live_ticker not in frame.columns:
+        return proxy
+    live = pd.to_numeric(frame[live_ticker], errors='coerce').astype(float).reindex(proxy.index)
+    overlap = pd.concat([proxy.rename('proxy'), live.rename('live')], axis=1).dropna()
+    if overlap.empty:
+        return proxy
+    switch_date = overlap.index[0]
+    live_base = float(overlap.loc[switch_date, 'live'])
+    if abs(live_base) < 1e-12:
+        return proxy
+    scale_factor = float(overlap.loc[switch_date, 'proxy']) / live_base
+    switch_mask = proxy.index >= switch_date
+    post_listing = live.loc[switch_mask].ffill()
+    proxy.loc[switch_mask] = post_listing * scale_factor
+    return proxy
+
+def _build_btc_ibit_formal_ohlc(us_raw, proxy_ticker='BTC-USD', live_ticker='IBIT'):
+    proxy = (us_raw or {}).get(proxy_ticker)
+    live = (us_raw or {}).get(live_ticker)
+    if proxy is None or not {'open', 'close'}.issubset(proxy.columns):
+        return pd.DataFrame(columns=['open', 'close'])
+    proxy_prices = proxy[['open', 'close']].apply(pd.to_numeric, errors='coerce')
+    if live is None or not {'open', 'close'}.issubset(live.columns):
+        return proxy_prices
+    live_prices = live[['open', 'close']].apply(pd.to_numeric, errors='coerce')
+    live_valid = _valid_us_ohlc_index(live_prices)
+    if len(live_valid) == 0:
+        return proxy_prices
+    switch_date = live_valid[0]
+    if live_ticker == 'IBIT':
+        switch_date = _ibit_first_trading_session()
+        if live_prices.index.min() < switch_date:
+            raise DataSchemaError('IBIT native OHLC before its first trading session 2024-01-11')
+    return pd.concat([proxy_prices.loc[proxy_prices.index < switch_date], live_prices.loc[switch_date:]], axis=0).sort_index()
+
+def _build_proxy_live_spliced_series(proxy_series, live_series=None, switch_start=None, name=None, live_name=None):
+    proxy = pd.to_numeric(proxy_series, errors='coerce').astype(float).copy()
+    if name is not None:
+        proxy = proxy.rename(name)
+    if live_series is None:
+        return proxy
+    live = pd.to_numeric(live_series, errors='coerce').astype(float).reindex(proxy.index)
+    switch_mask = pd.Series(True, index=proxy.index)
+    if switch_start is not None:
+        switch_mask = proxy.index >= pd.Timestamp(switch_start)
+    overlap = pd.concat([proxy.loc[switch_mask].rename('proxy'), live.loc[switch_mask].rename('live')], axis=1).dropna()
+    if overlap.empty:
+        return proxy
+    switch_date = overlap.index[0]
+    live_base = float(overlap.loc[switch_date, 'live'])
+    if abs(live_base) < 1e-12:
+        return proxy
+    scale_factor = float(overlap.loc[switch_date, 'proxy']) / live_base
+    switch_mask = proxy.index >= switch_date
+    post_switch_live = live.loc[switch_mask]
+    valid_live = np.isfinite(post_switch_live) & (post_switch_live > 0.0)
+    last_valid_date = post_switch_live.index[valid_live][-1]
+    observed_live = post_switch_live.loc[:last_valid_date]
+    invalid = ~np.isfinite(observed_live) | (observed_live <= 0.0)
+    if invalid.any():
+        first_bad = pd.Timestamp(observed_live.index[invalid][0]).date().isoformat()
+        proxy_label = name or proxy.name or 'proxy'
+        live_label = live_name or getattr(live_series, 'name', None) or 'live'
+        raise ValueError(f'{proxy_label}/{live_label} live splice has invalid price on {first_bad}; refusing to overwrite a valid proxy price')
+    proxy.loc[switch_mask] = post_switch_live * scale_factor
+    return proxy
+
+def _build_proxy_live_open_spliced_series(proxy_open, proxy_close, live_open=None, live_close=None, name=None, switch_start=None):
+    proxy = pd.to_numeric(proxy_open, errors='coerce').astype(float).copy()
+    if name is not None:
+        proxy = proxy.rename(name)
+    if live_open is None or live_close is None:
+        return proxy
+    proxy_close = pd.to_numeric(proxy_close, errors='coerce').astype(float).reindex(proxy.index)
+    live_open = pd.to_numeric(live_open, errors='coerce').astype(float).reindex(proxy.index)
+    live_close = pd.to_numeric(live_close, errors='coerce').astype(float).reindex(proxy.index)
+    switch_mask = pd.Series(True, index=proxy.index)
+    if switch_start is not None:
+        switch_mask = proxy.index >= pd.Timestamp(switch_start)
+    overlap = pd.concat([proxy_close.loc[switch_mask].rename('proxy_close'), live_close.loc[switch_mask].rename('live_close')], axis=1).dropna()
+    if overlap.empty:
+        return proxy
+    switch_date = overlap.index[0]
+    live_close_base = float(overlap.loc[switch_date, 'live_close'])
+    if abs(live_close_base) < 1e-12:
+        return proxy
+    scale_factor = float(overlap.loc[switch_date, 'proxy_close']) / live_close_base
+    switch_mask = proxy.index > switch_date
+    proxy.loc[switch_mask] = live_open.loc[switch_mask] * scale_factor
+    return proxy
+
+def _build_us_open_execution_dict(us_raw):
+    us_open = {}
+    for ticker, df in (us_raw or {}).items():
+        if df is not None and 'open' in df.columns:
+            us_open[ticker] = df['open']
+            if ticker == 'VGIT':
+                volume = df['volume'].map(_vgit_volume_value) if 'volume' in df else pd.Series(np.nan, index=df.index)
+                us_open['VGIT'] = df['open'].where(volume.gt(0))
+                us_open['VGIT_native_volume'] = volume
+    for live_ticker, cfg in {**_v80_b78_US_ROT_BASE_ASSETS, **US_ROT_BASE_ASSETS}.items():
+        proxy_ticker = cfg.get('proxy', live_ticker)
+        if proxy_ticker in {live_ticker, 'EMXC', US_ROT_BTC_TICKER}:
+            continue
+        proxy_df = (us_raw or {}).get(proxy_ticker)
+        live_df = (us_raw or {}).get(live_ticker)
+        if proxy_ticker in us_open and live_ticker in us_open and (proxy_df is not None) and (live_df is not None) and ('close' in proxy_df.columns) and ('close' in live_df.columns):
+            us_open[proxy_ticker] = _build_proxy_live_open_spliced_series(us_open[proxy_ticker], proxy_df['close'], us_open[live_ticker], live_df['close'], name=proxy_ticker)
+    if 'EMXC' in US_ROT_POOL and US_ROT_EMXC_BT_PROXY in us_open:
+        emxc_open = us_open.get('EMXC')
+        # The model trades on a continuous EEM/EMXC scale. Retain the ETF's
+        # own open for quotes printed alongside its live ticker.
+        if emxc_open is not None:
+            us_open['EMXC_native_open'] = emxc_open
+            if 'raw_open' in us_raw['EMXC']:
+                us_open['EMXC_raw_open'] = us_raw['EMXC']['raw_open']
+        emxc_close = (us_raw or {}).get('EMXC')
+        proxy_close = (us_raw or {}).get(US_ROT_EMXC_BT_PROXY)
+        if emxc_open is not None and emxc_close is not None and (proxy_close is not None):
+            us_open['EMXC'] = _build_proxy_live_open_spliced_series(us_open[US_ROT_EMXC_BT_PROXY], proxy_close['close'], emxc_open, emxc_close['close'], name='EMXC', switch_start=US_ROT_EMXC_BT_START)
+        else:
+            us_open['EMXC'] = _build_proxy_live_spliced_series(us_open[US_ROT_EMXC_BT_PROXY], emxc_open, switch_start=US_ROT_EMXC_BT_START, name='EMXC', live_name='EMXC')
+    if US_ROT_BTC_TICKER in us_open and 'IBIT' in us_open:
+        proxy_open = us_open[US_ROT_BTC_TICKER]
+        price_dates = proxy_open.index.union(us_open['IBIT'].index)
+        us_open[US_ROT_BTC_TICKER] = _build_proxy_live_open_spliced_series(proxy_open.reindex(price_dates), us_raw[US_ROT_BTC_TICKER]['close'], us_open['IBIT'], us_raw['IBIT']['close'], name=US_ROT_BTC_TICKER)
+    return us_open
+
+_TIINGO_TAIL_LOCK = threading.Lock()
+_TIINGO_TAIL_REQUEST_TIMES = []
+
+
+def _tiingo_tail_credential():
+    """Reserve one authenticated request. Tokens never enter URLs or receipts."""
+    token = os.environ.get('TIINGO_API_TOKEN', '').strip()
+    if os.name == 'nt':
+        try:
+            from tools.source_audit.config import DEFAULT_ROOT, load
+        except ImportError:
+            DEFAULT_ROOT = None  # Standalone Poe script outside the local repository.
+        if DEFAULT_ROOT is not None and (DEFAULT_ROOT / 'config.json').is_file():
+            try:
+                from tools.source_audit.store import Store
+                from tools.source_audit.transport import decrypt_dpapi
+                config = load(DEFAULT_ROOT / 'config.json')
+                token = token or decrypt_dpapi(config['credentials']['tiingo'])
+                if not token:
+                    raise ValueError('Empty credential')
+                store = Store(config['store_root'])
+                try:
+                    store.reserve_request('tiingo', config['local_hourly_budgets']['tiingo'])
+                finally:
+                    store.close()
+            except Exception:
+                raise DataSchemaError('Tiingo credential/shared request budget unavailable') from None
+            return token
+    if not token:
+        raise DataSchemaError('Tiingo credential unavailable')
+    with _TIINGO_TAIL_LOCK:
+        now = time.monotonic()
+        _TIINGO_TAIL_REQUEST_TIMES[:] = [t for t in _TIINGO_TAIL_REQUEST_TIMES if t > now - 3600]
+        if len(_TIINGO_TAIL_REQUEST_TIMES) >= 30:
+            raise DataSchemaError('Tiingo process request budget exhausted')
+        _TIINGO_TAIL_REQUEST_TIMES.append(now)
+    return token
+
+
+def _us_verified_tail_sources(ticker, dates):
+    """Use symbol-bound HTTPS endpoints. Neither request follows redirects or retries."""
+    start, end = dates[0].date().isoformat(), dates[-1].date().isoformat()
+    if ticker not in US_ALL_TICKERS or ticker == 'BTC-USD' or not re.fullmatch('[A-Z]{1,8}', ticker):
+        raise DataSchemaError('Unsupported ETF for verified US tail')
+    token = _tiingo_tail_credential()
+    try:
+        tiingo = requests.get(f'https://api.tiingo.com/tiingo/daily/{ticker}/prices',
+                              params={'startDate': start, 'endDate': end, 'resampleFreq': 'daily'},
+                              headers={'Authorization': 'Token ' + token}, timeout=15, allow_redirects=False)
+        if tiingo.status_code != 200:
+            raise ValueError('Tiingo HTTP failure')
+        prices = tiingo.json()
+    except Exception:
+        raise DataSchemaError(f'{ticker} Tiingo tail unavailable') from None
+    try:
+        nasdaq = requests.get(f'https://api.nasdaq.com/api/quote/{ticker}/historical',
+                              params={'assetclass': 'etf', 'fromdate': start, 'todate': end, 'limit': len(dates)},
+                              headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json, text/plain, */*',
+                                       'Referer': f'https://www.nasdaq.com/market-activity/etf/{ticker.lower()}/historical'},
+                              timeout=15, allow_redirects=False)
+        if nasdaq.status_code != 200:
+            raise ValueError('Nasdaq HTTP failure')
+        independent = nasdaq.json()['data']
+    except Exception:
+        raise DataSchemaError(f'{ticker} Nasdaq tail unavailable') from None
+    return prices, independent
+
+
+def _verified_tail_number(value, *, nasdaq=False, allow_zero=False):
+    if nasdaq and isinstance(value, str):
+        value = value.removeprefix('$').replace(',', '')
+    if isinstance(value, (bool, np.bool_)) or (isinstance(value, str) and not nasdaq):
+        raise ValueError('Invalid numeric field')
+    number = float(value)
+    if not np.isfinite(number) or number < 0 or (number == 0 and not allow_zero):
+        raise ValueError('Invalid numeric field')
+    return number
+
+
+def _us_verified_tail_prices(ticker, dates, tiingo, nasdaq, primary_raw):
+    # Nasdaq carries the symbol explicitly. Tiingo binds the prices to its
+    # requested symbol endpoint; its standard daily rows omit a symbol field.
+    if not isinstance(tiingo, list) or not isinstance(nasdaq, dict) or nasdaq.get('symbol') != ticker:
+        raise DataSchemaError(f'{ticker} invalid backup source identity or response')
+    try:
+        independent = {}; independent_volume = {}; verified_volume = []
+        for row in nasdaq['tradesTable']['rows']:
+            day = pd.Timestamp(datetime.strptime(row['date'], '%m/%d/%Y'))
+            if day in independent:
+                raise ValueError('Duplicate Nasdaq date')
+            independent[day] = [_verified_tail_number(row[k], nasdaq=True) for k in ('open', 'close')]
+            if ticker == 'VGIT': independent_volume[day] = _vgit_volume_value(row.get('volume'))
+        adjusted, factors, conflicts = [], [], {}
+        if set(independent) != set(dates) or len(tiingo) != len(dates):
+            raise ValueError('Backup dates do not cover the required session sequence')
+        for day, row in zip(dates, tiingo):
+            if row.get('ticker', ticker) != ticker or row.get('symbol', ticker) != ticker:
+                raise ValueError('Wrong Tiingo symbol')
+            stamp = pd.Timestamp(row['date'])
+            if stamp.tzinfo is None or stamp.utcoffset() != timedelta(0) or stamp.tz_localize(None) != day:
+                raise ValueError('Wrong or duplicate Tiingo session')
+            if _verified_tail_number(row['splitFactor']) != 1 or _verified_tail_number(row['divCash'], allow_zero=True) != 0:
+                raise ValueError('Corporate action needs independent adjudication')
+            raw = np.array([_verified_tail_number(row[k]) for k in ('open', 'close')])
+            adj = np.array([_verified_tail_number(row[k]) for k in ('adjOpen', 'adjClose')])
+            if not np.allclose(raw, independent[day], rtol=1e-5, atol=0):
+                raise ValueError('Tiingo/Nasdaq raw OHLC mismatch')
+            raw_observed = primary_raw.get(day.date().isoformat(), {})
+            for position, field in enumerate(('open', 'close')):
+                if field in raw_observed:
+                    original = _verified_tail_number(raw_observed[field])
+                    if not np.isclose(original, raw[position], rtol=1e-5, atol=0):
+                        if day in dates[:3]:
+                            raise ValueError('Yahoo raw overlap conflicts with the backup sources')
+                        conflicts.setdefault(day.date().isoformat(), {})['raw_' + field] = {
+                            'yahoo': original, 'verified': float(raw[position]),
+                        }
+            if ticker == 'VGIT':
+                value = _vgit_volume_value(row.get('volume')); other = independent_volume.get(day, np.nan)
+                if not np.isfinite(value) or not np.isfinite(other) or (value > 0) != (other > 0):
+                    raise ValueError('VGIT backup volume status unverified or conflicts')
+                verified_volume.append(value)
+            adjusted.append(adj)
+            factors.extend(adj / raw)
+        if not np.allclose(factors, factors[0], rtol=1e-5, atol=0):
+            raise ValueError('Unexplained adjusted/raw factor change')
+    except (AttributeError, TypeError, ValueError, KeyError, IndexError, OverflowError):
+        # Vendor strings may contain untrusted content. Keep messages local and fixed.
+        raise DataSchemaError(f'{ticker} invalid backup dates, prices, identity or corporate actions') from None
+    result = pd.DataFrame(adjusted, index=dates, columns=['open', 'close'])
+    if ticker == 'VGIT': result['volume'] = verified_volume
+    return result, conflicts
+
+
+def _repair_us_verified_tiingo_tail(ticker, frame, expected_date):
+    """Preserve complete Yahoo sessions. Replace a disputed half-bar only as a verified pair."""
+    if ticker not in US_ALL_TICKERS or ticker == 'BTC-USD' or not isinstance(frame, pd.DataFrame):
+        raise DataSchemaError('Unsupported primary input for verified US tail')
+    cutoff = pd.Timestamp(expected_date)
+    index = frame.index
+    if (pd.isna(cutoff) or cutoff.tzinfo is not None or cutoff != cutoff.normalize() or not _is_us_market_session(cutoff)
+            or not isinstance(index, pd.DatetimeIndex) or index.tz is not None or index.hasnans or index.has_duplicates
+            or not index.is_monotonic_increasing or not index.equals(index.normalize())
+            or not {'open', 'close'}.issubset(frame.columns)):
+        raise DataSchemaError(f'{ticker} invalid primary OHLC index or fields')
+    observed = frame.loc[:cutoff, ['open', 'close']]
+    numeric = observed.apply(pd.to_numeric, errors='coerce')
+    valid = np.isfinite(numeric) & (numeric > 0)
+    complete = observed.index[valid.all(axis=1)]
+    if len(complete) < 3:
+        raise DataSchemaError(f'{ticker} insufficient verified tail overlap')
+    last_complete = complete[-1]
+    if last_complete == cutoff:
+        return frame
+    dates = _expected_us_ohlc_index(complete[-3], cutoff)
+    if len(dates) < 4 or not dates[:3].equals(complete[-3:]) or not index.intersection(
+            pd.date_range(dates[0], cutoff)).difference(dates).empty:
+        raise DataSchemaError(f'{ticker} needs three consecutive primary sessions before the missing tail')
+    source = observed.reindex(dates)
+    known = numeric.reindex(dates)
+    if ((source.notna() & ~(np.isfinite(known) & (known > 0))).any().any()
+            or (frame.get('is_live_bar', pd.Series(False, index=index)).reindex(dates).eq(True)).any()):
+        raise DataSchemaError(f'{ticker} unexpected invalid or provisional OHLC in confirmed tail')
+    tiingo, nasdaq = _us_verified_tail_sources(ticker, dates)
+    verified, conflicts = _us_verified_tail_prices(ticker, dates, tiingo, nasdaq, frame.attrs.get('yahoo_partial_raw', {}))
+    if not np.allclose(known.iloc[:3].to_numpy(dtype=float), verified.loc[:, ['open', 'close']].iloc[:3].to_numpy(), rtol=1e-5, atol=0):
+        raise DataSchemaError(f'{ticker} Yahoo/Tiingo adjusted OHLC mismatch')
+    repaired = frame.reindex(index.union(dates).sort_values()).copy()
+    fields = {}
+    for day in dates[3:]:
+        day_key = day.date().isoformat()
+        for field, original in known.loc[day].dropna().items():
+            if not np.isclose(original, verified.at[day, field], rtol=1e-5, atol=0):
+                conflicts.setdefault(day_key, {})['adjusted_' + field] = {
+                    'yahoo': float(original), 'verified': float(verified.at[day, field]),
+                }
+        chosen = list(source.columns) if day_key in conflicts else list(source.columns[source.loc[day].isna()])
+        if chosen:
+            repaired.loc[day, chosen] = verified.loc[day, chosen]
+            fields[day_key] = chosen
+    if ticker == 'VGIT':
+        for day in dates:
+            original = _vgit_volume_value(frame.at[day, 'volume']) if 'volume' in frame and day in frame.index else np.nan
+            backup = _vgit_volume_value(verified.at[day, 'volume'])
+            if np.isfinite(original) and (original > 0) != (backup > 0):
+                raise DataSchemaError('VGIT Yahoo/verified backup volume status conflict')
+            if not np.isfinite(original): repaired.at[day, 'volume'] = backup
+    if ticker == 'EMXC' and 'raw_open' in frame:
+        repaired.loc[dates[3:], 'raw_open'] = [float(row['open']) for row in tiingo[3:]]
+    repaired.attrs.update(frame.attrs)
+    repaired.attrs['tiingo_tail_evidence'] = {
+        'ticker': ticker, 'overlap': [day.date().isoformat() for day in dates[:3]], 'filled_fields': fields,
+        'partial_conflicts': conflicts,
+        'adjusted_source': 'Tiingo', 'raw_corroboration': 'Nasdaq', 'rtol': 1e-5,
+    }
+    return repaired
+
+
+def _strategy_frame_cache_fingerprint(frame):
+    if frame is None:
+        return (None, 0, None, None, (), None)
+    index = frame.index
+    first = pd.Timestamp(index[0]) if len(index) else None
+    last = pd.Timestamp(index[-1]) if len(index) else None
+    columns = tuple((str(col) for col in getattr(frame, 'columns', ())))
+    try:
+        content_hash = int(pd.util.hash_pandas_object(frame, index=True).sum())
+    except Exception:
+        content_hash = None
+    return (id(frame), len(frame), first, last, columns, content_hash)
+
+def _strategy_open_cache_fingerprint(us_open):
+    if not isinstance(us_open, dict):
+        return (id(us_open), ())
+    members = []
+    for asset, series in sorted(us_open.items(), key=lambda item: str(item[0])):
+        if series is None:
+            members.append((str(asset), None, 0, None, None))
+            continue
+        try:
+            last = pd.Timestamp(series.index[-1]) if len(series) else None
+            content_hash = int(pd.util.hash_pandas_object(series, index=True).sum())
+        except Exception:
+            last = None
+            content_hash = None
+        members.append((str(asset), id(series), len(series), last, content_hash))
+    return (id(us_open), tuple(members))
+
+def _cn_signal_days(close_df, start_idx):
+    week_best = {}
+    for i in range(start_idx, len(close_df)):
+        dt = close_df.index[i]
+        dow = dt.dayofweek
+        if dow > 3:
+            continue
+        yr, wk, _ = dt.isocalendar()
+        key = (yr, wk)
+        if key not in week_best or dow > week_best[key][1]:
+            week_best[key] = (i, dow)
+    return {v[0] for v in week_best.values()}
+
+def _cn_cost(old_h, new_h):
+    if old_h == 'cash':
+        legs = 1 if new_h != 'cash' else 0
+    elif old_h != new_h:
+        legs = (1 if old_h != 'cash' else 0) + (1 if new_h != 'cash' else 0)
+    else:
+        legs = 0
+    return (1 - CN_COMMISSION) ** legs
+
+def _rolling_linear_sums(values, window):
+    arr = np.asarray(values, dtype=float)
+    n = len(arr)
+    if n < window or window <= 0:
+        empty = np.array([], dtype=float)
+        return (empty, empty, empty, empty)
+    valid = np.isfinite(arr)
+    clean = np.where(valid, arr, 0.0)
+    pos = np.arange(n, dtype=float)
+
+    def _window_sum(v):
+        csum = np.concatenate(([0.0], np.cumsum(v, dtype=float)))
+        return csum[window:] - csum[:-window]
+    sum_y = _window_sum(clean)
+    sum_y2 = _window_sum(clean * clean)
+    sum_pos_y = _window_sum(clean * pos)
+    count = _window_sum(valid.astype(float))
+    starts = np.arange(n - window + 1, dtype=float)
+    weighted_sum = sum_pos_y - starts * sum_y
+    return (sum_y, sum_y2, weighted_sum, count)
+
+def calc_bias_momentum(close_series, bias_n=None, mom_day=None):
+    if bias_n is None:
+        bias_n = CN_BIAS_N
+    if mom_day is None:
+        mom_day = CN_MOM_DAY
+    prices = pd.to_numeric(close_series, errors='coerce').to_numpy(dtype=float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = pd.Series(prices, index=close_series.index).rolling(bias_n).mean().to_numpy(dtype=float)
+    total_lookback = bias_n + mom_day - 2
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
+    x = np.arange(mom_day, dtype=float)
+    weights = np.linspace(1.0, float(CN_BIAS_MOM_WEIGHT_END), mom_day)
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for end in range(total_lookback, n):
+        y = bias[end - mom_day + 1:end + 1]
+        if not np.isfinite(y).all() or y[0] <= 1e-10:
+            continue
+        y_bar = float((weights * y).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (y - y_bar)).sum() / denom)
+        result[end] = slope / float(y[0]) * 10000.0
+    return pd.Series(result, index=close_series.index)
+
+def calc_rolling_r2(close_series, window=None):
+    if window is None:
+        window = CN_R2_WINDOW
+    y = pd.to_numeric(close_series, errors='coerce').to_numpy(dtype=float)
+    n = len(y)
+    r2 = np.full(n, np.nan)
+    if window <= 0 or n < window:
+        return pd.Series(r2, index=close_series.index)
+    windows = np.lib.stride_tricks.sliding_window_view(y, window)
+    complete = np.isfinite(windows).all(axis=1)
+    ends = np.arange(window - 1, n)[complete]
+    centered = windows[complete] - windows[complete, :1]
+    centered -= centered.mean(axis=1, keepdims=True)
+    ss_y = np.sum(centered * centered, axis=1)
+    flat = ss_y < 1e-12
+    r2[ends[flat]] = 0.0
+    if window > 1:
+        x = np.arange(window, dtype=float) - (window - 1) / 2.0
+        ss_xy = centered[~flat] @ x
+        ss_x = float(x @ x)
+        r2[ends[~flat]] = np.clip(ss_xy ** 2 / (ss_x * ss_y[~flat]), 0.0, 1.0)
+    return pd.Series(r2, index=close_series.index)
+
+def _single_asset_position_turnover(old_h, old_weight, new_h, new_weight):
+    old_h = 'cash' if old_h is None or pd.isna(old_h) else str(old_h)
+    new_h = 'cash' if new_h is None or pd.isna(new_h) else str(new_h)
+
+    def _clean_weight(holding, weight):
+        value = 0.0 if weight is None or pd.isna(weight) else max(float(weight), 0.0)
+        if holding == 'cash':
+            if value > 1e-12:
+                raise ValueError(f'cash holding has non-zero weight: {value:.12g}')
+            return 0.0
+        return value
+    old_w = _clean_weight(old_h, old_weight)
+    new_w = _clean_weight(new_h, new_weight)
+    if old_h == new_h:
+        return abs(new_w - old_w)
+    return old_w + new_w
+
+def _single_asset_turnover_series(holdings, weights):
+    holdings = pd.Series(holdings).fillna('cash').astype(str)
+    weights = pd.Series(weights, index=holdings.index).fillna(0.0).astype(float)
+    turnover = []
+    for i in range(len(holdings)):
+        if i == 0:
+            old_h, old_w = ('cash', 0.0)
+        else:
+            old_h, old_w = (holdings.iloc[i - 1], weights.iloc[i - 1])
+        turnover.append(_single_asset_position_turnover(old_h, old_w, holdings.iloc[i], weights.iloc[i]))
+    return pd.Series(turnover, index=holdings.index, dtype=float)
+
+def _suba_state_machine_return_components(holdings, weights, close_df, commission=CN_COMMISSION, financing_daily=CN_RF_DAILY):
+    holdings = pd.Series(holdings).fillna('cash').astype(str)
+    weights = pd.Series(weights, index=holdings.index).fillna(0.0).astype(float)
+    asset_component = pd.Series(0.0, index=holdings.index, dtype=float)
+    cash_component = pd.Series(0.0, index=holdings.index, dtype=float)
+    trade_cost = pd.Series(0.0, index=holdings.index, dtype=float)
+    for i, dt in enumerate(holdings.index):
+        if i == 0:
+            old_h, old_w = ('cash', 0.0)
+        else:
+            old_h = holdings.iloc[i - 1]
+            old_w = float(weights.iloc[i - 1])
+            prev_dt = holdings.index[i - 1]
+            if old_h != 'cash' and old_w > 1e-12:
+                asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1.0
+                asset_component.iloc[i] = old_w * float(asset_ret)
+        cash_weight = max(1.0 - float(old_w), 0.0)
+        borrow_weight = max(float(old_w) - 1.0, 0.0)
+        cash_component.iloc[i] = cash_weight * CN_RF_DAILY - borrow_weight * financing_daily
+        trade_cost.iloc[i] = commission * _single_asset_position_turnover(old_h, old_w, holdings.iloc[i], float(weights.iloc[i]))
+    return (asset_component, cash_component, trade_cost)
+
+def _dict_weight_turnover(old_weights, new_weights):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    assets = set(old_weights) | set(new_weights)
+    return float(sum((abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets)))
+
+def _dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=('CASH', 'BIL')):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    skip = set(non_tradeable_assets or ())
+    assets = (set(old_weights) | set(new_weights)) - skip
+    return float(sum((abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets)))
+
+def _subb_should_rebalance(turnover, min_turnover=US_ROT_MIN_TURNOVER):
+    threshold = max(float(min_turnover), 1e-09)
+    return float(turnover or 0.0) > threshold
+
+def _cn_series_value_at(series, row_pos):
+    try:
+        if series is None or row_pos >= len(series):
+            return np.nan
+        return series.iloc[row_pos]
+    except Exception:
+        return np.nan
+
+def _select_cn_ideal_asset(scores, r2_dict, row_pos, holding='cash', abs_mom_dict=None):
+    if not scores:
+        return 'cash'
+    best = max(scores, key=scores.get)
+    best_score = scores.get(best)
+    if pd.isna(best_score) or float(best_score) <= 0:
+        return 'cash'
+    r2_val = _cn_series_value_at(r2_dict.get(best), row_pos) if r2_dict else np.nan
+    if pd.isna(r2_val) or float(r2_val) < CN_R2_THRESHOLD:
+        return 'cash'
+    return best
+
+def _suba_single_calc_bias_momentum(close, bias_ma, mom_day, weight_end):
+    prices = pd.to_numeric(close, errors='coerce').to_numpy(dtype=float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = pd.Series(prices, index=close.index).rolling(int(bias_ma)).mean().to_numpy(dtype=float)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
+    x = np.arange(int(mom_day), dtype=float)
+    weights = np.linspace(1.0, float(weight_end), int(mom_day))
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for end in range(int(bias_ma) + int(mom_day) - 2, n):
+        y = bias[end - int(mom_day) + 1:end + 1]
+        if not np.isfinite(y).all() or y[0] <= 1e-10:
+            continue
+        y_bar = float((weights * y).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (y - y_bar)).sum() / denom)
+        result[end] = slope / float(y[0]) * 10000.0
+    return pd.Series(result, index=close.index, name='score')
+
+def _suba_single_calc_bias_momentum_r2(close, bias_ma, mom_day, weight_end):
+    prices = pd.to_numeric(close, errors='coerce').to_numpy(dtype=float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = pd.Series(prices, index=close.index).rolling(int(bias_ma)).mean().to_numpy(dtype=float)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        bias = np.where((ma > 1e-10) & np.isfinite(prices), prices / ma, np.nan)
+    x = np.arange(int(mom_day), dtype=float)
+    weights = np.linspace(1.0, float(weight_end), int(mom_day))
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for end in range(int(bias_ma) + int(mom_day) - 2, n):
+        y = bias[end - int(mom_day) + 1:end + 1]
+        if not np.isfinite(y).all() or y[0] <= 1e-10:
+            continue
+        y_bar = float((weights * y).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (y - y_bar)).sum() / denom)
+        fitted = y_bar + slope * (x - x_bar)
+        ss_res = float((weights * (y - fitted) ** 2).sum())
+        ss_tot = float((weights * (y - y_bar) ** 2).sum())
+        result[end] = 0.0 if ss_tot <= 1e-20 else max(0.0, min(1.0, 1.0 - ss_res / ss_tot))
+    return pd.Series(result, index=close.index, name='score_r2')
+
+def _suba_single_return_series(raw_ret, weight, cost_rate=0.001):
+    weight = pd.Series(weight, index=raw_ret.index).fillna(0.0).astype(float)
+    turnover = weight.diff().abs().fillna(weight.abs())
+    ret = weight * raw_ret.fillna(0.0) - float(cost_rate) * turnover
+    nav = (1.0 + ret).cumprod()
+    return (ret, nav, turnover)
+
+def _suba_single_score_abs_hysteresis(score, abs_mom, score_entry, score_exit, abs_reentry, abs_exit):
+    score_values = pd.to_numeric(score, errors='coerce')
+    abs_values = pd.to_numeric(abs_mom, errors='coerce')
+    score_active = False
+    abs_active = False
+    signal = []
+    for score_value, abs_value in zip(score_values, abs_values):
+        if pd.isna(score_value) or pd.isna(abs_value):
+            score_active = False
+            abs_active = False
+            signal.append(False)
+            continue
+        if score_active:
+            score_active = float(score_value) > float(score_exit)
+        elif float(score_value) > float(score_entry):
+            score_active = True
+        if not score_active:
+            abs_active = False
+            signal.append(False)
+            continue
+        if abs_active:
+            abs_active = float(abs_value) > float(abs_exit)
+        elif float(abs_value) > float(abs_reentry):
+            abs_active = True
+        signal.append(abs_active)
+    return pd.Series(signal, index=score.index, name='base_signal')
+
+def _suba_single_abs_hysteresis(score, abs_mom, score_threshold, abs_reentry, abs_exit):
+    score_ok = (pd.to_numeric(score, errors='coerce') > float(score_threshold)).fillna(False)
+    abs_values = pd.to_numeric(abs_mom, errors='coerce')
+    active = False
+    signal = []
+    for ok, value in zip(score_ok, abs_values):
+        if not ok or pd.isna(value):
+            active = False
+        elif active:
+            active = float(value) > float(abs_exit)
+        else:
+            active = float(value) > float(abs_reentry)
+        signal.append(active)
+    return pd.Series(signal, index=score.index, name='base_signal')
+
+def _suba_single_volume_hysteresis(volume_ratio, entry_threshold, exit_threshold, confirm_days=1):
+    values = pd.to_numeric(volume_ratio, errors='coerce')
+    active = False
+    entry_count = 0
+    exit_count = 0
+    need = max(1, int(confirm_days))
+    signal = []
+    for value in values:
+        if pd.isna(value):
+            active = False
+            entry_count = 0
+            exit_count = 0
+            signal.append(False)
+            continue
+        ratio = float(value)
+        if active:
+            entry_count = 0
+            if ratio < float(exit_threshold):
+                exit_count += 1
+                if exit_count >= need:
+                    active = False
+                    exit_count = 0
+            else:
+                exit_count = 0
+        else:
+            exit_count = 0
+            if ratio >= float(entry_threshold):
+                entry_count += 1
+                if entry_count >= need:
+                    active = True
+                    entry_count = 0
+            else:
+                entry_count = 0
+        signal.append(active)
+    return pd.Series(signal, index=volume_ratio.index, name='volume_pass_signal')
+
+def _suba_single_final_weight(ohlcv, cfg):
+    close = ohlcv['close'].astype(float)
+    volume = ohlcv['volume'].astype(float)
+    raw_ret = close.pct_change().fillna(0.0)
+    score = _suba_single_calc_bias_momentum(close, cfg['bias_ma'], cfg['mom_day'], cfg['weight_end'])
+    abs_mom = close / close.shift(int(cfg['abs_mom_day'])) - 1.0
+    mode = cfg.get('mode')
+    if mode == 'sse50_v1_0':
+        score_r2 = _suba_single_calc_bias_momentum_r2(close, cfg['bias_ma'], cfg['mom_day'], cfg['weight_end'])
+        volume_ratio = volume / volume.rolling(int(cfg['volume_ma'])).mean()
+        base_signal = (score > float(cfg['score_threshold'])) & (score_r2 >= float(cfg['r2_threshold'])) & (abs_mom > float(cfg['abs_threshold'])) & (volume_ratio >= float(cfg['volume_ratio_threshold']))
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        realized_vol = raw_ret.rolling(int(cfg['target_vol_window'])).std(ddof=0) * np.sqrt(CN_TRADING_DAYS)
+        scale_raw = (float(cfg['target_vol']) / realized_vol.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan)
+        target_vol_weight = base_weight * scale_raw.clip(lower=0.0, upper=float(cfg['max_leverage'])).shift(1).fillna(1.0)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, target_vol_weight, cfg['cost_rate'])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        final_weight = target_vol_weight.where(base_dd.shift(1).fillna(0.0) > -float(cfg['nav_decay_threshold']), target_vol_weight * float(cfg['nav_decay_scale']))
+        return final_weight.rename('final_weight')
+    if mode == 'cyb_v1_2':
+        base_signal = (score > float(cfg['score_threshold'])) & (abs_mom > float(cfg['abs_threshold']))
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg['cost_rate'])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        after_nav_weight = base_weight.where(base_dd.shift(1).fillna(0.0) > -float(cfg['nav_decay_threshold']), base_weight * float(cfg['nav_decay_scale']))
+        volume_ratio = volume / volume.rolling(int(cfg['hot_volume_ma']), min_periods=int(cfg['hot_volume_ma'])).mean()
+        hot_volume_confirm = (volume_ratio.shift(1) >= float(cfg['hot_volume_ratio_threshold'])).fillna(False)
+        score_hot_gate = (score.shift(1) >= float(cfg['hot_score_threshold'])) & (after_nav_weight > 0) & hot_volume_confirm
+        return after_nav_weight.where(~score_hot_gate, after_nav_weight * float(cfg['hot_scale'])).rename('final_weight')
+    if mode == 'zz1000_v1_2':
+        base_signal = _suba_single_abs_hysteresis(score, abs_mom, cfg['score_threshold'], cfg['abs_reentry_threshold'], cfg['abs_exit_threshold'])
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg['cost_rate'])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        after_nav_weight = base_weight.where(base_dd.shift(1).fillna(0.0) > -float(cfg['nav_decay_threshold']), base_weight * float(cfg['nav_decay_scale']))
+        after_score_hot = after_nav_weight.where(~((score.shift(1) >= float(cfg['score_hot_threshold'])) & (after_nav_weight > 0)), after_nav_weight * float(cfg['score_hot_scale']))
+        volume_ratio = volume / volume.rolling(int(cfg['volume_ma']), min_periods=int(cfg['volume_ma'])).mean()
+        volume_signal = _suba_single_volume_hysteresis(volume_ratio, cfg['volume_ratio_threshold'], cfg['volume_exit_threshold'], cfg['volume_confirm_days'])
+        volume_ready_exec = volume_ratio.notna().shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_signal_exec = volume_signal.shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_pass = volume_signal_exec | ~volume_ready_exec
+        return after_score_hot.where(volume_pass, 0.0).rename('final_weight')
+    if mode == 'zz500_v1_2':
+        base_signal = _suba_single_score_abs_hysteresis(score, abs_mom, cfg['score_threshold'], cfg['score_exit_threshold'], cfg['abs_reentry_threshold'], cfg['abs_exit_threshold'])
+        base_weight = base_signal.shift(1, fill_value=False).astype(float)
+        _, base_nav, _ = _suba_single_return_series(raw_ret, base_weight, cfg['cost_rate'])
+        base_dd = base_nav / base_nav.cummax() - 1.0
+        desired_weight = base_weight.where(base_dd.shift(1).fillna(0.0) > -float(cfg['nav_decay_threshold']), base_weight * float(cfg['nav_decay_scale']))
+        score_hot_scale = pd.Series(1.0, index=desired_weight.index)
+        score_hot_scale.loc[(score.shift(1) >= float(cfg['hot_score_threshold'])) & (desired_weight > 0)] = float(cfg['hot_scale'])
+        realized_vol = raw_ret.rolling(int(cfg['high_vol_window'])).std(ddof=0) * np.sqrt(CN_TRADING_DAYS)
+        vol_scale = pd.Series(1.0, index=desired_weight.index)
+        vol_scale.loc[(realized_vol.shift(1) >= float(cfg['high_vol_threshold'])) & (desired_weight > 0)] = float(cfg['high_vol_scale'])
+        overheat_weight = desired_weight * pd.concat([score_hot_scale, vol_scale], axis=1).min(axis=1)
+        volume_ratio = volume / volume.rolling(int(cfg['volume_ma']), min_periods=int(cfg['volume_ma'])).mean()
+        volume_signal = _suba_single_volume_hysteresis(volume_ratio, cfg['volume_ratio_threshold'], cfg['volume_exit_threshold'], cfg['volume_confirm_days'])
+        volume_ready_exec = volume_ratio.notna().shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_signal_exec = volume_signal.shift(1, fill_value=False).fillna(False).astype(bool)
+        volume_pass = volume_signal_exec | ~volume_ready_exec
+        return overheat_weight.where(volume_pass, 0.0).rename('final_weight')
+    raise ValueError(f'Unsupported Sub-A single gate mode: {mode}')
+
+def _build_suba_single_strategy_gates(close_df, msg=None):
+    gates = {}
+    for code, cfg in CN_SA_SINGLE_GATE_CONFIGS.items():
+        if code not in close_df.columns:
+            continue
+        try:
+            ohlcv = _fetch_cn_sina_amount_proxy(code)
+            final_weight = _suba_single_final_weight(ohlcv, cfg)
+            gate = final_weight.shift(int(CN_SA_SINGLE_GATE_EXECUTION_SHIFT)).fillna(final_weight) > 1e-12
+            gates[code] = gate.reindex(close_df.index).astype('boolean').ffill().fillna(False).astype(bool)
+            if msg is not None:
+                msg.write(f"  Sub-A single gate {CN_NAMES.get(code, code)}: {final_weight.index[-1].strftime('%Y-%m-%d')} [{cfg['name']}]\n")
+        except _DATA_FETCH_ERRORS as exc:
+            raise poe.BotError(f'Sub-A single gate data unavailable for {CN_NAMES.get(code, code)}: {_short_error(exc)}') from exc
+        except Exception as exc:
+            raise poe.BotError(f'Sub-A single gate failed for {CN_NAMES.get(code, code)}: {_short_error(exc)}') from exc
+    return gates
+
+def _normalize_suba_single_asset_gate(single_asset_signal_gate, index):
+    gates = {}
+    if not single_asset_signal_gate:
+        return gates
+    for code, values in single_asset_signal_gate.items():
+        gate = pd.Series(values, dtype='boolean').reindex(index).ffill().fillna(False).astype(bool)
+        gates[str(code)] = gate
+    return gates
+
+def run_cn_strategy(close_df, equity_codes, single_asset_signal_gate=None):
+    bond_code = CN_BOND_CODE
+    all_codes = equity_codes + [bond_code]
+    bias_dict, r2_dict = ({}, {})
+    for code in all_codes:
+        if code not in close_df.columns:
+            continue
+        bias_dict[code] = calc_bias_momentum(close_df[code])
+        r2_dict[code] = calc_rolling_r2(close_df[code])
+    start_idx = max(CN_BIAS_N + CN_MOM_DAY, CN_R2_WINDOW + 1)
+    holding = 'cash'
+    holding_fraction = 0.0
+    rows = []
+    for i in range(start_idx, len(close_df)):
+        date = close_df.index[i]
+        scores = {}
+        for code in all_codes:
+            if code in bias_dict:
+                val = bias_dict[code].iloc[i]
+                if not np.isnan(val):
+                    scores[code] = val
+        top_code = max(scores, key=scores.get) if scores else 'cash'
+        top_score = scores.get(top_code, np.nan)
+        top_r2 = _cn_series_value_at(r2_dict.get(top_code), i) if top_code != 'cash' else np.nan
+        ideal = _select_cn_ideal_asset(scores, r2_dict, i) if scores else 'cash'
+        trade_target = ideal if ideal != holding else None
+        trade_fraction = 0.0 if ideal == 'cash' else 1.0
+        is_signal = trade_target is not None
+        old_h = holding
+        old_fraction = holding_fraction
+        if old_h == 'cash' or old_fraction <= 1e-12 or i == 0:
+            asset_ret = 0.0
+        else:
+            asset_ret = close_df.iloc[i][old_h] / close_df.iloc[i - 1][old_h] - 1
+        asset_component = old_fraction * asset_ret
+        cash_component = (1.0 - old_fraction) * CN_RF_DAILY
+        trade_cost = 0.0
+        if trade_target is not None:
+            if trade_target == old_h:
+                turnover = abs(float(trade_fraction) - float(old_fraction))
+            else:
+                turnover = float(old_fraction) + float(trade_fraction)
+            trade_cost = CN_COMMISSION * turnover
+            holding = trade_target if float(trade_fraction) > 1e-12 else 'cash'
+            holding_fraction = float(trade_fraction) if holding != 'cash' else 0.0
+        else:
+            holding_fraction = old_fraction
+        rows.append({'date': date, 'holding': holding, 'holding_fraction': holding_fraction, 'is_signal': is_signal, 'target': trade_target, 'asset_component': asset_component, 'cash_component': cash_component, 'trade_cost': trade_cost, 'suba_top_code': top_code, 'suba_top_score': top_score, 'suba_top_r2': top_r2, 'suba_top_score_pass': bool(pd.notna(top_score) and float(top_score) > 0.0), 'suba_top_r2_pass': bool(pd.notna(top_r2) and float(top_r2) >= CN_R2_THRESHOLD), 'suba_raw_ideal': ideal})
+    df = pd.DataFrame(rows).set_index('date')
+    raw_ret = (df['asset_component'] + df['cash_component']).values.copy()
+    base_weight = df['holding_fraction'].fillna(0.0).values
+    is_cash = base_weight <= 1e-12
+    realized_vol = pd.Series(raw_ret, index=df.index).rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV)
+    raw_scale = raw_scale.shift(1)
+    if CN_SCALE_THRESHOLD > 0:
+        _sa = raw_scale.values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-09:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        raw_scale = pd.Series(_sa, index=df.index)
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
+    df['scale_raw'] = raw_scale
+    scale_arr[is_cash] = 1.0
+    effective_weight = scale_arr * base_weight
+    df['base_weight'] = base_weight
+    df['weight'] = effective_weight
+    df['realized_vol'] = realized_vol
+    df['base_trade_cost'] = df['trade_cost'].astype(float)
+    state_asset, state_cash, state_cost = _suba_state_machine_return_components(df['holding'], pd.Series(effective_weight, index=df.index), close_df, commission=CN_COMMISSION)
+    effective_turnover = state_cost / CN_COMMISSION if CN_COMMISSION else pd.Series(0.0, index=df.index)
+    df['asset_component'] = state_asset
+    df['cash_component'] = state_cash
+    df['effective_turnover'] = effective_turnover
+    df['trade_cost'] = state_cost
+    df['scale_tc'] = 0.0
+    scaled_gross = 1.0 + df['asset_component'].values + df['cash_component'].values
+    df['return'] = scaled_gross * (1.0 - df['trade_cost'].values) - 1.0
+    df['nav'] = (1 + df['return']).cumprod()
+    df.attrs['suba_bias_mom'] = bias_dict
+    df.attrs['suba_r2'] = r2_dict
+    df.attrs['suba_score_codes'] = [code for code in all_codes if code in bias_dict]
+    return df
+
+def _v78_weighted_linear_slope(values, window, weight_end=1.0, normalize_first=False):
+    arr = pd.to_numeric(values, errors='coerce').to_numpy(dtype=float)
+    out = np.full(len(arr), np.nan, dtype=float)
+    window = int(window)
+    if len(arr) < window:
+        return pd.Series(out, index=values.index, dtype=float)
+    x = np.arange(window, dtype=float)
+    weights = np.linspace(1.0, float(weight_end), window)
+    w_sum = weights.sum()
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    kernel = weights * (x - x_bar) / denom
+    for end in range(window - 1, len(arr)):
+        sample = arr[end - window + 1:end + 1]
+        if not np.isfinite(sample).all():
+            continue
+        slope = float(sample @ kernel)
+        if normalize_first:
+            first = abs(float(sample[0]))
+            if first < 1e-12:
+                continue
+            slope /= first
+        out[end] = slope
+    return pd.Series(out, index=values.index, dtype=float)
+
+def _v78_suba_bias_slope_score(close_df, ma=40, mom=20, weight_end=3.0):
+    bias = close_df / close_df.rolling(int(ma)).mean()
+    score = pd.DataFrame(index=close_df.index)
+    for col in close_df.columns:
+        score[col] = _v78_weighted_linear_slope(bias[col], int(mom), weight_end=float(weight_end), normalize_first=True)
+    return score
+
+def run_v78_suba_new_tv10(close_df, equity_codes):
+    if float(V78_SUBA_NEW_MAX_LEV) > 1.0 + 1e-12:
+        raise ValueError('V78_SUBA_NEW_MAX_LEV > 1.0 requires explicit borrow-cost implementation.')
+    codes = [c for c in equity_codes + [CN_BOND_CODE] if c in close_df.columns]
+    close = close_df[codes].copy()
+    raw_score = _v78_suba_bias_slope_score(close, ma=V78_SUBA_NEW_MA, mom=V78_SUBA_NEW_MOM_DAY, weight_end=V78_SUBA_NEW_WEIGHT_END)
+    abs_mom = close.pct_change(V78_SUBA_NEW_ABS_DAY)
+    raw_score_arr = raw_score.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float)
+    raw_filled = np.where(np.isfinite(raw_score_arr), raw_score_arr, -np.inf)
+    raw_top_idx = np.argmax(raw_filled, axis=1)
+    raw_top_val = raw_filled[np.arange(len(raw_filled)), raw_top_idx]
+    score = raw_score.where(raw_score > V78_SUBA_NEW_SCORE_THRESHOLD)
+    score = score.where(abs_mom > V78_SUBA_NEW_ABS_THRESHOLD)
+    score_arr = score.replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float)
+    filled = np.where(np.isfinite(score_arr), score_arr, -np.inf)
+    max_idx = np.argmax(filled, axis=1)
+    max_val = filled[np.arange(len(filled)), max_idx]
+    target_code = np.where(np.isfinite(max_val) & (max_val > 0), max_idx, -1).astype(int)
+    raw = np.zeros(len(close), dtype=float)
+    price = close.to_numpy(dtype=float)
+    asset_ret = np.zeros_like(price, dtype=float)
+    asset_ret[1:] = price[1:] / price[:-1] - 1.0
+    holding_code = np.empty_like(target_code)
+    holding_code[0] = -1
+    holding_code[1:] = target_code[:-1]
+    invested = holding_code >= 0
+    raw[invested] = asset_ret[np.arange(len(close))[invested], holding_code[invested]]
+    realized = pd.Series(raw, index=close.index).rolling(V78_SUBA_NEW_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    scale = (V78_SUBA_NEW_TARGET_VOL / realized.replace(0.0, np.nan)).clip(lower=0.0, upper=V78_SUBA_NEW_MAX_LEV)
+    target_weight = scale.fillna(1.0).where(pd.Series(target_code, index=close.index) >= 0, 0.0)
+    holding_weight = target_weight.shift(1).fillna(0.0)
+    gross = holding_weight.to_numpy(dtype=float) * pd.Series(raw, index=close.index).to_numpy(dtype=float)
+    cash_component = (1.0 - holding_weight.clip(upper=1.0).to_numpy(dtype=float)) * float(CN_RF_DAILY)
+    same_asset = target_code == holding_code
+    turnover = np.where(same_asset, np.abs(target_weight.to_numpy(dtype=float) - holding_weight.to_numpy(dtype=float)), np.abs(target_weight.to_numpy(dtype=float)) + np.abs(holding_weight.to_numpy(dtype=float)))
+    trade_cost = CN_COMMISSION * turnover
+    ret = (1.0 + gross + cash_component) * (1.0 - trade_cost) - 1.0
+    code_changed = pd.Series(target_code, index=close.index).ne(pd.Series(target_code, index=close.index).shift(1))
+    weight_changed = target_weight.diff().abs().fillna(0.0).gt(0.0001)
+    label_arr = np.array(codes + ['cash'], dtype=object)
+    out = pd.DataFrame({'holding': label_arr[np.where(holding_code >= 0, holding_code, len(codes))], 'target': label_arr[np.where(target_code >= 0, target_code, len(codes))], 'holding_fraction': holding_weight, 'base_weight': holding_weight, 'weight': holding_weight, 'target_weight': target_weight, 'scale_raw': scale, 'realized_vol': realized, 'return': ret, 'trade_cost': trade_cost, 'turnover': turnover, 'cash_component': cash_component, 'is_signal': (code_changed | weight_changed).fillna(False), 'v78_raw_top': label_arr[np.where(np.isfinite(raw_top_val), raw_top_idx, len(codes))], 'v78_raw_top_score': np.where(np.isfinite(raw_top_val), raw_top_val, np.nan), 'v78_raw_top_abs_mom': np.where(np.isfinite(raw_top_val), abs_mom.to_numpy(dtype=float)[np.arange(len(close)), raw_top_idx], np.nan)}, index=close.index)
+    out['v78_raw_top_score_pass'] = out['v78_raw_top_score'] > V78_SUBA_NEW_SCORE_THRESHOLD
+    out['v78_raw_top_abs_pass'] = out['v78_raw_top_abs_mom'] > V78_SUBA_NEW_ABS_THRESHOLD
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    out.attrs['v78_raw_score'] = raw_score
+    out.attrs['v78_abs_mom'] = abs_mom
+    out.attrs['v78_score'] = score
+    return out
+
+def blend_v78_suba_results(v77_result, new_result):
+    common_index = v77_result.dropna(subset=['return']).index.intersection(new_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('V7.9 Sub-A blend has no overlapping return window.')
+    v77 = v77_result.reindex(common_index)
+    new = new_result.reindex(common_index)
+
+    def _component_target_holding(df, index):
+        holding = df.get('holding', pd.Series('cash', index=index))
+        if not isinstance(holding, pd.Series):
+            holding = pd.Series(holding, index=index)
+        holding = holding.reindex(index).fillna('cash').astype(str)
+        target = df.get('target', pd.Series(None, index=index, dtype=object))
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=index, dtype=object)
+        target = target.reindex(index)
+        return target.where(target.notna(), holding).fillna('cash').astype(str)
+
+    def _component_target_weight(df, index):
+        weight = df.get('weight', pd.Series(0.0, index=index))
+        if not isinstance(weight, pd.Series):
+            weight = pd.Series(weight, index=index)
+        weight = pd.to_numeric(weight.reindex(index), errors='coerce').fillna(0.0)
+        target_weight = df.get('target_weight', weight)
+        if not isinstance(target_weight, pd.Series):
+            target_weight = pd.Series(target_weight, index=index)
+        return pd.to_numeric(target_weight.reindex(index), errors='coerce').fillna(weight)
+    out = v77.copy()
+    out['v78_suba_v77_return'] = v77['return'].astype(float)
+    out['v78_suba_new_return'] = new['return'].astype(float)
+    out['return'] = V78_SUBA_V77_WEIGHT * out['v78_suba_v77_return'] + V78_SUBA_NEW_TV10_WEIGHT * out['v78_suba_new_return']
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    v77_holding_full = v77_result.get('holding', pd.Series('cash', index=v77_result.index))
+    if not isinstance(v77_holding_full, pd.Series):
+        v77_holding_full = pd.Series(v77_holding_full, index=v77_result.index)
+    v77_weight_full = v77_result.get('weight', pd.Series(0.0, index=v77_result.index))
+    if not isinstance(v77_weight_full, pd.Series):
+        v77_weight_full = pd.Series(v77_weight_full, index=v77_result.index)
+    v77_scale_raw_full = v77_result.get('scale_raw', pd.Series(np.nan, index=v77_result.index))
+    if not isinstance(v77_scale_raw_full, pd.Series):
+        v77_scale_raw_full = pd.Series(v77_scale_raw_full, index=v77_result.index)
+    out['v78_suba_v77_holding'] = v77_holding_full.shift(1).reindex(common_index).fillna('cash').astype(str)
+    out['v78_suba_new_holding'] = new.get('holding', 'cash')
+    out['v78_suba_v77_weight'] = pd.to_numeric(v77_weight_full.shift(1).reindex(common_index), errors='coerce').fillna(0.0)
+    out['v78_suba_new_weight'] = pd.to_numeric(new.get('weight', 0.0), errors='coerce').fillna(0.0)
+    out['v78_suba_v77_target'] = _component_target_holding(v77, common_index)
+    out['v78_suba_new_target'] = _component_target_holding(new, common_index)
+    out['v78_suba_v77_target_weight'] = _component_target_weight(v77, common_index)
+    out['v78_suba_new_target_weight'] = _component_target_weight(new, common_index)
+    out['v78_suba_v77_scale_raw'] = pd.to_numeric(v77_scale_raw_full.shift(1).reindex(common_index), errors='coerce')
+    out['v78_suba_new_scale_raw'] = pd.to_numeric(new.get('scale_raw', np.nan), errors='coerce')
+    out['v78_suba_final_exposure'] = V78_SUBA_V77_WEIGHT * out['v78_suba_v77_weight'] + V78_SUBA_NEW_TV10_WEIGHT * out['v78_suba_new_weight']
+    out['v78_suba_target_exposure'] = V78_SUBA_V77_WEIGHT * out['v78_suba_v77_target_weight'] + V78_SUBA_NEW_TV10_WEIGHT * out['v78_suba_new_target_weight']
+    out['final_exposure'] = out['v78_suba_final_exposure']
+    out['target_exposure'] = out['v78_suba_target_exposure']
+    out['final_components'] = [{'v77': {'holding': vh, 'weight': V78_SUBA_V77_WEIGHT * float(vw)}, 'new': {'holding': nh, 'weight': V78_SUBA_NEW_TV10_WEIGHT * float(nw)}} for vh, vw, nh, nw in zip(out['v78_suba_v77_holding'], out['v78_suba_v77_weight'], out['v78_suba_new_holding'], out['v78_suba_new_weight'])]
+    out['holding'] = [f'V7.7A:{vh}|NewA:{nh}' for vh, nh in zip(out['v78_suba_v77_holding'], out['v78_suba_new_holding'])]
+    target_holding = [f'V7.7A:{vh}|NewA:{nh}' for vh, nh in zip(out['v78_suba_v77_target'], out['v78_suba_new_target'])]
+    out['weight'] = out['final_exposure']
+    out['holding_fraction'] = out['final_exposure']
+    out['effective_fraction'] = out['final_exposure']
+    out['base_weight'] = out['final_exposure']
+    out['scale_raw'] = np.nan
+    out['is_signal'] = v77.get('is_signal', pd.Series(False, index=common_index)).astype(bool) | new.get('is_signal', pd.Series(False, index=common_index)).astype(bool) | (out['v78_suba_target_exposure'] - out['v78_suba_final_exposure']).abs().gt(0.0001)
+    out['target'] = pd.Series(target_holding, index=out.index).where(out['is_signal'], None)
+    out['v78_blend_label'] = '50% V7.7A + 50% New A TV1.0'
+    out['v78_suba_component_net_return'] = out['return']
+    out['return_before_suba_execution_cost'] = out['return']
+    out['trade_cost'] = 0.0
+    out['turnover'] = np.nan
+    out['effective_turnover'] = np.nan
+    out['cost_basis_note'] = 'component-net blend; component costs already included'
+    out.attrs['v78_suba_v77'] = v77_result
+    out.attrs['v78_suba_new'] = new_result
+    return out
+CN_SA_CASH_OVERLAY_ENABLED = False
+CN_SA_CASH_OVERLAY_DECAY_RATIO = 0.55
+CN_SA_CASH_OVERLAY_RECOVERY_RATIO = 0.9
+CN_SA_CASH_OVERLAY_WARMUP_DAYS = 5
+CN_SA_SAME_SIDE_OVERHEAT_ENABLED = False
+CN_SA_SAME_SIDE_OVERHEAT_ENTER = 0.27
+CN_SA_SAME_SIDE_OVERHEAT_EXIT = 0.24
+CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE = 0.0
+
+def _extract_active_cn_score(cn_result, close_df):
+    if cn_result is None or len(cn_result) == 0:
+        return pd.Series(dtype=float)
+    all_codes = [c for c in CN_ALL_CODES if c in close_df.columns]
+    bias_dict = {}
+    for code in all_codes:
+        bias_dict[code] = calc_bias_momentum(close_df[code])
+    scores = []
+    for i, dt in enumerate(cn_result.index):
+        holding = str(cn_result['holding'].iloc[i]) if 'holding' in cn_result.columns else 'cash'
+        holding_fraction = float(cn_result['holding_fraction'].iloc[i]) if 'holding_fraction' in cn_result.columns else 0.0
+        score = np.nan
+        if holding in CN_STOCK_CODES and holding_fraction > 1e-12 and (holding in bias_dict) and (dt in bias_dict[holding].index):
+            raw = bias_dict[holding].loc[dt]
+            if pd.notna(raw):
+                score = float(raw)
+        scores.append(score)
+    return pd.Series(scores, index=cn_result.index, dtype=float)
+
+def apply_suba_cash_peak_decay_overlay(cn_result, close_df, decay_ratio_threshold, recovery_ratio_threshold, commission=0.0, warmup_days=CN_SA_CASH_OVERLAY_WARMUP_DAYS):
+    if not 0 < decay_ratio_threshold < 1:
+        raise ValueError('decay_ratio_threshold must be in (0, 1).')
+    if not decay_ratio_threshold < recovery_ratio_threshold <= 1:
+        raise ValueError('recovery_ratio_threshold must be in (decay_ratio_threshold, 1].')
+    if cn_result is None or len(cn_result) == 0:
+        return cn_result
+    required = {'holding', 'holding_fraction', 'return'}
+    missing = required.difference(cn_result.columns)
+    if missing:
+        raise KeyError(f'Missing required Sub-A columns: {sorted(missing)}')
+    out = cn_result.copy()
+    base_holding = out['holding'].fillna('cash').astype(str)
+    base_fraction = out['holding_fraction'].fillna(0.0).astype(float).clip(lower=0.0, upper=1.0)
+    active_score = _extract_active_cn_score(out, close_df).reindex(out.index).astype(float)
+    effective_holdings = []
+    effective_fractions = []
+    overlay_on = []
+    overlay_triggered = []
+    overlay_recovered = []
+    trade_ids = []
+    score_peaks = []
+    score_decay_ratios = []
+    waiting_flags = []
+    trade_id = 0
+    score_peak = None
+    derisked_for_today = False
+    waiting_for_new_peak = False
+    rearm_peak = None
+    prev_overlay_on = False
+    trade_age = 0
+    for i, dt in enumerate(out.index):
+        cur_base_holding = base_holding.iloc[i]
+        cur_base_fraction = float(base_fraction.iloc[i])
+        prev_base_holding = base_holding.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or cur_base_holding != prev_base_holding
+        if new_trade:
+            trade_id += 1
+            score_peak = None
+            derisked_for_today = False
+            waiting_for_new_peak = False
+            rearm_peak = None
+            trade_age = 0
+        trade_age += 1
+        eligible_stock = cur_base_holding in CN_STOCK_CODES and cur_base_fraction > 1e-12
+        cur_effective_holding = 'cash' if derisked_for_today and eligible_stock else cur_base_holding if cur_base_fraction > 1e-12 else 'cash'
+        cur_effective_fraction = 0.0 if derisked_for_today and eligible_stock else cur_base_fraction if cur_base_holding != 'cash' else 0.0
+        cur_overlay_on = bool(derisked_for_today and eligible_stock)
+        triggered_today = cur_overlay_on and (not prev_overlay_on)
+        recovered_today = not cur_overlay_on and prev_overlay_on
+        cur_score = active_score.iloc[i] if eligible_stock else np.nan
+        if pd.notna(cur_score):
+            cur_score = float(cur_score)
+            score_peak = cur_score if score_peak is None else max(float(score_peak), cur_score)
+        decay_ratio = None
+        if score_peak is not None and score_peak > 1e-12 and pd.notna(cur_score):
+            decay_ratio = float(cur_score) / float(score_peak)
+        next_derisked = derisked_for_today
+        next_waiting = waiting_for_new_peak
+        next_rearm_peak = rearm_peak
+        if next_waiting and next_rearm_peak is not None and (score_peak is not None) and (score_peak > float(next_rearm_peak) + 1e-12):
+            next_waiting = False
+            next_rearm_peak = None
+        if eligible_stock:
+            if next_derisked:
+                if decay_ratio is not None and decay_ratio >= recovery_ratio_threshold:
+                    next_derisked = False
+                    next_waiting = True
+                    next_rearm_peak = score_peak
+            elif not next_waiting and trade_age >= int(warmup_days) and (decay_ratio is not None) and (decay_ratio <= decay_ratio_threshold):
+                next_derisked = True
+        else:
+            next_derisked = False
+            next_waiting = False
+            next_rearm_peak = None
+        effective_holdings.append(cur_effective_holding)
+        effective_fractions.append(float(cur_effective_fraction))
+        overlay_on.append(cur_overlay_on)
+        overlay_triggered.append(triggered_today)
+        overlay_recovered.append(recovered_today)
+        trade_ids.append(int(trade_id))
+        score_peaks.append(None if score_peak is None else float(score_peak))
+        score_decay_ratios.append(None if decay_ratio is None else float(decay_ratio))
+        waiting_flags.append(bool(next_waiting))
+        derisked_for_today = next_derisked
+        waiting_for_new_peak = next_waiting
+        rearm_peak = next_rearm_peak
+        prev_overlay_on = cur_overlay_on
+    eff_h = pd.Series(effective_holdings, index=out.index, dtype=str)
+    eff_f = pd.Series(effective_fractions, index=out.index, dtype=float)
+    asset_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    cash_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    trade_cost_s = pd.Series(0.0, index=out.index, dtype=float)
+    effective_signals = []
+    for i, dt in enumerate(out.index):
+        if i == 0:
+            asset_component_s.iloc[i] = float(out['asset_component'].iloc[i]) if 'asset_component' in out.columns else 0.0
+            cash_component_s.iloc[i] = float(out['cash_component'].iloc[i]) if 'cash_component' in out.columns else float(out['return'].iloc[i])
+            trade_cost_s.iloc[i] = float(out['trade_cost'].iloc[i]) if 'trade_cost' in out.columns else 0.0
+            effective_signals.append(bool(eff_f.iloc[i] > 1e-12))
+            continue
+        prev_dt = out.index[i - 1]
+        old_h = eff_h.iloc[i - 1]
+        old_f = float(eff_f.iloc[i - 1])
+        new_h = eff_h.iloc[i]
+        new_f = float(eff_f.iloc[i])
+        if old_h == 'cash' or old_f <= 1e-12:
+            asset_component = 0.0
+        else:
+            asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1
+            asset_component = old_f * float(asset_ret)
+        cash_component = (1.0 - old_f) * CN_RF_DAILY
+        if new_h == old_h:
+            turnover = abs(new_f - old_f)
+        else:
+            turnover = old_f + new_f
+        trade_cost = commission * float(turnover)
+        asset_component_s.iloc[i] = float(asset_component)
+        cash_component_s.iloc[i] = float(cash_component)
+        trade_cost_s.iloc[i] = float(trade_cost)
+        effective_signals.append(bool(turnover > 1e-12))
+    raw_ret = asset_component_s + cash_component_s
+    realized_vol = raw_ret.rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV)
+    raw_scale = raw_scale.shift(1)
+    if CN_SCALE_THRESHOLD > 0:
+        _sa = raw_scale.values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-09:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        raw_scale = pd.Series(_sa, index=out.index)
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
+    is_cash = eff_f.values <= 1e-12
+    scale_arr[is_cash] = 1.0
+    effective_weight = scale_arr * eff_f.values
+    asset_component_s, cash_component_s, trade_cost_s = _suba_state_machine_return_components(eff_h, pd.Series(effective_weight, index=out.index), close_df, commission=commission)
+    effective_turnover = trade_cost_s / commission if commission else pd.Series(0.0, index=out.index)
+    scale_tc = pd.Series(0.0, index=out.index, dtype=float)
+    scaled_gross = 1.0 + asset_component_s.values + cash_component_s.values
+    out['base_holding'] = base_holding
+    out['base_fraction'] = base_fraction
+    out['effective_holding'] = eff_h
+    out['effective_fraction'] = eff_f
+    out['active_score_overlay'] = active_score
+    out['overlay_on'] = pd.Series(overlay_on, index=out.index, dtype=bool)
+    out['overlay_triggered'] = pd.Series(overlay_triggered, index=out.index, dtype=bool)
+    out['overlay_recovered'] = pd.Series(overlay_recovered, index=out.index, dtype=bool)
+    out['trade_id'] = pd.Series(trade_ids, index=out.index, dtype='Int64')
+    out['score_peak_overlay'] = pd.Series(score_peaks, index=out.index, dtype=float)
+    out['score_decay_ratio_overlay'] = pd.Series(score_decay_ratios, index=out.index, dtype=float)
+    out['waiting_for_new_peak'] = pd.Series(waiting_flags, index=out.index, dtype=bool)
+    out['asset_component'] = asset_component_s
+    out['cash_component'] = cash_component_s
+    out['base_trade_cost'] = out['trade_cost'] if 'trade_cost' in out.columns else np.nan
+    out['effective_turnover'] = effective_turnover
+    out['trade_cost'] = trade_cost_s
+    out['scale_raw'] = raw_scale
+    out['base_weight'] = eff_f.values
+    out['weight'] = effective_weight
+    out['realized_vol'] = realized_vol
+    out['scale_tc'] = scale_tc
+    out['return'] = scaled_gross * (1.0 - trade_cost_s.values) - 1.0
+    out['nav'] = (1.0 + out['return']).cumprod()
+    out['is_signal'] = pd.Series(effective_signals, index=out.index, dtype=bool)
+    out['target'] = out['effective_holding'].where(out['is_signal'], None)
+    return out
+
+def _suba_same_side_overheat_features(close_df):
+    features = {}
+    for code in CN_STOCK_CODES:
+        if code not in close_df.columns:
+            continue
+        price = close_df[code].astype(float)
+        ma = price.rolling(CN_BIAS_N).mean()
+        bias = price / ma - 1.0
+        bias_mom = calc_bias_momentum(price)
+        same_side = (bias > 0) & (bias_mom > 0) & bias.notna() & bias_mom.notna()
+        features[code] = pd.DataFrame({'bias': bias, 'bias_mom': bias_mom, 'same_side': same_side}, index=close_df.index)
+    return features
+
+def _rebuild_suba_from_effective(base_result, close_df, eff_h, eff_f, signal_flags, extra_cols):
+    out = base_result.copy()
+    eff_h = pd.Series(eff_h, index=out.index, dtype=str)
+    eff_f = pd.Series(eff_f, index=out.index, dtype=float)
+    signal_flags = pd.Series(signal_flags, index=out.index, dtype=bool)
+    asset_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    cash_component_s = pd.Series(0.0, index=out.index, dtype=float)
+    trade_cost_s = pd.Series(0.0, index=out.index, dtype=float)
+    for i, dt in enumerate(out.index):
+        if i == 0:
+            asset_component_s.iloc[i] = 0.0
+            cash_component_s.iloc[i] = CN_RF_DAILY
+            trade_cost_s.iloc[i] = CN_COMMISSION * float(eff_f.iloc[i])
+            continue
+        prev_dt = out.index[i - 1]
+        old_h = eff_h.iloc[i - 1]
+        old_f = float(eff_f.iloc[i - 1])
+        new_h = eff_h.iloc[i]
+        new_f = float(eff_f.iloc[i])
+        if old_h == 'cash' or old_f <= 1e-12:
+            asset_component = 0.0
+        else:
+            asset_ret = close_df.loc[dt, old_h] / close_df.loc[prev_dt, old_h] - 1.0
+            asset_component = old_f * float(asset_ret)
+        cash_component = (1.0 - old_f) * CN_RF_DAILY
+        turnover = abs(new_f - old_f) if new_h == old_h else old_f + new_f
+        trade_cost = CN_COMMISSION * float(turnover)
+        asset_component_s.iloc[i] = float(asset_component)
+        cash_component_s.iloc[i] = float(cash_component)
+        trade_cost_s.iloc[i] = float(trade_cost)
+    raw_ret = asset_component_s + cash_component_s
+    realized_vol = raw_ret.rolling(CN_VOL_WINDOW).std() * np.sqrt(CN_TRADING_DAYS)
+    raw_scale = (CN_TARGET_VOL / realized_vol).clip(CN_MIN_LEV, CN_MAX_LEV).shift(1)
+    if CN_SCALE_THRESHOLD > 0:
+        _sa = raw_scale.values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_SCALE_THRESHOLD - 1e-09:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        raw_scale = pd.Series(_sa, index=out.index)
+    scale_arr = raw_scale.fillna(1.0).to_numpy(copy=True)
+    is_cash = eff_f.values <= 1e-12
+    scale_arr[is_cash] = 1.0
+    effective_weight = scale_arr * eff_f.values
+    asset_component_s, cash_component_s, trade_cost_s = _suba_state_machine_return_components(eff_h, pd.Series(effective_weight, index=out.index), close_df, commission=CN_COMMISSION)
+    effective_turnover = trade_cost_s / CN_COMMISSION if CN_COMMISSION else pd.Series(0.0, index=out.index)
+    scale_tc = pd.Series(0.0, index=out.index, dtype=float)
+    scaled_gross = 1.0 + asset_component_s.values + cash_component_s.values
+    out['effective_holding'] = eff_h
+    out['effective_fraction'] = eff_f
+    out['holding'] = eff_h
+    out['holding_fraction'] = eff_f
+    out['asset_component'] = asset_component_s
+    out['cash_component'] = cash_component_s
+    out['base_trade_cost'] = out['trade_cost'] if 'trade_cost' in out.columns else np.nan
+    out['effective_turnover'] = effective_turnover
+    out['trade_cost'] = trade_cost_s
+    out['scale_raw'] = raw_scale
+    out['base_weight'] = eff_f.values
+    out['weight'] = effective_weight
+    out['realized_vol'] = realized_vol
+    out['scale_tc'] = scale_tc
+    out['return'] = scaled_gross * (1.0 - trade_cost_s.values) - 1.0
+    out['nav'] = (1.0 + out['return']).cumprod()
+    out['is_signal'] = signal_flags
+    out['target'] = out['holding'].where(out['is_signal'], None)
+    for key, value in extra_cols.items():
+        out[key] = value
+    return out
+
+def apply_suba_volume_overlay(cn_result, close_df, volume_signal, volume_feature, scale=CN_SA_VOLUME_SCALE, rule_name=CN_SA_VOLUME_RULE_NAME):
+    if not 0 <= scale <= 1:
+        raise ValueError('scale must be in [0, 1].')
+    if cn_result is None or len(cn_result) == 0:
+        return cn_result
+    pre_h = cn_result['effective_holding'].fillna('cash').astype(str) if 'effective_holding' in cn_result.columns else cn_result['holding'].fillna('cash').astype(str)
+    pre_f = cn_result['effective_fraction'].fillna(0.0).astype(float) if 'effective_fraction' in cn_result.columns else cn_result['holding_fraction'].fillna(0.0).astype(float)
+    pre_weight = pd.to_numeric(cn_result.get('weight', pre_f), errors='coerce').fillna(0.0)
+    signal_s = pd.Series(volume_signal, dtype='boolean').reindex(cn_result.index).ffill().fillna(False).astype(bool)
+    scale_s = pd.Series(np.where(signal_s, scale, 1.0), index=cn_result.index, dtype=float)
+    if volume_feature is not None and len(volume_feature) > 0 and ('combined_scale' in volume_feature.columns):
+        scale_s = pd.to_numeric(volume_feature['combined_scale'], errors='coerce').reindex(cn_result.index).ffill().fillna(1.0).clip(lower=0.0, upper=1.0).astype(float)
+        signal_s = scale_s < 1.0 - 1e-12
+    eff_h = []
+    eff_f = []
+    signal_flags = []
+    prev_h = 'cash'
+    prev_f = 0.0
+    for dt in cn_result.index:
+        h = str(pre_h.loc[dt])
+        f = float(pre_f.loc[dt])
+        if h in CN_STOCK_CODES and f > 1e-12 and bool(signal_s.loc[dt]):
+            f *= float(scale_s.loc[dt])
+        h2 = h if f > 1e-12 else 'cash'
+        eff_h.append(h2)
+        eff_f.append(f)
+        signal_flags.append(h2 != prev_h or abs(f - prev_f) > 1e-12)
+        prev_h = h2
+        prev_f = f
+    extra_cols = {'pre_suba_volume_holding': pre_h, 'pre_suba_volume_fraction': pre_f, 'pre_suba_volume_weight': pre_weight, 'suba_volume_rule_on': signal_s, 'suba_volume_rule_scale': scale_s, 'suba_volume_rule_name': pd.Series(rule_name, index=cn_result.index)}
+    if volume_feature is not None and len(volume_feature) > 0:
+        aligned_feature = volume_feature.reindex(cn_result.index).copy()
+        try:
+            with pd.option_context('future.no_silent_downcasting', True):
+                for col in aligned_feature.columns:
+                    aligned_feature[col] = aligned_feature[col].ffill()
+        except Exception:
+            for col in aligned_feature.columns:
+                aligned_feature[col] = aligned_feature[col].ffill()
+        aligned_feature = aligned_feature.infer_objects()
+        for col in aligned_feature.columns:
+            extra_cols[f'suba_volume_{col}'] = aligned_feature[col]
+        if 'combined_unresolved' in aligned_feature.columns:
+            extra_cols['suba_volume_unresolved'] = aligned_feature['combined_unresolved'].fillna(False).astype(bool)
+    return _rebuild_suba_from_effective(cn_result, close_df, eff_h, eff_f, signal_flags, extra_cols)
+
+def apply_v78_suba_new_volume_overlay(new_result, close_df, volume_signal, volume_feature, scale=CN_SA_VOLUME_SCALE, rule_name=CN_SA_VOLUME_RULE_NAME):
+    if not 0 <= scale <= 1:
+        raise ValueError('scale must be in [0, 1].')
+    if new_result is None or len(new_result) == 0:
+        return new_result
+    out = new_result.copy()
+    idx = out.index
+    signal_s = pd.Series(volume_signal, dtype='boolean').reindex(idx).ffill().fillna(False).astype(bool)
+    scale_s = pd.Series(np.where(signal_s, scale, 1.0), index=idx, dtype=float)
+    if volume_feature is not None and len(volume_feature) > 0 and ('combined_scale' in volume_feature.columns):
+        scale_s = pd.to_numeric(volume_feature['combined_scale'], errors='coerce').reindex(idx).ffill().fillna(1.0).clip(lower=0.0, upper=1.0).astype(float)
+        signal_s = scale_s < 1.0 - 1e-12
+    target_s = out.get('target', pd.Series('cash', index=idx)).fillna('cash').astype(str)
+    base_holding_w = pd.to_numeric(out.get('weight', out.get('holding_fraction', 0.0)), errors='coerce').fillna(0.0)
+    base_target_w = pd.to_numeric(out.get('target_weight', base_holding_w), errors='coerce').fillna(0.0)
+    target_risky = target_s.ne('cash') & target_s.ne(CN_BOND_CODE)
+    target_scale = scale_s.where(target_risky, 1.0)
+    effective_target_w = (base_target_w * target_scale).clip(lower=0.0, upper=V78_SUBA_NEW_MAX_LEV)
+    effective_target_s = target_s.where(effective_target_w > 1e-12, 'cash')
+    returns = []
+    turnovers = []
+    trade_costs = []
+    cash_components = []
+    signal_flags = []
+    holdings = []
+    holding_weights = []
+    prev_h = 'cash'
+    prev_w = 0.0
+    source_signal_s = out.get('is_signal', pd.Series(False, index=idx)).reindex(idx).fillna(False).astype(bool)
+    for i, dt in enumerate(idx):
+        h = prev_h
+        h_w = float(prev_w)
+        if i == 0 or h == 'cash' or h_w <= 1e-12:
+            raw_ret = 0.0
+        else:
+            prev_dt = idx[i - 1]
+            raw_ret = float(close_df.loc[dt, h] / close_df.loc[prev_dt, h] - 1.0) if h in close_df.columns else 0.0
+        asset_component = h_w * raw_ret
+        cash_component = (1.0 - min(h_w, 1.0)) * float(CN_RF_DAILY)
+        t = effective_target_s.loc[dt]
+        t_w = float(effective_target_w.loc[dt])
+        turnover = abs(t_w - h_w) if t == h else t_w + h_w
+        trade_cost = float(CN_COMMISSION) * turnover
+        returns.append((1.0 + asset_component + cash_component) * (1.0 - trade_cost) - 1.0)
+        turnovers.append(turnover)
+        trade_costs.append(trade_cost)
+        cash_components.append(cash_component)
+        holdings.append(h)
+        holding_weights.append(h_w)
+        signal_flags.append(bool(source_signal_s.loc[dt]) or t != h or abs(t_w - h_w) > 0.0001)
+        prev_h = t
+        prev_w = t_w
+    out['base_weight_before_suba_volume'] = base_holding_w
+    out['base_target_weight_before_suba_volume'] = base_target_w
+    out['base_target_holding_before_suba_volume'] = target_s
+    out['suba_volume_rule_on'] = signal_s
+    out['suba_volume_rule_scale'] = scale_s
+    out['suba_volume_rule_name'] = pd.Series(rule_name, index=idx)
+    if volume_feature is not None and len(volume_feature) > 0:
+        aligned_feature = volume_feature.reindex(idx).copy()
+        try:
+            with pd.option_context('future.no_silent_downcasting', True):
+                for col in aligned_feature.columns:
+                    aligned_feature[col] = aligned_feature[col].ffill()
+        except Exception:
+            for col in aligned_feature.columns:
+                aligned_feature[col] = aligned_feature[col].ffill()
+        aligned_feature = aligned_feature.infer_objects()
+        for col in aligned_feature.columns:
+            out[f'suba_volume_{col}'] = aligned_feature[col]
+    holding_w = pd.Series(holding_weights, index=idx, dtype=float)
+    out['holding_fraction'] = holding_w
+    out['base_weight'] = holding_w
+    out['weight'] = holding_w
+    out['target_weight'] = effective_target_w
+    out['cash_component'] = pd.Series(cash_components, index=idx, dtype=float)
+    out['turnover'] = pd.Series(turnovers, index=idx, dtype=float)
+    out['trade_cost'] = pd.Series(trade_costs, index=idx, dtype=float)
+    out['return'] = pd.Series(returns, index=idx, dtype=float)
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    out['is_signal'] = pd.Series(signal_flags, index=idx, dtype=bool)
+    out['holding'] = pd.Series(holdings, index=idx, dtype=object)
+    out['target'] = effective_target_s.where(out['is_signal'], None)
+    return out
+
+def apply_suba_same_side_overheat_overlay(cn_result, close_df, enter_threshold, exit_threshold, derisk_scale=0.0):
+    if not 0 < exit_threshold < enter_threshold:
+        raise ValueError('exit_threshold must be in (0, enter_threshold).')
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError('derisk_scale must be in [0, 1].')
+    if cn_result is None or len(cn_result) == 0:
+        return cn_result
+    required = {'holding', 'holding_fraction', 'return'}
+    missing = required.difference(cn_result.columns)
+    if missing:
+        raise KeyError(f'Missing required Sub-A columns: {sorted(missing)}')
+    out = cn_result.copy()
+    pre_weight = pd.to_numeric(out.get('weight', out.get('holding_fraction', 0.0)), errors='coerce').fillna(0.0)
+    features = _suba_same_side_overheat_features(close_df)
+    pre_h = out['effective_holding'].fillna('cash').astype(str) if 'effective_holding' in out.columns else out['holding'].fillna('cash').astype(str)
+    pre_f = out['effective_fraction'].fillna(0.0).astype(float) if 'effective_fraction' in out.columns else out['holding_fraction'].fillna(0.0).astype(float)
+    overheat_state = False
+    prev_effective_h = 'cash'
+    prev_effective_f = 0.0
+    prev_pre_holding = None
+    eff_h, eff_f, signals = ([], [], [])
+    bias_vals, mom_vals, same_side_vals = ([], [], [])
+    state_vals, trigger_vals, recover_vals = ([], [], [])
+    for i, dt in enumerate(out.index):
+        holding = str(pre_h.iloc[i])
+        fraction = float(pre_f.iloc[i])
+        if prev_pre_holding is not None and holding != prev_pre_holding:
+            overheat_state = False
+        prev_pre_holding = holding
+        eligible = holding in CN_STOCK_CODES and fraction > 1e-12
+        bias = np.nan
+        mom = np.nan
+        same_side = False
+        if eligible and holding in features and (dt in features[holding].index):
+            row = features[holding].loc[dt]
+            bias = float(row['bias']) if pd.notna(row['bias']) else np.nan
+            mom = float(row['bias_mom']) if pd.notna(row['bias_mom']) else np.nan
+            same_side = bool(row['same_side']) if pd.notna(row['same_side']) else False
+        current_state = overheat_state and eligible
+        out_f = fraction * float(derisk_scale) if current_state else fraction
+        out_h = holding if out_f > 1e-12 else 'cash'
+        triggered_today = False
+        recovered_today = False
+        next_state = overheat_state
+        if eligible and pd.notna(bias) and same_side:
+            if next_state:
+                if bias <= exit_threshold:
+                    next_state = False
+                    recovered_today = True
+            elif bias >= enter_threshold:
+                next_state = True
+                triggered_today = True
+        elif next_state:
+            next_state = False
+            recovered_today = True
+        signal = out_h != prev_effective_h or abs(out_f - prev_effective_f) > 1e-12
+        eff_h.append(out_h)
+        eff_f.append(out_f)
+        signals.append(signal)
+        bias_vals.append(bias)
+        mom_vals.append(mom)
+        same_side_vals.append(same_side)
+        state_vals.append(current_state)
+        trigger_vals.append(triggered_today)
+        recover_vals.append(recovered_today)
+        overheat_state = next_state
+        prev_effective_h = out_h
+        prev_effective_f = out_f
+    extra = {'pre_suba_overheat_holding': pre_h, 'pre_suba_overheat_fraction': pre_f, 'pre_suba_overheat_weight': pre_weight, 'suba_same_side_overheat_bias': pd.Series(bias_vals, index=out.index, dtype=float), 'suba_same_side_overheat_bias_mom': pd.Series(mom_vals, index=out.index, dtype=float), 'suba_same_side_overheat_signal': pd.Series(same_side_vals, index=out.index, dtype=bool), 'suba_same_side_overheat_on': pd.Series(state_vals, index=out.index, dtype=bool), 'suba_same_side_overheat_triggered': pd.Series(trigger_vals, index=out.index, dtype=bool), 'suba_same_side_overheat_recovered': pd.Series(recover_vals, index=out.index, dtype=bool)}
+    out = _rebuild_suba_from_effective(out, close_df, eff_h, eff_f, signals, extra)
+    out.attrs['suba_same_side_overheat_overlay'] = {'enter_threshold': float(enter_threshold), 'exit_threshold': float(exit_threshold), 'derisk_scale': float(derisk_scale), 'overlay_days': int(out['suba_same_side_overheat_on'].sum()), 'overlay_ratio': float(out['suba_same_side_overheat_on'].mean()), 'trigger_count': int(out['suba_same_side_overheat_triggered'].sum()), 'recovery_count': int(out['suba_same_side_overheat_recovered'].sum())}
+    return out
+
+def _dk_signal_days(close_df, start_idx):
+    week_best = {}
+    for i in range(start_idx, len(close_df)):
+        dt = close_df.index[i]
+        dow = dt.dayofweek
+        yr, wk, _ = dt.isocalendar()
+        key = (yr, wk)
+        if key not in week_best or dow > week_best[key][1]:
+            week_best[key] = (i, dow)
+    return {v[0] for v in week_best.values()}
+
+def rolling_r2_fast(series, window):
+    y = series.values.astype(float)
+    n = len(y)
+    r2 = np.full(n, np.nan)
+    x = np.arange(window, dtype=float)
+    x_mean = x.mean()
+    ss_x = ((x - x_mean) ** 2).sum()
+    for i in range(window - 1, n):
+        yi = y[i - window + 1:i + 1]
+        if np.any(np.isnan(yi)):
+            continue
+        y_mean = yi.mean()
+        ss_y = ((yi - y_mean) ** 2).sum()
+        if ss_y < 1e-15:
+            r2[i] = 0.0
+            continue
+        ss_xy = ((x - x_mean) * (yi - y_mean)).sum()
+        r2[i] = max(0.0, ss_xy ** 2 / (ss_x * ss_y))
+    return pd.Series(r2, index=series.index)
+
+def _dk_calc_bias_momentum(series, bias_n, mom_day):
+    prices = series.values.astype(float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = series.rolling(bias_n).mean().values
+    total_lookback = bias_n + mom_day - 2
+    x = np.arange(mom_day, dtype=float)
+    weights = np.linspace(1.0, 10.0, mom_day)
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    denom = float((weights * (x - x_bar) ** 2).sum())
+    for i in range(total_lookback, n):
+        bias_window = np.empty(mom_day)
+        valid = True
+        for j in range(mom_day):
+            idx = i - mom_day + 1 + j
+            if np.isnan(ma[idx]) or ma[idx] < 1e-10 or np.isnan(prices[idx]):
+                valid = False
+                break
+            bias_window[j] = prices[idx] / ma[idx]
+        if not valid or bias_window[0] < 1e-10:
+            continue
+        y_bar = float((weights * bias_window).sum() / w_sum)
+        slope = float((weights * (x - x_bar) * (bias_window - y_bar)).sum() / denom)
+        result[i] = slope / float(bias_window[0]) * 10000.0
+    return pd.Series(result, index=series.index)
+
+def _dk_calc_bias_momentum_r2(series, bias_n, mom_day):
+    prices = series.values.astype(float)
+    n = len(prices)
+    result = np.full(n, np.nan)
+    ma = series.rolling(bias_n).mean().values
+    total_lookback = bias_n + mom_day - 2
+    x = np.arange(mom_day, dtype=float)
+    weights = np.linspace(1.0, 10.0, mom_day)
+    w_sum = float(weights.sum())
+    x_bar = float((weights * x).sum() / w_sum)
+    x_dev = x - x_bar
+    denom = float((weights * x_dev ** 2).sum())
+    for i in range(total_lookback, n):
+        bias_window = np.empty(mom_day)
+        valid = True
+        for j in range(mom_day):
+            idx = i - mom_day + 1 + j
+            if np.isnan(ma[idx]) or ma[idx] < 1e-10 or np.isnan(prices[idx]):
+                valid = False
+                break
+            bias_window[j] = prices[idx] / ma[idx]
+        if not valid:
+            continue
+        y_bar = float((weights * bias_window).sum() / w_sum)
+        y_dev = bias_window - y_bar
+        slope = float((weights * x_dev * y_dev).sum() / denom)
+        fitted = y_bar + slope * x_dev
+        sse = float((weights * (bias_window - fitted) ** 2).sum())
+        sst = float((weights * y_dev ** 2).sum())
+        result[i] = 1.0 - sse / sst if sst > 1e-18 else np.nan
+    return pd.Series(result, index=series.index)
+
+def _run_single_pair_dk(a_prices, b_prices, r2_quality_enabled=None):
+    d = pd.DataFrame({'a': a_prices, 'b': b_prices}).dropna()
+    if len(d) < CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50:
+        return (None, None, None)
+    d['a_ret'] = d['a'].pct_change()
+    d['b_ret'] = d['b'].pct_change()
+    d['spread_ret'] = d['a_ret'] - d['b_ret']
+    d = d.dropna(subset=['a_ret', 'b_ret'])
+    d['ratio'] = d['a'] / d['b']
+    d['bias_mom'] = _dk_calc_bias_momentum(d['ratio'], CN_DK_BIAS_N, CN_DK_MOM_DAY)
+    d['signal_r2'] = _dk_calc_bias_momentum_r2(d['ratio'], CN_DK_BIAS_N, CN_DK_MOM_DAY)
+    d['rank_score'] = d['bias_mom'].abs()
+    if r2_quality_enabled is None:
+        r2_quality_enabled = CN_DK_R2_QUALITY_ENABLED
+    if r2_quality_enabled:
+        d['rank_score'] = d['rank_score'].where(d['signal_r2'] >= CN_DK_R2_QUALITY_THRESHOLD)
+    n = len(d)
+    start_idx = max(CN_DK_BIAS_N + CN_DK_MOM_DAY, CN_DK_VOL_WINDOW) + 1
+    d['signal'] = np.nan
+    valid = d['bias_mom'].notna() & (np.arange(n) >= start_idx)
+    d.loc[valid, 'signal'] = np.where(d.loc[valid, 'bias_mom'] > 0, 1, -1)
+    d['signal'] = d['signal'].ffill()
+    d['signal'] = d['signal'].astype(float)
+    d['position'] = d['signal'].shift(1)
+    d['raw_ret'] = d['position'] * d['spread_ret']
+    d = d.dropna(subset=['position', 'raw_ret'])
+    d['realized_vol'] = d['raw_ret'].rolling(CN_DK_VOL_WINDOW).std() * np.sqrt(CN_DK_TRADING_DAYS)
+    if CN_DK_VOL_SCALE_ENABLED:
+        d['scale'] = (CN_DK_TARGET_VOL / d['realized_vol']).clip(CN_DK_MIN_LEV, CN_DK_MAX_LEV)
+        d['scale'] = d['scale'].shift(1)
+        d['scale_raw'] = d['scale'].copy()
+    else:
+        d['scale'] = 1.0
+        d['scale_raw'] = 1.0
+    if CN_DK_VOL_SCALE_ENABLED and CN_DK_SCALE_THRESHOLD > 0:
+        _sa = d['scale'].values.copy()
+        _last = np.nan
+        for _i in range(len(_sa)):
+            if np.isnan(_sa[_i]):
+                continue
+            if np.isnan(_last):
+                _last = _sa[_i]
+            elif abs(_sa[_i] - _last) >= CN_DK_SCALE_THRESHOLD - 1e-09:
+                _last = _sa[_i]
+            else:
+                _sa[_i] = _last
+        d['scale'] = _sa
+    d['strategy_ret'] = d['raw_ret'] * d['scale']
+    d = d.dropna(subset=['strategy_ret'])
+    pos_prev = d['position'].shift(1)
+    is_flip = (d['position'] != pos_prev) & pos_prev.notna()
+    is_initial = d['position'].notna() & pos_prev.isna()
+    if CN_DK_COMMISSION > 0:
+        d['tc'] = 0.0
+        d.loc[is_flip, 'tc'] = 4 * CN_DK_COMMISSION * d['scale'][is_flip]
+        d.loc[is_initial, 'tc'] = 2 * CN_DK_COMMISSION * d['scale'][is_initial]
+        _chg = d['scale'].diff().abs().fillna(0)
+        _only = ~is_flip & ~is_initial & d['position'].notna()
+        d.loc[_only, 'tc'] += 2 * CN_DK_COMMISSION * _chg[_only]
+        d['strategy_ret'] = (1 + d['strategy_ret']) * (1 - d['tc']) - 1
+    return (d['strategy_ret'], d['rank_score'], d)
+
+def _build_top_n_dk(rets_df, signals_df, n=1):
+    common_idx = rets_df.index.intersection(signals_df.index)
+    rets_df = rets_df.reindex(common_idx)
+    signals_df = signals_df.reindex(common_idx)
+    signals_shifted = signals_df.shift(1)
+    combined = pd.Series(0.0, index=common_idx)
+    for i in range(len(common_idx)):
+        row_sig = signals_shifted.iloc[i].dropna()
+        if len(row_sig) == 0:
+            continue
+        top_pairs = row_sig.nlargest(n).index.tolist()
+        day_ret = 0.0
+        cnt = 0
+        for p in top_pairs:
+            r = rets_df.iloc[i].get(p, np.nan)
+            if not np.isnan(r):
+                day_ret += r
+                cnt += 1
+        if cnt > 0:
+            combined.iloc[i] = day_ret / cnt
+    return combined
+
+def _dk_position_legs(pair, direction, scale):
+    if pair is None or str(pair) == 'none' or int(direction or 0) == 0 or (float(scale or 0.0) <= 1e-12):
+        return {}
+    parts = str(pair).split('/')
+    if len(parts) != 2:
+        return {}
+    a, b = (parts[0].strip(), parts[1].strip())
+    if not a or not b:
+        return {}
+    direction = int(direction)
+    scale = float(scale)
+    return {a: direction * scale, b: -direction * scale}
+
+def _dk_leg_fields(pair, direction, active=True):
+    if not active or pair is None or str(pair) == 'none' or (int(direction or 0) == 0):
+        return (None, None, None, None)
+    parts = str(pair).split('/')
+    if len(parts) != 2:
+        return (None, None, None, None)
+    a, b = (parts[0].strip(), parts[1].strip())
+    if not a or not b:
+        return (None, None, None, None)
+    if int(direction) == 1:
+        return (a, b, a, b)
+    return (a, b, b, a)
+
+def _sync_dk_execution_fields(dk_result, weight_change_threshold=0.001):
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    idx = out.index
+    top_pair = out.get('top_pair', pd.Series('none', index=idx)).fillna('none').astype(str)
+    direction_src = out.get('actual_direction', out.get('direction', pd.Series(0, index=idx)))
+    direction = pd.to_numeric(direction_src, errors='coerce').fillna(0).astype(int)
+    weight = pd.to_numeric(out.get('weight', pd.Series(1.0, index=idx)), errors='coerce').fillna(0.0)
+    active_pairs = []
+    effective_dirs = []
+    holdings = []
+    pair_a_list = []
+    pair_b_list = []
+    long_leg_list = []
+    short_leg_list = []
+    for pair, dir_val, w in zip(top_pair, direction, weight):
+        active = pair != 'none' and int(dir_val) != 0 and (abs(float(w)) > 1e-12)
+        eff_dir = int(dir_val) if active else 0
+        active_pair = pair if active else 'none'
+        pair_a, pair_b, long_leg, short_leg = _dk_leg_fields(pair, eff_dir, active=active)
+        active_pairs.append(active_pair)
+        effective_dirs.append(eff_dir)
+        holdings.append(f'{pair}_{eff_dir}' if active else 'none_0')
+        pair_a_list.append(pair_a)
+        pair_b_list.append(pair_b)
+        long_leg_list.append(long_leg)
+        short_leg_list.append(short_leg)
+    active_pair_s = pd.Series(active_pairs, index=idx, dtype=object)
+    direction_s = pd.Series(effective_dirs, index=idx, dtype=int)
+    pair_changed = active_pair_s.ne(active_pair_s.shift(1))
+    direction_changed = direction_s.ne(direction_s.shift(1))
+    active_mask = active_pair_s.ne('none') & direction_s.ne(0)
+    effective_weight = weight.where(active_mask, 0.0)
+    scale_rebalanced = effective_weight.diff().abs().fillna(0.0) > float(weight_change_threshold)
+    if len(out) > 0:
+        pair_changed.iloc[0] = False
+        direction_changed.iloc[0] = False
+        scale_rebalanced.iloc[0] = False
+    out['direction'] = direction_s
+    out['holding'] = pd.Series(holdings, index=idx, dtype=object)
+    out['pair_a'] = pd.Series(pair_a_list, index=idx, dtype=object)
+    out['pair_b'] = pd.Series(pair_b_list, index=idx, dtype=object)
+    out['long_leg'] = pd.Series(long_leg_list, index=idx, dtype=object)
+    out['short_leg'] = pd.Series(short_leg_list, index=idx, dtype=object)
+    out['pair_changed'] = pair_changed.astype(bool)
+    out['direction_changed'] = direction_changed.astype(bool)
+    out['scale_rebalanced'] = scale_rebalanced.astype(bool)
+    out['is_signal'] = (pair_changed | direction_changed | scale_rebalanced).astype(bool)
+    out['target'] = out['holding'].where(out['is_signal'], None)
+    return out
+
+def _rebuild_dk_actual_execution_costs(dk_result, pair_data, commission=CN_DK_COMMISSION):
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    returns = []
+    costs = []
+    turnovers = []
+    gross_returns = []
+    actual_positions = []
+    actual_directions = []
+    prev_legs = {}
+    for dt, row in out.iterrows():
+        pair = str(row.get('top_pair', 'none'))
+        pdata = pair_data.get(pair) if pair != 'none' else None
+        scale = float(row.get('weight', 1.0))
+        direction = 0
+        gross_ret = 0.0
+        if pdata is not None and dt in pdata.index:
+            prow = pdata.loc[dt]
+            direction = int(prow.get('position', 0)) if pd.notna(prow.get('position', np.nan)) else 0
+            raw_ret = prow.get('raw_ret', np.nan)
+            if pd.notna(raw_ret):
+                gross_ret = float(raw_ret) * scale
+            else:
+                tc = float(prow.get('tc', 0.0)) if pd.notna(prow.get('tc', np.nan)) else 0.0
+                strategy_ret = float(prow.get('strategy_ret', 0.0)) if pd.notna(prow.get('strategy_ret', np.nan)) else 0.0
+                gross_ret = (1.0 + strategy_ret) / (1.0 - tc) - 1.0 if tc < 1.0 else strategy_ret
+        key = f'{pair}_{direction}' if pair != 'none' and direction != 0 and (scale > 1e-12) else None
+        new_legs = _dk_position_legs(pair, direction, scale)
+        turnover = _dict_weight_turnover(prev_legs, new_legs)
+        trade_cost = float(commission) * max(turnover, 0.0)
+        gross_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(trade_cost)
+        returns.append((1.0 + gross_ret) * (1.0 - trade_cost) - 1.0)
+        actual_positions.append(key or 'none')
+        actual_directions.append(direction)
+        prev_legs = new_legs
+    out['return_before_dk_execution_cost'] = pd.Series(gross_returns, index=out.index)
+    out['dk_execution_turnover'] = pd.Series(turnovers, index=out.index)
+    out['dk_execution_cost'] = pd.Series(costs, index=out.index)
+    out['actual_position'] = pd.Series(actual_positions, index=out.index)
+    out['actual_direction'] = pd.Series(actual_directions, index=out.index)
+    out['return'] = pd.Series(returns, index=out.index)
+    out['nav'] = (1.0 + out['return']).cumprod()
+    return _sync_dk_execution_fields(out)
+
+def _rebuild_dk_effective_execution_costs(dk_result, pair_data, commission=CN_DK_COMMISSION):
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    returns = []
+    costs = []
+    turnovers = []
+    gross_returns = []
+    actual_positions = []
+    actual_directions = []
+    prev_legs = {}
+    for dt, row in out.iterrows():
+        pair = str(row.get('top_pair', 'none'))
+        pdata = pair_data.get(pair) if pair != 'none' else None
+        total_scale = float(row.get('weight', 0.0) or 0.0)
+        direction = int(row.get('direction', 0) or 0)
+        raw_pair_ret = 0.0
+        if pdata is not None and dt in pdata.index:
+            prow = pdata.loc[dt]
+            direction = int(prow.get('position', direction)) if pd.notna(prow.get('position', np.nan)) else direction
+            raw_ret = prow.get('raw_ret', np.nan)
+            if pd.notna(raw_ret):
+                raw_pair_ret = float(raw_ret)
+            else:
+                base_scale = float(row.get('base_weight', row.get('weight', 1.0)) or 1.0)
+                base_gross = float(row.get('return_before_dk_execution_cost', 0.0) or 0.0)
+                raw_pair_ret = base_gross / base_scale if abs(base_scale) > 1e-12 else 0.0
+        if pair == 'none' or direction == 0 or abs(total_scale) <= 1e-12:
+            new_legs = {}
+            key = None
+            gross_ret = 0.0
+        else:
+            new_legs = _dk_position_legs(pair, direction, total_scale)
+            key = f'{pair}_{direction}'
+            gross_ret = raw_pair_ret * total_scale
+        turnover = _dict_weight_turnover(prev_legs, new_legs)
+        trade_cost = float(commission) * max(turnover, 0.0)
+        gross_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(trade_cost)
+        returns.append((1.0 + gross_ret) * (1.0 - trade_cost) - 1.0)
+        actual_positions.append(key or 'none')
+        actual_directions.append(direction if key else 0)
+        prev_legs = new_legs
+    out['return_before_dk_execution_cost'] = pd.Series(gross_returns, index=out.index)
+    out['dk_execution_turnover'] = pd.Series(turnovers, index=out.index)
+    out['dk_execution_cost'] = pd.Series(costs, index=out.index)
+    out['dk_overlay_execution_cost'] = 0.0
+    out['same_side_overheat_tc'] = 0.0
+    out['actual_position'] = pd.Series(actual_positions, index=out.index)
+    out['actual_direction'] = pd.Series(actual_directions, index=out.index)
+    out['return'] = pd.Series(returns, index=out.index)
+    out['nav'] = (1.0 + out['return']).cumprod()
+    return _sync_dk_execution_fields(out)
+
+def run_dk_strategy(cn_close, cn_dk_close, official_pair_order=None, r2_quality_enabled=None, top_n=None):
+    from itertools import combinations
+    if official_pair_order is None:
+        official_pair_order = ADK_OFFICIAL_PAIR_ORDER
+    official_pairs = set(official_pair_order)
+    if r2_quality_enabled is None:
+        r2_quality_enabled = CN_DK_R2_QUALITY_ENABLED
+    if top_n is None:
+        top_n = CN_DK_TOP_N
+    idx_series = {}
+    for name, info in CN_DK_INDICES.items():
+        src_df = cn_dk_close if info['src'] == 'dk' else cn_close
+        if info['col'] in src_df.columns:
+            idx_series[name] = src_df[info['col']].rename(info['col'])
+    pairs_all = [(a_name, b_name) for a_name, b_name in combinations(idx_series.keys(), 2) if f'{a_name}/{b_name}' in official_pairs]
+    pair_rets = {}
+    pair_abs_mom = {}
+    pair_data = {}
+    for a_name, b_name in pairs_all:
+        label = f'{a_name}/{b_name}'
+        ret, abs_mom, pdata = _run_single_pair_dk(idx_series[a_name], idx_series[b_name], r2_quality_enabled=r2_quality_enabled)
+        if ret is not None:
+            pair_rets[label] = ret
+            pair_abs_mom[label] = abs_mom
+            pair_data[label] = pdata
+    if not pair_rets:
+        raise ValueError('No valid DK pairs')
+    rets_df = pd.DataFrame(pair_rets)
+    signals_df = pd.DataFrame(pair_abs_mom)
+    combined_ret = _build_top_n_dk(rets_df, signals_df, int(top_n))
+    signals_shifted = signals_df.shift(1)
+    common_idx = combined_ret.index
+    top_pair_list = []
+    top_dir_list = []
+    for i in range(len(common_idx)):
+        date = common_idx[i]
+        row_sig = signals_shifted.loc[date].dropna() if date in signals_shifted.index else pd.Series(dtype=float)
+        if len(row_sig) == 0:
+            top_pair_list.append('none')
+            top_dir_list.append(0)
+        else:
+            best = row_sig.idxmax()
+            top_pair_list.append(best)
+            if best in pair_data and date in pair_data[best].index:
+                pos_val = pair_data[best].loc[date, 'position'] if 'position' in pair_data[best].columns else np.nan
+                top_dir_list.append(int(pos_val) if not np.isnan(pos_val) else 0)
+            else:
+                top_dir_list.append(0)
+    _weight_arr = []
+    _scale_raw_arr = []
+    _realized_vol_arr = []
+    for i in range(len(common_idx)):
+        date = common_idx[i]
+        pair = top_pair_list[i]
+        if pair != 'none' and pair in pair_data and (date in pair_data[pair].index):
+            pd_row = pair_data[pair].loc[date]
+            _w = pd_row['scale'] if 'scale' in pd_row.index and (not np.isnan(pd_row['scale'])) else 1.0
+            _sr = pd_row['scale_raw'] if 'scale_raw' in pd_row.index and (not np.isnan(pd_row['scale_raw'])) else _w
+            _rv = pd_row['realized_vol'] if 'realized_vol' in pd_row.index else np.nan
+        else:
+            _w, _sr, _rv = (1.0, 1.0, np.nan)
+        _weight_arr.append(_w)
+        _scale_raw_arr.append(_sr)
+        _realized_vol_arr.append(_rv)
+    top_pair_series = pd.Series(top_pair_list, index=common_idx)
+    top_dir_series = pd.Series(top_dir_list, index=common_idx)
+    pair_changed = top_pair_series.ne(top_pair_series.shift(1))
+    direction_changed = top_dir_series.ne(top_dir_series.shift(1))
+    is_signal = pair_changed | direction_changed
+    pair_changed.iloc[0] = False
+    direction_changed.iloc[0] = False
+    is_signal.iloc[0] = False
+    _pair_a_list, _pair_b_list = ([], [])
+    _long_leg_list, _short_leg_list = ([], [])
+    for p, d in zip(top_pair_list, top_dir_list):
+        pair_a, pair_b, long_leg, short_leg = _dk_leg_fields(p, d, active=p != 'none' and d != 0)
+        _pair_a_list.append(pair_a)
+        _pair_b_list.append(pair_b)
+        _long_leg_list.append(long_leg)
+        _short_leg_list.append(short_leg)
+    result = pd.DataFrame({'return': combined_ret, 'nav': (1 + combined_ret).cumprod(), 'top_pair': top_pair_series, 'direction': top_dir_series, 'holding': [f'{p}_{d}' for p, d in zip(top_pair_list, top_dir_list)], 'pair_a': _pair_a_list, 'pair_b': _pair_b_list, 'long_leg': _long_leg_list, 'short_leg': _short_leg_list, 'pair_changed': pair_changed, 'direction_changed': direction_changed, 'is_signal': is_signal, 'target': None, 'weight': _weight_arr, 'scale_raw': _scale_raw_arr, 'realized_vol': _realized_vol_arr}, index=common_idx)
+    result = _rebuild_dk_actual_execution_costs(result, pair_data, CN_DK_COMMISSION)
+    result.attrs['pair_rets'] = pair_rets
+    result.attrs['pair_abs_mom'] = pair_abs_mom
+    result.attrs['pair_data'] = pair_data
+    result.attrs['rets_df'] = rets_df
+    result.attrs['signals_df'] = signals_df
+    return result
+
+def _v78_all_adk_pair_order():
+    names = list(CN_DK_INDICES.keys())
+    pairs = []
+    for i, left in enumerate(names):
+        for right in names[i + 1:]:
+            pairs.append(f'{left}/{right}')
+    return tuple(pairs)
+
+def apply_v78_adk_score_overheat(dk_result, enter=80.0, exit=40.0, derisk_scale=0.0):
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    out = dk_result.copy()
+    active_score = _extract_active_pair_score(out)
+    decision_score = _extract_active_pair_score(out, signal_shift=1)
+    base_ret = out.get('return_before_dk_execution_cost', out['return']).fillna(0.0).astype(float)
+    base_weight = out.get('weight', pd.Series(1.0, index=out.index)).fillna(1.0).astype(float)
+    scales = []
+    costs = []
+    on = False
+    prev_scale = 1.0
+    for dt in out.index:
+        score_for_today = decision_score.loc[dt]
+        if pd.notna(score_for_today):
+            if on and float(score_for_today) <= float(exit):
+                on = False
+            elif not on and float(score_for_today) >= float(enter):
+                on = True
+        cur_scale = float(derisk_scale) if on else 1.0
+        delta = abs(cur_scale - prev_scale)
+        costs.append(2.0 * CN_DK_COMMISSION * float(base_weight.loc[dt]) * delta if delta > 1e-12 else 0.0)
+        scales.append(cur_scale)
+        prev_scale = cur_scale
+    scale_s = pd.Series(scales, index=out.index, dtype=float)
+    cost_s = pd.Series(costs, index=out.index, dtype=float)
+    out['v78_score_overheat_score'] = active_score
+    out['v78_score_overheat_decision_score'] = decision_score
+    out['v78_score_overheat_scale'] = scale_s
+    out['v78_score_overheat_on'] = scale_s < 0.999999
+    out['v78_score_overheat_cost_indicative'] = cost_s
+    out['return_before_v78_score_overheat'] = base_ret
+    out['base_weight_before_v78_score_hot'] = base_weight
+    out['weight'] = base_weight * scale_s
+    return _rebuild_dk_effective_execution_costs(out, out.attrs.get('pair_data', {}), CN_DK_COMMISSION)
+
+def run_v78_adk_new_primary(cn_close, cn_dk_close):
+    result = run_dk_strategy(cn_close, cn_dk_close, official_pair_order=_v78_all_adk_pair_order(), r2_quality_enabled=False, top_n=1)
+    return apply_v78_adk_score_overheat(result, enter=V78_ADK_NEW_SCORE_HOT_ENTER, exit=V78_ADK_NEW_SCORE_HOT_EXIT, derisk_scale=V78_ADK_NEW_SCORE_HOT_SCALE)
+
+def _v78_adk_aggregate_asset_weights(row):
+    net = {}
+    legs = row.get('final_long_short_legs', {}) or {}
+    for leg_key in ('v77', 'new'):
+        leg = legs.get(leg_key, {}) or {}
+        weight = float(leg.get('weight', 0.0) or 0.0)
+        long_leg = leg.get('long_leg')
+        short_leg = leg.get('short_leg')
+        if long_leg:
+            net[long_leg] = net.get(long_leg, 0.0) + weight
+        if short_leg:
+            net[short_leg] = net.get(short_leg, 0.0) - weight
+    return {asset: exposure for asset, exposure in sorted(net.items()) if abs(exposure) > 1e-12}
+
+def run_v80_adk_new_only(cn_close, cn_dk_close):
+    """Run the single V8.0 production ADK strategy: all10 with score-hot."""
+    component = run_v78_adk_new_primary(cn_close, cn_dk_close)
+    component = component.copy(deep=True)
+    active_legs = component['top_pair'].fillna('none').astype(str).ne('none') & component['direction'].fillna(0).ne(0) & component['long_leg'].notna() & component['short_leg'].notna()
+    component['weight'] = pd.to_numeric(component['weight'], errors='coerce').fillna(0.0).where(active_legs, 0.0)
+    if 'base_weight_before_v78_score_hot' in component:
+        component['base_weight_before_v78_score_hot'] = pd.to_numeric(component['base_weight_before_v78_score_hot'], errors='coerce').fillna(0.0).where(active_legs, 0.0)
+    out = component.copy(deep=True)
+    idx = out.index
+    holdings = out.get('holding', pd.Series('none_0', index=idx)).fillna('none_0').astype(str)
+    weights = pd.to_numeric(out.get('weight', pd.Series(0.0, index=idx)), errors='coerce').fillna(0.0)
+    long_legs = out.get('long_leg', pd.Series(None, index=idx))
+    short_legs = out.get('short_leg', pd.Series(None, index=idx))
+    out['v78_adk_new_holding'] = holdings
+    out['v78_adk_new_weight'] = weights
+    out['v78_adk_final_exposure'] = weights
+    out['final_exposure'] = weights
+    out['final_long_short_legs'] = [{'new': {'holding': holding, 'long_leg': long_leg, 'short_leg': short_leg, 'weight': V80_ADK_PRODUCTION_WEIGHT * float(weight)}} for holding, long_leg, short_leg, weight in zip(holdings, long_legs, short_legs, weights)]
+    out['adk_net_asset_exposure'] = out.apply(_v78_adk_aggregate_asset_weights, axis=1)
+    out['adk_net_long_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: weight for asset, weight in net.items() if weight > 1e-12})
+    out['adk_net_short_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: -weight for asset, weight in net.items() if weight < -1e-12})
+    out['v78_blend_label'] = 'ADK策略（全10配对 + score-hot）'
+    out['v78_adk_component_net_return'] = out['return']
+    out['cost_basis_note'] = 'single production ADK component; execution costs already included'
+    out['v80_adk_production_mode'] = V80_ADK_PRODUCTION_MODE
+    out.attrs.pop('v78_adk_v77', None)
+    out.attrs['v78_adk_new'] = component
+    out.attrs['v80_adk_production_mode'] = V80_ADK_PRODUCTION_MODE
+    out.attrs['v80_adk_production_weight'] = V80_ADK_PRODUCTION_WEIGHT
+    return out
+
+def _v80_adk_is_new_only(cn_dk_result):
+    if cn_dk_result is None:
+        return False
+    return cn_dk_result.attrs.get('v80_adk_production_mode') == V80_ADK_PRODUCTION_MODE
+
+def _v80_adk_component_specs(cn_dk_result):
+    if _v80_adk_is_new_only(cn_dk_result):
+        component = cn_dk_result.attrs.get('v78_adk_new')
+        if component is None:
+            component = cn_dk_result
+        return [('ADK策略', '全10配对 + score-hot', V80_ADK_PRODUCTION_WEIGHT, component, True)]
+    return [('V7.7 ADK', '正式8配对', V78_ADK_V77_WEIGHT, cn_dk_result.attrs.get('v78_adk_v77'), False), (V78_ADK_NEW_LABEL, '全10配对 + score-hot', V78_ADK_NEW_PRIMARY_WEIGHT, cn_dk_result.attrs.get('v78_adk_new'), True)]
+
+def blend_v78_adk_results(v77_result, new_result):
+    common_index = v77_result.dropna(subset=['return']).index.intersection(new_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('V7.9 ADK blend has no overlapping return window.')
+    v77 = v77_result.reindex(common_index)
+    new = new_result.reindex(common_index)
+    out = v77.copy()
+    out['v78_adk_v77_return'] = v77['return'].astype(float)
+    out['v78_adk_new_return'] = new['return'].astype(float)
+    out['return'] = V78_ADK_V77_WEIGHT * out['v78_adk_v77_return'] + V78_ADK_NEW_PRIMARY_WEIGHT * out['v78_adk_new_return']
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    out['v78_adk_v77_holding'] = v77.get('holding', 'none_0')
+    out['v78_adk_new_holding'] = new.get('holding', 'none_0')
+    out['v78_adk_v77_weight'] = pd.to_numeric(v77.get('weight', 0.0), errors='coerce').fillna(0.0)
+    out['v78_adk_new_weight'] = pd.to_numeric(new.get('weight', 0.0), errors='coerce').fillna(0.0)
+    out['v78_adk_final_exposure'] = V78_ADK_V77_WEIGHT * out['v78_adk_v77_weight'] + V78_ADK_NEW_PRIMARY_WEIGHT * out['v78_adk_new_weight']
+    out['final_exposure'] = out['v78_adk_final_exposure']
+    v77_long = v77.get('long_leg', pd.Series(None, index=common_index))
+    v77_short = v77.get('short_leg', pd.Series(None, index=common_index))
+    new_long = new.get('long_leg', pd.Series(None, index=common_index))
+    new_short = new.get('short_leg', pd.Series(None, index=common_index))
+    out['final_long_short_legs'] = [{'v77': {'holding': vh, 'long_leg': vl, 'short_leg': vs, 'weight': V78_ADK_V77_WEIGHT * float(vw)}, 'new': {'holding': nh, 'long_leg': nl, 'short_leg': ns, 'weight': V78_ADK_NEW_PRIMARY_WEIGHT * float(nw)}} for vh, vl, vs, vw, nh, nl, ns, nw in zip(out['v78_adk_v77_holding'], v77_long, v77_short, out['v78_adk_v77_weight'], out['v78_adk_new_holding'], new_long, new_short, out['v78_adk_new_weight'])]
+    out['adk_net_asset_exposure'] = out.apply(_v78_adk_aggregate_asset_weights, axis=1)
+    out['adk_net_long_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: weight for asset, weight in net.items() if weight > 1e-12})
+    out['adk_net_short_weights'] = out['adk_net_asset_exposure'].map(lambda net: {asset: -weight for asset, weight in net.items() if weight < -1e-12})
+    out['holding'] = [f'V7.7ADK:{vh}|NewADK:{nh}' for vh, nh in zip(out['v78_adk_v77_holding'], out['v78_adk_new_holding'])]
+    out['top_pair'] = [f'V7.7ADK:{vp}|NewADK:{npair}' for vp, npair in zip(v77.get('top_pair', pd.Series('none', index=common_index)), new.get('top_pair', pd.Series('none', index=common_index)))]
+    out['long_leg'] = None
+    out['short_leg'] = None
+    out['direction'] = 0
+    out['weight'] = out['final_exposure']
+    out['is_signal'] = v77.get('is_signal', pd.Series(False, index=common_index)).astype(bool) | new.get('is_signal', pd.Series(False, index=common_index)).astype(bool) | out['final_exposure'].diff().abs().fillna(0.0).gt(0.0001)
+    out['target'] = out['holding'].where(out['is_signal'], None)
+    out['v78_blend_label'] = '50% V7.7 ADK + 50% New ADK primary'
+    out['v78_adk_component_net_return'] = out['return']
+    out['return_before_dk_execution_cost'] = out['return']
+    out['dk_execution_cost'] = 0.0
+    out['dk_execution_turnover'] = np.nan
+    out['cost_basis_note'] = 'component-net blend; component costs already included'
+    out.attrs['v78_adk_v77'] = v77_result
+    out.attrs['v78_adk_new'] = new_result
+    return out
+
+def _extract_active_pair_score(dk_result, signal_shift=0):
+    signals_df = dk_result.attrs.get('signals_df')
+    if signals_df is None or len(dk_result) == 0:
+        raise KeyError('signals_df is missing from dk_result attrs.')
+    if 'top_pair' not in dk_result.columns:
+        raise KeyError('top_pair column is required for score-decay overlay.')
+    score_frame = signals_df.shift(int(signal_shift)) if int(signal_shift) else signals_df
+    scores = []
+    for dt, pair in dk_result['top_pair'].fillna('none').items():
+        score = None
+        if pair != 'none' and pair in score_frame.columns and (dt in score_frame.index):
+            raw = score_frame.loc[dt, pair]
+            if pd.notna(raw):
+                score = float(raw)
+        scores.append(score)
+    return pd.Series(scores, index=dk_result.index, dtype=float)
+
+def apply_dk_pair_score_peak_decay_overlay(dk_result, decay_ratio_threshold, recovery_ratio_threshold, derisk_scale, commission=0.0, warmup_days=CN_DK_PAIR_SCORE_DECAY_WARMUP_DAYS):
+    if not 0 < decay_ratio_threshold < 1:
+        raise ValueError('decay_ratio_threshold must be in (0, 1).')
+    if not decay_ratio_threshold < recovery_ratio_threshold <= 1:
+        raise ValueError('recovery_ratio_threshold must be in (decay_ratio_threshold, 1].')
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError('derisk_scale must be in [0, 1].')
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    required = {'return', 'holding', 'top_pair'}
+    missing = required.difference(dk_result.columns)
+    if missing:
+        raise KeyError(f'Missing required DK columns: {sorted(missing)}')
+    out = dk_result.copy()
+    base_ret = out.get('return_before_dk_overlay', out.get('return_before_dk_execution_cost', out['return'])).fillna(0.0)
+    base_execution_cost = out.get('dk_execution_cost', pd.Series(0.0, index=out.index)).fillna(0.0)
+    if 'dk_overlay_execution_cost' in out.columns:
+        base_execution_cost = base_execution_cost + out['dk_overlay_execution_cost'].fillna(0.0)
+    base_weight = out['weight'].fillna(1.0) if 'weight' in out.columns else pd.Series(1.0, index=out.index)
+    holdings = out['holding'].fillna('none_0').astype(str)
+    active_score = _extract_active_pair_score(out)
+    final_ret = []
+    overlay_scale = []
+    overlay_on = []
+    overlay_triggered = []
+    overlay_recovered = []
+    trade_ids = []
+    score_peaks = []
+    score_decay_ratios = []
+    waiting_flags = []
+    overlay_costs = []
+    trade_id = 0
+    score_peak = None
+    derisked_for_today = False
+    waiting_for_new_peak = False
+    rearm_peak = None
+    prev_scale = 1.0
+    trade_age = 0
+    for i, dt in enumerate(base_ret.index):
+        holding = holdings.iloc[i]
+        prev_holding = holdings.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or holding != prev_holding
+        if new_trade:
+            trade_id += 1
+            score_peak = None
+            derisked_for_today = False
+            waiting_for_new_peak = False
+            rearm_peak = None
+            trade_age = 0
+        trade_age += 1
+        cur_scale = derisk_scale if derisked_for_today else 1.0
+        triggered_today = cur_scale < 0.999999 and prev_scale >= 0.999999
+        recovered_today = cur_scale >= 0.999999 and prev_scale < 0.999999
+        realized_gross = float(base_ret.iloc[i]) * cur_scale
+        delta_scale = abs(cur_scale - prev_scale)
+        overlay_tc = 0.0
+        if delta_scale > 1e-12:
+            overlay_tc = 2.0 * commission * float(base_weight.iloc[i]) * delta_scale
+        realized_ret = (1.0 + realized_gross) * (1.0 - float(base_execution_cost.iloc[i])) * (1.0 - overlay_tc) - 1.0
+        cur_score = active_score.iloc[i]
+        if pd.notna(cur_score):
+            cur_score = float(cur_score)
+            score_peak = cur_score if score_peak is None else max(float(score_peak), cur_score)
+        decay_ratio = None
+        if score_peak is not None and score_peak > 1e-12 and pd.notna(cur_score):
+            decay_ratio = float(cur_score) / float(score_peak)
+        next_derisked = derisked_for_today
+        next_waiting = waiting_for_new_peak
+        next_rearm_peak = rearm_peak
+        if next_waiting and next_rearm_peak is not None and (score_peak is not None) and (score_peak > float(next_rearm_peak) + 1e-12):
+            next_waiting = False
+            next_rearm_peak = None
+        if next_derisked:
+            if decay_ratio is not None and decay_ratio >= recovery_ratio_threshold:
+                next_derisked = False
+                next_waiting = True
+                next_rearm_peak = score_peak
+        elif not next_waiting and trade_age >= int(warmup_days) and (decay_ratio is not None) and (decay_ratio <= decay_ratio_threshold):
+            next_derisked = True
+        final_ret.append(float(realized_ret))
+        overlay_scale.append(float(cur_scale))
+        overlay_on.append(bool(cur_scale < 0.999999))
+        overlay_triggered.append(bool(triggered_today))
+        overlay_recovered.append(bool(recovered_today))
+        trade_ids.append(int(trade_id))
+        score_peaks.append(None if score_peak is None else float(score_peak))
+        score_decay_ratios.append(None if decay_ratio is None else float(decay_ratio))
+        waiting_flags.append(bool(next_waiting))
+        overlay_costs.append(float(overlay_tc))
+        derisked_for_today = next_derisked
+        waiting_for_new_peak = next_waiting
+        rearm_peak = next_rearm_peak
+        prev_scale = cur_scale
+    out['raw_return'] = base_ret
+    out['return_before_dk_overlay'] = base_ret
+    out['dk_overlay_execution_cost'] = pd.Series(overlay_costs, index=out.index, dtype=float)
+    out['base_weight'] = base_weight
+    out['return'] = pd.Series(final_ret, index=out.index, dtype=float)
+    out['nav'] = (1.0 + out['return']).cumprod()
+    out['active_score_overlay'] = active_score
+    out['overlay_scale'] = pd.Series(overlay_scale, index=out.index, dtype=float)
+    out['overlay_on'] = pd.Series(overlay_on, index=out.index, dtype=bool)
+    out['overlay_triggered'] = pd.Series(overlay_triggered, index=out.index, dtype=bool)
+    out['overlay_recovered'] = pd.Series(overlay_recovered, index=out.index, dtype=bool)
+    out['trade_id'] = pd.Series(trade_ids, index=out.index, dtype='Int64')
+    out['score_peak_overlay'] = pd.Series(score_peaks, index=out.index, dtype=float)
+    out['score_decay_ratio_overlay'] = pd.Series(score_decay_ratios, index=out.index, dtype=float)
+    out['waiting_for_new_peak'] = pd.Series(waiting_flags, index=out.index, dtype=bool)
+    out['weight'] = out['base_weight'] * out['overlay_scale']
+    out.attrs['pair_score_peak_decay_overlay'] = {'decay_ratio_threshold': decay_ratio_threshold, 'recovery_ratio_threshold': recovery_ratio_threshold, 'derisk_scale': derisk_scale, 'commission': commission, 'warmup_days': int(warmup_days), 'overlay_days': int(out['overlay_on'].sum()), 'overlay_ratio': float(out['overlay_on'].mean()), 'trigger_count': int(out['overlay_triggered'].sum()), 'recovery_count': int(out['overlay_recovered'].sum())}
+    return out
+
+def _extract_active_pair_same_side_overheat(dk_result):
+    pair_data = dk_result.attrs.get('pair_data')
+    if pair_data is None:
+        raise KeyError('pair_data is missing from dk_result attrs.')
+    if 'top_pair' not in dk_result.columns:
+        raise KeyError('top_pair column is required for same-side overheat overlay.')
+    feature_cache = {}
+    for pair, pdata in pair_data.items():
+        if pdata is None or 'ratio' not in pdata.columns or 'bias_mom' not in pdata.columns:
+            continue
+        ratio = pdata['ratio'].astype(float)
+        ma = ratio.rolling(CN_DK_BIAS_N).mean()
+        bias = ratio / ma - 1.0
+        bias_mom = pdata['bias_mom'].astype(float)
+        same_side = (np.sign(bias) == np.sign(bias_mom)) & bias.notna() & bias_mom.notna()
+        feature_cache[pair] = pd.DataFrame({'abs_bias': bias.abs(), 'same_side': same_side}, index=pdata.index).shift(1)
+    abs_bias_vals = []
+    same_side_vals = []
+    for dt, pair in dk_result['top_pair'].fillna('none').items():
+        abs_bias = np.nan
+        same_side = False
+        f = feature_cache.get(pair)
+        if f is not None and dt in f.index:
+            ab = f.loc[dt, 'abs_bias']
+            ss = f.loc[dt, 'same_side']
+            if pd.notna(ab):
+                abs_bias = float(ab)
+            same_side = bool(ss) if pd.notna(ss) else False
+        abs_bias_vals.append(abs_bias)
+        same_side_vals.append(same_side)
+    return (pd.Series(abs_bias_vals, index=dk_result.index, dtype=float), pd.Series(same_side_vals, index=dk_result.index, dtype=bool))
+
+def apply_dk_same_side_overheat_overlay(dk_result, enter_threshold, exit_threshold, derisk_scale, commission=0.0):
+    if not 0 < exit_threshold < enter_threshold:
+        raise ValueError('exit_threshold must be in (0, enter_threshold).')
+    if not 0 <= derisk_scale <= 1:
+        raise ValueError('derisk_scale must be in [0, 1].')
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    required = {'return', 'holding', 'top_pair'}
+    missing = required.difference(dk_result.columns)
+    if missing:
+        raise KeyError(f'Missing required DK columns: {sorted(missing)}')
+    out = dk_result.copy()
+    base_ret = out.get('return_before_dk_execution_cost', out.get('return_before_dk_overlay', out['return'])).fillna(0.0)
+    base_execution_cost = out.get('dk_execution_cost', pd.Series(0.0, index=out.index)).fillna(0.0)
+    if 'dk_overlay_execution_cost' in out.columns:
+        base_execution_cost = base_execution_cost + out['dk_overlay_execution_cost'].fillna(0.0)
+    pre_weight = out['weight'].fillna(1.0) if 'weight' in out.columns else pd.Series(1.0, index=out.index)
+    prior_overlay_scale = out.get('overlay_scale', pd.Series(1.0, index=out.index)).fillna(1.0)
+    holdings = out['holding'].fillna('none_0').astype(str)
+    active_abs_bias, active_same_side = _extract_active_pair_same_side_overheat(out)
+    final_ret = []
+    overheat_scale = []
+    overheat_on = []
+    overheat_triggered = []
+    overheat_recovered = []
+    overheat_tc = []
+    prev_scale = 1.0
+    defense_on = False
+    for i, dt in enumerate(base_ret.index):
+        holding = holdings.iloc[i]
+        prev_holding = holdings.iloc[i - 1] if i > 0 else None
+        new_trade = i == 0 or holding != prev_holding
+        if new_trade:
+            defense_on = False
+            prev_scale = 1.0
+        abs_bias = active_abs_bias.iloc[i]
+        same_side = bool(active_same_side.iloc[i])
+        if holding == 'none_0' or pd.isna(abs_bias) or (not same_side):
+            defense_on = False
+        elif defense_on:
+            if float(abs_bias) <= exit_threshold:
+                defense_on = False
+        elif float(abs_bias) > enter_threshold:
+            defense_on = True
+        cur_scale = derisk_scale if defense_on else 1.0
+        if holding == 'none_0':
+            cur_scale = 0.0
+        triggered_today = cur_scale < 0.999999 and prev_scale >= 0.999999
+        recovered_today = cur_scale >= 0.999999 and prev_scale < 0.999999
+        delta_scale = abs(cur_scale - prev_scale)
+        tc = 0.0
+        if delta_scale > 1e-12:
+            tc = 2.0 * commission * float(pre_weight.iloc[i]) * delta_scale
+        realized_gross = float(base_ret.iloc[i]) * float(prior_overlay_scale.iloc[i]) * cur_scale
+        realized_ret = (1.0 + realized_gross) * (1.0 - float(base_execution_cost.iloc[i])) * (1.0 - tc) - 1.0
+        final_ret.append(float(realized_ret))
+        overheat_scale.append(float(cur_scale))
+        overheat_on.append(bool(cur_scale < 0.999999))
+        overheat_triggered.append(bool(triggered_today))
+        overheat_recovered.append(bool(recovered_today))
+        overheat_tc.append(float(tc))
+        prev_scale = cur_scale
+    out['pre_overheat_return'] = base_ret
+    out['return_before_dk_overheat'] = base_ret
+    out['pre_overheat_weight'] = pre_weight
+    out['same_side_overheat_abs_bias'] = active_abs_bias
+    out['same_side_overheat_signal'] = active_same_side
+    out['same_side_overheat_scale'] = pd.Series(overheat_scale, index=out.index, dtype=float)
+    out['same_side_overheat_on'] = pd.Series(overheat_on, index=out.index, dtype=bool)
+    out['same_side_overheat_triggered'] = pd.Series(overheat_triggered, index=out.index, dtype=bool)
+    out['same_side_overheat_recovered'] = pd.Series(overheat_recovered, index=out.index, dtype=bool)
+    out['same_side_overheat_tc'] = pd.Series(overheat_tc, index=out.index, dtype=float)
+    out['dk_total_overlay_scale'] = prior_overlay_scale * out['same_side_overheat_scale']
+    out['return'] = pd.Series(final_ret, index=out.index, dtype=float)
+    out['nav'] = (1.0 + out['return']).cumprod()
+    out['weight'] = out['pre_overheat_weight'] * out['same_side_overheat_scale']
+    out.attrs['same_side_overheat_overlay'] = {'enter_threshold': enter_threshold, 'exit_threshold': exit_threshold, 'derisk_scale': derisk_scale, 'commission': commission, 'overlay_days': int(out['same_side_overheat_on'].sum()), 'overlay_ratio': float(out['same_side_overheat_on'].mean()), 'trigger_count': int(out['same_side_overheat_triggered'].sum()), 'recovery_count': int(out['same_side_overheat_recovered'].sum())}
+    return out
+
+def apply_dk_drawdown_risk_gate(dk_result, enter=0.15, scale_defense=0.5, exit_value=0.08, cooldown_days=0):
+    if dk_result is None or len(dk_result) == 0:
+        return dk_result
+    gate_gross_ret = dk_result.get('return_before_dk_execution_cost', dk_result.get('raw_return', dk_result['return'])).fillna(0.0)
+    base_ret = gate_gross_ret
+    base_weight = dk_result['weight'].fillna(1.0)
+    prior_overlay_scale = dk_result.get('dk_total_overlay_scale', None)
+    if prior_overlay_scale is None:
+        prior_overlay_scale = pd.Series(1.0, index=dk_result.index)
+        if 'overlay_scale' in dk_result.columns:
+            prior_overlay_scale = prior_overlay_scale * dk_result['overlay_scale'].fillna(1.0)
+        if 'same_side_overheat_scale' in dk_result.columns:
+            prior_overlay_scale = prior_overlay_scale * dk_result['same_side_overheat_scale'].fillna(1.0)
+    else:
+        prior_overlay_scale = prior_overlay_scale.fillna(1.0)
+    dk_execution_cost = dk_result.get('dk_execution_cost', pd.Series(0.0, index=dk_result.index)).fillna(0.0)
+    prior_cost = dk_execution_cost.copy()
+    if 'dk_overlay_execution_cost' in dk_result.columns:
+        prior_cost = prior_cost + dk_result['dk_overlay_execution_cost'].fillna(0.0)
+    if 'same_side_overheat_tc' in dk_result.columns:
+        prior_cost = prior_cost + dk_result['same_side_overheat_tc'].fillna(0.0)
+    risk_gate_base_ret = (1.0 + gate_gross_ret) * (1.0 - dk_execution_cost) - 1.0
+    base_nav = (1.0 + risk_gate_base_ret).cumprod()
+    base_dd = base_nav / base_nav.cummax() - 1.0
+    gated_ret = []
+    gate_scale = []
+    gate_on = []
+    prev_scale = 1.0
+    cooldown_left = 0
+    for i, dt in enumerate(risk_gate_base_ret.index):
+        if i == 0:
+            cur_scale = 1.0
+        else:
+            prev_dt = risk_gate_base_ret.index[i - 1]
+            prev_dd = float(base_dd.loc[prev_dt])
+            trigger = prev_dd <= -enter
+            release_ready = prev_dd >= -exit_value if exit_value is not None else prev_dd > -enter
+            if trigger:
+                cooldown_left = max(cooldown_left, cooldown_days)
+                cur_scale = scale_defense
+            elif prev_scale < 0.999999:
+                if cooldown_left > 0:
+                    cooldown_left -= 1
+                    cur_scale = scale_defense
+                else:
+                    cur_scale = 1.0 if release_ready else scale_defense
+            else:
+                cur_scale = 1.0
+        scaled_ret = base_ret.iloc[i] * float(prior_overlay_scale.iloc[i]) * cur_scale
+        delta_scale = abs(cur_scale - prev_scale)
+        overlay_tc = 0.0
+        if delta_scale > 1e-12:
+            overlay_tc = 2.0 * CN_DK_COMMISSION * delta_scale * float(base_weight.iloc[i])
+        final_ret = (1.0 + scaled_ret) * (1.0 - float(prior_cost.iloc[i])) * (1.0 - overlay_tc) - 1.0
+        gated_ret.append(final_ret)
+        gate_scale.append(cur_scale)
+        gate_on.append(cur_scale < 0.999999)
+        prev_scale = cur_scale
+    out = dk_result.copy()
+    out['raw_return'] = gate_gross_ret
+    out['risk_gate_base_return'] = risk_gate_base_ret
+    out['raw_nav'] = base_nav
+    out['base_weight'] = base_weight
+    out['risk_gate_scale'] = pd.Series(gate_scale, index=base_ret.index)
+    out['risk_gate_on'] = pd.Series(gate_on, index=base_ret.index)
+    out['risk_gate_base_dd'] = base_dd
+    out['return'] = pd.Series(gated_ret, index=base_ret.index)
+    out['nav'] = (1.0 + out['return']).cumprod()
+    out['weight'] = out['base_weight'] * out['risk_gate_scale']
+    out['dk_total_overlay_scale'] = prior_overlay_scale * out['risk_gate_scale']
+    out.attrs['risk_gate'] = {'kind': 'dd', 'dd_basis': 'pre_gate_execution_nav', 'enter': enter, 'exit': exit_value, 'scale_defense': scale_defense, 'cooldown_days': cooldown_days}
+    return out
+
+def _us_signal_days(close_df, start_idx):
+    week_confirmations = {}
+    signal_days = set()
+    for i in range(start_idx, len(close_df)):
+        dt = pd.Timestamp(close_df.index[i]).normalize()
+        week_start = dt - pd.Timedelta(days=dt.weekday())
+        if week_start not in week_confirmations:
+            sessions = [week_start + pd.Timedelta(days=offset) for offset in range(4) if _is_us_market_session(week_start + pd.Timedelta(days=offset))]
+            week_confirmations[week_start] = sessions[-1] if sessions else None
+        if dt == week_confirmations[week_start]:
+            signal_days.add(i)
+    return signal_days
+
+def _should_suppress_early_week_us_signal(us_date, now=None):
+    bj_now = beijing_now() if now is None else now
+    now_et = _bj_naive_to_utc(bj_now).astimezone(ZoneInfo('America/New_York'))
+    us_date = pd.Timestamp(us_date).normalize()
+    if us_date.dayofweek >= 3:
+        return False
+    sig_year, sig_week, _ = us_date.isocalendar()
+    now_year, now_week, _ = pd.Timestamp(now_et.date()).isocalendar()
+    if (sig_year, sig_week) != (now_year, now_week):
+        return False
+    week_start = us_date - pd.Timedelta(days=us_date.weekday())
+    confirmation_sessions = [week_start + pd.Timedelta(days=offset) for offset in range(4) if _is_us_market_session(week_start + pd.Timedelta(days=offset))]
+    if not confirmation_sessions:
+        return True
+    confirmation = confirmation_sessions[-1]
+    confirmation_close = 13 if _is_us_early_close_session(confirmation) else 16
+    now_session = pd.Timestamp(now_et.date()).normalize()
+    if now_session < confirmation:
+        return True
+    if now_session > confirmation:
+        return False
+    return (now_et.hour, now_et.minute) < (confirmation_close, 0)
+
+def _bj_naive_to_utc(now):
+    if now.tzinfo is not None:
+        return now.astimezone(timezone.utc)
+    return (now - timedelta(hours=8)).replace(tzinfo=timezone.utc)
+
+def _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold, prev_risky=None, threshold=1.0):
+    available = {}
+    for a in ranking_codes:
+        if a in mom_row.index and (not np.isnan(mom_row[a])) and (a in vol_row.index) and (not np.isnan(vol_row[a])) and (vol_row[a] > 0.001):
+            available[a] = mom_row[a]
+    if not available:
+        return {'BIL': 1.0}
+    sorted_avail = sorted(available.items(), key=lambda x: x[1], reverse=True)
+    if threshold > 1.0 and prev_risky:
+        selected = set()
+        for a in prev_risky:
+            if a in available:
+                selected.add(a)
+        for a, _ in sorted_avail:
+            if len(selected) >= top_n:
+                break
+            if a not in selected:
+                selected.add(a)
+        if len(selected) > top_n:
+            sel_scored = sorted([(a, available[a]) for a in selected], key=lambda x: x[1])
+            while len(selected) > top_n:
+                selected.discard(sel_scored.pop(0)[0])
+        weakest = min(selected, key=lambda a: available.get(a, -999))
+        weakest_score = available.get(weakest, 0)
+        for a, sc in sorted_avail:
+            if a in selected:
+                continue
+            should_replace = sc > weakest_score if weakest_score <= 0 else sc > weakest_score * threshold
+            if should_replace:
+                selected.discard(weakest)
+                selected.add(a)
+                weakest = min(selected, key=lambda a2: available.get(a2, -999))
+                weakest_score = available.get(weakest, 0)
+        top = [(a, available[a]) for a in selected]
+    else:
+        top = sorted_avail[:top_n]
+    passed, n_fail = ([], 0)
+    for a, _ in top:
+        if not np.isnan(mom_row.get(a, np.nan)) and mom_row[a] > abs_threshold:
+            passed.append(a)
+        else:
+            n_fail += 1
+    if not top:
+        return {'BIL': 1.0}
+    bil_w = n_fail / len(top)
+    raw = {}
+    if passed:
+        iv = {a: 1.0 / vol_row[a] for a in passed if vol_row[a] > 0.001}
+        total_iv = sum(iv.values()) if iv else 1
+        share = 1.0 - bil_w
+        raw = {a: v / total_iv * share for a, v in iv.items()}
+    if bil_w > 0:
+        raw['BIL'] = bil_w
+    return raw
+
+def _us_model_b(raw_w, scale):
+    act = {}
+    for a, w in raw_w.items():
+        if a == 'BIL':
+            continue
+        live_asset = _ROT_PROXY_TO_LIVE.get(a, a)
+        if scale <= 1.0:
+            act[a] = w * scale
+        elif live_asset in US_ROT_FUTURES:
+            act[a] = w * scale
+        else:
+            act[a] = w
+    risky = sum(act.values())
+    act['BIL'] = max(1.0 - risky, 0.0)
+    return act
+
+def _apply_btc_cap(act, btc_ticker, max_w):
+    if btc_ticker not in act or act[btc_ticker] <= max_w:
+        return act
+    act = dict(act)
+    excess = act[btc_ticker] - max_w
+    act[btc_ticker] = max_w
+    act['BIL'] = act.get('BIL', 0.0) + excess
+    return act
+
+def _apply_subb_btc_cap(act):
+    return _apply_btc_cap(act, US_ROT_BTC_TICKER, US_ROT_BTC_MAX_W)
+
+def _apply_subb_btc_start_filter(close_df):
+    out = close_df.copy()
+    if US_ROT_BTC_TICKER in out.columns:
+        out.loc[out.index < US_ROT_BTC_START, US_ROT_BTC_TICKER] = np.nan
+    return out
+
+def _average_weight_dicts(weight_dicts):
+    if not weight_dicts:
+        return {'BIL': 1.0}
+    keys = set().union(*[wd.keys() for wd in weight_dicts])
+    return {k: sum((wd.get(k, 0.0) for wd in weight_dicts)) / len(weight_dicts) for k in keys}
+
+def _weighted_average_weight_dicts(weight_items):
+    if not weight_items:
+        return {'BIL': 1.0}
+    total_weight = sum((float(weight) for _weights, weight in weight_items))
+    if total_weight <= 0:
+        return {'BIL': 1.0}
+    keys = set().union(*[weights.keys() for weights, _weight in weight_items])
+    return {key: sum((weights.get(key, 0.0) * float(weight) for weights, weight in weight_items)) / total_weight for key in keys}
+
+def _us_selected_risky_from_raw(raw_w):
+    return {a for a, w in raw_w.items() if a != 'BIL' and w > 1e-12}
+
+def _serialize_us_mix_selected(selected):
+    if not selected:
+        return ''
+    return ','.join(sorted(selected))
+
+def _deserialize_us_mix_selected(value):
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return None
+    text = str(value).strip()
+    if not text:
+        return set()
+    items = {part.strip() for part in text.split(',') if part.strip()}
+    return items
+
+def _us_mix_prev_risky_by_lb_from_row(row):
+    if row is None:
+        return None
+    prev_risky_by_lb = {}
+    for lb in US_ROT_LBS:
+        col = f'sel_{lb}'
+        if col not in row:
+            prev_risky_by_lb[lb] = None
+            continue
+        prev_risky_by_lb[lb] = _deserialize_us_mix_selected(row[col])
+    if not any((value is not None for value in prev_risky_by_lb.values())):
+        return None
+    return prev_risky_by_lb
+
+def _us_mix_prev_risky_by_lb_from_result(result_df, signal_date=None, include_current=False):
+    if result_df is None or len(result_df) == 0 or 'is_signal' not in result_df.columns:
+        return None
+    signal_rows = result_df[result_df['is_signal']]
+    if signal_rows.empty:
+        return None
+    if signal_date is not None:
+        signal_date = pd.Timestamp(signal_date)
+        if include_current:
+            signal_rows = signal_rows.loc[signal_rows.index <= signal_date]
+        else:
+            signal_rows = signal_rows.loc[signal_rows.index < signal_date]
+        if signal_rows.empty:
+            return None
+    return _us_mix_prev_risky_by_lb_from_row(signal_rows.iloc[-1])
+
+def _us_mix_target_weights(momentum_rows, vol_row, ranking_codes, scale, top_n=US_ROT_TOP_N, abs_threshold=US_ROT_ABS_THRESHOLD, prev_risky_by_lb=None, threshold=1.0):
+    acts = []
+    per_lb = {}
+    for lb, mom_row in momentum_rows.items():
+        prev_risky = prev_risky_by_lb.get(lb) if prev_risky_by_lb else None
+        raw = _us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold, prev_risky=prev_risky, threshold=threshold)
+        act = _us_model_b(raw, scale)
+        acts.append((act, US_ROT_WINDOW_WEIGHTS.get(lb, 0.0)))
+        per_lb[lb] = {'raw': raw, 'act': act, 'selected': _us_selected_risky_from_raw(raw), 'prev_risky': set(prev_risky) if prev_risky else None}
+    return (_apply_subb_btc_cap(_weighted_average_weight_dicts(acts)), per_lb)
+
+def _us_mix_snapshot(close_df, row_idx, ranking_codes, scale, prev_risky_by_lb=None, threshold=1.0):
+    vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
+    momentum_rows = {lb: close_df.div(close_df.shift(lb)).sub(1).iloc[row_idx] for lb in US_ROT_LBS}
+    mix_act, per_lb = _us_mix_target_weights(momentum_rows, vol_df.iloc[row_idx], ranking_codes, scale, prev_risky_by_lb=prev_risky_by_lb, threshold=threshold)
+    return (mix_act, per_lb, vol_df.iloc[row_idx])
+
+def _subb_v75_ema_prev_risky_from_result(result_df, signal_date=None, include_current=False):
+    if result_df is None or len(result_df) == 0:
+        return None
+    rows = result_df
+    if signal_date is not None:
+        signal_date = pd.Timestamp(signal_date)
+        rows = rows.loc[rows.index <= signal_date] if include_current else rows.loc[rows.index < signal_date]
+    if rows.empty:
+        return None
+    row = rows.iloc[-1]
+    prefixes = ('ema_w_', 'ema_actual_w_')
+    for prefix in prefixes:
+        weights = {c[len(prefix):]: float(row.get(c, 0.0) or 0.0) for c in row.index if isinstance(c, str) and c.startswith(prefix)}
+        risky = {asset for asset, weight in weights.items() if asset != 'BIL' and weight > 0.001}
+        if risky:
+            return risky
+    return None
+
+def _subb_v75_ema_scale_from_result(result_df, include_current=False):
+    if result_df is not None and 'ema_scale' in result_df.columns and (len(result_df) > 0):
+        value = pd.to_numeric(result_df['ema_scale'], errors='coerce').dropna()
+        if len(value) > 0:
+            return float(value.iloc[-1])
+    if result_df is not None and 'ema_return' in result_df.columns:
+        hist = pd.to_numeric(result_df['ema_return'], errors='coerce').dropna()
+        if not include_current:
+            hist = hist.iloc[:-1]
+        if len(hist) > 0:
+            return _subb_v75_ema_scale_from_hist(hist.values)
+    return 1.0
+
+def _subb_official_scale_from_result(result_df, end_loc=None, include_current=False, *, target_vol=None, max_lev=None, vol_window=None, trading_days=None):
+    target_vol = US_ROT_TARGET_VOL if target_vol is None else target_vol
+    max_lev = US_ROT_MAX_LEV if max_lev is None else max_lev
+    vol_window = US_ROT_VOL_WINDOW if vol_window is None else vol_window
+    trading_days = US_TRADING_DAYS if trading_days is None else trading_days
+    if result_df is None or len(result_df) == 0:
+        return 1.0
+    source = result_df['official_return'] if 'official_return' in result_df.columns else result_df['return']
+    source = pd.to_numeric(source, errors='coerce')
+    if end_loc is not None:
+        source = source.iloc[:end_loc]
+    elif not include_current:
+        source = source.iloc[:-1]
+    hist = source.dropna().values
+    if len(hist) >= vol_window:
+        rv = np.std(hist[-vol_window:], ddof=1) * np.sqrt(trading_days)
+        return min(max(target_vol / rv, 0.05), max_lev) if rv > 0.001 else max_lev
+    return 1.0
+
+def _subb_v75_ema_snapshot(close_df, row_idx, scale, ranking_codes=None, prev_risky=None, threshold=US_ROT_REBALANCE_THRESHOLD):
+    ranking_codes = list(ranking_codes) if ranking_codes is not None else list(US_ROT_POOL)
+    score_row = _subb_v75_ema_score(close_df, SUBB_V75_EMA_HALF_LIFE).iloc[row_idx]
+    vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
+    raw_w = _us_raw_weights(score_row, vol_row, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=SUBB_V75_EMA_ABS_THRESHOLD, prev_risky=prev_risky, threshold=threshold)
+    return (_apply_subb_btc_cap(_us_model_b(raw_w, scale)), raw_w, vol_row)
+
+def _blend_subb_v75_weight_dicts(official_weights, ema_weights, official_weight=SUBB_V75_OFFICIAL_WEIGHT, ema_weight=SUBB_V75_EMA_WEIGHT):
+    official_weights = dict(official_weights or {})
+    ema_weights = dict(ema_weights or {})
+    assets = set(official_weights) | set(ema_weights)
+    return {asset: float(official_weight) * float(official_weights.get(asset, 0.0) or 0.0) + float(ema_weight) * float(ema_weights.get(asset, 0.0) or 0.0) for asset in assets}
+
+def _blend_v78_subb_weight_dicts(v77_weights, bias_weights, logvol_weights):
+    v77_weights = dict(v77_weights or {})
+    bias_weights = dict(bias_weights or {})
+    logvol_weights = dict(logvol_weights or {})
+    assets = sorted(set(v77_weights) | set(bias_weights) | set(logvol_weights))
+    return {asset: V78_SUBB_V77_WEIGHT * float(v77_weights.get(asset, 0.0) or 0.0) + V78_SUBB_NEW_BIAS_WEIGHT * float(bias_weights.get(asset, 0.0) or 0.0) + V78_SUBB_NEW_LOGVOL_WEIGHT * float(logvol_weights.get(asset, 0.0) or 0.0) for asset in assets}
+
+def _us_mix_display_context(close_df, row_idx, ranking_codes, scale, prev_risky_by_lb=None, threshold=1.0, reference_assets=None):
+    ranking_codes = list(ranking_codes)
+    if reference_assets is None:
+        reference_assets = [('BTC-USD', 'IBIT(参考)')]
+    reference_proxies = [proxy for proxy, _ in reference_assets if proxy not in ranking_codes and proxy in close_df.columns]
+    display_codes = list(dict.fromkeys(ranking_codes + reference_proxies))
+    mix_act, per_lb, vol_row = _us_mix_snapshot(close_df, row_idx, ranking_codes, scale, prev_risky_by_lb=prev_risky_by_lb, threshold=threshold)
+    momentum_rows = {lb: close_df.div(close_df.shift(lb)).sub(1).iloc[row_idx] for lb in US_ROT_LBS}
+
+    def _build_row(proxy, live_name, participates):
+        per_lb_momentum = {}
+        per_lb_act = {}
+        valid_moms = []
+        weighted_momentum_sum = 0.0
+        valid_window_weight_sum = 0.0
+        for lb in US_ROT_LBS:
+            mom = momentum_rows[lb].get(proxy, np.nan)
+            per_lb_momentum[lb] = float(mom) if not pd.isna(mom) else np.nan
+            if not pd.isna(mom):
+                mom_value = float(mom)
+                valid_moms.append(mom_value)
+                window_weight = float(US_ROT_WINDOW_WEIGHTS.get(lb, 0.0))
+                weighted_momentum_sum += mom_value * window_weight
+                valid_window_weight_sum += window_weight
+            per_lb_act[lb] = float(per_lb[lb]['act'].get(proxy, 0.0)) if participates else 0.0
+        vol = vol_row.get(proxy, np.nan)
+        avg_momentum = float(weighted_momentum_sum / valid_window_weight_sum) if valid_moms and valid_window_weight_sum > 0 else np.nan
+        return {'proxy': proxy, 'live_name': live_name, 'participates': participates, 'vol': float(vol) if not pd.isna(vol) else np.nan, 'avg_momentum': avg_momentum, 'mix_weight': float(mix_act.get(proxy, 0.0)) if participates else 0.0, 'per_lb_momentum': per_lb_momentum, 'per_lb_act': per_lb_act, 'per_lb_rank': {}, 'actual_rank': None}
+    per_lb_actual_rank = {}
+    for lb in US_ROT_LBS:
+        ranked = []
+        for proxy in display_codes:
+            mom = momentum_rows[lb].get(proxy, np.nan)
+            vol = vol_row.get(proxy, np.nan)
+            if not pd.isna(mom) and (not pd.isna(vol)) and (vol > 0.001):
+                ranked.append((proxy, float(mom)))
+        ranked.sort(key=lambda x: x[1], reverse=True)
+        per_lb_actual_rank[lb] = {proxy: rank for rank, (proxy, _) in enumerate(ranked, 1)}
+    avg_ranked = []
+    for proxy in display_codes:
+        weighted_momentum_sum = 0.0
+        valid_window_weight_sum = 0.0
+        for lb in US_ROT_LBS:
+            mom = momentum_rows[lb].get(proxy, np.nan)
+            if not pd.isna(mom):
+                window_weight = float(US_ROT_WINDOW_WEIGHTS.get(lb, 0.0))
+                weighted_momentum_sum += float(mom) * window_weight
+                valid_window_weight_sum += window_weight
+        vol = vol_row.get(proxy, np.nan)
+        if valid_window_weight_sum > 0 and (not pd.isna(vol)) and (vol > 0.001):
+            avg_ranked.append((proxy, float(weighted_momentum_sum / valid_window_weight_sum)))
+    avg_ranked.sort(key=lambda x: x[1], reverse=True)
+    actual_avg_rank = {proxy: rank for rank, (proxy, _) in enumerate(avg_ranked, 1)}
+    per_lb_rows = {}
+    for lb in US_ROT_LBS:
+        rows = []
+        for proxy in ranking_codes:
+            row = _build_row(proxy, _ROT_PROXY_TO_LIVE.get(proxy, proxy), True)
+            mom = row['per_lb_momentum'][lb]
+            vol = row['vol']
+            if np.isnan(mom) or np.isnan(vol) or vol <= 0.001:
+                continue
+            row = dict(row)
+            row['momentum'] = mom
+            row['window_weight'] = row['per_lb_act'][lb]
+            row['buffer_selected'] = proxy in per_lb[lb]['selected']
+            row['buffer_prev_hold'] = proxy in (per_lb[lb]['prev_risky'] or set())
+            row['actual_rank'] = actual_avg_rank.get(proxy)
+            row['per_lb_rank'] = {w_lb: per_lb_actual_rank[w_lb].get(proxy) for w_lb in US_ROT_LBS}
+            rows.append(row)
+        rows.sort(key=lambda x: x['momentum'], reverse=True)
+        for rank, row in enumerate(rows, 1):
+            row['rank'] = rank
+            row['top3'] = rank <= US_ROT_TOP_N
+            row['abs_pass'] = row['momentum'] > US_ROT_ABS_THRESHOLD
+        per_lb_rows[lb] = rows
+    mix_rows = [_build_row(proxy, _ROT_PROXY_TO_LIVE.get(proxy, proxy), True) for proxy in ranking_codes]
+    mix_rows.sort(key=lambda x: (x['mix_weight'], x['avg_momentum']), reverse=True)
+    for rank, row in enumerate(mix_rows, 1):
+        row['rank'] = rank
+        row['mix_selected'] = row['mix_weight'] > 1e-06
+        row['actual_rank'] = actual_avg_rank.get(row['proxy'])
+        row['per_lb_rank'] = {lb: per_lb_actual_rank[lb].get(row['proxy']) for lb in US_ROT_LBS}
+    reference_rows = []
+    for proxy, live_name in reference_assets:
+        if proxy in ranking_codes or proxy not in close_df.columns:
+            continue
+        row = _build_row(proxy, live_name, False)
+        row['actual_rank'] = actual_avg_rank.get(proxy)
+        row['per_lb_rank'] = {lb: per_lb_actual_rank[lb].get(proxy) for lb in US_ROT_LBS}
+        has_mom = any((not np.isnan(row['per_lb_momentum'][lb]) for lb in US_ROT_LBS))
+        if not has_mom and (np.isnan(row['vol']) or row['vol'] <= 0.001):
+            continue
+        reference_rows.append(row)
+    reference_per_lb_rows = {}
+    for lb in US_ROT_LBS:
+        rows = []
+        for row in reference_rows:
+            rank = row['per_lb_rank'].get(lb)
+            mom = row['per_lb_momentum'][lb]
+            vol = row['vol']
+            if rank is None or np.isnan(mom) or np.isnan(vol) or (vol <= 0.001):
+                continue
+            ref_row = dict(row)
+            ref_row['rank'] = rank
+            ref_row['momentum'] = mom
+            ref_row['window_weight'] = 0.0
+            ref_row['top3'] = rank <= US_ROT_TOP_N
+            ref_row['abs_pass'] = mom > US_ROT_ABS_THRESHOLD
+            rows.append(ref_row)
+        rows.sort(key=lambda x: x['rank'])
+        reference_per_lb_rows[lb] = rows
+    return {'mix_act': mix_act, 'per_lb': per_lb, 'vol_row': vol_row, 'momentum_rows': momentum_rows, 'per_lb_rows': per_lb_rows, 'mix_rows': mix_rows, 'reference_rows': reference_rows, 'reference_per_lb_rows': reference_per_lb_rows}
+
+def run_us_rotation_mix(close_df, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=US_ROT_ABS_THRESHOLD, min_turnover=US_ROT_MIN_TURNOVER, threshold=US_ROT_REBALANCE_THRESHOLD, us_open=None, ranking_code_selector=None, weight_assets=None, strict_open_execution=False):
+    close_df = _apply_subb_btc_start_filter(close_df)
+    start_idx = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
+    required = list(ranking_codes) + ['BIL']
+    if ranking_code_selector is not None:
+        required += list(SUBB_INFLATION_GATE_TICKERS)
+    _validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation', strict_calendar=strict_open_execution)
+    momentum_by_lb = {lb: close_df.div(close_df.shift(lb)).sub(1) for lb in US_ROT_LBS}
+    vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
+    signal_days = _us_signal_days(close_df, start_idx)
+    act = {'BIL': 1.0}
+    holdings = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    scale = 1.0
+    w_assets = list(dict.fromkeys(weight_assets if weight_assets is not None else ranking_codes))
+    if 'BIL' not in w_assets:
+        w_assets.append('BIL')
+    prev_risky_by_lb = {lb: None for lb in US_ROT_LBS}
+    rows, hist = ([], [])
+    for i in range(start_idx, len(close_df)):
+        if len(hist) >= US_ROT_VOL_WINDOW:
+            rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+            scale = min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
+        if pending_act is not None:
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(close_df.index[i], open_assets, us_open, close_df, strict=strict_open_execution, context='Sub-B official rotation')
+            overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross_adj = (1 + overnight) * (1 + intraday) - 1
+            execution_cost = float(pending_comm)
+            adj = (1 + gross_adj) * (1 - execution_cost) - 1
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross_adj = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            adj = gross_adj
+        hist.append(adj)
+        is_sig = i in signal_days
+        rebalanced = False
+        new_act = dict(act)
+        row_selected_by_lb = {lb: prev_risky_by_lb.get(lb) for lb in US_ROT_LBS}
+        active_ranking_codes = list(ranking_codes)
+        if is_sig:
+            if ranking_code_selector is not None:
+                active_ranking_codes = list(ranking_code_selector(close_df, i, ranking_codes))
+            momentum_rows = {lb: momentum_by_lb[lb].iloc[i] for lb in US_ROT_LBS}
+            new_act, per_lb = _us_mix_target_weights(momentum_rows, vol_df.iloc[i], active_ranking_codes, scale, top_n=top_n, abs_threshold=abs_threshold, prev_risky_by_lb=prev_risky_by_lb, threshold=threshold)
+            next_prev_risky_by_lb = {lb: per_lb[lb]['selected'] or None for lb in US_ROT_LBS}
+            prev_a = {a: act.get(a, 0.0) for a in w_assets} if rows else {'BIL': 1.0}
+            all_a = set(list(new_act.keys()) + list(prev_a.keys()))
+            to = sum((abs(new_act.get(a, 0.0) - prev_a.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            if _subb_should_rebalance(to, min_turnover):
+                pending_act = dict(new_act)
+                pending_comm = to * US_ROT_COMMISSION if to > 0 else 0.0
+                act = new_act
+                prev_risky_by_lb = next_prev_risky_by_lb
+                row_selected_by_lb = next_prev_risky_by_lb
+                rebalanced = True
+        row = {'date': close_df.index[i], 'return': adj, 'return_before_execution_cost': gross_adj, 'execution_cost': execution_cost, 'is_signal': is_sig, 'rebalanced': rebalanced, 'scale': scale, 'inflation_pressure_on': _inflation_pressure_on_from_prices(close_df, i), 'ranking_codes': ','.join(active_ranking_codes)}
+        for a in w_assets:
+            row[f'w_{a}'] = holdings.get(a, 0.0)
+            row[f'actual_w_{a}'] = holdings.get(a, 0.0)
+            row[f'target_w_{a}'] = act.get(a, 0.0)
+        for lb in US_ROT_LBS:
+            row[f'sel_{lb}'] = _serialize_us_mix_selected(row_selected_by_lb.get(lb))
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index('date')
+    df['nav'] = (1 + df['return']).cumprod()
+    return df
+
+def _subb_v75_ema_score(close_df, half_life=SUBB_V75_EMA_HALF_LIFE):
+    ret = close_df.pct_change()
+    return ret.ewm(halflife=half_life, min_periods=half_life, adjust=False).mean() * US_TRADING_DAYS
+
+def _subb_v75_ema_scale_from_hist(hist):
+    min_obs = US_ROT_VOL_WINDOW
+    if SUBB_V75_EMA_VOL_MODE == 'ewma6m_1vol':
+        min_obs = max(US_ROT_VOL_WINDOW, SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+    if len(hist) < min_obs:
+        return 1.0
+    if SUBB_V75_EMA_VOL_MODE == 'ewma6m_1vol':
+        rv = pd.Series(hist, dtype=float).ewm(halflife=SUBB_V75_EMA_VOL_HALFLIFE_DAYS, adjust=False).std().iloc[-1] * np.sqrt(US_TRADING_DAYS)
+    else:
+        rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+    return min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
+
+def run_subb_v75_ema_base7_rotation(close_df, base_codes=None, half_life=SUBB_V75_EMA_HALF_LIFE, abs_threshold=SUBB_V75_EMA_ABS_THRESHOLD, top_n=US_ROT_TOP_N, min_turnover=US_ROT_MIN_TURNOVER, threshold=US_ROT_REBALANCE_THRESHOLD, us_open=None, weight_assets=None, strict_open_execution=False):
+    close_df = _apply_subb_btc_start_filter(close_df)
+    ranking_codes = list(base_codes) if base_codes is not None else list(US_ROT_POOL)
+    start_idx = max(half_life, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
+    _validate_subb_price_input(close_df, ranking_codes + ['BIL'], start_idx + 1, 'Sub-B EMA rotation', strict_calendar=strict_open_execution)
+    score_df = _subb_v75_ema_score(close_df, half_life)
+    vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
+    signal_days = _us_signal_days(close_df, start_idx)
+    w_assets = list(dict.fromkeys(weight_assets if weight_assets is not None else ranking_codes))
+    if 'BIL' not in w_assets:
+        w_assets.append('BIL')
+    act = {'BIL': 1.0}
+    holdings = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    scale = 1.0
+    rows, hist = ([], [])
+    for i in range(start_idx, len(close_df)):
+        scale = _subb_v75_ema_scale_from_hist(hist)
+        if pending_act is not None:
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(close_df.index[i], open_assets, us_open, close_df, strict=strict_open_execution, context='Sub-B EMA rotation')
+            overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross_adj = (1 + overnight) * (1 + intraday) - 1
+            execution_cost = float(pending_comm)
+            adj = (1 + gross_adj) * (1 - execution_cost) - 1
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross_adj = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            adj = gross_adj
+        hist.append(adj)
+        is_sig = i in signal_days
+        rebalanced = False
+        selected = []
+        turnover = 0.0
+        if is_sig:
+            prev_risky = {a for a in w_assets if a != 'BIL' and act.get(a, 0.0) > 0.001}
+            raw_w = _us_raw_weights(score_df.iloc[i], vol_df.iloc[i], ranking_codes, top_n, abs_threshold, prev_risky=prev_risky if prev_risky else None, threshold=threshold)
+            new_act = _apply_subb_btc_cap(_us_model_b(raw_w, scale))
+            prev_a = {a: act.get(a, 0.0) for a in w_assets} if rows else {'BIL': 1.0}
+            all_a = set(list(new_act.keys()) + list(prev_a.keys()))
+            turnover = sum((abs(new_act.get(a, 0.0) - prev_a.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            if _subb_should_rebalance(turnover, min_turnover):
+                pending_act = dict(new_act)
+                pending_comm = turnover * US_ROT_COMMISSION if turnover > 0 else 0.0
+                act = new_act
+                rebalanced = True
+            selected = sorted([a for a, w in raw_w.items() if a != 'BIL' and w > 1e-12])
+        row = {'date': close_df.index[i], 'return': adj, 'return_before_execution_cost': gross_adj, 'execution_cost': execution_cost, 'is_signal': is_sig, 'rebalanced': rebalanced, 'turnover': turnover, 'scale': scale, 'target_vol_mode': SUBB_V75_EMA_VOL_MODE, 'target_vol_halflife_days': SUBB_V75_EMA_VOL_HALFLIFE_DAYS, 'ranking_codes': ','.join(ranking_codes), 'selected': ','.join(selected), 'inflation_pressure_on': _inflation_pressure_on_from_prices(close_df, i)}
+        for asset in w_assets:
+            row[f'w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'actual_w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'target_w_{asset}'] = act.get(asset, 0.0)
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index('date')
+    df['nav'] = (1 + df['return']).cumprod()
+    return df
+
+def blend_subb_v75_results(official_result, ema_result, official_weight=SUBB_V75_OFFICIAL_WEIGHT, ema_weight=SUBB_V75_EMA_WEIGHT):
+    common_index = official_result.dropna(subset=['return']).index.intersection(ema_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('Sub-B V7.7 official/EMA blend has no overlapping return window.')
+    official = official_result.reindex(common_index)
+    ema = ema_result.reindex(common_index)
+    out = official.copy()
+    official_gross = official.get('return_before_execution_cost', official['return']).astype(float)
+    ema_gross = ema.get('return_before_execution_cost', ema['return']).astype(float)
+    out['official_return'] = official['return'].astype(float)
+    out['ema_return'] = ema['return'].astype(float)
+    out['official_return_before_execution_cost'] = official_gross
+    out['ema_return_before_execution_cost'] = ema_gross
+    out['return_before_subb_execution_cost'] = official_weight * official_gross + ema_weight * ema_gross
+    out['subb_blend_official_weight'] = float(official_weight)
+    out['subb_blend_ema_weight'] = float(ema_weight)
+    out['subb_ema_half_life'] = int(SUBB_V75_EMA_HALF_LIFE)
+    out['subb_ema_abs_threshold'] = float(SUBB_V75_EMA_ABS_THRESHOLD)
+    out['subb_ema_vol_mode'] = SUBB_V75_EMA_VOL_MODE
+    out['subb_ema_vol_halflife_days'] = int(SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+    if 'scale' in official.columns:
+        out['official_scale'] = official['scale']
+    if 'scale' in ema.columns:
+        out['ema_scale'] = ema['scale']
+    if 'selected' in ema.columns:
+        out['ema_selected'] = ema['selected']
+    if 'is_signal' in ema.columns:
+        out['is_signal'] = official.get('is_signal', False).astype(bool) | ema['is_signal'].astype(bool)
+    if 'rebalanced' in ema.columns:
+        out['rebalanced'] = official.get('rebalanced', False).astype(bool) | ema['rebalanced'].astype(bool)
+    assets = sorted(set(_weight_columns_assets(official)) | set(_weight_columns_assets(ema)))
+    actual_df = pd.DataFrame(index=common_index)
+    target_df = pd.DataFrame(index=common_index)
+    blended_weight_cols = {}
+    for asset in assets:
+        official_w = pd.to_numeric(official.get(f'w_{asset}', pd.Series(0.0, index=common_index)), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_w = pd.to_numeric(ema.get(f'w_{asset}', pd.Series(0.0, index=common_index)), errors='coerce').reindex(common_index).fillna(0.0)
+        official_actual = pd.to_numeric(official.get(f'actual_w_{asset}', official_w), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_actual = pd.to_numeric(ema.get(f'actual_w_{asset}', ema_w), errors='coerce').reindex(common_index).fillna(0.0)
+        official_target = pd.to_numeric(official.get(f'target_w_{asset}', official_w), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_target = pd.to_numeric(ema.get(f'target_w_{asset}', ema_w), errors='coerce').reindex(common_index).fillna(0.0)
+        official_contrib_actual = official_weight * official_actual
+        ema_contrib_actual = ema_weight * ema_actual
+        official_contrib_target = official_weight * official_target
+        ema_contrib_target = ema_weight * ema_target
+        actual_df[asset] = official_contrib_actual + ema_contrib_actual
+        target_df[asset] = official_contrib_target + ema_contrib_target
+        blended_weight_cols[f'official_w_{asset}'] = official_target
+        blended_weight_cols[f'ema_w_{asset}'] = ema_target
+        blended_weight_cols[f'official_actual_w_{asset}'] = official_actual
+        blended_weight_cols[f'ema_actual_w_{asset}'] = ema_actual
+        blended_weight_cols[f'official_contrib_w_{asset}'] = official_contrib_target
+        blended_weight_cols[f'ema_contrib_w_{asset}'] = ema_contrib_target
+        blended_weight_cols[f'actual_w_{asset}'] = actual_df[asset]
+        blended_weight_cols[f'target_w_{asset}'] = target_df[asset]
+        blended_weight_cols[f'w_{asset}'] = actual_df[asset]
+    if blended_weight_cols:
+        out = pd.concat([out.drop(columns=list(blended_weight_cols), errors='ignore'), pd.DataFrame(blended_weight_cols, index=common_index)], axis=1)
+    prev_actual = None
+    turnovers = []
+    costs = []
+    for dt in common_index:
+        actual = actual_df.loc[dt].to_dict()
+        if prev_actual is None:
+            prev_actual = {'BIL': 1.0}
+        turnover = _dict_tradeable_turnover(prev_actual, actual, non_tradeable_assets=('BIL',))
+        turnovers.append(turnover)
+        costs.append(turnover * US_ROT_COMMISSION)
+        prev_actual = actual
+    out['subb_execution_turnover'] = pd.Series(turnovers, index=common_index, dtype=float)
+    out['subb_execution_cost'] = pd.Series(costs, index=common_index, dtype=float)
+    out['return'] = (1.0 + out['return_before_subb_execution_cost']) * (1.0 - out['subb_execution_cost']) - 1.0
+    out['nav'] = (1 + out['return']).cumprod()
+    return out
+
+def _v78_normalize_weights(weights):
+    out = {k: float(v) for k, v in dict(weights).items() if abs(float(v)) > 1e-12}
+    total = sum(out.values())
+    if total <= 0:
+        return {'BIL': 1.0}
+    if abs(total - 1.0) > 1e-10:
+        out = {k: v / total for k, v in out.items()}
+    return out
+
+def _v78_apply_equity_scale(weights, scale):
+    out = dict(weights)
+    cash_add = 0.0
+    for asset in US_ROT_VOLREG_SCALE_ASSETS:
+        old = float(out.get(asset, 0.0))
+        if old > 1e-12:
+            new = old * float(scale)
+            out[asset] = new
+            cash_add += old - new
+    out['BIL'] = out.get('BIL', 0.0) + cash_add
+    return _v78_normalize_weights(out)
+
+def _v78_fetch_spy_volume(index, timeout=20):
+    try:
+        start = int((pd.Timestamp(index.min()) - pd.Timedelta(days=10)).timestamp())
+        end = int((pd.Timestamp(index.max()) + pd.Timedelta(days=5)).timestamp())
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1={start}&period2={end}&interval=1d&events=history'
+        resp = _session.get(url, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0'})
+        resp.raise_for_status()
+        result = resp.json()['chart']['result'][0]
+        ts = pd.to_datetime(result['timestamp'], unit='s').tz_localize('UTC').tz_convert('America/New_York').tz_localize(None).normalize()
+        vol = result['indicators']['quote'][0]['volume']
+        out = pd.Series(vol, index=ts, dtype=float).sort_index()
+        out = out[~out.index.duplicated(keep='last')]
+        return (out, 'Yahoo chart SPY volume')
+    except Exception as exc:
+        return (pd.Series(False, index=index, dtype=bool), f'unavailable: {_short_error(exc)}')
+
+def _v78_spy_volume_cache_path():
+    base_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+    return os.path.join(base_dir, '.us_market_cache', 'SPY_volume.csv')
+
+def _clean_v78_spy_volume(series):
+    out = pd.to_numeric(pd.Series(series), errors='coerce')
+    out.index = pd.DatetimeIndex(pd.to_datetime(out.index)).tz_localize(None).normalize()
+    out = out.dropna()
+    out = out[out > 0]
+    return out[~out.index.duplicated(keep='last')].sort_index().astype(float)
+
+def _load_v78_spy_volume_cache():
+    path = _v78_spy_volume_cache_path()
+    if not os.path.exists(path):
+        raise FileNotFoundError('no SPY volume cache')
+    frame = pd.read_csv(path)
+    if 'date' not in frame.columns or 'volume' not in frame.columns:
+        raise ValueError('invalid SPY volume cache schema')
+    series = _clean_v78_spy_volume(frame.set_index('date')['volume'])
+    if series.empty:
+        raise ValueError('SPY volume cache has no usable rows')
+    return series
+
+def _save_v78_spy_volume_cache(series):
+    fresh = _clean_v78_spy_volume(series)
+    if fresh.empty:
+        return
+    try:
+        cached = _load_v78_spy_volume_cache()
+    except (FileNotFoundError, ValueError, OSError):
+        cached = pd.Series(dtype=float)
+    merged = fresh.combine_first(cached).sort_index()
+    path = _v78_spy_volume_cache_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    merged.rename('volume').to_csv(path, index_label='date', encoding='utf-8')
+
+def _v78_fetch_spy_volume_stooq(index, timeout=20):
+    try:
+        start = pd.Timestamp(index.min()).strftime('%Y%m%d')
+        end = (pd.Timestamp(index.max()) + pd.Timedelta(days=5)).strftime('%Y%m%d')
+        url = f'https://stooq.com/q/d/l/?s=spy.us&d1={start}&d2={end}&i=d'
+        resp = _session.get(url, timeout=timeout)
+        resp.raise_for_status()
+        frame = pd.read_csv(io.StringIO(resp.text))
+        if 'Date' not in frame.columns or 'Volume' not in frame.columns:
+            raise ValueError('Stooq SPY volume schema missing Date/Volume')
+        series = _clean_v78_spy_volume(frame.set_index('Date')['Volume'])
+        if series.empty:
+            raise ValueError('Stooq SPY volume is empty')
+        return (series, 'Stooq SPY volume')
+    except Exception as exc:
+        return (pd.Series(False, index=index, dtype=bool), f'unavailable: {_short_error(exc)}')
+
+def _v78_spy_volume_gate(index):
+    target_index = pd.DatetimeIndex(pd.to_datetime(index)).tz_localize(None).normalize()
+    mode = str(globals().get('V78_SUBB_SPY_VOLUME_FAIL_MODE', 'warn_open') or 'warn_open').lower()
+    if mode not in ('warn_open', 'fail_closed', 'raise'):
+        raise ValueError(f'Unsupported V78_SUBB_SPY_VOLUME_FAIL_MODE: {mode}')
+    merged = pd.Series(dtype=float)
+    valid_sources = []
+    failures = []
+    for fetcher in (_v78_fetch_spy_volume, _v78_fetch_spy_volume_stooq):
+        candidate, source = fetcher(target_index)
+        if getattr(candidate, 'dtype', None) == bool:
+            failures.append(str(source))
+            continue
+        candidate = _clean_v78_spy_volume(candidate)
+        if candidate.empty:
+            failures.append(f'{source}; empty')
+            continue
+        merged = merged.combine_first(candidate) if not merged.empty else candidate
+        valid_sources.append(str(source))
+    try:
+        cached = _load_v78_spy_volume_cache()
+        merged = merged.combine_first(cached)
+        valid_sources.append('local-cache SPY volume')
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        failures.append(f'cache unavailable: {_short_error(exc)}')
+    if not merged.empty and valid_sources and any(('Yahoo' in item or 'Stooq' in item for item in valid_sources)):
+        try:
+            _save_v78_spy_volume_cache(merged)
+        except OSError as exc:
+            failures.append(f'cache write unavailable: {_short_error(exc)}')
+    aligned = pd.Series(np.nan, index=target_index, dtype=float)
+    if not merged.empty:
+        expanded_index = merged.index.union(target_index).sort_values()
+        aligned = merged.reindex(expanded_index).ffill().reindex(target_index)
+        aligned.loc[target_index < merged.index.min()] = np.nan
+        aligned.loc[target_index > merged.index.max()] = np.nan
+    ratio = aligned / aligned.rolling(60, min_periods=60).mean()
+    gate = (ratio >= 1.5).fillna(False).astype(bool)
+    unresolved = aligned.isna()
+    if unresolved.any():
+        missing_dates = target_index[unresolved]
+        reason = f'unresolved SPY volume {missing_dates.min().date().isoformat()}..{missing_dates.max().date().isoformat()} ({int(unresolved.sum())} dates)'
+        if mode == 'raise':
+            raise RuntimeError(f'SPY volume unavailable: {reason}')
+        if mode == 'fail_closed':
+            gate.loc[unresolved] = True
+            failures.append(f'{reason}; fail_closed')
+        else:
+            failures.append(f'{reason}; warn_open')
+    source_parts = valid_sources + failures
+    source = ' | '.join(dict.fromkeys(source_parts)) or 'unavailable: SPY volume'
+    return (gate, source)
+
+def _v78_score_bias_level(close_df):
+    weights = {160: 3.0, 260: 2.0, 390: 1.0}
+    score = pd.DataFrame(0.0, index=close_df.index, columns=US_ROT_POOL)
+    denom = sum(weights.values())
+    for lb, weight in weights.items():
+        score = score + (close_df[US_ROT_POOL] / close_df[US_ROT_POOL].rolling(lb).mean() - 1.0) * (weight / denom)
+    return score
+
+def _v78_score_log_weighted(close_df):
+    weights = {120: 0.6, 200: 0.3, 320: 0.1}
+    score = pd.DataFrame(0.0, index=close_df.index, columns=US_ROT_POOL)
+    for lb, weight in weights.items():
+        score = score + np.log(close_df[US_ROT_POOL] / close_df[US_ROT_POOL].shift(lb)) * weight
+    return score
+
+def _v78_target_from_scores(score_row, vol_row, scale, top_n=US_ROT_TOP_N, abs_threshold=0.0):
+    raw_w = _us_raw_weights(score_row, vol_row, US_ROT_POOL, top_n, abs_threshold, prev_risky=None, threshold=1.0)
+    return _apply_subb_btc_cap(_us_model_b(raw_w, scale))
+
+def _v79_subb_new_line_risk_parameters(line):
+    return {'bias': (0.25, 40, 1.5), 'logvol': (0.3, 40, 1.25)}[line]
+
+def run_v78_subb_new_line(close_df, line='bias', us_open=None, strict_open_execution=False):
+    close_df = _apply_subb_btc_start_filter(close_df)
+    w_assets = list(dict.fromkeys(US_ROT_POOL + ['BIL']))
+    if line == 'bias':
+        scores = _v78_score_bias_level(close_df)
+        target_vol, vol_window, max_leverage = _v79_subb_new_line_risk_parameters('bias')
+        abs_threshold = 0.0
+        start_idx = max(390, US_ROT_VOL_LB, vol_window) + 1
+    elif line == 'logvol':
+        scores = _v78_score_log_weighted(close_df)
+        target_vol, vol_window, max_leverage = _v79_subb_new_line_risk_parameters('logvol')
+        abs_threshold = 0.0
+        start_idx = max(320, US_ROT_VOL_LB, vol_window) + 1
+    else:
+        raise ValueError(line)
+    _validate_subb_price_input(close_df, list(US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.9 {line} rotation', strict_calendar=strict_open_execution)
+    vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
+    signal_days = _us_signal_days(close_df, start_idx)
+    holdings = {'BIL': 1.0}
+    target = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    hist = []
+    rows = []
+    for i in range(start_idx, len(close_df)):
+        dt = close_df.index[i]
+        if len(hist) >= vol_window:
+            rv = np.std(hist[-vol_window:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+            scale = min(max(target_vol / rv, 0.05), max_leverage) if rv > 0.001 else max_leverage
+        else:
+            rv = np.nan
+            scale = 1.0
+        if pending_act is not None:
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(dt, open_assets, us_open, close_df, strict=strict_open_execution, context=f'Sub-B V7.9 {line} rotation')
+            overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross = (1.0 + overnight) * (1.0 + intraday) - 1.0
+            execution_cost = float(pending_comm)
+            ret = (1.0 + gross) * (1.0 - execution_cost) - 1.0
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            ret = gross
+        hist.append(float(ret))
+        is_signal = i in signal_days
+        rebalanced = False
+        turnover = 0.0
+        if is_signal:
+            base_target = _v78_target_from_scores(scores.iloc[i], vol_df.iloc[i], scale, top_n=US_ROT_TOP_N, abs_threshold=abs_threshold)
+            target = _v78_normalize_weights(base_target)
+            all_a = set(target) | set(holdings)
+            turnover = sum((abs(target.get(a, 0.0) - holdings.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            pending_act = dict(target)
+            pending_comm = turnover * US_ROT_COMMISSION if turnover > 0 else 0.0
+            rebalanced = True
+        row = {'date': dt, 'return': float(ret), 'return_before_execution_cost': float(gross), 'execution_cost': float(execution_cost), 'is_signal': bool(is_signal), 'rebalanced': bool(rebalanced), 'turnover': float(turnover), 'target_vol_scale': float(scale), 'realized_vol': float(rv) if np.isfinite(rv) else np.nan, 'line': line}
+        for asset in w_assets:
+            row[f'w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'actual_w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'target_w_{asset}'] = target.get(asset, 0.0)
+        rows.append(row)
+    out = pd.DataFrame(rows).set_index('date')
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    return out
+
+def _v78_subb_new_line_hypo_weights(close_df, result_df, line='bias', row_idx=-1):
+    if line == 'bias':
+        scores = _v78_score_bias_level(close_df)
+    elif line == 'logvol':
+        scores = _v78_score_log_weighted(close_df)
+    else:
+        raise ValueError(line)
+    vol_row = close_df.pct_change().rolling(US_ROT_VOL_LB).std().mul(np.sqrt(US_TRADING_DAYS)).iloc[row_idx]
+    scale = 1.0
+    if result_df is not None and len(result_df) > 0:
+        try:
+            result_row = result_df.iloc[row_idx]
+            scale = float(result_row.get('target_vol_scale', 1.0) or 1.0)
+        except Exception:
+            pass
+    base_target = _v78_target_from_scores(scores.iloc[row_idx], vol_row, scale, top_n=US_ROT_TOP_N, abs_threshold=0.0)
+    return _v78_normalize_weights(base_target)
+
+def _v78_subb_new_line_hypo_weights_from_blend(close_df, us_rot_result, line='bias', row_idx=-1):
+    attr_name = {'bias': 'v78_subb_bias', 'logvol': 'v78_subb_logvol'}.get(line)
+    component_result = None
+    if us_rot_result is not None and attr_name:
+        component_result = us_rot_result.attrs.get(attr_name)
+    return _v78_subb_new_line_hypo_weights(close_df, component_result, line=line, row_idx=row_idx)
+
+def blend_v78_subb_results(v77_result, bias_result, logvol_result):
+    common_index = v77_result.dropna(subset=['return']).index
+    common_index = common_index.intersection(bias_result.dropna(subset=['return']).index)
+    common_index = common_index.intersection(logvol_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('V7.9 Sub-B blend has no overlapping return window.')
+    v77 = v77_result.reindex(common_index)
+    bias = bias_result.reindex(common_index)
+    logvol = logvol_result.reindex(common_index)
+    out = v77.copy()
+    out['v78_subb_v77_return'] = v77['return'].astype(float)
+    out['v78_subb_bias_return'] = bias['return'].astype(float)
+    out['v78_subb_logvol_return'] = logvol['return'].astype(float)
+    component_net_return = V78_SUBB_V77_WEIGHT * out['v78_subb_v77_return'] + V78_SUBB_NEW_BIAS_WEIGHT * out['v78_subb_bias_return'] + V78_SUBB_NEW_LOGVOL_WEIGHT * out['v78_subb_logvol_return']
+    v77_gross = pd.to_numeric(v77.get('return_before_subb_execution_cost', v77.get('return_before_execution_cost', v77['return'])), errors='coerce').fillna(0.0)
+    bias_gross = pd.to_numeric(bias.get('return_before_execution_cost', bias['return']), errors='coerce').fillna(0.0)
+    logvol_gross = pd.to_numeric(logvol.get('return_before_execution_cost', logvol['return']), errors='coerce').fillna(0.0)
+    account_gross_return = V78_SUBB_V77_WEIGHT * v77_gross + V78_SUBB_NEW_BIAS_WEIGHT * bias_gross + V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_gross
+    out['return_before_v78_subb_blend'] = component_net_return
+    out['v78_subb_component_net_return'] = component_net_return
+    out['v78_subb_v77_gross_return'] = v77_gross
+    out['v78_subb_bias_gross_return'] = bias_gross
+    out['v78_subb_logvol_gross_return'] = logvol_gross
+    out['return_before_subb_execution_cost'] = account_gross_return
+    out['return'] = account_gross_return
+    out['subb_execution_cost'] = 0.0
+    out['cost_basis_note'] = 'final-account net execution; component costs are diagnostic only; commission is rebuilt once from adjacent final effective weights'
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    for flag_col in ('is_signal', 'rebalanced'):
+        out[flag_col] = v77.get(flag_col, pd.Series(False, index=common_index)).astype(bool) | bias.get(flag_col, pd.Series(False, index=common_index)).astype(bool) | logvol.get(flag_col, pd.Series(False, index=common_index)).astype(bool)
+    out['model_rebalanced'] = out['rebalanced']
+    out['effective_rebalanced'] = out['rebalanced']
+    assets = sorted(set(_weight_columns_assets(v77)) | set(_weight_columns_assets(bias)) | set(_weight_columns_assets(logvol)))
+    weight_cols = {}
+    for asset in assets:
+        zero = pd.Series(0.0, index=common_index)
+        v77_actual = pd.to_numeric(v77.get(f'actual_w_{asset}', v77.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        bias_actual = pd.to_numeric(bias.get(f'actual_w_{asset}', bias.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        logvol_actual = pd.to_numeric(logvol.get(f'actual_w_{asset}', logvol.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        v77_target = pd.to_numeric(v77.get(f'target_w_{asset}', v77_actual), errors='coerce').fillna(0.0)
+        bias_target = pd.to_numeric(bias.get(f'target_w_{asset}', bias_actual), errors='coerce').fillna(0.0)
+        logvol_target = pd.to_numeric(logvol.get(f'target_w_{asset}', logvol_actual), errors='coerce').fillna(0.0)
+        actual_w = V78_SUBB_V77_WEIGHT * v77_actual + V78_SUBB_NEW_BIAS_WEIGHT * bias_actual + V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_actual
+        target_w = V78_SUBB_V77_WEIGHT * v77_target + V78_SUBB_NEW_BIAS_WEIGHT * bias_target + V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_target
+        weight_cols[f'v78_v77_w_{asset}'] = v77_actual
+        weight_cols[f'v78_bias_w_{asset}'] = bias_actual
+        weight_cols[f'v78_logvol_w_{asset}'] = logvol_actual
+        weight_cols[f'v78_v77_target_w_{asset}'] = v77_target
+        weight_cols[f'v78_bias_target_w_{asset}'] = bias_target
+        weight_cols[f'v78_logvol_target_w_{asset}'] = logvol_target
+        weight_cols[f'w_{asset}'] = actual_w
+        weight_cols[f'actual_w_{asset}'] = actual_w
+        weight_cols[f'target_w_{asset}'] = target_w
+    if weight_cols:
+        out = out.drop(columns=[col for col in weight_cols if col in out.columns], errors='ignore')
+        out = pd.concat([out, pd.DataFrame(weight_cols, index=common_index)], axis=1)
+    out['v78_blend_label'] = f'{V78_SUBB_V77_WEIGHT * SUBB_V75_OFFICIAL_WEIGHT:.0%} Official + {V78_SUBB_V77_WEIGHT * SUBB_V75_EMA_WEIGHT:.0%} EMA + {V78_SUBB_NEW_BIAS_WEIGHT:.0%} Bias + {V78_SUBB_NEW_LOGVOL_WEIGHT:.0%} LogVol'
+    out.attrs['v78_subb_v77'] = v77_result
+    out.attrs['v78_subb_bias'] = bias_result
+    out.attrs['v78_subb_logvol'] = logvol_result
+    return out
+
+def _fmt_v78_pct(value):
+    try:
+        return f'{float(value):.1%}'
+    except Exception:
+        return 'N/A'
+
+def _fmt_v78_x(value):
+    try:
+        return f'{float(value):.2f}x'
+    except Exception:
+        return 'N/A'
+
+def _fmt_v78_score(value):
+    try:
+        value = float(value)
+    except Exception:
+        return 'N/A'
+    if not np.isfinite(value):
+        return 'N/A'
+    return f'{value:.4f}'
+
+def _v78_suba_new_signal_rows(cn_result, idx, max_rows=None):
+    new_result = cn_result.attrs.get('v78_suba_new') if hasattr(cn_result, 'attrs') else None
+    if new_result is None or len(new_result) == 0:
+        return []
+    raw_score = new_result.attrs.get('v78_raw_score')
+    if raw_score is None:
+        raw_score = new_result.attrs.get('v78_score')
+    abs_mom = new_result.attrs.get('v78_abs_mom')
+    gated_score = new_result.attrs.get('v78_score')
+    if raw_score is None or len(raw_score) == 0:
+        return []
+    date = cn_result.index[idx]
+    try:
+        pos = raw_score.index.get_loc(date)
+    except Exception:
+        pos = idx
+    if isinstance(pos, slice) or not isinstance(pos, (int, np.integer)):
+        pos = int(np.asarray(pos)[0])
+    raw_row = pd.to_numeric(raw_score.iloc[pos], errors='coerce')
+    abs_row = pd.to_numeric(abs_mom.iloc[pos], errors='coerce') if abs_mom is not None else pd.Series(np.nan, index=raw_row.index)
+    gated_row = pd.to_numeric(gated_score.iloc[pos], errors='coerce') if gated_score is not None else pd.Series(np.nan, index=raw_row.index)
+    selected_code = None
+    finite_gated = gated_row.replace([np.inf, -np.inf], np.nan).dropna()
+    if len(finite_gated) > 0:
+        selected_code = finite_gated.idxmax()
+    sort_key = raw_row.replace([np.inf, -np.inf], np.nan).fillna(float('-inf'))
+    codes = list(sort_key.sort_values(ascending=False).index)
+    if max_rows is not None:
+        codes = codes[:int(max_rows)]
+    rows = []
+    for code in codes:
+        score_value = raw_row.get(code, np.nan)
+        abs_value = abs_row.get(code, np.nan)
+        score_pass = bool(pd.notna(score_value) and float(score_value) > V78_SUBA_NEW_SCORE_THRESHOLD)
+        abs_pass = bool(pd.notna(abs_value) and float(abs_value) > V78_SUBA_NEW_ABS_THRESHOLD)
+        rows.append({'code': code, 'name': CN_NAMES.get(code, code), 'score': float(score_value) if pd.notna(score_value) else np.nan, 'abs_mom': float(abs_value) if pd.notna(abs_value) else np.nan, 'score_pass': score_pass, 'abs_pass': abs_pass, 'selected': bool(code == selected_code)})
+    return rows
+
+def _write_v78_suba_new_signal_table(w, cn_result, idx):
+    _write_v78_suba_new_leg_signal_table(w, cn_result, idx)
+
+def _v78_plain_status_text(text):
+    text = str(text)
+    for marker in ('⛔', '✅', '❌', '🟢', '🔴'):
+        text = text.replace(marker, '')
+    return ' '.join(text.split())
+
+def _write_unified_suba_leg_rows(w, title, subtitle, rows):
+    if not rows:
+        return
+    w(f'\n**{title}**')
+    if subtitle:
+        w(f' ({subtitle})')
+    w('\n\n')
+    w('| # | 资产 | 排名分数 | R²质量 | 正动量条件 | 状态 |\n')
+    w('|:-|:-|------:|:-|:-|:-|\n')
+    for rank, row in enumerate(rows, 1):
+        marker = ' 🎯' if row.get('selected') else ''
+        hold_marker = ' 👈' if row.get('current_holding') else ''
+        status = _v78_plain_status_text(row['status'])
+        w(f"| {rank}{marker} | {row['name']}{hold_marker} | {row['score_text']} | {row['quality_text']} | {row['momentum_text']} | {status} |\n")
+
+def _write_v78_suba_new_leg_signal_table(w, cn_result, idx):
+    rows = _v78_suba_new_signal_rows(cn_result, idx)
+    if not rows:
+        return
+    unified = []
+    for row in rows:
+        selected = bool(row['selected'])
+        quality_text = 'score通过' if row['score_pass'] else 'score未通过'
+        momentum_text = f'abs{V78_SUBA_NEW_ABS_DAY}通过' if row['abs_pass'] else f'abs{V78_SUBA_NEW_ABS_DAY}未通过'
+        status = 'Top-1' if selected else '候选' if row['score_pass'] and row['abs_pass'] else '排除'
+        unified.append({'name': row['name'], 'score_text': _fmt_v78_score(row['score']), 'quality_text': quality_text, 'momentum_text': f"{_format_suba_abs_mom(row['abs_mom'])} / {momentum_text}", 'status': status, 'selected': selected, 'current_holding': False})
+    _write_unified_suba_leg_rows(w, 'New A TV1.0 子策略状态', f'全池逐只过滤 → 合格池择优；首名失败可递补。MA{V78_SUBA_NEW_MA}/{V78_SUBA_NEW_MOM_DAY} score>{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}, abs{V78_SUBA_NEW_ABS_DAY}>{V78_SUBA_NEW_ABS_THRESHOLD:.0%}', unified)
+
+def _v78_suba_v77_leg_rows(bias_mom, r2, abs_mom, codes, idx, current_holding='cash'):
+    rows = []
+    for code in codes:
+        bm = _series_value_at(bias_mom.get(code), None, idx)
+        if np.isnan(bm):
+            continue
+        r2v = _series_value_at(r2.get(code), None, idx)
+        absv = _series_value_at(abs_mom.get(code), None, idx) if abs_mom else np.nan
+        rows.append({'code': code, 'asset_name': CN_NAMES.get(code, code), 'current_momentum': bm, 'current_r2': r2v, 'current_abs_mom': absv, 'status': _suba_filter_status(bm, r2v, absv)})
+    rows.sort(key=lambda row: row['current_momentum'], reverse=True)
+    unified = []
+    for row in rows:
+        bm = row['current_momentum']
+        r2v = row['current_r2']
+        r2_pass = pd.notna(r2v) and float(r2v) >= CN_R2_THRESHOLD
+        bm_pass = pd.notna(bm) and float(bm) > 0
+        unified.append({'name': row['asset_name'], 'score_text': f'{float(bm):+.1f}' if pd.notna(bm) else 'N/A', 'quality_text': f"R² {float(r2v):.3f} {('通过' if r2_pass else '未通过')}" if pd.notna(r2v) else 'R² N/A', 'momentum_text': 'score>0通过' if bm_pass else 'score≤0未通过', 'status': row['status'], 'selected': bool(len(unified) == 0 and bm_pass and r2_pass), 'current_holding': row['code'] == current_holding})
+    return unified
+
+def _write_v78_suba_v77_leg_signal_table(w, bias_mom, r2, abs_mom, codes, idx, current_holding='cash'):
+    rows = _v78_suba_v77_leg_rows(bias_mom, r2, abs_mom, codes, idx, current_holding=current_holding)
+    _write_unified_suba_leg_rows(w, 'A策略状态', f'先定原始Top-1 → 只验Top-1；score>0且R²≥{CN_R2_THRESHOLD:.2f}才持有；失败直接Cash，不递补第2名', rows)
+
+def _write_v78_suba_leg_signal_tables(w, cn_result, idx, bias_mom, r2, abs_mom, codes, current_holding='cash'):
+    _write_v78_suba_v77_leg_signal_table(w, bias_mom, r2, abs_mom, codes, idx, current_holding=current_holding)
+
+def _v78_suba_display_leg_snapshot(cn_result, idx):
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    row = cn_result.iloc[pos]
+
+    def _to_float(value, default=0.0):
+        try:
+            return float(value)
+        except Exception:
+            return float(default)
+    v77_h = row.get('v78_suba_v77_holding', 'cash')
+    new_h = row.get('v78_suba_new_holding', 'cash')
+    v77_w = _to_float(row.get('v78_suba_v77_weight', 0.0))
+    new_w = _to_float(row.get('v78_suba_new_weight', 0.0))
+    return {'v77_holding': v77_h, 'new_holding': new_h, 'v77_weight': v77_w, 'new_weight': new_w, 'final_exposure': V78_SUBA_V77_WEIGHT * v77_w + V78_SUBA_NEW_TV10_WEIGHT * new_w}
+
+def _write_v78_suba_blend_table(w, cn_result, idx):
+    if 'v78_suba_v77_holding' not in cn_result.columns:
+        return
+    display = _v78_suba_display_leg_snapshot(cn_result, idx)
+    v77_h = display['v77_holding']
+    new_h = display['new_holding']
+    v77_w = display['v77_weight']
+    new_w = display['new_weight']
+    w('\n**V8.0 Sub-A混合腿拆分（沿用7.7展示样式）**\n\n')
+    w('| 腿 | 组合权重 | 当前持仓 | 腿内敞口 | 组合贡献 |\n')
+    w('|:-|------:|:-|------:|------:|\n')
+    w(f'| V7.7A原版 | {V78_SUBA_V77_WEIGHT:.0%} | {CN_NAMES.get(v77_h, v77_h)} | {_fmt_v78_x(v77_w)} | {_fmt_v78_x(V78_SUBA_V77_WEIGHT * v77_w)} |\n')
+    w(f'| {V78_SUBA_NEW_LABEL} | {V78_SUBA_NEW_TV10_WEIGHT:.0%} | {CN_NAMES.get(new_h, new_h)} | {_fmt_v78_x(new_w)} | {_fmt_v78_x(V78_SUBA_NEW_TV10_WEIGHT * new_w)} |\n')
+    w(f"| **V8.0最终** | **100%** | - | - | **{_fmt_v78_x(display['final_exposure'])}** |\n")
+
+def _v79_suba_leg_execution_rows(cn_result, idx):
+    if cn_result is None or len(cn_result) == 0:
+        return []
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    date = cn_result.index[pos]
+    row = cn_result.iloc[pos]
+
+    def _number(value, default=0.0):
+        try:
+            value = float(value)
+        except Exception:
+            return float(default)
+        return value if np.isfinite(value) else float(default)
+
+    def _bool(value):
+        return False if pd.isna(value) else bool(value)
+
+    def _component_row(component):
+        if component is None or len(component) == 0:
+            return pd.Series(dtype=object)
+        try:
+            source = component.loc[date]
+            return source.iloc[-1] if isinstance(source, pd.DataFrame) else source
+        except Exception:
+            source_pos = min(pos, len(component) - 1)
+            return component.iloc[source_pos]
+
+    def _holding(value, weight):
+        if weight <= 1e-12 or value is None or pd.isna(value):
+            return 'cash'
+        return str(value)
+
+    def _position_text(holding, weight):
+        if weight <= 1e-12 or holding == 'cash':
+            return 'Cash / 0.00x'
+        return f'{CN_NAMES.get(holding, holding)} / {weight:.2f}x'
+
+    def _v77_cash_reason(source):
+        code = str(source.get('suba_top_code', 'cash') or 'cash')
+        if code == 'cash':
+            return '原始排名无有效候选'
+        score = source.get('suba_top_score', np.nan)
+        r2 = source.get('suba_top_r2', np.nan)
+        failed = []
+        if not _bool(source.get('suba_top_score_pass', False)):
+            failed.append(f'排名分数{_fmt_v78_score(score)}≤0')
+        if not _bool(source.get('suba_top_r2_pass', False)):
+            failed.append(f'R² {_fmt_v78_score(r2)}<{CN_R2_THRESHOLD:.2f}')
+        detail = '、'.join(failed) if failed else '执行目标为Cash'
+        return f'Top-1={CN_NAMES.get(code, code)}未通过：{detail}；旧A只检查Top-1，不递补第2名'
+
+    def _new_cash_reason(source):
+        code = str(source.get('v78_raw_top', 'cash') or 'cash')
+        if code == 'cash':
+            return '原始排名无有效候选'
+        score = source.get('v78_raw_top_score', np.nan)
+        abs_mom = source.get('v78_raw_top_abs_mom', np.nan)
+        failed = []
+        if not _bool(source.get('v78_raw_top_score_pass', False)):
+            failed.append(f'score {_fmt_v78_score(score)}≤{V78_SUBA_NEW_SCORE_THRESHOLD:.4f}')
+        if not _bool(source.get('v78_raw_top_abs_pass', False)):
+            failed.append(f'abs{V78_SUBA_NEW_ABS_DAY} {_format_suba_abs_mom(abs_mom)}≤{V78_SUBA_NEW_ABS_THRESHOLD:.0%}')
+        detail = '、'.join(failed) if failed else '其余候选未同时通过'
+        return f'无资产同时通过全部条件；原始Top-1={CN_NAMES.get(code, code)}：{detail}'
+
+    def _reason(current_h, current_w, raw_h, raw_w, final_h, final_w, blockers, raw_cash_reason):
+        if current_w <= 1e-12:
+            if final_w > 1e-12:
+                return f"当前0仅因时点：{date.strftime('%Y-%m-%d')}收盘信号尚未计入盘中仓位；收盘执行后为{_position_text(final_h, final_w)}"
+            if raw_w > 1e-12:
+                return '当前及收盘目标均为0：' + ('；'.join(blockers) if blockers else '执行覆盖层将原始目标压至0')
+            return f'当前及收盘目标均为0：{raw_cash_reason}'
+        if final_w <= 1e-12:
+            return '当前仍有仓位；本次收盘后清仓：' + ('；'.join(blockers) if blockers else '原始目标转为Cash')
+        if current_h != final_h:
+            return f'当前持有{CN_NAMES.get(current_h, current_h)}；本次收盘后换为{CN_NAMES.get(final_h, final_h)}'
+        if abs(current_w - final_w) > 0.0001:
+            return f'资产不变；本次收盘后敞口 {current_w:.2f}x → {final_w:.2f}x'
+        return '当前仓位与收盘最终目标一致'
+    rows = []
+    v77_component = cn_result.attrs.get('v78_suba_v77') if hasattr(cn_result, 'attrs') else None
+    v77 = _component_row(v77_component)
+    current_v77_w = _number(row.get('v78_suba_v77_weight', 0.0))
+    current_v77_h = _holding(row.get('v78_suba_v77_holding', 'cash'), current_v77_w)
+    final_v77_w = _number(v77.get('weight', row.get('v78_suba_v77_target_weight', 0.0)))
+    final_v77_h = _holding(v77.get('holding', row.get('v78_suba_v77_target', 'cash')), final_v77_w)
+    raw_v77_w = _number(v77.get('pre_suba_overheat_weight', v77.get('pre_suba_volume_weight', final_v77_w)))
+    raw_v77_h = _holding(v77.get('pre_suba_overheat_holding', v77.get('pre_suba_volume_holding', final_v77_h)), raw_v77_w)
+    after_overheat_w = _number(v77.get('pre_suba_volume_weight', final_v77_w))
+    overheat_on = _bool(v77.get('suba_same_side_overheat_on', False))
+    volume_on = _bool(v77.get('suba_volume_rule_on', False))
+    volume_scale = _number(v77.get('suba_volume_rule_scale', 1.0), 1.0)
+    v77_overheat_scale = float(CN_SA_SAME_SIDE_OVERHEAT_DERISK_SCALE) if overheat_on and raw_v77_w > 1e-12 else 1.0
+    v77_blockers = []
+    if overheat_on and raw_v77_w > 1e-12 and (after_overheat_w <= 1e-12):
+        bias = v77.get('suba_same_side_overheat_bias', np.nan)
+        bias_text = f'（当前乖离{float(bias):.1%}）' if pd.notna(bias) else ''
+        v77_blockers.append(f'MA60过热止盈 ×{v77_overheat_scale:.2f}{bias_text}')
+    if volume_on and volume_scale < 1.0 - 1e-12 and (after_overheat_w > 1e-12):
+        v77_blockers.append(f'成交额风控 ×{volume_scale:.2f}')
+    rows.append({'leg': 'V7.7A原版', 'selection_rule': '先定原始Top-1；只验Top-1，失败Cash，不递补', 'current': _position_text(current_v77_h, current_v77_w), 'raw_target': _position_text(raw_v77_h, raw_v77_w), 'overlays': f'过热×{v77_overheat_scale:.2f}；成交额×{(volume_scale if volume_on else 1.0):.2f}', 'final_target': _position_text(final_v77_h, final_v77_w), 'reason': _reason(current_v77_h, current_v77_w, raw_v77_h, raw_v77_w, final_v77_h, final_v77_w, v77_blockers, _v77_cash_reason(v77))})
+    new_component = cn_result.attrs.get('v78_suba_new') if hasattr(cn_result, 'attrs') else None
+    new = _component_row(new_component)
+    current_new_w = _number(row.get('v78_suba_new_weight', 0.0))
+    current_new_h = _holding(row.get('v78_suba_new_holding', 'cash'), current_new_w)
+    raw_new_w = _number(new.get('base_target_weight_before_suba_volume', new.get('target_weight', 0.0)))
+    raw_new_h = _holding(new.get('base_target_holding_before_suba_volume', new.get('target', 'cash')), raw_new_w)
+    final_new_w = _number(new.get('target_weight', row.get('v78_suba_new_target_weight', 0.0)))
+    final_new_h_raw = new.get('target', None)
+    if final_new_h_raw is None or pd.isna(final_new_h_raw):
+        final_new_h_raw = raw_new_h if final_new_w > 1e-12 else 'cash'
+    final_new_h = _holding(final_new_h_raw, final_new_w)
+    new_volume_on = _bool(new.get('suba_volume_rule_on', False))
+    new_volume_scale = _number(new.get('suba_volume_rule_scale', 1.0), 1.0)
+    new_blockers = []
+    if new_volume_on and new_volume_scale < 1.0 - 1e-12 and (raw_new_w > 1e-12):
+        new_blockers.append(f'成交额风控 ×{new_volume_scale:.2f}')
+    rows.append({'leg': V78_SUBA_NEW_LABEL, 'selection_rule': '全池逐只过滤；从合格池择优，首名失败可递补', 'current': _position_text(current_new_h, current_new_w), 'raw_target': _position_text(raw_new_h, raw_new_w), 'overlays': f'成交额×{(new_volume_scale if new_volume_on else 1.0):.2f}', 'final_target': _position_text(final_new_h, final_new_w), 'reason': _reason(current_new_h, current_new_w, raw_new_h, raw_new_w, final_new_h, final_new_w, new_blockers, _new_cash_reason(new))})
+    return rows
+
+def _write_v79_suba_execution_chain(w, cn_result, idx):
+    if cn_result is not None and len(cn_result) > 0 and ('v78_suba_v77_holding' not in cn_result.columns):
+        n = len(cn_result)
+        pos = idx if idx >= 0 else n + idx
+        pos = int(np.clip(pos, 0, n - 1))
+        row = cn_result.iloc[pos]
+        date = cn_result.index[pos]
+        state = _suba_signal_display_state(cn_result, pos)
+        current_pos = pos - 1 if state['is_signal'] and pos > 0 else pos
+        current_row = cn_result.iloc[current_pos]
+        current_h = state['current_holding']
+        current_w = float(current_row.get('weight', 0.0) or 0.0)
+        final_h = state['target_holding']
+        final_w = float(row.get('weight', 0.0) or 0.0)
+        raw_h = str(row.get('pre_suba_volume_holding', final_h) or 'cash')
+        raw_w = float(row.get('pre_suba_volume_weight', final_w) or 0.0)
+        volume_on = bool(row.get('suba_volume_rule_on', False))
+        volume_scale = float(row.get('suba_volume_rule_scale', 1.0) or 0.0)
+
+        def _position(holding, weight):
+            if weight <= 1e-12 or holding == 'cash':
+                return 'Cash / 0.00x'
+            return f'{CN_NAMES.get(holding, holding)} / {weight:.2f}x'
+        blockers = []
+        if volume_on and volume_scale < 1.0 - 1e-12 and (raw_w > 1e-12):
+            blockers.append(f'成交额风控 ×{volume_scale:.2f}')
+        if raw_w <= 1e-12:
+            code = str(row.get('suba_top_code', 'cash') or 'cash')
+            score = row.get('suba_top_score', np.nan)
+            r2_value = row.get('suba_top_r2', np.nan)
+            failed = []
+            if pd.isna(score) or float(score) <= 0.0:
+                failed.append('排名分数≤0')
+            if pd.isna(r2_value) or float(r2_value) < CN_R2_THRESHOLD:
+                failed.append(f'R²<{CN_R2_THRESHOLD:.2f}')
+            reason = f"Top-1={CN_NAMES.get(code, code)}未通过：{('、'.join(failed) if failed else '无有效目标')}；不递补第2名"
+        elif blockers:
+            reason = '；'.join(blockers)
+        elif current_h != final_h:
+            reason = f'收盘后由{CN_NAMES.get(current_h, current_h)}换为{CN_NAMES.get(final_h, final_h)}'
+        elif abs(current_w - final_w) > 0.0001:
+            reason = f'资产不变；敞口 {current_w:.2f}x → {final_w:.2f}x'
+        else:
+            reason = '当前仓位与收盘最终目标一致'
+        w(f"\n**V8.0 A策略仓位因果链（{date.strftime('%Y-%m-%d')}）**\n\n")
+        w('| 策略 | 选拔规则 | 当前已生效 | 收盘原始目标 | 执行覆盖层 | 收盘最终目标 | 结论 |\n')
+        w('|:-|:-|:-|:-|:-|:-|:-|\n')
+        overlay = '；'.join(blockers) if blockers else '仅成交额风控，当前未触发'
+        w(f'| A策略 | 原始Top-1；score>0且R²通过，否则Cash；不递补 | {_position(current_h, current_w)} | {_position(raw_h, raw_w)} | {overlay} | {_position(final_h, final_w)} | **{reason}** |\n')
+        return
+    rows = _v79_suba_leg_execution_rows(cn_result, idx)
+    if not rows:
+        return
+    n = len(cn_result)
+    pos = idx if idx >= 0 else n + idx
+    pos = int(np.clip(pos, 0, n - 1))
+    date = cn_result.index[pos]
+    w(f"\n**V8.0 Sub-A分腿仓位因果链（{date.strftime('%Y-%m-%d')}）**\n\n")
+    w('当前=当日收盘执行前已生效仓位；收盘目标=当日信号经过全部覆盖层后的执行结果。\n\n')
+    w('**两腿选拔规则不同：V7.7A首名失败不递补；New A会从其余合格资产中递补。**\n\n')
+    w('| 腿 | 选拔 / 递补规则 | 当前已生效 | 收盘原始目标 | 执行覆盖层 | 收盘最终目标 | 结论 / 0仓位主因 |\n')
+    w('|:-|:-|:-|:-|:-|:-|:-|\n')
+    for item in rows:
+        w(f"| {item['leg']} | {item['selection_rule']} | {item['current']} | {item['raw_target']} | {item['overlays']} | {item['final_target']} | **{item['reason']}** |\n")
+
+def _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label='当前配对/方向'):
+    if 'v78_adk_v77_holding' not in cn_dk_result.columns:
+        return
+    row = cn_dk_result.iloc[idx]
+    v77_h = row.get('v78_adk_v77_holding', 'none_0')
+    new_h = row.get('v78_adk_new_holding', 'none_0')
+    w('\n**V8.0 ADK 混合腿拆分（沿用7.7展示样式）**\n\n')
+    w(f'| 腿 | 组合权重 | {position_col_label} | 腿内敞口 | 组合贡献 |\n')
+    w('|:-|------:|:-|------:|------:|\n')
+    w(f"| V7.7 ADK原版 | {V78_ADK_V77_WEIGHT:.0%} | {_dk_pos_str(v77_h)} | {_fmt_v78_x(row.get('v78_adk_v77_weight', 0.0))} | {_fmt_v78_x(V78_ADK_V77_WEIGHT * float(row.get('v78_adk_v77_weight', 0.0)))} |\n")
+    w(f"| {V78_ADK_NEW_LABEL} | {V78_ADK_NEW_PRIMARY_WEIGHT:.0%} | {_dk_pos_str(new_h)} | {_fmt_v78_x(row.get('v78_adk_new_weight', 0.0))} | {_fmt_v78_x(V78_ADK_NEW_PRIMARY_WEIGHT * float(row.get('v78_adk_new_weight', 0.0)))} |\n")
+    w(f"| **V8.0最终** | **100%** | - | - | **{_fmt_v78_x(row.get('v78_adk_final_exposure', 0.0))}** |\n")
+
+def _write_v78_adk_net_exposure_table(w, cn_dk_result, idx):
+    if 'adk_net_asset_exposure' not in cn_dk_result.columns:
+        return
+    resolved_idx, _ = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return
+    net = cn_dk_result.iloc[resolved_idx].get('adk_net_asset_exposure', {}) or {}
+    if not net:
+        return
+    w('\n**V8.0 ADK账户级净敞口（实盘优先看这一张）**\n\n')
+    w('| 指数 | 净敞口 | 方向 |\n')
+    w('|:-|------:|:-|\n')
+    for asset, exposure in sorted(net.items(), key=lambda item: abs(float(item[1])), reverse=True):
+        exposure = float(exposure)
+        direction = '做多' if exposure > 0 else '做空'
+        w(f'| {_dk_leg_name(asset)} | {abs(exposure):.2f}x | {direction} |\n')
+
+def _adk_net_exposure_changed(cn_dk_result, old_idx, new_idx, threshold=0.0001):
+    if cn_dk_result is None or 'adk_net_asset_exposure' not in cn_dk_result.columns:
+        return False
+    old_resolved_idx, _ = _v78_resolve_display_idx_date(cn_dk_result, old_idx)
+    new_resolved_idx, _ = _v78_resolve_display_idx_date(cn_dk_result, new_idx)
+    if old_resolved_idx is None or new_resolved_idx is None:
+        return False
+    old_net = cn_dk_result.iloc[old_resolved_idx].get('adk_net_asset_exposure', {}) or {}
+    new_net = cn_dk_result.iloc[new_resolved_idx].get('adk_net_asset_exposure', {}) or {}
+    assets = set(old_net) | set(new_net)
+    return any((abs(float(new_net.get(asset, 0.0) or 0.0) - float(old_net.get(asset, 0.0) or 0.0)) > threshold for asset in assets))
+
+def _adk_net_exposure_signal_text(cn_dk_result, old_idx, new_idx):
+    if cn_dk_result is None or 'adk_net_asset_exposure' not in cn_dk_result.columns:
+        return 'ADK净敞口字段不可用，无法按账户级净敞口判断变化'
+    if _adk_net_exposure_changed(cn_dk_result, old_idx, new_idx):
+        return 'ADK净敞口有变化，按“ADK净敞口”表复核'
+    return 'ADK净敞口无变化'
+
+def _write_v78_adk_current_holding_summary(w, cn_dk_result, idx):
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return
+    row = cn_dk_result.iloc[resolved_idx]
+    holding = row.get('holding', row.get('v78_adk_v77_holding', 'none_0'))
+    top_pair = row.get('top_pair', 'none')
+    direction = int(row.get('direction', 0) or 0)
+    exposure = float(row.get('weight', row.get('v78_adk_final_exposure', 0.0)) or 0.0)
+    date_text = f"（对应 {pd.Timestamp(date).strftime('%Y-%m-%d')} 收盘确认）" if date is not None else ''
+    title = 'ADK当前已生效双腿持仓' if 'v78_adk_v77_holding' in row.index else 'ADK当前已生效持仓'
+    w(f'**{title}:** **{_dk_pos_str(holding)}**{date_text}\n')
+    if top_pair != 'none':
+        direction_text = f' | 方向 {direction:+d}' if direction != 0 else ''
+        w(f'- 综合持仓标识: **{_dk_pair_display(top_pair)}**{direction_text}\n')
+    if 'v78_adk_v77_holding' in row.index:
+        w(f"- V7.7 ADK原版: {_dk_pos_str(row.get('v78_adk_v77_holding', 'none_0'))}\n")
+    if 'v78_adk_new_holding' in row.index:
+        w(f"- {V78_ADK_NEW_LABEL}: {_dk_pos_str(row.get('v78_adk_new_holding', 'none_0'))}\n")
+    w(f'- 当前已生效总敞口: **{exposure:.2f}x**\n')
+
+def _v78_row_for_display(df, idx, date=None):
+    if df is None or len(df) == 0:
+        return None
+    if date is not None:
+        try:
+            date = pd.Timestamp(date)
+            if date in df.index:
+                return df.loc[date]
+        except Exception:
+            pass
+    try:
+        return df.iloc[idx]
+    except Exception:
+        return None
+
+def _v78_resolve_display_idx_date(df, idx):
+    if df is None or len(df) == 0:
+        return (None, None)
+    if isinstance(idx, (pd.Timestamp, datetime, np.datetime64, str)) or hasattr(idx, 'year'):
+        try:
+            ts = pd.Timestamp(idx)
+            if ts in df.index:
+                return (int(df.index.get_loc(ts)), ts)
+        except Exception:
+            pass
+    try:
+        pos = int(idx)
+        return (pos, df.index[pos])
+    except Exception:
+        return (None, None)
+
+def _v78_adk_pair_score(result_df, row, date):
+    if row is None:
+        return np.nan
+    if 'v78_score_overheat_score' in row.index:
+        value = row.get('v78_score_overheat_score', np.nan)
+        return float(value) if pd.notna(value) else np.nan
+    signals_df = result_df.attrs.get('signals_df') if result_df is not None else None
+    pair = row.get('top_pair', 'none')
+    if signals_df is None or pair == 'none':
+        return np.nan
+    try:
+        value = signals_df.loc[pd.Timestamp(date), pair]
+    except Exception:
+        return np.nan
+    return float(value) if pd.notna(value) else np.nan
+
+def _v78_adk_leg_status_rows(cn_dk_result, idx):
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return []
+    specs = _v80_adk_component_specs(cn_dk_result)
+    rows = []
+    for label, scope, blend_weight, result_df, is_new in specs:
+        row = _v78_row_for_display(result_df, resolved_idx, date)
+        if row is None:
+            continue
+        pair = row.get('top_pair', 'none')
+        direction = int(row.get('direction', 0) or 0)
+        weight = float(row.get('weight', 0.0) or 0.0)
+        score_hot_on = bool(row.get('v78_score_overheat_on', False)) if is_new else False
+        score_hot_scale = float(row.get('v78_score_overheat_scale', 1.0) or 0.0) if is_new else 1.0
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+        vol_scale = float(_dk_get_vol_scale(result_df, component_idx))
+        raw_value = row.get('scale_raw', np.nan)
+        realized_value = row.get('realized_vol', np.nan)
+        vol_scale_raw = float(raw_value) if pd.notna(raw_value) else np.nan
+        realized_vol = float(realized_value) if pd.notna(realized_value) else np.nan
+        overlay_multiplier = weight / vol_scale if abs(vol_scale) > 1e-12 else 0.0
+        rows.append({'leg': label, 'scope': scope, 'is_new': is_new, 'blend_weight': float(blend_weight), 'pair': pair, 'direction': direction, 'position_text': _dk_pos_str(f'{pair}_{direction}') if pair != 'none' else 'none', 'score': _v78_adk_pair_score(result_df, row, date), 'score_hot_on': score_hot_on, 'score_hot_scale': score_hot_scale, 'realized_vol': realized_vol, 'vol_scale_raw': vol_scale_raw, 'vol_scale': vol_scale, 'overlay_multiplier': overlay_multiplier, 'leg_weight': weight, 'leg_contribution': float(blend_weight) * weight})
+    return rows
+
+def _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label='分腿Top-1配对/方向'):
+    rows = _v78_adk_leg_status_rows(cn_dk_result, idx)
+    if not rows:
+        return
+    new_only = _v80_adk_is_new_only(cn_dk_result)
+    unit = '策略' if new_only else '腿'
+    w(f"\n**V8.0 ADK {('单策略' if new_only else '子策略')}状态**\n\n")
+    w(f'| {unit} | 配对范围 | {position_col_label} | 排名分数 | 质量过滤 | 已实现波动率 | raw VolScale | 生效VolScale | overlay乘数 | 最终敞口 | 实际贡献 |\n')
+    w('|:-|:-|:-|------:|:-|------:|------:|------:|------:|------:|------:|------:|\n')
+    for row in rows:
+        score = row['score']
+        score_text = f'`{score:.2f}`' if not np.isnan(score) else '`NA`'
+        if row['is_new']:
+            quality_text = 'R²不启用'
+        else:
+            quality_text = f'R²质控≥{CN_DK_R2_QUALITY_THRESHOLD:.2f}' if CN_DK_R2_QUALITY_ENABLED else 'R²质控关闭'
+        realized_text = f"{row['realized_vol']:.1%}" if pd.notna(row['realized_vol']) else 'NA'
+        raw_scale_text = f"{row['vol_scale_raw']:.2f}x" if pd.notna(row['vol_scale_raw']) else 'NA'
+        overlay_text = f"{row['overlay_multiplier']:.2f}x"
+        if row['is_new']:
+            overlay_text += ' (score-hot开启)' if row['score_hot_on'] else ' (score-hot关闭)'
+        w(f"| {row['leg']} | {row['scope']} | {row['position_text']} | {score_text} | {quality_text} | {realized_text} | {raw_scale_text} | {row['vol_scale']:.2f}x | {overlay_text} | {_fmt_v78_x(row['leg_weight'])} | {_fmt_v78_x(row['leg_contribution'])} |\n")
+
+def _v79_adk_base_position(result_df, row, date):
+    pair = str(row.get('top_pair', 'none') or 'none')
+    direction = int(row.get('direction', 0) or 0)
+    pair_data = result_df.attrs.get('pair_data', {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is not None and date in pdata.index:
+        source = pdata.loc[date]
+        if isinstance(source, pd.DataFrame):
+            source = source.iloc[-1]
+        value = source.get('position', source.get('signal', np.nan))
+        if pd.notna(value):
+            direction = int(value)
+    return (pair, direction)
+
+def _v79_adk_pair_next_vol_scale(result_df, pair, date, fallback_scale):
+    pair_data = result_df.attrs.get('pair_data', {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is None or date not in pdata.index:
+        return (float(fallback_scale), float(fallback_scale), False)
+    source = pdata.loc[date]
+    if isinstance(source, pd.DataFrame):
+        source = source.iloc[-1]
+    current_scale = source.get('scale', fallback_scale)
+    current_scale = float(current_scale) if pd.notna(current_scale) else float(fallback_scale)
+    realized_vol = source.get('realized_vol', np.nan)
+    return _compute_next_vol_scale(realized_vol, current_scale, CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+
+def _v79_adk_same_side_close_state(result_df, pair, date, current_on, same_trade):
+    pair_data = result_df.attrs.get('pair_data', {}) if result_df is not None else {}
+    pdata = pair_data.get(pair)
+    if pdata is None or date not in pdata.index or 'ratio' not in pdata.columns or ('bias_mom' not in pdata.columns):
+        return (bool(current_on), np.nan, False)
+    ratio = pd.to_numeric(pdata['ratio'], errors='coerce')
+    bias = ratio / ratio.rolling(CN_DK_BIAS_N).mean() - 1.0
+    source = pdata.loc[date]
+    if isinstance(source, pd.DataFrame):
+        source = source.iloc[-1]
+    abs_bias = abs(float(bias.loc[date])) if pd.notna(bias.loc[date]) else np.nan
+    bias_mom = source.get('bias_mom', np.nan)
+    same_side = bool(pd.notna(bias.loc[date]) and pd.notna(bias_mom) and (np.sign(float(bias.loc[date])) == np.sign(float(bias_mom))))
+    defense_on = bool(current_on) if same_trade else False
+    if pd.isna(abs_bias) or not same_side:
+        defense_on = False
+    elif defense_on and abs_bias <= CN_DK_SAME_SIDE_OVERHEAT_EXIT:
+        defense_on = False
+    elif not defense_on and abs_bias > CN_DK_SAME_SIDE_OVERHEAT_ENTER:
+        defense_on = True
+    return (defense_on, abs_bias, same_side)
+
+def _v79_adk_leg_execution_rows(cn_dk_result, idx=-1):
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return []
+    specs = [(label, weight, result_df, is_new) for label, _scope, weight, result_df, is_new in _v80_adk_component_specs(cn_dk_result)]
+    rows = []
+    for label, blend_weight, result_df, is_new in specs:
+        row = _v78_row_for_display(result_df, resolved_idx, date)
+        if row is None:
+            continue
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+        base_pair, base_direction = _v79_adk_base_position(result_df, row, date)
+        current_final_weight = float(row.get('weight', 0.0) or 0.0)
+        current_vol_scale = float(_dk_get_vol_scale(result_df, component_idx))
+        if is_new:
+            current_base_weight = float(row.get('base_weight_before_v78_score_hot', current_vol_scale) or 0.0)
+            current_overlay_scale = float(row.get('v78_score_overheat_scale', 1.0) or 0.0)
+            current_overlay_on = bool(row.get('v78_score_overheat_on', False))
+            prior_score = row.get('v78_score_overheat_decision_score', np.nan)
+            trigger_pos = None
+            trigger_score = np.nan
+            trigger_date = None
+            if 'v78_score_overheat_on' in result_df.columns:
+                on_series = result_df['v78_score_overheat_on'].fillna(False).astype(bool)
+                triggered = on_series & ~on_series.shift(1, fill_value=False)
+                prior_triggers = np.flatnonzero(triggered.to_numpy()[:component_idx + 1])
+                if len(prior_triggers) > 0:
+                    trigger_pos = int(prior_triggers[-1])
+                    trigger_basis_pos = max(trigger_pos - 1, 0)
+                    trigger_date = result_df.index[trigger_basis_pos]
+                    if 'v78_score_overheat_decision_score' in result_df.columns:
+                        trigger_score = result_df['v78_score_overheat_decision_score'].iloc[trigger_pos]
+            if current_overlay_on:
+                trigger_text = ''
+                if trigger_date is not None and pd.notna(trigger_score):
+                    trigger_text = f"{pd.Timestamp(trigger_date).strftime('%Y-%m-%d')} 收盘基础配对分数 {float(trigger_score):.2f} >= {V78_ADK_NEW_SCORE_HOT_ENTER:.0f} 触发"
+                if trigger_pos == component_idx and trigger_text:
+                    current_reason = f'score-hot已触发：{trigger_text}，乘数 {current_overlay_scale:.2f}x'
+                elif trigger_text and pd.notna(prior_score):
+                    current_reason = f'score-hot延续：{trigger_text}；上一收盘分数 {float(prior_score):.2f} > {V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未达到恢复线'
+                elif pd.notna(prior_score) and float(prior_score) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+                    current_reason = f'score-hot已触发：上一收盘基础配对分数 {float(prior_score):.2f} >= {V78_ADK_NEW_SCORE_HOT_ENTER:.0f}，乘数 {current_overlay_scale:.2f}x'
+                elif pd.notna(prior_score):
+                    current_reason = f'score-hot延续：上一收盘基础配对分数 {float(prior_score):.2f} > {V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未达到恢复线'
+                else:
+                    current_reason = f'score-hot防守开启，乘数 {current_overlay_scale:.2f}x'
+            else:
+                current_reason = 'score-hot关闭'
+        else:
+            current_base_weight = float(row.get('pre_overheat_weight', current_vol_scale) or 0.0)
+            current_overlay_scale = float(row.get('same_side_overheat_scale', 1.0) or 0.0)
+            current_overlay_on = bool(row.get('same_side_overheat_on', False))
+            current_abs_bias = row.get('same_side_overheat_abs_bias', np.nan)
+            bias_text = f'，判断乖离 {float(current_abs_bias):.1%}' if pd.notna(current_abs_bias) else ''
+            current_reason = f'同向过热防守开启，乘数 {current_overlay_scale:.2f}x{bias_text}' if current_overlay_on else '同向过热防守关闭'
+        targets = _build_dk_rank_rows_at(result_df, idx=component_idx, use_shifted=False, top_n=1)
+        if targets:
+            target_pair = str(targets[0]['pair'])
+            target_direction = int(targets[0]['direction'] or 0)
+        else:
+            target_pair, target_direction = (base_pair, base_direction)
+        _, target_base_weight, vol_changed = _v79_adk_pair_next_vol_scale(result_df, target_pair, date, current_vol_scale)
+        if is_new:
+            signals_df = result_df.attrs.get('signals_df')
+            score_for_close = np.nan
+            if signals_df is not None and target_pair in signals_df.columns and (date in signals_df.index):
+                score_for_close = signals_df.loc[date, target_pair]
+            target_overlay_on = current_overlay_on
+            if pd.notna(score_for_close):
+                if target_overlay_on and float(score_for_close) <= V78_ADK_NEW_SCORE_HOT_EXIT:
+                    target_overlay_on = False
+                elif not target_overlay_on and float(score_for_close) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+                    target_overlay_on = True
+            target_overlay_scale = V78_ADK_NEW_SCORE_HOT_SCALE if target_overlay_on else 1.0
+            score_text = f'{float(score_for_close):.2f}' if pd.notna(score_for_close) else 'NA'
+            target_overlay_text = f"score-hot{('开启' if target_overlay_on else '关闭')} ({score_text}; 进/出 {V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}) x{target_overlay_scale:.2f}"
+        else:
+            same_trade = base_pair == target_pair and base_direction == target_direction
+            target_overlay_on, target_abs_bias, target_same_side = _v79_adk_same_side_close_state(result_df, target_pair, date, current_overlay_on, same_trade)
+            target_overlay_scale = CN_DK_SAME_SIDE_OVERHEAT_DERISK_SCALE if target_overlay_on else 1.0
+            bias_text = f'{target_abs_bias:.1%}' if pd.notna(target_abs_bias) else 'NA'
+            target_overlay_text = f"同向过热{('开启' if target_overlay_on else '关闭')} (乖离 {bias_text}; 同向 {('是' if target_same_side else '否')}) x{target_overlay_scale:.2f}"
+        target_final_weight = float(target_base_weight) * float(target_overlay_scale)
+        current_active = base_pair != 'none' and base_direction != 0 and (current_final_weight > 1e-12)
+        target_active = target_pair != 'none' and target_direction != 0 and (target_final_weight > 1e-12)
+        current_pair = base_pair if current_active else 'none'
+        current_direction = base_direction if current_active else 0
+        final_target_pair = target_pair if target_active else 'none'
+        final_target_direction = target_direction if target_active else 0
+        changed = current_pair != final_target_pair or current_direction != final_target_direction or abs(current_final_weight - target_final_weight) > 0.001
+        base_text = _dk_pos_str(f'{base_pair}_{base_direction}') if base_pair != 'none' and base_direction != 0 else '无有效基础信号'
+        current_final_text = f"{_dk_pos_str(f'{current_pair}_{current_direction}')} / {current_final_weight:.2f}x" if current_active else '空仓 / 0.00x'
+        target_base_text = f"{_dk_pos_str(f'{target_pair}_{target_direction}')} / {target_base_weight:.2f}x" if target_pair != 'none' and target_direction != 0 else '无有效基础信号'
+        target_final_text = f"{_dk_pos_str(f'{final_target_pair}_{final_target_direction}')} / {target_final_weight:.2f}x" if target_active else '空仓 / 0.00x'
+        if current_final_weight <= 1e-12 and current_base_weight > 1e-12:
+            current_reason = f'基础信号并未空仓；{current_reason}，{current_base_weight:.2f}x -> 0.00x'
+        if vol_changed:
+            target_overlay_text = f'VolScale {current_vol_scale:.2f}x->{target_base_weight:.2f}x；' + target_overlay_text
+        rows.append({'leg': label, 'blend_weight': float(blend_weight), 'current_base_pair': base_pair, 'current_base_direction': base_direction, 'current_base_weight': current_base_weight, 'current_base_text': f'{base_text} / {current_base_weight:.2f}x', 'current_overlay_text': current_reason, 'current_pair': current_pair, 'current_direction': current_direction, 'current_weight': current_final_weight, 'current_final_text': current_final_text, 'target_base_pair': target_pair, 'target_base_direction': target_direction, 'target_base_weight': float(target_base_weight), 'target_base_text': target_base_text, 'target_overlay_text': target_overlay_text, 'target_pair': final_target_pair, 'target_direction': final_target_direction, 'target_weight': target_final_weight, 'target_final_text': target_final_text, 'target_score': float(score_for_close) if is_new and pd.notna(score_for_close) else np.nan, 'changed': bool(changed)})
+    return rows
+
+def _v79_adk_execution_summary(cn_dk_result, idx=-1):
+    rows = _v79_adk_leg_execution_rows(cn_dk_result, idx)
+    current_net = {}
+    target_net = {}
+    for row in rows:
+        for asset, exposure in _dk_position_legs(row['current_pair'], row['current_direction'], row['blend_weight'] * row['current_weight']).items():
+            current_net[asset] = current_net.get(asset, 0.0) + exposure
+        for asset, exposure in _dk_position_legs(row['target_pair'], row['target_direction'], row['blend_weight'] * row['target_weight']).items():
+            target_net[asset] = target_net.get(asset, 0.0) + exposure
+    assets = set(current_net) | set(target_net)
+    changed = any((abs(target_net.get(asset, 0.0) - current_net.get(asset, 0.0)) > 0.0001 for asset in assets))
+    return {'rows': rows, 'current_net': {k: v for k, v in current_net.items() if abs(v) > 1e-12}, 'target_net': {k: v for k, v in target_net.items() if abs(v) > 1e-12}, 'changed': bool(changed)}
+
+def _write_v79_adk_execution_chain(w, cn_dk_result, idx=-1, close_label='若现在收盘'):
+    summary = _v79_adk_execution_summary(cn_dk_result, idx)
+    rows = summary['rows']
+    if not rows:
+        return summary
+    mark = '🔴' if summary['changed'] else '🟢'
+    verdict = '最终执行仓位将变化' if summary['changed'] else '最终执行仓位不变化'
+    w(f'\n{mark} **ADK {close_label}：{verdict}。**（按配对、方向和腿内敞口综合判断）\n\n')
+    unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '腿'
+    w(f'| {unit} | 当前基础信号 | 当前为何是该持仓 | 当前最终持仓 | 收盘基础目标 | 收盘后覆盖层 | 收盘最终目标 | 结论 |\n')
+    w('|:-|:-|:-|:-|:-|:-|:-|:-|\n')
+    for row in rows:
+        w(f"| {row['leg']} | {row['current_base_text']} | {row['current_overlay_text']} | {row['current_final_text']} | {row['target_base_text']} | {row['target_overlay_text']} | {row['target_final_text']} | **{('变化' if row['changed'] else '不变')}** |\n")
+    return summary
+
+def _query_action_instruction(changed, intraday, query_kind):
+    if query_kind in {'params', 'live_params'}:
+        return '本页只用于核对状态和参数；实际操作请以“实时信号”的操作卡为准。'
+    if intraday:
+        if query_kind == 'signal':
+            return '盘中尚未确认：现在不操作；如需观察盘中假设，请查询“实时信号”。'
+        return '盘中仅观察：现在不操作；临近收盘复核，收盘确认后再按目标执行。'
+    if changed:
+        return '收盘目标已确认：若尚未执行，按目标调整；若已执行，不要重复下单。'
+    return '目标与当前一致：维持，不操作。'
+
+def _suba_query_overview(cn_result, idx=-1):
+    if cn_result is None or len(cn_result) == 0:
+        return {'rows': [], 'changed': False, 'current_exposure': np.nan, 'target_exposure': np.nan}
+    if 'v78_suba_v77_holding' not in cn_result.columns:
+        n = len(cn_result)
+        pos = idx if idx >= 0 else n + idx
+        pos = int(np.clip(pos, 0, n - 1))
+        state = _suba_signal_display_state(cn_result, pos)
+        row = cn_result.iloc[pos]
+        current_pos = pos - 1 if pos > 0 else pos
+        current_row = cn_result.iloc[current_pos]
+        current_holding = str(current_row.get('holding', 'cash') or 'cash')
+        target_holding = state['target_holding']
+        current_weight = float(current_row.get('weight', 0.0) or 0.0)
+        target_weight = float(row.get('weight', 0.0) or 0.0)
+        if current_weight <= 1e-12:
+            current_holding = 'cash'
+        if target_weight <= 1e-12:
+            target_holding = 'cash'
+        changed = current_holding != target_holding or abs(current_weight - target_weight) > 0.0001
+        action = '换仓' if current_holding != target_holding else '调整敞口' if changed else '维持'
+        item = {'leg': 'A策略', 'current': f'{CN_NAMES.get(current_holding, current_holding)} / {current_weight:.4f}x', 'target': f'{CN_NAMES.get(target_holding, target_holding)} / {target_weight:.4f}x', 'action': action, 'changed': changed}
+        return {'rows': [item], 'changed': changed, 'current_exposure': current_weight, 'target_exposure': target_weight}
+    row = cn_result.iloc[idx]
+    specs = [('V7.7A原版', V78_SUBA_V77_WEIGHT, 'v78_suba_v77'), (V78_SUBA_NEW_LABEL, V78_SUBA_NEW_TV10_WEIGHT, 'v78_suba_new')]
+    rows = []
+    for label, blend_weight, prefix in specs:
+        current_holding = str(row.get(f'{prefix}_holding', 'cash') or 'cash')
+        target_holding = str(row.get(f'{prefix}_target', current_holding) or 'cash')
+        current_weight = float(row.get(f'{prefix}_weight', 0.0) or 0.0)
+        target_weight = float(row.get(f'{prefix}_target_weight', current_weight) or 0.0)
+        if current_weight <= 1e-12:
+            current_holding = 'cash'
+        if target_weight <= 1e-12:
+            target_holding = 'cash'
+        changed = current_holding != target_holding or abs(current_weight - target_weight) > 0.0001
+        if current_holding != target_holding:
+            action = '换仓'
+        elif abs(current_weight - target_weight) > 0.0001:
+            action = '调整敞口'
+        else:
+            action = '维持'
+        rows.append({'leg': label, 'current': f'{CN_NAMES.get(current_holding, current_holding)} / {current_weight:.2f}x', 'target': f'{CN_NAMES.get(target_holding, target_holding)} / {target_weight:.2f}x', 'action': action, 'changed': changed, 'current_contribution': blend_weight * current_weight, 'target_contribution': blend_weight * target_weight})
+    current_exposure = float(row.get('v78_suba_final_exposure', sum((item['current_contribution'] for item in rows))) or 0.0)
+    target_exposure = float(row.get('v78_suba_target_exposure', sum((item['target_contribution'] for item in rows))) or 0.0)
+    return {'rows': rows, 'changed': any((item['changed'] for item in rows)) or abs(current_exposure - target_exposure) > 0.0001, 'current_exposure': current_exposure, 'target_exposure': target_exposure}
+
+def _adk_query_overview(cn_dk_result, idx=-1):
+    if cn_dk_result is not None and 'v78_adk_final_exposure' in cn_dk_result.columns:
+        rich = _v79_adk_execution_summary(cn_dk_result, idx)
+        return {'rows': [{'leg': item['leg'], 'current': item['current_final_text'], 'target': item['target_final_text'], 'action': '调整' if item['changed'] else '维持', 'changed': bool(item['changed'])} for item in rich['rows']], 'changed': bool(rich['changed']), 'current_net': rich.get('current_net', {}), 'target_net': rich.get('target_net', {}), 'target_is_exact': True}
+    change_rows = _v78_adk_close_target_change_rows(cn_dk_result, idx) if cn_dk_result is not None else []
+    return {'rows': [{'leg': item['leg'], 'current': item['current_text'], 'target': item['target_text'], 'action': '换配对/方向' if item['changed'] else '维持', 'changed': bool(item['changed'])} for item in change_rows], 'changed': any((bool(item['changed']) for item in change_rows)), 'current_net': {}, 'target_net': {}, 'target_is_exact': False}
+
+def _format_signed_exposure(value):
+    value = float(value or 0.0)
+    if abs(value) <= 1e-12:
+        return '0.00x'
+    return f"{('多' if value > 0 else '空')} {abs(value):.2f}x"
+
+def _fmt_threshold_value(value, digits=2):
+    return '数据不可用' if pd.isna(value) else f'{float(value):.{digits}f}'
+
+def _write_suba_decision_explanation(w, cn_result):
+    if cn_result is None or len(cn_result) == 0:
+        return
+    row = cn_result.iloc[-1]
+    top_code = str(row.get('suba_top_code', 'cash') or 'cash')
+    top_name = CN_NAMES.get(top_code, top_code)
+    score = row.get('suba_top_score', np.nan)
+    r2 = row.get('suba_top_r2', np.nan)
+    score_pass = bool(pd.notna(score) and float(score) > 0.0)
+    r2_pass = bool(pd.notna(r2) and float(r2) >= CN_R2_THRESHOLD)
+    raw_weight = float(row.get('pre_suba_volume_weight', row.get('weight', 0.0)) or 0.0)
+    final_weight = float(row.get('weight', 0.0) or 0.0)
+    volume_on = bool(row.get('suba_volume_rule_on', False))
+    volume_scale = float(row.get('suba_volume_rule_scale', 1.0) or 0.0)
+    unresolved = bool(row.get('suba_volume_unresolved', row.get('suba_volume_unavailable', False)))
+    zz_streak = row.get('suba_volume_zz2000_streak', np.nan)
+    cyb_streak = row.get('suba_volume_cyb_streak', np.nan)
+    volume_date = row.get('suba_volume_freshness_latest_date', None)
+    score_text = _fmt_threshold_value(score)
+    r2_text = _fmt_threshold_value(r2)
+
+    def _volume_streak_text(name, streak, ma_window, trigger_days):
+        if pd.isna(streak):
+            return f'{name}低于MA{ma_window}：连续天数不可用（触发需≥{trigger_days}日，无法判定）'
+        days = int(streak)
+        status = '已触发' if days >= int(trigger_days) else '未触发'
+        return f'{name}低于MA{ma_window}：连续{days}日（触发需≥{trigger_days}日，{status}）'
+    zz_status = _volume_streak_text('中证2000', zz_streak, CN_SA_VOLUME_ZZ2000_MA, CN_SA_VOLUME_ZZ2000_DAYS)
+    cyb_status = _volume_streak_text('创业板', cyb_streak, CN_SA_VOLUME_CYB_MA, CN_SA_VOLUME_CYB_DAYS)
+    volume_date_text = '数据日期不可用' if volume_date is None or pd.isna(volume_date) else str(volume_date)
+    w('\n**开仓判定：**\n\n')
+    w(f"- 原始动量：Top-1={top_name}｜score={score_text}，要求 **>0**（{('通过' if score_pass else '未通过')}）｜R²={r2_text}，要求 **≥{CN_R2_THRESHOLD:.2f}**（{('通过' if r2_pass else '未通过')}）。Top-1任一项未通过即持Cash，**不递补第2名**。\n")
+    w(f'- 成交额覆盖：数据截至={volume_date_text}（最近已确认收盘）｜{zz_status}｜{cyb_status}｜成交额乘数={volume_scale:.2f}x。\n')
+    amount_sources = []
+    for key, label in (('zz2000', '中证2000'), ('cyb', '创业板')):
+        source = row.get(f'suba_volume_{key}_source')
+        if isinstance(source, str) and source:
+            amount_sources.append(f'{label}={source}')
+    if amount_sources:
+        w('- 成交额来源：' + '；'.join(amount_sources) + '。\n')
+    if unresolved:
+        conclusion = '成交额数据不可判定；禁止把当前结果当作正常可执行仓位。'
+    elif not (score_pass and r2_pass) or raw_weight <= 1e-12:
+        failed = []
+        if not score_pass:
+            failed.append(f'score={score_text}未达到>0')
+        if not r2_pass:
+            failed.append(f'R²={r2_text}未达到≥{CN_R2_THRESHOLD:.2f}')
+        detail = '、'.join(failed) if failed else '没有有效原始Top-1目标'
+        conclusion = f'未开仓直接原因是**原始动量未通过**（{detail}）'
+        if volume_on and volume_scale < 1.0 - 1e-12:
+            if volume_scale <= 1e-12:
+                conclusion += '；同时**成交额风控也已触发0.00x**，即使出现股票基础目标也会被清零'
+            else:
+                conclusion += f'；同时成交额风控已触发{volume_scale:.2f}x减仓'
+        conclusion += '。'
+    elif volume_on and volume_scale < 1.0 - 1e-12 and (final_weight <= 1e-12):
+        conclusion = f'原始动量已通过，但**成交额风控触发**，将{raw_weight:.2f}x降至0.00x，因此未开仓。'
+    elif final_weight <= 1e-12:
+        conclusion = '原始动量已有目标，但最终仓位为0；现有原因字段不足，禁止猜测，需停止执行并检查数据。'
+    else:
+        conclusion = f"原始动量已通过；成交额风控{('已触发' if volume_on else '未触发')}；最终目标={final_weight:.2f}x。"
+    w(f'- 结论：{conclusion}\n')
+    w(f'- 时点口径：{CN_SA_MODEL_CLOCK_NOTE}\n')
+
+def _write_adk_decision_explanation(w, cn_dk_result):
+    if cn_dk_result is None or len(cn_dk_result) == 0:
+        return
+    summary = _v79_adk_execution_summary(cn_dk_result, -1)
+    if not summary.get('rows'):
+        w('\n**开仓判定：** ADK状态字段不可用；本次不生成开仓结论。\n')
+        return
+    item = summary['rows'][0]
+    row = cn_dk_result.iloc[-1]
+    close_score = item.get('target_score', np.nan)
+    prior_score = row.get('v78_score_overheat_decision_score', np.nan)
+    current_hot = bool(row.get('v78_score_overheat_on', False))
+    target_hot = current_hot
+    if pd.notna(close_score):
+        if target_hot and float(close_score) <= V78_ADK_NEW_SCORE_HOT_EXIT:
+            target_hot = False
+        elif not target_hot and float(close_score) >= V78_ADK_NEW_SCORE_HOT_ENTER:
+            target_hot = True
+    base_valid = item.get('target_base_pair', 'none') != 'none' and int(item.get('target_base_direction', 0) or 0) != 0
+    w('\n**开仓判定：**\n\n')
+    w(f"- 原始动量：固定Top-1={item.get('target_base_text', '无有效基础信号')}。\n")
+    if current_hot and pd.notna(prior_score) and (float(prior_score) > V78_ADK_NEW_SCORE_HOT_EXIT):
+        current_state_text = f'防守延续（{float(prior_score):.2f}>{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，尚未恢复；不是本日重新触发）'
+    elif current_hot:
+        current_state_text = '防守开启'
+    else:
+        current_state_text = '防守关闭'
+    if current_hot and (not target_hot):
+        target_state_text = f'恢复（{float(close_score):.2f}≤{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}）' if pd.notna(close_score) else '恢复'
+    elif target_hot and current_hot:
+        target_state_text = f'继续防守（{float(close_score):.2f}>{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}，仍未恢复）' if pd.notna(close_score) else '继续防守'
+    elif target_hot:
+        target_state_text = f'新触发（{float(close_score):.2f}≥{V78_ADK_NEW_SCORE_HOT_ENTER:.0f}）' if pd.notna(close_score) else '新触发'
+    else:
+        target_state_text = '防守关闭'
+    w(f'- score-hot滞回规则：历史分数达到 **≥{V78_ADK_NEW_SCORE_HOT_ENTER:.0f}** 后进入防守；此后必须降至 **≤{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}** 才恢复，防守乘数={V78_ADK_NEW_SCORE_HOT_SCALE:.2f}x；按组合持续跟踪，更换配对不重置防守。上一收盘score={_fmt_threshold_value(prior_score)}，当前={current_state_text}；本收盘score={_fmt_threshold_value(close_score)}，下一状态={target_state_text}。\n')
+    if current_hot and item.get('current_overlay_text'):
+        w(f"- 历史触发链：{item['current_overlay_text']}。\n")
+    if not base_valid:
+        conclusion = '未开仓原因是**原始动量没有有效Top-1配对**（通常为所需数据不足或无效），不是score-hot覆盖。'
+    elif target_hot and float(item.get('target_weight', 0.0) or 0.0) <= 1e-12:
+        conclusion = f"原始动量有效，但**score-hot处于防守状态**，基础敞口{float(item.get('target_base_weight', 0.0) or 0.0):.2f}x × {V78_ADK_NEW_SCORE_HOT_SCALE:.2f}=0.00x，因此未开仓/清仓。"
+    else:
+        conclusion = f"原始动量有效；score-hot下一状态={('开' if target_hot else '关')}；最终目标={item.get('target_final_text', '状态不可用')}。"
+    w(f'- 结论：{conclusion}\n')
+
+def _write_cn_live_input_times(w, price_frame):
+    attrs = getattr(price_frame, 'attrs', {})
+    missing = attrs.get('cn_missing_live_inputs', ())
+    if missing:
+        legs = '；'.join(f'{name}（最近有效数据 {last_seen}）' for name, last_seen in missing)
+        w(f"缺少{attrs['cn_missing_live_field']}：{legs}。\n\n")
+    start, end = attrs.get('cn_quote_start'), attrs.get('cn_quote_end')
+    if start is not None and end is not None:
+        label = '其余品种有效盘中报价' if missing else '盘中报价时间'
+        span = f'{start:%H:%M:%S}' if start == end else f'{start:%H:%M:%S}–{end:%H:%M:%S}'
+        w(f'{label}：北京时间 {span}。\n\n')
+
+def _cn_expect_today_for_query(query_kind, clock):
+    required_time = (9, 30) if query_kind in {'live_signal', 'live_params'} else (15, 0)
+    return _is_cn_required_close_day(clock.date()) and (clock.hour, clock.minute) >= required_time
+
+def _write_a_adk_query_overview(w, cn_result, cn_dk_result, *, cn_intraday=False, dk_intraday=False, query_kind='signal', cn_price_frame=None, dk_price_frame=None):
+    cn_intraday = cn_intraday or bool(getattr(cn_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
+    dk_intraday = dk_intraday or bool(getattr(dk_price_frame, 'attrs', {}).get('cn_unconfirmed_snapshot', False))
+    w('## 🇨🇳 A / ADK总览\n\n')
+    if query_kind in {'params', 'live_params'}:
+        w('> 参数核对页；下单只看“实时信号”。\n\n')
+    suba = _suba_query_overview(cn_result, -1)
+    suba_available = bool(suba['rows'])
+    now = beijing_now()
+    expect_today = _cn_expect_today_for_query(query_kind, now)
+    suba_live_missing = expect_today and cn_result is not None and len(cn_result) > 0 and pd.Timestamp(cn_result.index[-1]).date() < now.date()
+    a_volume_unresolved = False
+    if cn_result is not None and len(cn_result) > 0:
+        a_row = cn_result.iloc[-1]
+        a_volume_unresolved = bool(a_row.get('suba_volume_unresolved', a_row.get('suba_volume_unavailable', False)))
+    suba_executable = suba_available and (not a_volume_unresolved) and (not suba_live_missing)
+    suba_mark = '🔴' if suba_executable and suba['changed'] else '🟢' if suba_executable else '⚠️'
+    suba_status = '需要调整' if suba_executable and suba['changed'] else '维持' if suba_executable else '状态不可判定'
+    w(f'### A策略（Sub-A）｜{suba_mark} {suba_status}\n\n')
+    if suba_live_missing:
+        w('⚠️ 今日Sub-A实时数据不完整；以下仅为最近确认收盘的历史信号，不作为今日实时操作依据。\n\n')
+    if suba_live_missing or cn_intraday:
+        _write_cn_live_input_times(w, cn_price_frame)
+    if cn_result is not None and len(cn_result) > 0:
+        w(f"数据日期：**{pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if cn_intraday else '最近已确认收盘')}）\n\n")
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：**A策略（单一生产策略）**｜MA{CN_BIAS_N}/动量{CN_MOM_DAY}日｜原始Top-1需score>0且R²({CN_R2_WINDOW})≥{CN_R2_THRESHOLD:.2f}，失败不递补｜目标波动{CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日｜杠杆{CN_MIN_LEV:.2f}–{CN_MAX_LEV:.2f}x\n\n')
+        w(f'风控/执行：ZZ2000成交额<MA{CN_SA_VOLUME_ZZ2000_MA}连续{CN_SA_VOLUME_ZZ2000_DAYS}日 **或** CYB成交额<MA{CN_SA_VOLUME_CYB_MA}连续{CN_SA_VOLUME_CYB_DAYS}日时股票仓降至{CN_SA_VOLUME_SCALE:.0%}｜单边成本{CN_COMMISSION:.2%}｜收盘纸面计价｜现金收益与借款成本均按{CN_RF_ANNUAL:.0%}/年回测假设，非券商融资报价\n\n')
+    if suba['rows']:
+        target_label = '历史收盘目标（非今日实时）' if suba_live_missing else '诊断目标（不可执行）' if a_volume_unresolved else '盘中参考目标（待收盘确认）' if cn_intraday else '收盘最终目标'
+        w(f'| 策略 | 当前已生效 | {target_label} | 操作 |\n')
+        w('|:-|:-|:-|:-|\n')
+        for item in suba['rows']:
+            action = '实时数据不完整；等待刷新' if suba_live_missing else '风控不可判定；停止执行并刷新数据' if a_volume_unresolved else item['action']
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
+    else:
+        reason = getattr(cn_price_frame, 'attrs', {}).get('cn_panel_error')
+        w(f'⚠️ A策略状态不可用。{reason or ""}\n')
+    _write_suba_decision_explanation(w, cn_result)
+    if cn_result is not None and len(cn_result) > 0:
+        a_row = cn_result.iloc[-1]
+        a_rv = a_row.get('realized_vol', np.nan)
+        a_raw_scale = a_row.get('scale_raw', np.nan)
+        a_volume_scale = a_row.get('suba_volume_rule_scale', 1.0)
+        a_volume_unresolved = bool(a_row.get('suba_volume_unresolved', a_row.get('suba_volume_unavailable', False)))
+        a_measure = f'已实现波动={float(a_rv):.1%}' if pd.notna(a_rv) else '已实现波动=N/A'
+        a_measure += f'｜VolScale={float(a_raw_scale):.2f}x' if pd.notna(a_raw_scale) else '｜VolScale=N/A'
+        a_measure += '｜成交额覆盖=不可判定（禁止按正常仓位执行）' if a_volume_unresolved else f'｜成交额乘数={float(a_volume_scale):.2f}x'
+        w(f"\n关键风控：目标波动={CN_TARGET_VOL:.0%}/{CN_VOL_WINDOW}日（上限{CN_MAX_LEV:.2f}x）｜{a_measure}｜最终目标={suba['target_exposure']:.2f}x\n\n")
+    if query_kind not in {'params', 'live_params'}:
+        suba_action = _query_action_instruction(suba['changed'], cn_intraday, query_kind) if suba_executable else '状态不可判定：停止执行并重试，不能按“维持”处理。'
+        w(f'**现在怎么做：{suba_action}**\n\n')
+    adk = _adk_query_overview(cn_dk_result, -1)
+    adk_live_missing = expect_today and cn_dk_result is not None and len(cn_dk_result) > 0 and pd.Timestamp(cn_dk_result.index[-1]).date() < now.date()
+    adk_available = bool(adk['rows']) and not adk_live_missing
+    adk_mark = '🔴' if adk_available and adk['changed'] else '🟢' if adk_available else '⚠️'
+    adk_status = '需要调整' if adk_available and adk['changed'] else '维持' if adk_available else '状态不可判定'
+    w(f'### ADK策略（Sub-A-DK）｜{adk_mark} {adk_status}\n\n')
+    if adk_live_missing:
+        w('⚠️ 今日ADK实时数据不完整；以下仅为最近确认收盘的历史信号，不作为今日实时操作依据。\n\n')
+    if adk_live_missing or dk_intraday:
+        _write_cn_live_input_times(w, dk_price_frame)
+    w('选拔口径：全10配对按绝对乖离动量固定 Top-1；R²仅供诊断展示，正式路径不以 R² 过滤配对。\n\n')
+    if cn_dk_result is not None and len(cn_dk_result) > 0:
+        w(f"数据日期：**{pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d')}**（{('盘中快照，尚未确认' if dk_intraday else '最近已确认收盘')}）\n\n")
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：**ADK策略（单一生产策略）**｜5指数全10对固定Top-1｜MA{CN_DK_BIAS_N}/动量{CN_DK_MOM_DAY}日｜score-hot进入/恢复/乘数={V78_ADK_NEW_SCORE_HOT_ENTER:.0f}/{V78_ADK_NEW_SCORE_HOT_EXIT:.0f}/{V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x\n\n')
+        w(f'风控/执行：目标波动{CN_DK_TARGET_VOL:.0%}/{CN_DK_VOL_WINDOW}日｜杠杆{CN_DK_MIN_LEV:.1f}–{CN_DK_MAX_LEV:.1f}x｜|Δscale|≥{CN_DK_SCALE_THRESHOLD:.2f}才调整｜每条多/空腿单边成本{CN_DK_COMMISSION:.3%}｜A股收盘执行\n\n')
+    if adk['rows']:
+        target_label = '历史收盘目标（非今日实时）' if adk_live_missing else '盘中参考目标（待收盘确认）' if dk_intraday else '收盘最终目标'
+        w(f"| {('策略' if _v80_adk_is_new_only(cn_dk_result) else '分腿')} | 当前已生效 | {target_label} | 操作 |\n")
+        w('|:-|:-|:-|:-|\n')
+        for item in adk['rows']:
+            action = '实时数据不完整；等待刷新' if adk_live_missing else item['action']
+            w(f"| {item['leg']} | {item['current']} | **{item['target']}** | **{action}** |\n")
+    else:
+        reason = getattr(dk_price_frame, 'attrs', {}).get('cn_panel_error')
+        w(f'⚠️ ADK策略状态不可用。{reason or ""}\n')
+    _write_adk_decision_explanation(w, cn_dk_result)
+    if adk['target_net'] and adk_available:
+        w('\n**账户净敞口（实际执行优先看）**\n\n')
+        w('| 指数 | 当前净敞口 | 目标净敞口 | 调整量 |\n')
+        w('|:-|:-|:-|:-|\n')
+        assets = sorted(set(adk['current_net']) | set(adk['target_net']))
+        for asset in assets:
+            current = float(adk['current_net'].get(asset, 0.0) or 0.0)
+            target = float(adk['target_net'].get(asset, 0.0) or 0.0)
+            delta = target - current
+            w(f'| {_dk_leg_name(asset)} | {_format_signed_exposure(current)} | **{_format_signed_exposure(target)}** | {_format_signed_exposure(delta)} |\n')
+    elif adk_available and not adk['target_is_exact']:
+        w('\n> 当前兼容路径只给出配对/方向变化；精确腿内敞口继续以下方 VolScale 与覆盖层状态表为准。\n')
+    if cn_dk_result is not None and len(cn_dk_result) > 0:
+        adk_row = cn_dk_result.iloc[-1]
+        adk_rv = adk_row.get('realized_vol', np.nan)
+        adk_vol_scale = _dk_get_vol_scale(cn_dk_result, len(cn_dk_result) - 1)
+        adk_score = adk_row.get('v78_score_overheat_decision_score', np.nan)
+        adk_summary_rows = _v79_adk_execution_summary(cn_dk_result, -1).get('rows', [])
+        adk_close_score = adk_summary_rows[0].get('target_score', np.nan) if adk_summary_rows else np.nan
+        adk_hot_on = bool(adk_row.get('v78_score_overheat_on', False))
+        adk_hot_scale = float(adk_row.get('v78_score_overheat_scale', 1.0) or 0.0)
+        adk_measure = f'已实现波动={float(adk_rv):.1%}' if pd.notna(adk_rv) else '已实现波动=N/A'
+        adk_measure += f'｜VolScale={float(adk_vol_scale):.2f}x'
+        adk_measure += f"｜score-hot防守={('开启' if adk_hot_on else '关闭')}"
+        adk_measure += f'（上一收盘分数={float(adk_score):.2f}' if pd.notna(adk_score) else '（上一收盘分数=N/A'
+        adk_measure += f'，本收盘分数={float(adk_close_score):.2f}' if pd.notna(adk_close_score) else '，本收盘分数=N/A'
+        adk_measure += f'，乘数={adk_hot_scale:.2f}x）'
+        w(f'\n关键风控：{adk_measure}\n\n')
+    if query_kind not in {'params', 'live_params'}:
+        adk_action = _query_action_instruction(adk['changed'], dk_intraday, query_kind) if adk_available else '状态不可判定：停止执行并重试，不能按“维持”处理。'
+        w(f'**现在怎么做：{adk_action}**\n\n')
+    a_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in suba['rows'])) or '状态不可用'
+    if a_volume_unresolved:
+        a_target_text = '风控不可判定；仅供诊断，不可执行：' + a_target_text
+    adk_target_text = '；'.join((f"{item['leg']} {item['target']}" for item in adk['rows'])) or '状态不可用'
+    a_date = pd.Timestamp(cn_result.index[-1]).strftime('%Y-%m-%d') if cn_result is not None and len(cn_result) else 'N/A'
+    adk_date = pd.Timestamp(cn_dk_result.index[-1]).strftime('%Y-%m-%d') if cn_dk_result is not None and len(cn_dk_result) else 'N/A'
+    a_note = '状态不可用或风控不可判定；停止执行，不生成正式调整指令' if not suba_executable else f"{a_date}{('盘中假设，尚未确认' if cn_intraday else '收盘确认')}；A策略"
+    return {'Sub-A': {'is_signal': bool(suba_executable and suba['changed'] and (not cn_intraday)), 'signal_text': a_target_text, 'note': f'{a_note}。{CN_SA_MODEL_CLOCK_NOTE}'}, 'Sub-A-DK': {'is_signal': bool(adk_available and adk['changed'] and (not dk_intraday)), 'signal_text': adk_target_text, 'note': '状态不可用；不生成正式调整指令' if not adk_available else f"{adk_date}{('盘中假设，尚未确认' if dk_intraday else '收盘确认')}；ADK策略（全10配对 + score-hot）"}}
+_v80_b78_US_ROT_COMMISSION = 0.001
+_v80_b78_US_TRADING_DAYS = 252
+_v80_b78_US_ROT_FINANCING_BENCHMARK = 'BIL'
+_v80_b78_US_ROT_FINANCING_SPREAD_BPS = 100
+_v80_b78_US_ROT_BASE_ASSETS = {'QQQM': {'proxy': 'QQQ', 'label': 'Nasdaq 100'}, 'EMXC': {'proxy': 'EMXC', 'label': '新兴市场(除中国)'}, 'VEA': {'proxy': 'EFA', 'label': '发达市场'}, 'GLDM': {'proxy': 'GLD', 'label': '黄金'}, 'VGIT': {'proxy': 'VGIT', 'label': '美国中期国债'}, 'PDBC': {'proxy': 'DBC', 'label': '大宗商品'}, 'IBIT': {'proxy': 'BTC-USD', 'label': '比特币'}}
+_v80_b78_US_ROT_MACRO_ASSETS = {'UUP': {'proxy': 'UUP', 'label': '美元指数'}, 'DBMF': {'proxy': 'DBMF', 'label': 'CTA/Managed Futures'}, 'KMLM': {'proxy': 'KMLM', 'label': 'CTA/KFA Managed Futures'}}
+_v80_b78_US_ROT_ASSETS = {**_v80_b78_US_ROT_BASE_ASSETS, **_v80_b78_US_ROT_MACRO_ASSETS}
+_v80_b78_US_ROT_BASE_POOL = [cfg['proxy'] for cfg in _v80_b78_US_ROT_BASE_ASSETS.values()]
+_v80_b78_US_ROT_MACRO_POOL = [cfg['proxy'] for cfg in _v80_b78_US_ROT_MACRO_ASSETS.values()]
+_v80_b78_US_ROT_POOL = _v80_b78_US_ROT_BASE_POOL + _v80_b78_US_ROT_MACRO_POOL
+_v80_b78_SUBB_INFLATION_GATE_TICKERS = ('DBC', 'TLT', 'UUP')
+_v80_b78_SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(_v80_b78_US_ROT_POOL + ['BIL', 'SPY'] + list(_v80_b78_SUBB_INFLATION_GATE_TICKERS)))
+_v80_b78_SUBB_REQUIRED_LIVE_PRICE_TICKERS = tuple(_v80_b78_US_ROT_ASSETS)
+_v80_b78_US_ROT_FUTURES = {'QQQM', 'GLDM'}
+_v80_b78_ROT_PROXY_TO_LIVE = {cfg['proxy']: live for live, cfg in _v80_b78_US_ROT_ASSETS.items()}
+_v80_b78_US_ROT_TARGET_VOL = 0.25
+_v80_b78_US_ROT_MAX_LEV = 1.5
+_v80_b78_US_ROT_VOL_WINDOW = 40
+_v80_b78_V78_SUBB_BIAS_TARGET_VOL = 0.25
+_v80_b78_V78_SUBB_BIAS_MAX_LEV = 1.5
+_v80_b78_V78_SUBB_BIAS_VOL_WINDOW = 40
+_v80_b78_V78_SUBB_LOGVOL_TARGET_VOL = 0.3
+_v80_b78_V78_SUBB_LOGVOL_MAX_LEV = 1.25
+_v80_b78_V78_SUBB_LOGVOL_VOL_WINDOW = 40
+_v80_b78_US_ROT_LBS = (160, 260, 390)
+_v80_b78_US_ROT_LBS_DEFAULT = (160, 260, 390)
+_v80_b78_US_ROT_WINDOW_WEIGHTS = {160: 0.6, 260: 0.3, 390: 0.1}
+_v80_b78_US_ROT_WINDOW_WEIGHT_LABEL = '160/260/390=60%/30%/10%'
+_v80_b78_US_ROT_MAX_LB = max(_v80_b78_US_ROT_LBS)
+_v80_b78_US_ROT_VOL_LB = 20
+_v80_b78_US_ROT_MIN_TURNOVER = 0.0
+_v80_b78_US_ROT_ABS_THRESHOLD = 0.0
+_v80_b78_US_ROT_REBALANCE_THRESHOLD = 1.05
+_v80_b78_SUBB_V75_OFFICIAL_WEIGHT = 0.5
+_v80_b78_SUBB_V75_EMA_WEIGHT = 0.5
+_v80_b78_SUBB_V75_EMA_HALF_LIFE = 70
+_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD = 0.15
+_v80_b78_SUBB_V75_EMA_VOL_MODE = 'ewma6m_1vol'
+_v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS = int(round(_v80_b78_US_TRADING_DAYS * 6 / 12))
+_v80_b78_SUBB_BLEND_VOL_NOTE = '混合后不再做组合级二次波动率归一；最终波动由官方腿与EMA腿各自VolScale及50/50日收益混合共同决定。'
+_v80_b78_V78_SUBB_V77_WEIGHT = 0.5
+_v80_b78_V78_SUBB_NEW_BIAS_WEIGHT = 0.25
+_v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT = 0.25
+_v80_b78_US_ROT_BTC_TICKER = 'BTC-USD'
+_v80_b78_US_ROT_BTC_START = pd.Timestamp('2022-01-01')
+_v80_b78_US_ROT_BTC_MAX_W = 0.3
+_v80_b78_US_ROT_VOLREG_ENABLED = True
+_v80_b78_US_ROT_VOLREG_SHORT_W = 10
+_v80_b78_US_ROT_VOLREG_LONG_W = 250
+_v80_b78_US_ROT_VOLREG_THRESHOLD = 1.8
+_v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD = 1.4
+_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE = 0.0
+_v80_b78_US_ROT_VOLREG_SCALE_ASSETS = ('QQQ', 'EMXC', 'EFA')
+_v80_b78_US_ROT_VOLREG_BACKTEST_NOTE = 'VolReg回测口径: T日收盘信号 -> T+1调整后开盘执行；仅将QQQ/EMXC/EFA目标暴露清零，削减权重转BIL；黄金、债券、商品、CTA、BTC不直接降档。'
+_v80_b78_PROD_PORTFOLIO = {'VTI': {'w': 0.2, 'label': 'US Total Market', 'proxy': 'VTI', 'cls': 'equity'}, 'QQQM': {'w': 0.1, 'label': 'US Nasdaq 100', 'proxy': 'QQQ', 'cls': 'equity'}, 'AVUV': {'w': 0.1, 'label': 'US Small Cap Value', 'proxy': 'AVUV', 'cls': 'equity'}, 'VEA': {'w': 0.1, 'label': 'Intl Developed', 'proxy': 'VEA', 'cls': 'equity'}, 'AVDV': {'w': 0.1, 'label': 'Intl Small Cap Value', 'proxy': 'AVDV', 'cls': 'equity'}, 'VGIT': {'w': 0.15, 'label': 'US Interm Treasury', 'proxy': 'VGIT', 'cls': 'bond'}, 'DBMF': {'w': 0.025, 'label': 'Managed Futures (DBMF)', 'proxy': 'DBMF', 'cls': 'alt'}, 'KMLM': {'w': 0.025, 'label': 'Managed Futures (KMLM)', 'proxy': 'KMLM', 'cls': 'alt'}, 'GLDM': {'w': 0.15, 'label': 'Gold', 'proxy': 'GLD', 'cls': 'commodity'}, 'IBIT': {'w': 0.05, 'label': 'Bitcoin', 'proxy': 'BTC-USD', 'cls': 'crypto'}}
+_v80_b78_INFLATION_PRESSURE_LB = 126
+_v80_b78_XNYS_AD_HOC_CLOSURES = frozenset(pd.to_datetime(['2004-06-11', '2007-01-02', '2012-10-29', '2012-10-30', '2018-12-05', '2025-01-09']).normalize())
+
+def _v80_b78_v78_subb_inflation_participation_note():
+    return '官方腿：通胀开关ON才纳入UUP/DBMF/KMLM；EMA腿/Bias腿/LogVol腿：始终US_ROT_POOL全池参与排名。'
+
+def _v80_b78_subb_window_lbs_for_display():
+    try:
+        values = list(_v80_b78_US_ROT_LBS)
+        values = [int(v) for v in values[:3]]
+        if len(values) == 3:
+            return tuple(values)
+    except Exception:
+        pass
+    return _v80_b78_US_ROT_LBS_DEFAULT
+
+def _v80_b78_subb_window_label_for_display(separator='/'):
+    return separator.join((str(lb) for lb in _v80_b78_subb_window_lbs_for_display()))
+
+def _v80_b78_normalize_row_idx(index, row_idx):
+    return len(index) + row_idx if row_idx < 0 else row_idx
+
+def _v80_b78_inflation_pressure_state_from_prices(close_df, row_idx, lookback=_v80_b78_INFLATION_PRESSURE_LB):
+    row_idx = _v80_b78_normalize_row_idx(close_df.index, row_idx)
+    if row_idx < lookback:
+        return None
+    if 'DBC' not in close_df.columns or 'TLT' not in close_df.columns:
+        return None
+    current = close_df.iloc[row_idx]
+    previous = close_df.iloc[row_idx - lookback]
+    if pd.isna(current.get('DBC')) or pd.isna(previous.get('DBC')):
+        return None
+    if pd.isna(current.get('TLT')) or pd.isna(previous.get('TLT')):
+        return None
+    dbc_mom = current['DBC'] / previous['DBC'] - 1.0
+    tlt_mom = current['TLT'] / previous['TLT'] - 1.0
+    return bool(dbc_mom > 0 and tlt_mom < 0)
+
+def _v80_b78_inflation_pressure_on_from_prices(close_df, row_idx, lookback=_v80_b78_INFLATION_PRESSURE_LB):
+    return _v80_b78_inflation_pressure_state_from_prices(close_df, row_idx, lookback) is True
+
+def _v80_b78_subb_active_ranking_codes(close_df, row_idx, base_codes=None):
+    base = list(base_codes) if base_codes is not None else list(_v80_b78_US_ROT_BASE_POOL)
+    state = _v80_b78_inflation_pressure_state_from_prices(close_df, row_idx)
+    if state is None:
+        raise poe.BotError('Sub-B通胀门控数据不可判定：DBC/TLT缺失或过期')
+    if state is False:
+        return base
+    available_macro = [code for code in _v80_b78_US_ROT_MACRO_POOL if code in close_df.columns]
+    return base + [code for code in available_macro if code not in base]
+
+def _v80_b78_dict_weight_turnover(old_weights, new_weights):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    assets = set(old_weights) | set(new_weights)
+    return float(sum((abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets)))
+
+def _v80_b78_dict_tradeable_turnover(old_weights, new_weights, non_tradeable_assets=('CASH', 'BIL')):
+    old_weights = old_weights or {}
+    new_weights = new_weights or {}
+    skip = set(non_tradeable_assets or ())
+    assets = (set(old_weights) | set(new_weights)) - skip
+    return float(sum((abs(float(new_weights.get(a, 0.0) or 0.0) - float(old_weights.get(a, 0.0) or 0.0)) for a in assets)))
+
+def _v80_b78_subb_should_rebalance(turnover, min_turnover=_v80_b78_US_ROT_MIN_TURNOVER):
+    threshold = max(float(min_turnover), 1e-09)
+    return float(turnover or 0.0) > threshold
+
+def _v80_b78_us_signal_days(close_df, start_idx):
+    return _us_signal_days(close_df, start_idx)
+
+def _v80_b78_xnys_fallback_schedule(start_date, end_date):
+    start = pd.Timestamp(start_date).normalize()
+    end = pd.Timestamp(end_date).normalize()
+    sessions = [dt for dt in pd.date_range(start, end, freq='D') if _is_us_market_session(dt)]
+    rows = []
+    for session in sessions:
+        early_close = _is_us_early_close_session(session)
+        open_et = pd.Timestamp(datetime(session.year, session.month, session.day, 9, 30), tz='America/New_York')
+        close_et = pd.Timestamp(datetime(session.year, session.month, session.day, 13 if early_close else 16, 0), tz='America/New_York')
+        rows.append((session.normalize(), open_et.tz_convert('UTC'), close_et.tz_convert('UTC')))
+    if not rows:
+        return pd.DataFrame(columns=['market_open', 'market_close'], index=pd.DatetimeIndex([]))
+    return pd.DataFrame({'market_open': [row[1] for row in rows], 'market_close': [row[2] for row in rows]}, index=pd.DatetimeIndex([row[0] for row in rows]))
+
+def _v80_b78_xnys_schedule(start_date, end_date):
+    start = pd.Timestamp(start_date).normalize()
+    end = pd.Timestamp(end_date).normalize()
+    canonical = _v80_b78_xnys_fallback_schedule(start, end)
+
+    def _on_canonical_sessions(schedule):
+        schedule = schedule[['market_open', 'market_close']].copy()
+        schedule = schedule[~schedule.index.duplicated(keep='last')]
+        schedule = schedule.reindex(canonical.index)
+        for column in ('market_open', 'market_close'):
+            schedule[column] = pd.to_datetime(schedule[column], utc=True)
+            schedule[column] = schedule[column].fillna(canonical[column])
+        return schedule[['market_open', 'market_close']]
+    try:
+        import exchange_calendars as xcals
+        calendar = xcals.get_calendar('XNYS')
+        schedule = calendar.schedule.loc[start.strftime('%Y-%m-%d'):end.strftime('%Y-%m-%d')].copy()
+        schedule = schedule.rename(columns={'open': 'market_open', 'close': 'market_close'})
+        schedule.index = pd.DatetimeIndex(pd.to_datetime(schedule.index)).tz_localize(None).normalize()
+        for column in ('market_open', 'market_close'):
+            schedule[column] = pd.to_datetime(schedule[column], utc=True)
+        return _on_canonical_sessions(schedule)
+    except (ImportError, KeyError, TypeError, ValueError, AttributeError):
+        pass
+    try:
+        import pandas_market_calendars as mcal
+        schedule = mcal.get_calendar('XNYS').schedule(start_date=start, end_date=end).copy()
+        schedule.index = pd.DatetimeIndex(pd.to_datetime(schedule.index)).tz_localize(None).normalize()
+        for column in ('market_open', 'market_close'):
+            schedule[column] = pd.to_datetime(schedule[column], utc=True)
+        return _on_canonical_sessions(schedule)
+    except (ImportError, KeyError, TypeError, ValueError, AttributeError):
+        return canonical
+
+def _v80_b78_us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold, prev_risky=None, threshold=1.0):
+    available = {}
+    for a in ranking_codes:
+        if a in mom_row.index and (not np.isnan(mom_row[a])) and (a in vol_row.index) and (not np.isnan(vol_row[a])) and (vol_row[a] > 0.001):
+            available[a] = mom_row[a]
+    if not available:
+        return {'BIL': 1.0}
+    sorted_avail = sorted(available.items(), key=lambda x: x[1], reverse=True)
+    if threshold > 1.0 and prev_risky:
+        selected = set()
+        for a in prev_risky:
+            if a in available:
+                selected.add(a)
+        for a, _ in sorted_avail:
+            if len(selected) >= top_n:
+                break
+            if a not in selected:
+                selected.add(a)
+        if len(selected) > top_n:
+            sel_scored = sorted([(a, available[a]) for a in selected], key=lambda x: x[1])
+            while len(selected) > top_n:
+                selected.discard(sel_scored.pop(0)[0])
+        weakest = min(selected, key=lambda a: available.get(a, -999))
+        weakest_score = available.get(weakest, 0)
+        for a, sc in sorted_avail:
+            if a in selected:
+                continue
+            should_replace = sc > weakest_score if weakest_score <= 0 else sc > weakest_score * threshold
+            if should_replace:
+                selected.discard(weakest)
+                selected.add(a)
+                weakest = min(selected, key=lambda a2: available.get(a2, -999))
+                weakest_score = available.get(weakest, 0)
+        top = [(a, available[a]) for a in selected]
+    else:
+        top = sorted_avail[:top_n]
+    passed, n_fail = ([], 0)
+    for a, _ in top:
+        if not np.isnan(mom_row.get(a, np.nan)) and mom_row[a] > abs_threshold:
+            passed.append(a)
+        else:
+            n_fail += 1
+    if not top:
+        return {'BIL': 1.0}
+    bil_w = n_fail / len(top)
+    raw = {}
+    if passed:
+        iv = {a: 1.0 / vol_row[a] for a in passed if vol_row[a] > 0.001}
+        total_iv = sum(iv.values()) if iv else 1
+        share = 1.0 - bil_w
+        raw = {a: v / total_iv * share for a, v in iv.items()}
+    if bil_w > 0:
+        raw['BIL'] = bil_w
+    return raw
+
+def _v80_b78_us_model_b(raw_w, scale):
+    act = {}
+    for a, w in raw_w.items():
+        if a == 'BIL':
+            continue
+        live_asset = _v80_b78_ROT_PROXY_TO_LIVE.get(a, a)
+        if scale <= 1.0:
+            act[a] = w * scale
+        elif live_asset in _v80_b78_US_ROT_FUTURES:
+            act[a] = w * scale
+        else:
+            act[a] = w
+    risky = sum(act.values())
+    act['BIL'] = max(1.0 - risky, 0.0)
+    return act
+
+def _v80_b78_apply_btc_cap(act, btc_ticker, max_w):
+    if btc_ticker not in act or act[btc_ticker] <= max_w:
+        return act
+    act = dict(act)
+    excess = act[btc_ticker] - max_w
+    act[btc_ticker] = max_w
+    act['BIL'] = act.get('BIL', 0.0) + excess
+    return act
+
+def _v80_b78_apply_subb_btc_cap(act):
+    return _v80_b78_apply_btc_cap(act, _v80_b78_US_ROT_BTC_TICKER, _v80_b78_US_ROT_BTC_MAX_W)
+
+def _v80_b78_apply_subb_btc_start_filter(close_df):
+    out = close_df.copy()
+    if _v80_b78_US_ROT_BTC_TICKER in out.columns:
+        out.loc[out.index < _v80_b78_US_ROT_BTC_START, _v80_b78_US_ROT_BTC_TICKER] = np.nan
+    return out
+
+def _v80_b78_weighted_average_weight_dicts(weight_items):
+    if not weight_items:
+        return {'BIL': 1.0}
+    total_weight = sum((float(weight) for _weights, weight in weight_items))
+    if total_weight <= 0:
+        return {'BIL': 1.0}
+    keys = set().union(*[weights.keys() for weights, _weight in weight_items])
+    return {key: sum((weights.get(key, 0.0) * float(weight) for weights, weight in weight_items)) / total_weight for key in keys}
+
+def _v80_b78_us_selected_risky_from_raw(raw_w):
+    return {a for a, w in raw_w.items() if a != 'BIL' and w > 1e-12}
+
+def _v80_b78_serialize_us_mix_selected(selected):
+    if not selected:
+        return ''
+    return ','.join(sorted(selected))
+
+def _v80_b78_us_mix_target_weights(momentum_rows, vol_row, ranking_codes, scale, top_n=3, abs_threshold=_v80_b78_US_ROT_ABS_THRESHOLD, prev_risky_by_lb=None, threshold=1.0):
+    acts = []
+    per_lb = {}
+    for lb, mom_row in momentum_rows.items():
+        prev_risky = prev_risky_by_lb.get(lb) if prev_risky_by_lb else None
+        raw = _v80_b78_us_raw_weights(mom_row, vol_row, ranking_codes, top_n, abs_threshold, prev_risky=prev_risky, threshold=threshold)
+        act = _v80_b78_us_model_b(raw, scale)
+        acts.append((act, _v80_b78_US_ROT_WINDOW_WEIGHTS.get(lb, 0.0)))
+        per_lb[lb] = {'raw': raw, 'act': act, 'selected': _v80_b78_us_selected_risky_from_raw(raw), 'prev_risky': set(prev_risky) if prev_risky else None}
+    return (_v80_b78_apply_subb_btc_cap(_v80_b78_weighted_average_weight_dicts(acts)), per_lb)
+
+def _v80_b78_run_us_rotation_mix(close_df, ranking_codes, top_n=3, abs_threshold=_v80_b78_US_ROT_ABS_THRESHOLD, min_turnover=_v80_b78_US_ROT_MIN_TURNOVER, threshold=_v80_b78_US_ROT_REBALANCE_THRESHOLD, us_open=None, ranking_code_selector=None, weight_assets=None, strict_open_execution=False):
+    close_df = _v80_b78_apply_subb_btc_start_filter(close_df)
+    start_idx = max(_v80_b78_US_ROT_MAX_LB, _v80_b78_US_ROT_VOL_LB, _v80_b78_US_ROT_VOL_WINDOW) + 1
+    required = list(ranking_codes) + ['BIL']
+    if ranking_code_selector is not None:
+        required += list(_v80_b78_SUBB_INFLATION_GATE_TICKERS)
+    _v80_b78_validate_subb_price_input(close_df, required, start_idx + 1, 'Sub-B official rotation', strict_calendar=strict_open_execution)
+    momentum_by_lb = {lb: close_df.div(close_df.shift(lb)).sub(1) for lb in _v80_b78_US_ROT_LBS}
+    vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    signal_days = _v80_b78_us_signal_days(close_df, start_idx)
+    act = {'BIL': 1.0}
+    holdings = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    scale = 1.0
+    w_assets = list(dict.fromkeys(weight_assets if weight_assets is not None else ranking_codes))
+    if 'BIL' not in w_assets:
+        w_assets.append('BIL')
+    prev_risky_by_lb = {lb: None for lb in _v80_b78_US_ROT_LBS}
+    rows, hist = ([], [])
+    for i in range(start_idx, len(close_df)):
+        if len(hist) >= _v80_b78_US_ROT_VOL_WINDOW:
+            rv = np.std(hist[-_v80_b78_US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(_v80_b78_US_TRADING_DAYS)
+            scale = min(max(_v80_b78_US_ROT_TARGET_VOL / rv, 0.05), _v80_b78_US_ROT_MAX_LEV) if rv > 0.001 else _v80_b78_US_ROT_MAX_LEV
+        if pending_act is not None:
+            open_assets = _v80_b78_active_weight_assets(holdings, pending_act)
+            open_row = _v80_b78_us_open_row(close_df.index[i], open_assets, us_open, close_df, strict=strict_open_execution, context='Sub-B official rotation')
+            overnight = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _v80_b78_us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross_adj = (1 + overnight) * (1 + intraday) - 1
+            execution_cost = float(pending_comm)
+            adj = (1 + gross_adj) * (1 - execution_cost) - 1
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross_adj = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            adj = gross_adj
+        hist.append(adj)
+        is_sig = i in signal_days
+        rebalanced = False
+        new_act = dict(act)
+        row_selected_by_lb = {lb: prev_risky_by_lb.get(lb) for lb in _v80_b78_US_ROT_LBS}
+        active_ranking_codes = list(ranking_codes)
+        if is_sig:
+            if ranking_code_selector is not None:
+                active_ranking_codes = list(ranking_code_selector(close_df, i, ranking_codes))
+            momentum_rows = {lb: momentum_by_lb[lb].iloc[i] for lb in _v80_b78_US_ROT_LBS}
+            new_act, per_lb = _v80_b78_us_mix_target_weights(momentum_rows, vol_df.iloc[i], active_ranking_codes, scale, top_n=top_n, abs_threshold=abs_threshold, prev_risky_by_lb=prev_risky_by_lb, threshold=threshold)
+            next_prev_risky_by_lb = {lb: per_lb[lb]['selected'] or None for lb in _v80_b78_US_ROT_LBS}
+            prev_a = {a: act.get(a, 0.0) for a in w_assets} if rows else {'BIL': 1.0}
+            all_a = set(list(new_act.keys()) + list(prev_a.keys()))
+            to = sum((abs(new_act.get(a, 0.0) - prev_a.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            if _v80_b78_subb_should_rebalance(to, min_turnover):
+                pending_act = dict(new_act)
+                pending_comm = to * _v80_b78_US_ROT_COMMISSION if to > 0 else 0.0
+                act = new_act
+                prev_risky_by_lb = next_prev_risky_by_lb
+                row_selected_by_lb = next_prev_risky_by_lb
+                rebalanced = True
+        row = {'date': close_df.index[i], 'return': adj, 'return_before_execution_cost': gross_adj, 'execution_cost': execution_cost, 'is_signal': is_sig, 'rebalanced': rebalanced, 'scale': scale, 'inflation_pressure_on': _v80_b78_inflation_pressure_on_from_prices(close_df, i), 'ranking_codes': ','.join(active_ranking_codes)}
+        for a in w_assets:
+            row[f'w_{a}'] = holdings.get(a, 0.0)
+            row[f'actual_w_{a}'] = holdings.get(a, 0.0)
+            row[f'target_w_{a}'] = act.get(a, 0.0)
+        for lb in _v80_b78_US_ROT_LBS:
+            row[f'sel_{lb}'] = _v80_b78_serialize_us_mix_selected(row_selected_by_lb.get(lb))
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index('date')
+    df['nav'] = (1 + df['return']).cumprod()
+    return df
+
+def _v80_b78_subb_v75_ema_score(close_df, half_life=_v80_b78_SUBB_V75_EMA_HALF_LIFE):
+    ret = close_df.pct_change()
+    return ret.ewm(halflife=half_life, min_periods=half_life, adjust=False).mean() * _v80_b78_US_TRADING_DAYS
+
+def _v80_b78_subb_v75_ema_scale_from_hist(hist):
+    min_obs = _v80_b78_US_ROT_VOL_WINDOW
+    if _v80_b78_SUBB_V75_EMA_VOL_MODE == 'ewma6m_1vol':
+        min_obs = max(_v80_b78_US_ROT_VOL_WINDOW, _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+    if len(hist) < min_obs:
+        return 1.0
+    if _v80_b78_SUBB_V75_EMA_VOL_MODE == 'ewma6m_1vol':
+        rv = pd.Series(hist, dtype=float).ewm(halflife=_v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS, adjust=False).std().iloc[-1] * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    else:
+        rv = np.std(hist[-_v80_b78_US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    return min(max(_v80_b78_US_ROT_TARGET_VOL / rv, 0.05), _v80_b78_US_ROT_MAX_LEV) if rv > 0.001 else _v80_b78_US_ROT_MAX_LEV
+
+def _v80_b78_run_subb_v75_ema_base7_rotation(close_df, base_codes=None, half_life=_v80_b78_SUBB_V75_EMA_HALF_LIFE, abs_threshold=_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD, top_n=3, min_turnover=_v80_b78_US_ROT_MIN_TURNOVER, threshold=_v80_b78_US_ROT_REBALANCE_THRESHOLD, us_open=None, weight_assets=None, strict_open_execution=False):
+    close_df = _v80_b78_apply_subb_btc_start_filter(close_df)
+    ranking_codes = list(base_codes) if base_codes is not None else list(_v80_b78_US_ROT_POOL)
+    start_idx = max(half_life, _v80_b78_US_ROT_VOL_LB, _v80_b78_US_ROT_VOL_WINDOW) + 1
+    _v80_b78_validate_subb_price_input(close_df, ranking_codes + ['BIL'], start_idx + 1, 'Sub-B EMA rotation', strict_calendar=strict_open_execution)
+    score_df = _v80_b78_subb_v75_ema_score(close_df, half_life)
+    vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    signal_days = _v80_b78_us_signal_days(close_df, start_idx)
+    w_assets = list(dict.fromkeys(weight_assets if weight_assets is not None else ranking_codes))
+    if 'BIL' not in w_assets:
+        w_assets.append('BIL')
+    act = {'BIL': 1.0}
+    holdings = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    scale = 1.0
+    rows, hist = ([], [])
+    for i in range(start_idx, len(close_df)):
+        scale = _v80_b78_subb_v75_ema_scale_from_hist(hist)
+        if pending_act is not None:
+            open_assets = _v80_b78_active_weight_assets(holdings, pending_act)
+            open_row = _v80_b78_us_open_row(close_df.index[i], open_assets, us_open, close_df, strict=strict_open_execution, context='Sub-B EMA rotation')
+            overnight = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _v80_b78_us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross_adj = (1 + overnight) * (1 + intraday) - 1
+            execution_cost = float(pending_comm)
+            adj = (1 + gross_adj) * (1 - execution_cost) - 1
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross_adj = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            adj = gross_adj
+        hist.append(adj)
+        is_sig = i in signal_days
+        rebalanced = False
+        selected = []
+        turnover = 0.0
+        if is_sig:
+            prev_risky = {a for a in w_assets if a != 'BIL' and act.get(a, 0.0) > 0.001}
+            raw_w = _v80_b78_us_raw_weights(score_df.iloc[i], vol_df.iloc[i], ranking_codes, top_n, abs_threshold, prev_risky=prev_risky if prev_risky else None, threshold=threshold)
+            new_act = _v80_b78_apply_subb_btc_cap(_v80_b78_us_model_b(raw_w, scale))
+            prev_a = {a: act.get(a, 0.0) for a in w_assets} if rows else {'BIL': 1.0}
+            all_a = set(list(new_act.keys()) + list(prev_a.keys()))
+            turnover = sum((abs(new_act.get(a, 0.0) - prev_a.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            if _v80_b78_subb_should_rebalance(turnover, min_turnover):
+                pending_act = dict(new_act)
+                pending_comm = turnover * _v80_b78_US_ROT_COMMISSION if turnover > 0 else 0.0
+                act = new_act
+                rebalanced = True
+            selected = sorted([a for a, w in raw_w.items() if a != 'BIL' and w > 1e-12])
+        row = {'date': close_df.index[i], 'return': adj, 'return_before_execution_cost': gross_adj, 'execution_cost': execution_cost, 'is_signal': is_sig, 'rebalanced': rebalanced, 'turnover': turnover, 'scale': scale, 'target_vol_mode': _v80_b78_SUBB_V75_EMA_VOL_MODE, 'target_vol_halflife_days': _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS, 'ranking_codes': ','.join(ranking_codes), 'selected': ','.join(selected), 'inflation_pressure_on': _v80_b78_inflation_pressure_on_from_prices(close_df, i)}
+        for asset in w_assets:
+            row[f'w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'actual_w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'target_w_{asset}'] = act.get(asset, 0.0)
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index('date')
+    df['nav'] = (1 + df['return']).cumprod()
+    return df
+
+def _v80_b78_blend_subb_v75_results(official_result, ema_result, official_weight=_v80_b78_SUBB_V75_OFFICIAL_WEIGHT, ema_weight=_v80_b78_SUBB_V75_EMA_WEIGHT):
+    common_index = official_result.dropna(subset=['return']).index.intersection(ema_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('Sub-B V7.7 official/EMA blend has no overlapping return window.')
+    official = official_result.reindex(common_index)
+    ema = ema_result.reindex(common_index)
+    out = official.copy()
+    official_gross = official.get('return_before_execution_cost', official['return']).astype(float)
+    ema_gross = ema.get('return_before_execution_cost', ema['return']).astype(float)
+    out['official_return'] = official['return'].astype(float)
+    out['ema_return'] = ema['return'].astype(float)
+    out['official_return_before_execution_cost'] = official_gross
+    out['ema_return_before_execution_cost'] = ema_gross
+    out['return_before_subb_execution_cost'] = official_weight * official_gross + ema_weight * ema_gross
+    out['subb_blend_official_weight'] = float(official_weight)
+    out['subb_blend_ema_weight'] = float(ema_weight)
+    out['subb_ema_half_life'] = int(_v80_b78_SUBB_V75_EMA_HALF_LIFE)
+    out['subb_ema_abs_threshold'] = float(_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD)
+    out['subb_ema_vol_mode'] = _v80_b78_SUBB_V75_EMA_VOL_MODE
+    out['subb_ema_vol_halflife_days'] = int(_v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+    if 'scale' in official.columns:
+        out['official_scale'] = official['scale']
+    if 'scale' in ema.columns:
+        out['ema_scale'] = ema['scale']
+    if 'selected' in ema.columns:
+        out['ema_selected'] = ema['selected']
+    if 'is_signal' in ema.columns:
+        out['is_signal'] = official.get('is_signal', False).astype(bool) | ema['is_signal'].astype(bool)
+    if 'rebalanced' in ema.columns:
+        out['rebalanced'] = official.get('rebalanced', False).astype(bool) | ema['rebalanced'].astype(bool)
+    assets = sorted(set(_v80_b78_weight_columns_assets(official)) | set(_v80_b78_weight_columns_assets(ema)))
+    actual_df = pd.DataFrame(index=common_index)
+    target_df = pd.DataFrame(index=common_index)
+    blended_weight_cols = {}
+    for asset in assets:
+        official_w = pd.to_numeric(official.get(f'w_{asset}', pd.Series(0.0, index=common_index)), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_w = pd.to_numeric(ema.get(f'w_{asset}', pd.Series(0.0, index=common_index)), errors='coerce').reindex(common_index).fillna(0.0)
+        official_actual = pd.to_numeric(official.get(f'actual_w_{asset}', official_w), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_actual = pd.to_numeric(ema.get(f'actual_w_{asset}', ema_w), errors='coerce').reindex(common_index).fillna(0.0)
+        official_target = pd.to_numeric(official.get(f'target_w_{asset}', official_w), errors='coerce').reindex(common_index).fillna(0.0)
+        ema_target = pd.to_numeric(ema.get(f'target_w_{asset}', ema_w), errors='coerce').reindex(common_index).fillna(0.0)
+        official_contrib_actual = official_weight * official_actual
+        ema_contrib_actual = ema_weight * ema_actual
+        official_contrib_target = official_weight * official_target
+        ema_contrib_target = ema_weight * ema_target
+        actual_df[asset] = official_contrib_actual + ema_contrib_actual
+        target_df[asset] = official_contrib_target + ema_contrib_target
+        blended_weight_cols[f'official_w_{asset}'] = official_target
+        blended_weight_cols[f'ema_w_{asset}'] = ema_target
+        blended_weight_cols[f'official_actual_w_{asset}'] = official_actual
+        blended_weight_cols[f'ema_actual_w_{asset}'] = ema_actual
+        blended_weight_cols[f'official_contrib_w_{asset}'] = official_contrib_target
+        blended_weight_cols[f'ema_contrib_w_{asset}'] = ema_contrib_target
+        blended_weight_cols[f'actual_w_{asset}'] = actual_df[asset]
+        blended_weight_cols[f'target_w_{asset}'] = target_df[asset]
+        blended_weight_cols[f'w_{asset}'] = actual_df[asset]
+    if blended_weight_cols:
+        out = pd.concat([out.drop(columns=list(blended_weight_cols), errors='ignore'), pd.DataFrame(blended_weight_cols, index=common_index)], axis=1)
+    prev_actual = None
+    turnovers = []
+    costs = []
+    for dt in common_index:
+        actual = actual_df.loc[dt].to_dict()
+        if prev_actual is None:
+            prev_actual = {'BIL': 1.0}
+        turnover = _v80_b78_dict_tradeable_turnover(prev_actual, actual, non_tradeable_assets=('BIL',))
+        turnovers.append(turnover)
+        costs.append(turnover * _v80_b78_US_ROT_COMMISSION)
+        prev_actual = actual
+    out['subb_execution_turnover'] = pd.Series(turnovers, index=common_index, dtype=float)
+    out['subb_execution_cost'] = pd.Series(costs, index=common_index, dtype=float)
+    out['return'] = (1.0 + out['return_before_subb_execution_cost']) * (1.0 - out['subb_execution_cost']) - 1.0
+    out['nav'] = (1 + out['return']).cumprod()
+    return out
+
+def _v80_b78_v78_score_bias_level(close_df):
+    weights = {160: 3.0, 260: 2.0, 390: 1.0}
+    score = pd.DataFrame(0.0, index=close_df.index, columns=_v80_b78_US_ROT_POOL)
+    denom = sum(weights.values())
+    for lb, weight in weights.items():
+        score = score + (close_df[_v80_b78_US_ROT_POOL] / close_df[_v80_b78_US_ROT_POOL].rolling(lb).mean() - 1.0) * (weight / denom)
+    return score
+
+def _v80_b78_v78_score_log_weighted(close_df):
+    weights = {120: 0.6, 200: 0.3, 320: 0.1}
+    score = pd.DataFrame(0.0, index=close_df.index, columns=_v80_b78_US_ROT_POOL)
+    for lb, weight in weights.items():
+        score = score + np.log(close_df[_v80_b78_US_ROT_POOL] / close_df[_v80_b78_US_ROT_POOL].shift(lb)) * weight
+    return score
+
+def _v80_b78_v78_target_from_scores(score_row, vol_row, scale, top_n=3, abs_threshold=0.0):
+    raw_w = _v80_b78_us_raw_weights(score_row, vol_row, _v80_b78_US_ROT_POOL, top_n, abs_threshold, prev_risky=None, threshold=1.0)
+    return _v80_b78_apply_subb_btc_cap(_v80_b78_us_model_b(raw_w, scale))
+
+def _v80_b78_run_v78_subb_new_line(close_df, line='bias', us_open=None, strict_open_execution=False):
+    close_df = _v80_b78_apply_subb_btc_start_filter(close_df)
+    w_assets = list(dict.fromkeys(_v80_b78_US_ROT_POOL + ['BIL']))
+    if line == 'bias':
+        scores = _v80_b78_v78_score_bias_level(close_df)
+        target_vol = _v80_b78_V78_SUBB_BIAS_TARGET_VOL
+        vol_window = _v80_b78_V78_SUBB_BIAS_VOL_WINDOW
+        max_leverage = _v80_b78_V78_SUBB_BIAS_MAX_LEV
+        abs_threshold = 0.0
+        start_idx = max(390, _v80_b78_US_ROT_VOL_LB, vol_window) + 1
+    elif line == 'logvol':
+        scores = _v80_b78_v78_score_log_weighted(close_df)
+        target_vol = _v80_b78_V78_SUBB_LOGVOL_TARGET_VOL
+        vol_window = _v80_b78_V78_SUBB_LOGVOL_VOL_WINDOW
+        max_leverage = _v80_b78_V78_SUBB_LOGVOL_MAX_LEV
+        abs_threshold = 0.0
+        start_idx = max(320, _v80_b78_US_ROT_VOL_LB, vol_window) + 1
+    else:
+        raise ValueError(line)
+    _v80_b78_validate_subb_price_input(close_df, list(_v80_b78_US_ROT_POOL) + ['BIL'], start_idx + 1, f'Sub-B V7.8 {line} rotation', strict_calendar=strict_open_execution)
+    vol_df = close_df.pct_change().rolling(_v80_b78_US_ROT_VOL_LB).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    signal_days = _v80_b78_us_signal_days(close_df, start_idx)
+    holdings = {'BIL': 1.0}
+    target = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    hist = []
+    rows = []
+    for i in range(start_idx, len(close_df)):
+        dt = close_df.index[i]
+        if len(hist) >= vol_window:
+            rv = np.std(hist[-vol_window:], ddof=1) * np.sqrt(_v80_b78_US_TRADING_DAYS)
+            scale = min(max(target_vol / rv, 0.05), max_leverage) if rv > 0.001 else max_leverage
+        else:
+            rv = np.nan
+            scale = 1.0
+        if pending_act is not None:
+            open_assets = _v80_b78_active_weight_assets(holdings, pending_act)
+            open_row = _v80_b78_us_open_row(dt, open_assets, us_open, close_df, strict=strict_open_execution, context=f'Sub-B V7.8 {line} rotation')
+            overnight = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _v80_b78_us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            gross = (1.0 + overnight) * (1.0 + intraday) - 1.0
+            execution_cost = float(pending_comm)
+            ret = (1.0 + gross) * (1.0 - execution_cost) - 1.0
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            gross = _v80_b78_us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+            execution_cost = 0.0
+            ret = gross
+        hist.append(float(ret))
+        is_signal = i in signal_days
+        rebalanced = False
+        turnover = 0.0
+        if is_signal:
+            target = _v80_b78_v78_target_from_scores(scores.iloc[i], vol_df.iloc[i], scale, top_n=3, abs_threshold=abs_threshold)
+            all_a = set(target) | set(holdings)
+            turnover = sum((abs(target.get(a, 0.0) - holdings.get(a, 0.0)) for a in all_a if a != 'BIL'))
+            pending_act = dict(target)
+            pending_comm = turnover * _v80_b78_US_ROT_COMMISSION if turnover > 0 else 0.0
+            rebalanced = True
+        row = {'date': dt, 'return': float(ret), 'return_before_execution_cost': float(gross), 'execution_cost': float(execution_cost), 'is_signal': bool(is_signal), 'rebalanced': bool(rebalanced), 'turnover': float(turnover), 'target_vol_scale': float(scale), 'realized_vol': float(rv) if np.isfinite(rv) else np.nan, 'line': line}
+        for asset in w_assets:
+            row[f'w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'actual_w_{asset}'] = holdings.get(asset, 0.0)
+            row[f'target_w_{asset}'] = target.get(asset, 0.0)
+        rows.append(row)
+    out = pd.DataFrame(rows).set_index('date')
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    return out
+
+def _v80_b78_blend_v78_subb_results(v77_result, bias_result, logvol_result):
+    common_index = v77_result.dropna(subset=['return']).index
+    common_index = common_index.intersection(bias_result.dropna(subset=['return']).index)
+    common_index = common_index.intersection(logvol_result.dropna(subset=['return']).index)
+    if common_index.empty:
+        raise ValueError('V7.8 Sub-B blend has no overlapping return window.')
+    v77 = v77_result.reindex(common_index)
+    bias = bias_result.reindex(common_index)
+    logvol = logvol_result.reindex(common_index)
+    out = v77.copy()
+    out['v78_subb_v77_return'] = v77['return'].astype(float)
+    out['v78_subb_bias_return'] = bias['return'].astype(float)
+    out['v78_subb_logvol_return'] = logvol['return'].astype(float)
+    out['return'] = _v80_b78_V78_SUBB_V77_WEIGHT * out['v78_subb_v77_return'] + _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT * out['v78_subb_bias_return'] + _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT * out['v78_subb_logvol_return']
+    out['return_before_v78_subb_blend'] = out['return']
+    out['v78_subb_component_net_return'] = out['return']
+    out['return_before_subb_execution_cost'] = out['return']
+    out['subb_execution_cost'] = 0.0
+    out['cost_basis_note'] = 'component-net blend; component costs already included; account-level target turnover is display-only'
+    out['nav'] = (1.0 + out['return'].fillna(0.0)).cumprod()
+    for flag_col in ('is_signal', 'rebalanced'):
+        out[flag_col] = v77.get(flag_col, pd.Series(False, index=common_index)).astype(bool) | bias.get(flag_col, pd.Series(False, index=common_index)).astype(bool) | logvol.get(flag_col, pd.Series(False, index=common_index)).astype(bool)
+    out['model_rebalanced'] = out['rebalanced']
+    out['effective_rebalanced'] = out['rebalanced']
+    assets = sorted(set(_v80_b78_weight_columns_assets(v77)) | set(_v80_b78_weight_columns_assets(bias)) | set(_v80_b78_weight_columns_assets(logvol)))
+    weight_cols = {}
+    for asset in assets:
+        zero = pd.Series(0.0, index=common_index)
+        v77_actual = pd.to_numeric(v77.get(f'actual_w_{asset}', v77.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        bias_actual = pd.to_numeric(bias.get(f'actual_w_{asset}', bias.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        logvol_actual = pd.to_numeric(logvol.get(f'actual_w_{asset}', logvol.get(f'w_{asset}', zero)), errors='coerce').fillna(0.0)
+        v77_target = pd.to_numeric(v77.get(f'target_w_{asset}', v77_actual), errors='coerce').fillna(0.0)
+        bias_target = pd.to_numeric(bias.get(f'target_w_{asset}', bias_actual), errors='coerce').fillna(0.0)
+        logvol_target = pd.to_numeric(logvol.get(f'target_w_{asset}', logvol_actual), errors='coerce').fillna(0.0)
+        actual_w = _v80_b78_V78_SUBB_V77_WEIGHT * v77_actual + _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT * bias_actual + _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_actual
+        target_w = _v80_b78_V78_SUBB_V77_WEIGHT * v77_target + _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT * bias_target + _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_target
+        weight_cols[f'v78_v77_w_{asset}'] = v77_actual
+        weight_cols[f'v78_bias_w_{asset}'] = bias_actual
+        weight_cols[f'v78_logvol_w_{asset}'] = logvol_actual
+        weight_cols[f'v78_v77_target_w_{asset}'] = v77_target
+        weight_cols[f'v78_bias_target_w_{asset}'] = bias_target
+        weight_cols[f'v78_logvol_target_w_{asset}'] = logvol_target
+        weight_cols[f'w_{asset}'] = actual_w
+        weight_cols[f'actual_w_{asset}'] = actual_w
+        weight_cols[f'target_w_{asset}'] = target_w
+    if weight_cols:
+        out = out.drop(columns=[col for col in weight_cols if col in out.columns], errors='ignore')
+        out = pd.concat([out, pd.DataFrame(weight_cols, index=common_index)], axis=1)
+    out['v78_blend_label'] = '25% Official + 25% EMA + 25% Bias + 25% LogVol'
+    out.attrs['v78_subb_v77'] = v77_result
+    out.attrs['v78_subb_bias'] = bias_result
+    out.attrs['v78_subb_logvol'] = logvol_result
+    return out
+
+def _v80_b78_v78_row_for_display(df, idx, date=None):
+    if df is None or len(df) == 0:
+        return None
+    if date is not None:
+        try:
+            date = pd.Timestamp(date)
+            if date in df.index:
+                return df.loc[date]
+        except Exception:
+            pass
+    try:
+        return df.iloc[idx]
+    except Exception:
+        return None
+
+def _v80_b78_v78_resolve_display_idx_date(df, idx):
+    if df is None or len(df) == 0:
+        return (None, None)
+    if isinstance(idx, (pd.Timestamp, datetime, np.datetime64, str)) or hasattr(idx, 'year'):
+        try:
+            ts = pd.Timestamp(idx)
+            if ts in df.index:
+                return (int(df.index.get_loc(ts)), ts)
+        except Exception:
+            pass
+    try:
+        pos = int(idx)
+        return (pos, df.index[pos])
+    except Exception:
+        return (None, None)
+
+def _v80_b78_v78_subb_four_leg_weight_rows(us_rot_result, idx, min_weight=0.0005):
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return []
+    idx, date = _v80_b78_v78_resolve_display_idx_date(us_rot_result, idx)
+    if idx is None:
+        return []
+    row = us_rot_result.iloc[idx]
+    v77 = us_rot_result.attrs.get('v78_subb_v77')
+    bias = us_rot_result.attrs.get('v78_subb_bias')
+    logvol = us_rot_result.attrs.get('v78_subb_logvol')
+    v77_row = _v80_b78_v78_row_for_display(v77, idx, date)
+    bias_row = _v80_b78_v78_row_for_display(bias, idx, date)
+    logvol_row = _v80_b78_v78_row_for_display(logvol, idx, date)
+    assets = set()
+    for source_row in (row, v77_row, bias_row, logvol_row):
+        if source_row is None:
+            continue
+        for col in source_row.index:
+            if not isinstance(col, str):
+                continue
+            for prefix in ('w_', 'official_w_', 'official_contrib_w_', 'ema_w_', 'ema_contrib_w_'):
+                if col.startswith(prefix):
+                    assets.add(col[len(prefix):])
+    rows = []
+    for asset in sorted(assets):
+        official_raw = float(v77_row.get(f'official_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+        ema_raw = float(v77_row.get(f'ema_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+        official_inner = float(v77_row.get(f'official_contrib_w_{asset}', _v80_b78_SUBB_V75_OFFICIAL_WEIGHT * official_raw) or 0.0) if v77_row is not None else 0.0
+        ema_inner = float(v77_row.get(f'ema_contrib_w_{asset}', _v80_b78_SUBB_V75_EMA_WEIGHT * ema_raw) or 0.0) if v77_row is not None else 0.0
+        official_contrib = _v80_b78_V78_SUBB_V77_WEIGHT * official_inner
+        ema_contrib = _v80_b78_V78_SUBB_V77_WEIGHT * ema_inner
+        bias_w = float(bias_row.get(f'target_w_{asset}', bias_row.get(f'w_{asset}', 0.0)) or 0.0) if bias_row is not None else 0.0
+        logvol_w = float(logvol_row.get(f'target_w_{asset}', logvol_row.get(f'w_{asset}', 0.0)) or 0.0) if logvol_row is not None else 0.0
+        bias_contrib = _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT * bias_w
+        logvol_contrib = _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_w
+        final_weight = float(row.get(f'target_w_{asset}', official_contrib + ema_contrib + bias_contrib + logvol_contrib) or 0.0)
+        if max(abs(official_contrib), abs(ema_contrib), abs(bias_contrib), abs(logvol_contrib), abs(final_weight)) < min_weight:
+            continue
+        rows.append({'asset': asset, 'live_name': _v80_b78_ROT_PROXY_TO_LIVE.get(asset, asset), 'official_contrib': official_contrib, 'ema_contrib': ema_contrib, 'bias_contrib': bias_contrib, 'logvol_contrib': logvol_contrib, 'final_weight': final_weight})
+    rows.sort(key=lambda item: item['final_weight'], reverse=True)
+    return rows
+
+def _v80_b78_v78_subb_component_leg_rows(us_rot_result, idx, include_official=True, min_weight=0.0005):
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return []
+    idx, date = _v80_b78_v78_resolve_display_idx_date(us_rot_result, idx)
+    if idx is None:
+        return []
+    v77 = us_rot_result.attrs.get('v78_subb_v77')
+    bias = us_rot_result.attrs.get('v78_subb_bias')
+    logvol = us_rot_result.attrs.get('v78_subb_logvol')
+    v77_row = _v80_b78_v78_row_for_display(v77, idx, date)
+    bias_row = _v80_b78_v78_row_for_display(bias, idx, date)
+    logvol_row = _v80_b78_v78_row_for_display(logvol, idx, date)
+    assets = set()
+    for source_row in (v77_row, bias_row, logvol_row):
+        if source_row is None:
+            continue
+        for col in source_row.index:
+            if not isinstance(col, str):
+                continue
+            for prefix in ('official_w_', 'official_contrib_w_', 'ema_w_', 'ema_contrib_w_', 'target_w_', 'w_'):
+                if col.startswith(prefix):
+                    assets.add(col[len(prefix):])
+    leg_specs = []
+    if include_official:
+        leg_specs.append(('官方腿', _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_OFFICIAL_WEIGHT))
+    leg_specs.extend([('EMA腿', _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_EMA_WEIGHT), ('Bias腿', _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT), ('LogVol腿', _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT)])
+    rows = []
+    for leg, blend_weight in leg_specs:
+        for asset in sorted(assets):
+            if leg == '官方腿':
+                raw_weight = float(v77_row.get(f'official_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+                contrib = _v80_b78_V78_SUBB_V77_WEIGHT * float(v77_row.get(f'official_contrib_w_{asset}', _v80_b78_SUBB_V75_OFFICIAL_WEIGHT * raw_weight) or 0.0) if v77_row is not None else 0.0
+            elif leg == 'EMA腿':
+                raw_weight = float(v77_row.get(f'ema_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+                contrib = _v80_b78_V78_SUBB_V77_WEIGHT * float(v77_row.get(f'ema_contrib_w_{asset}', _v80_b78_SUBB_V75_EMA_WEIGHT * raw_weight) or 0.0) if v77_row is not None else 0.0
+            elif leg == 'Bias腿':
+                raw_weight = float(bias_row.get(f'target_w_{asset}', bias_row.get(f'w_{asset}', 0.0)) or 0.0) if bias_row is not None else 0.0
+                contrib = _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT * raw_weight
+            else:
+                raw_weight = float(logvol_row.get(f'target_w_{asset}', logvol_row.get(f'w_{asset}', 0.0)) or 0.0) if logvol_row is not None else 0.0
+                contrib = _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT * raw_weight
+            if max(abs(raw_weight), abs(contrib)) < min_weight:
+                continue
+            rows.append({'leg': leg, 'blend_weight': blend_weight, 'asset': asset, 'live_name': _v80_b78_ROT_PROXY_TO_LIVE.get(asset, asset), 'leg_weight': raw_weight, 'contribution': contrib})
+    rows.sort(key=lambda item: (item['leg'], -abs(item['contribution']), item['asset']))
+    return rows
+
+def _v80_b78_write_v78_subb_component_leg_tables(w, us_rot_result, idx, include_official=True):
+    rows = _v80_b78_v78_subb_component_leg_rows(us_rot_result, idx, include_official=include_official)
+    if not rows:
+        return
+    w('\n**V7.8 Sub-B 子策略腿状态（腿内目标 -> 组合贡献）**\n\n')
+    for leg in ['官方腿', 'EMA腿', 'Bias腿', 'LogVol腿']:
+        leg_rows = [row for row in rows if row['leg'] == leg]
+        if not leg_rows:
+            continue
+        blend_weight = leg_rows[0]['blend_weight']
+        w(f'**{leg}（{blend_weight:.0%}）**\n\n')
+        w('| ETF | 腿内目标权重 | 组合贡献 |\n|:-|------:|------:|\n')
+        for row in leg_rows:
+            w(f"| {row['live_name']} | {row['leg_weight']:.1%} | {row['contribution']:.1%} |\n")
+        w('\n')
+
+def _v80_b78_write_v78_subb_blend_table(w, us_rot_result, idx):
+    if 'v78_subb_v77_return' not in us_rot_result.columns:
+        return
+    rows = _v80_b78_v78_subb_four_leg_weight_rows(us_rot_result, idx)
+    w('\n**V7.8 Sub-B 四腿拆分与综合目标**（官方腿25% + EMA腿25% + Bias腿25% + LogVol腿25%）\n\n')
+    if rows:
+        w('| ETF | 官方腿贡献 | EMA腿贡献 | Bias腿贡献 | LogVol腿贡献 | V7.8综合目标 |\n')
+        w('|:-|------:|------:|------:|------:|------:|------:|\n')
+        for row in rows:
+            w(f"| {row['live_name']} | {row['official_contrib']:.1%} | {row['ema_contrib']:.1%} | {row['bias_contrib']:.1%} | {row['logvol_contrib']:.1%} | **{row['final_weight']:.1%}** |\n")
+    return
+
+def _v80_b78_v78_subb_volume_warning(us_rot_result):
+    if us_rot_result is None:
+        return ''
+    labels = {'v78_subb_bias': 'Bias', 'v78_subb_logvol': 'LogVol'}
+    failed = []
+    for key, label in labels.items():
+        comp = us_rot_result.attrs.get(key)
+        if comp is None or len(comp) == 0 or 'volume_source' not in comp.columns:
+            continue
+        src = str(comp.iloc[-1].get('volume_source', '') or '')
+        if src.startswith('unavailable:') or 'unresolved SPY volume' in src:
+            failed.append(label)
+    if not failed:
+        return ''
+    mode = str(globals().get('V78_SUBB_SPY_VOLUME_FAIL_MODE', 'warn_open') or 'warn_open').lower()
+    if mode == 'fail_closed':
+        return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 已按 fail-closed 保守降权。"
+    if mode == 'raise':
+        return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 配置为 raise，应中止本次信号。"
+    return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 本次未执行（fail-open：本次未降权）。"
+
+def _v80_b78_write_v78_subb_param_tables(w):
+    n_etfs = len(_v80_b78_US_ROT_ASSETS)
+    etf_labels = [f"{k}({v['label']})" for k, v in _v80_b78_US_ROT_ASSETS.items()]
+    w('**全局执行口径**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 四腿混合 | **官方腿25% / EMA腿25% / Bias腿25% / LogVol腿25%** | 四腿分别计算目标，再汇总为V7.8综合执行目标 |\n')
+    w(f'| 混合后波动口径 | **不二次归一** | {_v80_b78_SUBB_BLEND_VOL_NOTE} |\n')
+    w('| V7.8 NAV成本口径 | **component-net** | V7.7 official+EMA account-level blend is pre-netted before entering V7.8 as the 50% V7.7 component; Bias/LogVol are separately netted V7.8 components. Displayed aggregate target is for execution review and may have lower account-level net turnover. |\n')
+    w(f'| 最小调仓幅度 | **{_v80_b78_US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n')
+    w(f'| 调仓保护 | **{_v80_b78_US_ROT_REBALANCE_THRESHOLD}x** | 逐窗口挑战者保护；新资产需超过最弱在位者{_v80_b78_US_ROT_REBALANCE_THRESHOLD:.2f}x才允许替换 |\n')
+    w(f'| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(_v80_b78_US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n')
+    w(f'| 目标年化波动率/最大杠杆 | **{_v80_b78_US_ROT_TARGET_VOL:.0%} / {_v80_b78_US_ROT_MAX_LEV:.1f}x** | 各腿按自己的波动率口径计算scale |\n')
+    w(f'| 交易成本 | **{_v80_b78_US_ROT_COMMISSION:.1%}** | 单边手续费 |\n')
+    w(f'| 信号频率 | **周度** | 每周最后一个交易日(≤周四) |\n')
+    if _v80_b78_US_ROT_VOLREG_ENABLED:
+        w(f'| VolReg股票过热 | **开启** | {_v80_b78_subb_volreg_rule_text()}；{_v80_b78_US_ROT_VOLREG_BACKTEST_NOTE} |\n')
+    w('\n**官方腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 排名池 | **7ETF+通胀宏观3ETF** | 沿用官方生产逻辑；UUP/DBMF/KMLM只在通胀开关ON时进入候选池 |\n')
+    w(f"| 动量窗口 | **{_v80_b78_subb_window_label_for_display(' / ')}日** | 三个窗口分别生成目标仓位后按{_v80_b78_US_ROT_WINDOW_WEIGHT_LABEL}加权平均 |\n")
+    w(f'| 波动率窗口(权重) | **{_v80_b78_US_ROT_VOL_LB}日** | 各窗口内使用反波动率加权 |\n')
+    w(f'| 波动率缩放 | **{_v80_b78_US_ROT_VOL_WINDOW}日rolling** | Model B 目标波动率scale |\n')
+    w(f'| Top N / 绝对动量 | **3 / >{_v80_b78_US_ROT_ABS_THRESHOLD:.0%}** | 动量需超过阈值才持有，否则转BIL |\n')
+    w('\n**EMA腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 排名池 | **US_ROT_POOL全池** | {_v80_b78_v78_subb_inflation_participation_note()} |\n')
+    w(f'| EMA半衰期 / 阈值 | **hl{_v80_b78_SUBB_V75_EMA_HALF_LIFE} / {_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD:.0%}** | 使用年化EWM日收益 |\n')
+    w(f'| EMA腿VolScale | **{_v80_b78_SUBB_V75_EMA_VOL_MODE}** | 目标波动率scale用6个月EWMA已实现波动率，半衰期{_v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS}日 |\n')
+    w(f'| 波动率窗口(权重) | **{_v80_b78_US_ROT_VOL_LB}日rolling** | 资产反波动率权重仍用rolling口径 |\n')
+    w(f'| target-vol / 最大杠杆 | **{_v80_b78_US_ROT_TARGET_VOL:.0%} / {_v80_b78_US_ROT_MAX_LEV:.1f}x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w('\n**Bias腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；UUP/DBMF/KMLM始终参与排名 |\n')
+    w('| score口径 | **price/MA160,260,390 = 3/2/1加权** | 按price/MA(lb)-1排名；不是官方腿动量窗口 |\n')
+    w(f'| target-vol / 窗口 / 最大杠杆 | **{_v80_b78_V78_SUBB_BIAS_TARGET_VOL:.0%} / {_v80_b78_V78_SUBB_BIAS_VOL_WINDOW}日 / max{_v80_b78_V78_SUBB_BIAS_MAX_LEV:g}x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w('\n**LogVol腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；UUP/DBMF/KMLM始终参与排名 |\n')
+    w('| score口径 | **log return 120/200/320 = 60%/30%/10%** | 独立于官方腿160/260/390窗口 |\n')
+    w(f'| target-vol / 窗口 / 最大杠杆 | **{_v80_b78_V78_SUBB_LOGVOL_TARGET_VOL:.0%} / {_v80_b78_V78_SUBB_LOGVOL_VOL_WINDOW}日 / max{_v80_b78_V78_SUBB_LOGVOL_MAX_LEV:g}x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w(f"\n资产池: **{n_etfs}只** | {', '.join(etf_labels)}\n")
+
+def _v80_b78_us_weighted_return(weights, prev_prices, curr_prices):
+    pr = 0.0
+    for a, w in weights.items():
+        try:
+            weight = float(w or 0.0)
+        except (TypeError, ValueError):
+            raise ValueError(f'US return calculation received invalid weight for {a}: {w!r}')
+        if abs(weight) <= 1e-12:
+            continue
+        prev_px = prev_prices.get(a, np.nan)
+        curr_px = curr_prices.get(a, np.nan)
+        if pd.isna(prev_px) or pd.isna(curr_px) or (not np.isfinite(prev_px)) or (not np.isfinite(curr_px)) or (prev_px <= 0) or (curr_px <= 0):
+            raise ValueError(f'US return calculation missing/invalid active price for {a}')
+        pr += weight * (float(curr_px) / float(prev_px) - 1)
+    return pr
+
+def _v80_b78_validate_subb_price_input(close_df, required_columns, min_rows, context, *, strict_calendar=False):
+    if close_df is None or not isinstance(close_df, pd.DataFrame):
+        raise ValueError(f'{context}: price history must be a DataFrame')
+    if not isinstance(close_df.index, pd.DatetimeIndex):
+        raise ValueError(f'{context}: price history requires a DatetimeIndex')
+    if not close_df.index.is_monotonic_increasing or close_df.index.has_duplicates:
+        raise ValueError(f'{context}: price history index must be sorted and unique')
+    missing = sorted(set(required_columns) - set(close_df.columns))
+    if missing:
+        raise ValueError(f"{context}: missing required price columns: {', '.join(missing)}")
+    if len(close_df) < int(min_rows):
+        raise ValueError(f'{context}: insufficient price history; rows={len(close_df)}, required>={int(min_rows)}')
+    if strict_calendar:
+        _assert_subb_full_session_index(close_df.index, context)
+
+def _v80_b78_active_weight_assets(*weight_dicts, min_abs=1e-12):
+    assets = set()
+    for weights in weight_dicts:
+        for asset, raw_weight in (weights or {}).items():
+            try:
+                weight = float(raw_weight or 0.0)
+            except Exception:
+                weight = 0.0
+            if abs(weight) > min_abs:
+                assets.add(asset)
+    return sorted(assets)
+
+def _v80_b78_us_open_row(date, assets, us_open, close_df, *, strict=False, context='US open execution'):
+    if strict:
+        _assert_us_execution_session(date, close_df, context=context)
+    prices = {}
+    missing = []
+    fallback_assets = []
+    for a in assets:
+        px = np.nan
+        if us_open is not None and a in us_open:
+            s = us_open[a]
+            if date in s.index:
+                px = s.loc[date]
+        if pd.isna(px):
+            if strict:
+                missing.append(a)
+            elif close_df is not None and a in close_df.columns and (date in close_df.index):
+                px = close_df.loc[date, a]
+                fallback_assets.append(a)
+        prices[a] = px
+    if missing:
+        dt = pd.Timestamp(date).date().isoformat()
+        assets_text = ', '.join(sorted(missing))
+        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal model execution requires T+1 adjusted open; refusing close fallback.')
+    row = pd.Series(prices)
+    if fallback_assets:
+        row.attrs['open_price_close_fallback_assets'] = tuple(sorted(fallback_assets))
+    return row
+
+def _v80_b78_prefixed_weight_dict(row, prefix, assets):
+    out = {}
+    for asset in assets:
+        value = row.get(f'{prefix}{asset}', 0.0)
+        if pd.notna(value):
+            out[asset] = float(value)
+    return out
+
+def _v80_b78_weight_columns_assets(df, prefixes=('w_', 'actual_w_', 'target_w_')):
+    assets = set()
+    for col in df.columns:
+        for prefix in prefixes:
+            if col.startswith(prefix):
+                assets.add(col[len(prefix):])
+    return sorted(assets)
+
+def _v80_b78_volreg_next_cash_state(current_cash, ratio):
+    if pd.isna(ratio):
+        return bool(current_cash)
+    ratio = float(ratio)
+    if not current_cash and ratio > _v80_b78_US_ROT_VOLREG_THRESHOLD:
+        return True
+    if current_cash and ratio < _v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD:
+        return False
+    return bool(current_cash)
+
+def _v80_b78_volreg_scale_for_state(active):
+    return float(_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE) if bool(active) else 1.0
+
+def _v80_b78_volreg_scaled_assets_in(weights_or_assets):
+    if isinstance(weights_or_assets, dict):
+        assets = set(weights_or_assets)
+    else:
+        assets = set(weights_or_assets or [])
+    return [asset for asset in _v80_b78_US_ROT_VOLREG_SCALE_ASSETS if asset in assets]
+
+def _v80_b78_prefixed_weight_dict_with_asset_fallback(row, primary_prefix, fallback_prefix, assets):
+    primary = _v80_b78_prefixed_weight_dict(row, primary_prefix, assets)
+    if not any((abs(v) > 1e-12 for v in primary.values())):
+        return _v80_b78_prefixed_weight_dict(row, fallback_prefix, assets)
+    fallback = _v80_b78_prefixed_weight_dict(row, fallback_prefix, assets)
+    out = {}
+    for asset in assets:
+        key = f'{primary_prefix}{asset}'
+        raw = row.get(key, np.nan)
+        out[asset] = fallback.get(asset, 0.0) if pd.isna(raw) else primary.get(asset, 0.0)
+    return out
+
+def _v80_b78_apply_subb_volreg_defense_scale_to_weights(weights, active=True):
+    out = {asset: float(weight or 0.0) for asset, weight in dict(weights or {}).items()}
+    if not active:
+        out['CASH'] = 0.0
+        return (out, {asset: 0.0 for asset in _v80_b78_volreg_scaled_assets_in(out)})
+    removed = {}
+    for asset in _v80_b78_volreg_scaled_assets_in(out):
+        old = float(out.get(asset, 0.0) or 0.0)
+        new = old * float(_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE)
+        out[asset] = new
+        removed[asset] = old - new
+    moved_to_bil = sum(removed.values())
+    out['BIL'] = float(out.get('BIL', 0.0) or 0.0) + moved_to_bil
+    out['CASH'] = 0.0
+    return (out, removed)
+
+def _v80_b78_subb_volreg_rule_text():
+    proxy_assets = '/'.join(_v80_b78_US_ROT_VOLREG_SCALE_ASSETS)
+    live_assets = '/'.join((_v80_b78_ROT_PROXY_TO_LIVE.get(asset, asset) for asset in _v80_b78_US_ROT_VOLREG_SCALE_ASSETS))
+    live_note = '' if live_assets == proxy_assets else f' (实盘{live_assets})'
+    return f'SPY {_v80_b78_US_ROT_VOLREG_SHORT_W}d/{_v80_b78_US_ROT_VOLREG_LONG_W}d vol比 >{_v80_b78_US_ROT_VOLREG_THRESHOLD:.1f} -> {proxy_assets}{live_note} x{_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE:.2f}, 差额进BIL；低于{_v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD:.1f}恢复'
+
+def _v80_b78_subb_model_rebalanced_value(row):
+    return bool(row.get('model_rebalanced', row.get('rebalanced', False)))
+
+def _v80_b78_row_prefixed_weights(row, prefix, assets):
+    weights = {}
+    for asset in assets:
+        value = row.get(f'{prefix}{asset}', 0.0)
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+def _v80_b78_is_v78_subb_blend(result):
+    return result is not None and 'v78_subb_v77_return' in result.columns and ('v78_subb_bias_return' in result.columns) and ('v78_subb_logvol_return' in result.columns)
+
+def _v80_b78_apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=None, strict_open_execution=False):
+    spy_ret = spy_close.pct_change()
+    short_vol = spy_ret.rolling(_v80_b78_US_ROT_VOLREG_SHORT_W).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    long_vol = spy_ret.rolling(_v80_b78_US_ROT_VOLREG_LONG_W).std() * np.sqrt(_v80_b78_US_TRADING_DAYS)
+    vol_ratio = (short_vol / long_vol).reindex(us_rot_result.index).ffill()
+    ratio_shifted = vol_ratio.shift(1)
+    defense_state = False
+    mask_values = []
+    for value in ratio_shifted:
+        defense_state = _v80_b78_volreg_next_cash_state(defense_state, value)
+        mask_values.append(defense_state)
+    mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
+    result = us_rot_result.copy()
+    close_aligned = close_df.reindex(result.index) if close_df is not None else None
+    pre_volreg_return = pd.to_numeric(result['return'], errors='coerce').fillna(0.0)
+    base_ret = pre_volreg_return if _v80_b78_is_v78_subb_blend(result) else pd.to_numeric(result.get('return_before_subb_execution_cost', result.get('return_before_execution_cost', result['return'])), errors='coerce').fillna(0.0)
+    assets = _v80_b78_weight_columns_assets(result)
+    if 'BIL' not in assets:
+        assets.append('BIL')
+    if 'CASH' not in assets:
+        assets.append('CASH')
+    prev_effective = None
+    prev_removed = None
+    prev_defense = False
+    turnovers = []
+    costs = []
+    gross_returns = []
+    final_returns = []
+    volreg_actions = []
+    moved_to_bil_values = []
+    model_records = []
+    effective_records = []
+    model_target_records = []
+    effective_target_records = []
+    for pos, dt in enumerate(result.index):
+        row = result.loc[dt]
+        model_w = _v80_b78_prefixed_weight_dict_with_asset_fallback(row, 'actual_w_', 'w_', assets)
+        defense_active = bool(mask.loc[dt])
+        effective_w, removed_w = _v80_b78_apply_subb_volreg_defense_scale_to_weights(model_w, defense_active)
+        model_target_w = _v80_b78_prefixed_weight_dict_with_asset_fallback(row, 'target_w_', 'actual_w_', assets)
+        target_defense_active = _v80_b78_volreg_next_cash_state(defense_active, vol_ratio.loc[dt]) if pd.notna(vol_ratio.loc[dt]) else defense_active
+        effective_target_w, _ = _v80_b78_apply_subb_volreg_defense_scale_to_weights(model_target_w, target_defense_active)
+        for asset in assets:
+            effective_w.setdefault(asset, 0.0)
+            effective_target_w.setdefault(asset, 0.0)
+            removed_w.setdefault(asset, 0.0)
+        moved_to_bil_values.append(sum((float(v or 0.0) for v in removed_w.values())))
+        if prev_effective is None:
+            turnover = 0.0
+        elif defense_active == prev_defense:
+            turnover = 0.0
+        else:
+            cur_scale = _v80_b78_volreg_scale_for_state(defense_active)
+            prev_scale = _v80_b78_volreg_scale_for_state(prev_defense)
+            scaled_model_weight = sum((float(model_w.get(asset, 0.0) or 0.0) for asset in _v80_b78_volreg_scaled_assets_in(model_w)))
+            turnover = scaled_model_weight * abs(cur_scale - prev_scale)
+        has_open_execution_prices = close_aligned is not None and prev_effective is not None and (us_open is not None or strict_open_execution)
+        gross_ret = float(base_ret.loc[dt])
+        if has_open_execution_prices:
+            adjusted_assets = [asset for asset in _v80_b78_volreg_scaled_assets_in(assets) if float((prev_removed or {}).get(asset, 0.0) or 0.0) > 1e-12 or float(removed_w.get(asset, 0.0) or 0.0) > 1e-12]
+            if adjusted_assets:
+                open_row = _v80_b78_us_open_row(dt, ['BIL', *adjusted_assets], us_open, close_aligned, strict=strict_open_execution, context='Sub-B VolReg equity defense')
+                prev_close = close_aligned.iloc[pos - 1] if pos > 0 else close_aligned.loc[dt]
+                cur_close = close_aligned.loc[dt]
+                delta = 0.0
+                for asset in adjusted_assets:
+                    prev_removed_weight = float((prev_removed or {}).get(asset, 0.0) or 0.0)
+                    cur_removed_weight = float(removed_w.get(asset, 0.0) or 0.0)
+                    if prev_removed_weight > 1e-12:
+                        delta += prev_removed_weight * (_v80_b78_subb_price_return('BIL', prev_close, open_row) - _v80_b78_subb_price_return(asset, prev_close, open_row))
+                    if cur_removed_weight > 1e-12:
+                        delta += cur_removed_weight * (_v80_b78_subb_price_return('BIL', open_row, cur_close) - _v80_b78_subb_price_return(asset, open_row, cur_close))
+                gross_ret += delta
+        cost = turnover * _v80_b78_US_ROT_COMMISSION
+        gross_returns.append(gross_ret)
+        final_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(cost)
+        if defense_active and (not prev_defense):
+            volreg_actions.append('enter_defense')
+        elif prev_defense and (not defense_active):
+            volreg_actions.append('exit_defense')
+        else:
+            volreg_actions.append('')
+        model_records.append({asset: model_w.get(asset, 0.0) for asset in assets})
+        effective_records.append({asset: effective_w.get(asset, 0.0) for asset in assets})
+        model_target_records.append({asset: model_target_w.get(asset, 0.0) for asset in assets})
+        effective_target_records.append({asset: effective_target_w.get(asset, 0.0) for asset in assets})
+        prev_effective = effective_w
+        prev_removed = removed_w
+        prev_defense = defense_active
+    model_df = pd.DataFrame.from_records(model_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_df = pd.DataFrame.from_records(effective_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    model_target_df = pd.DataFrame.from_records(model_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_target_df = pd.DataFrame.from_records(effective_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    for asset in assets:
+        result[f'model_w_{asset}'] = model_df[asset]
+        result[f'model_target_w_{asset}'] = model_target_df[asset]
+        result[f'effective_w_{asset}'] = effective_df[asset]
+        result[f'w_{asset}'] = effective_df[asset]
+        result[f'target_w_{asset}'] = effective_target_df[asset]
+    result['pre_volreg_return'] = pre_volreg_return
+    result['gross_return_before_volreg_cost'] = pd.Series(gross_returns, index=result.index, dtype=float)
+    result['model_full_day_return_before_volreg'] = base_ret
+    result['return_before_volreg'] = pre_volreg_return
+    result['volreg_action'] = pd.Series(volreg_actions, index=result.index, dtype=object)
+    result['subb_effective_turnover'] = pd.Series(turnovers, index=result.index, dtype=float)
+    result['subb_effective_cost'] = pd.Series(costs, index=result.index, dtype=float)
+    base_rebalanced = result.get('rebalanced', pd.Series(False, index=result.index)).fillna(False).astype(bool)
+    effective_rebalanced = result['subb_effective_turnover'].abs() > 1e-09
+    result['model_rebalanced'] = base_rebalanced
+    result['effective_rebalanced'] = effective_rebalanced
+    result['volreg_transition'] = result['volreg_action'].isin(['enter_defense', 'exit_defense'])
+    result['volreg_transition_turnover'] = result['subb_effective_turnover'].where(result['volreg_transition'], 0.0)
+    result['volreg_transition_cost'] = result['subb_effective_cost'].where(result['volreg_transition'], 0.0)
+    result['volreg_rebalanced'] = result['volreg_transition']
+    result['rebalanced'] = base_rebalanced
+    result['return'] = pd.Series(final_returns, index=result.index, dtype=float)
+    result['nav'] = (1 + result['return']).cumprod()
+    result['volreg_ratio'] = vol_ratio
+    result['volreg_defense'] = mask
+    result['volreg_cash'] = False
+    result['volreg_effective_scale'] = pd.Series(np.where(mask, float(_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE), 1.0), index=result.index, dtype=float)
+    result['volreg_moved_to_bil'] = pd.Series(moved_to_bil_values, index=result.index, dtype=float)
+    result['volreg_scaled_assets'] = ','.join(_v80_b78_US_ROT_VOLREG_SCALE_ASSETS)
+    return result
+
+def _v80_b78_subb_price_return(asset, prev_prices, curr_prices):
+    if asset is None:
+        return 0.0
+    prev_px = prev_prices.get(asset, np.nan)
+    curr_px = curr_prices.get(asset, np.nan)
+    if pd.isna(prev_px) or pd.isna(curr_px) or (not np.isfinite(prev_px)) or (not np.isfinite(curr_px)) or (float(prev_px) <= 0.0) or (float(curr_px) <= 0.0):
+        raise ValueError(f'Sub-B return calculation missing/invalid active price for {asset}')
+    return float(curr_px) / float(prev_px) - 1.0
+
+def _v80_b78_subb_weights_from_prefixes(row, prefixes, assets):
+    weights = {}
+    for asset in assets:
+        value = np.nan
+        for prefix in prefixes:
+            raw = row.get(f'{prefix}{asset}', np.nan)
+            if pd.notna(raw):
+                value = raw
+                break
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+def _v80_b78_subb_account_gross_exposure(weights):
+    return float(sum((abs(float(weight or 0.0)) for asset, weight in (weights or {}).items() if asset != 'CASH' and abs(float(weight or 0.0)) > 1e-12)))
+
+def _v80_b78_subb_final_effective_weights(row, assets):
+    return _v80_b78_subb_weights_from_prefixes(row, ('effective_w_', 'actual_w_', 'w_'), assets)
+
+def _v80_us_spread_time_fractions(previous_date, date):
+    previous_date, date = (pd.Timestamp(previous_date), pd.Timestamp(date))
+    _assert_us_next_session(previous_date, date, context='US financing')
+    eastern = ZoneInfo('America/New_York')
+    previous_hour = 13 if _is_us_early_close_session(previous_date) else 16
+    close_hour = 13 if _is_us_early_close_session(date) else 16
+    previous_close = datetime(previous_date.year, previous_date.month, previous_date.day, previous_hour, tzinfo=eastern).astimezone(timezone.utc)
+    current_open = datetime(date.year, date.month, date.day, 9, 30, tzinfo=eastern).astimezone(timezone.utc)
+    current_close = datetime(date.year, date.month, date.day, close_hour, tzinfo=eastern).astimezone(timezone.utc)
+    total = (current_close - previous_close).total_seconds()
+    if total <= 0 or not previous_close < current_open < current_close:
+        raise ValueError('US financing requires consecutive, increasing market sessions')
+    overnight = (current_open - previous_close).total_seconds() / total
+    return (overnight, 1.0 - overnight)
+
+def _v80_rebuild_subb_self_financing(us_rot_result, close_df, us_open, strict_open_execution, *, commission, benchmark, spread_bps, trading_days, covered_assets, defense_scale, next_defense_func):
+    """Execute frozen model events with security lots, tagged defensive cash and debt.
+
+    Model outputs stay unchanged. The first row carries the existing model portfolio
+    at the preceding close; later model events execute at the next session open.
+    A pure VolReg event converts only its tagged equity/cash lots.
+    """
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return us_rot_result
+    if not isinstance(close_df, pd.DataFrame) or not close_df.index.is_monotonic_increasing or close_df.index.has_duplicates:
+        raise ValueError('Sub-B account requires sorted unique close prices')
+    result = us_rot_result.copy()
+    source_attrs = dict(result.attrs)
+    result.attrs = {}
+    assets = _weight_columns_assets(result, prefixes=('model_w_', 'effective_w_', 'actual_w_', 'w_', 'target_w_'))
+    if not assets or len(result.index.difference(close_df.index)):
+        raise ValueError('Sub-B account is missing weights or close rows')
+    assets = sorted(set(assets) | {'BIL', 'CASH'})
+    covered_assets = set(covered_assets)
+    has_model = any((col.startswith('model_w_') for col in result.columns))
+    model_rows = [_subb_weights_from_prefixes(row, ('model_w_',) if has_model else ('effective_w_', 'actual_w_', 'w_'), assets) for _, row in result.iterrows()]
+    signal_flags = result.get('model_rebalanced', result.get('rebalanced', pd.Series(False, index=result.index))).fillna(False).astype(bool).to_numpy()
+    defense_states = result.get('volreg_defense', pd.Series(False, index=result.index)).fillna(False).astype(bool).to_numpy()
+    daily_spread = float(spread_bps) / 10000.0 / float(trading_days)
+    if not 0 <= commission < 0.1 or not 0 <= defense_scale <= 1:
+        raise ValueError('Sub-B account invalid commission/defense scale')
+
+    def aggregate(lots):
+        values = {asset: 0.0 for asset in assets}
+        for (_, security), value in lots.items():
+            values[security] = values.get(security, 0.0) + value
+        return values
+
+    def target_lots(weights, nav, defense):
+        slots = {}
+        for asset, weight in weights.items():
+            if not np.isfinite(weight) or weight < -1e-12:
+                raise ValueError(f'Sub-B account invalid weight for {asset}')
+            if weight <= 1e-12:
+                continue
+            scale = defense_scale if defense and asset in covered_assets else 1.0
+            slots[asset, asset] = nav * weight * scale
+            if scale < 1:
+                slots[asset, 'BIL'] = nav * weight * (1 - scale)
+        total = sum(weights.values())
+        if total < 1:
+            slots['CASH', 'CASH'] = slots.get(('CASH', 'CASH'), 0.0) + nav * (1 - total)
+        return (slots, nav * max(total - 1, 0.0))
+
+    def mark(lots, debt, previous_prices, current_prices, spread_fraction):
+        marked = {}
+        for key, value in lots.items():
+            security = key[1]
+            ratio = 1.0 if security == 'CASH' or abs(value) <= 1e-14 else 1.0 + _us_weighted_return({security: 1.0}, previous_prices, current_prices)
+            marked[key] = value * ratio
+        financing = 0.0
+        if debt > 1e-14:
+            cash_return = _us_weighted_return({benchmark: 1.0}, previous_prices, current_prices)
+            financing = debt * (cash_return + daily_spread * spread_fraction)
+        return (marked, debt + financing, financing)
+
+    def reset_model(lots, debt, weights, defense):
+        nav = sum(lots.values()) - debt
+        old = aggregate(lots)
+        if nav <= 0:
+            raise ValueError('Sub-B account exhausted equity before rebalance')
+        no_fee_lots, no_fee_debt = target_lots(weights, nav, defense)
+        no_fee_target = aggregate(no_fee_lots)
+        no_fee_traded = sum((abs(no_fee_target[a] - old[a]) for a in assets if a not in {'BIL', 'CASH'}))
+        if commission == 0 or no_fee_traded <= 1e-14:
+            return (no_fee_lots, no_fee_debt, 0.0, no_fee_traded)
+        lo, hi = (0.0, nav * min(0.99, commission * (sum((abs(v) for v in weights.values())) + sum((abs(v) for v in old.values())) / nav) + 1e-12))
+        for _ in range(55):
+            fee = (lo + hi) / 2
+            proposed, _ = target_lots(weights, nav - fee, defense)
+            target = aggregate(proposed)
+            traded = sum((abs(target[a] - old[a]) for a in assets if a not in {'BIL', 'CASH'}))
+            if fee < commission * traded:
+                lo = fee
+            else:
+                hi = fee
+        fee = (lo + hi) / 2
+        proposed, new_debt = target_lots(weights, nav - fee, defense)
+        traded = sum((abs(aggregate(proposed)[a] - old[a]) for a in assets if a not in {'BIL', 'CASH'}))
+        return (proposed, new_debt, fee, traded)
+
+    def transition(lots, defense, charge=True):
+        proposed = dict(lots)
+        fee_total = traded_total = 0.0
+        scale = defense_scale if defense else 1.0
+        for asset in covered_assets:
+            risk = proposed.get((asset, asset), 0.0)
+            cash = proposed.get((asset, 'BIL'), 0.0)
+            value = risk + cash
+            if value <= 1e-14:
+                continue
+            desired = scale * value
+            rate = commission if charge else 0.0
+            fee = rate * abs(desired - risk) / (1 + rate * scale if desired >= risk else 1 - rate * scale)
+            new_risk = scale * (value - fee)
+            proposed[asset, asset] = new_risk
+            proposed[asset, 'BIL'] = (1 - scale) * (value - fee)
+            fee_total += fee
+            traded_total += abs(new_risk - risk)
+        return (proposed, fee_total, traded_total)
+    lots, debt = target_lots(model_rows[0], 1.0, bool(defense_states[0]))
+    output = []
+    for pos, date in enumerate(result.index):
+        row = result.iloc[pos]
+        current_prices = close_df.loc[date]
+        prior_dates = close_df.index[close_df.index < date]
+        previous_date = result.index[pos - 1] if pos else prior_dates[-1] if len(prior_dates) else None
+        start_nav = sum(lots.values()) - debt
+        model_execution = pos > 0 and (bool(signal_flags[pos - 1]) or model_rows[pos] != model_rows[pos - 1])
+        risk_execution = pos > 0 and bool(defense_states[pos]) != bool(defense_states[pos - 1])
+        fee = traded = financing = 0.0
+        open_nav = start_nav
+        execution_before = execution_after = None
+        if previous_date is not None:
+            previous_prices = close_df.loc[previous_date]
+            if model_execution or risk_execution:
+                future_lots, future_debt = target_lots(model_rows[pos], start_nav, bool(defense_states[pos])) if model_execution else (transition(lots, bool(defense_states[pos]), charge=False)[0], debt)
+                active = sorted({security for (_, security), value in {**lots, **future_lots}.items() if abs(value) > 1e-14 and security != 'CASH'} | ({benchmark} if max(debt, future_debt) > 1e-14 else set()))
+                active = sorted(set(active) | {security for (_, security), value in lots.items() if abs(value) > 1e-14 and security != 'CASH'})
+                open_prices = _us_open_row(date, active, us_open, close_df, strict=strict_open_execution, context='Sub-B self-financing account execution')
+                overnight_fraction, intraday_fraction = _v80_us_spread_time_fractions(previous_date, date)
+                lots, debt, overnight_financing = mark(lots, debt, previous_prices, open_prices, overnight_fraction)
+                open_nav = sum(lots.values()) - debt
+                execution_before = aggregate(lots)
+                if model_execution:
+                    lots, debt, fee, traded = reset_model(lots, debt, model_rows[pos], bool(defense_states[pos]))
+                else:
+                    lots, fee, traded = transition(lots, bool(defense_states[pos]))
+                execution_after = aggregate(lots)
+                lots, debt, intraday_financing = mark(lots, debt, open_prices, current_prices, intraday_fraction)
+                financing = overnight_financing + intraday_financing
+            else:
+                lots, debt, financing = mark(lots, debt, previous_prices, current_prices, 1.0)
+        nav = sum(lots.values()) - debt
+        if not np.isfinite(nav) or nav <= 0:
+            raise ValueError(f'Sub-B self-financing account equity invalid on {date}')
+        actual = {asset: value / nav for asset, value in aggregate(lots).items()}
+        next_defense = next_defense_func(bool(defense_states[pos]), row.get('volreg_ratio', np.nan)) if 'volreg_defense' in result.columns else False
+        pending_model = bool(signal_flags[pos])
+        pending_risk = bool(next_defense) != bool(defense_states[pos])
+        if pending_model:
+            target_weights = _subb_weights_from_prefixes(row, ('model_target_w_', 'target_w_'), assets)
+            next_lots, _ = target_lots(target_weights, nav, next_defense)
+        elif pending_risk:
+            next_lots = transition(lots, next_defense, charge=False)[0]
+        else:
+            next_lots = lots
+        execution_target = {asset: value / nav for asset, value in aggregate(next_lots).items()}
+        net_return = nav / start_nav - 1
+        record = {'return': net_return, 'subb_account_nav': nav, 'subb_account_start_nav': start_nav, 'subb_account_open_nav': open_nav, 'subb_account_borrow_value': debt, 'subb_account_asset_value': sum(lots.values()), 'subb_account_fee_value': fee, 'subb_account_financing_value': financing, 'subb_effective_turnover': traded / open_nav, 'subb_effective_cost': fee / start_nav, 'subb_financing_cost': financing / start_nav, 'subb_account_gross_return': net_return + (fee + financing) / start_nav, 'return_before_subb_execution_cost': net_return + fee / start_nav, 'subb_gross_exposure': sum((v for a, v in actual.items() if a != 'CASH')), 'subb_model_execution': model_execution, 'subb_volreg_execution': risk_execution, 'subb_pending_model_rebalance': pending_model, 'subb_pending_volreg_transition': pending_risk, 'subb_pending_execution': pending_model or pending_risk, 'effective_rebalanced': traded > 1e-12}
+        for asset in assets:
+            for prefix in ('w_', 'actual_w_', 'effective_w_'):
+                record[prefix + asset] = actual[asset]
+            record['execution_target_w_' + asset] = execution_target[asset]
+            record['subb_execution_before_w_' + asset] = execution_before[asset] / open_nav if execution_before is not None else actual[asset]
+            record['subb_execution_after_w_' + asset] = execution_after[asset] / open_nav if execution_after is not None else actual[asset]
+        output.append(record)
+    account = pd.DataFrame(output, index=result.index)
+    result = pd.concat([result.drop(columns=list(account.columns), errors='ignore'), account], axis=1)
+    result['subb_execution_turnover'] = result['subb_effective_turnover']
+    result['subb_execution_cost'] = result['subb_effective_cost']
+    result['nav'] = (1 + result['return']).cumprod()
+    result['cost_basis_note'] = f'self-financing security lots; open drift turnover; tagged VolReg cash; financing={benchmark}+{spread_bps}bp'
+    result.attrs = source_attrs
+    result.attrs['subb_account_execution'] = {'commission': float(commission), 'financing_benchmark': benchmark, 'financing_spread_bps': float(spread_bps), 'open_execution': 'T close -> T+1 adjusted open -> T+1 close', 'spread_allocation': 'each row uses 1/trading_days; actual elapsed overnight/intraday proportions', 'initialization': 'carry existing initial model portfolio at preceding close, no invented initial trade', 'weights_basis': 'w/actual/effective are close holdings; target is frozen model; execution_target is next confirmed action before unknown open gap and fees'}
+    return result
+
+def _v80_b78_rebuild_subb_account_execution_costs(us_rot_result, close_df, us_open=None, strict_open_execution=False, strict=None):
+    if strict is not None:
+        strict_open_execution = bool(strict)
+    return _v80_rebuild_subb_self_financing(us_rot_result, close_df, us_open, strict_open_execution, commission=_v80_b78_US_ROT_COMMISSION, benchmark=_v80_b78_US_ROT_FINANCING_BENCHMARK, spread_bps=_v80_b78_US_ROT_FINANCING_SPREAD_BPS, trading_days=_v80_b78_US_TRADING_DAYS, covered_assets=_v80_b78_US_ROT_VOLREG_SCALE_ASSETS, defense_scale=_v80_b78_US_ROT_VOLREG_DEFENSE_SCALE, next_defense_func=_v80_b78_volreg_next_cash_state)
+
+def _v80_b78_is_edt(d):
+    if hasattr(d, 'date'):
+        d = d.date()
+    et = datetime(d.year, d.month, d.day, 12, 0, tzinfo=ZoneInfo('America/New_York'))
+    return et.utcoffset() == timedelta(hours=-4)
+
+def _v80_b78_beijing_time_str(date, market='CN', event='close'):
+    if market == 'CN':
+        if event == 'open':
+            return f"{date.strftime('%Y-%m-%d')} 09:30 北京时间"
+        return f"{date.strftime('%Y-%m-%d')} 15:00 北京时间"
+    else:
+        schedule = _v80_b78_xnys_schedule(pd.Timestamp(date).normalize(), pd.Timestamp(date).normalize())
+        if not schedule.empty:
+            column = 'market_open' if event == 'open' else 'market_close'
+            event_bj = pd.Timestamp(schedule[column].iloc[0]).tz_convert('Asia/Shanghai')
+            return f"{event_bj.strftime('%Y-%m-%d %H:%M')} 北京时间"
+        edt = _v80_b78_is_edt(date)
+        if event == 'open':
+            bj_hour = '21:30' if edt else '22:30'
+            return f"{date.strftime('%Y-%m-%d')} {bj_hour} 北京时间"
+        else:
+            bj_hour = '04:00' if edt else '05:00'
+            next_day = date + timedelta(days=1)
+            return f"{next_day.strftime('%Y-%m-%d')} {bj_hour} 北京时间"
+
+def _v80_b78_coerce_session_index(schedule):
+    if schedule is None:
+        return None
+    if isinstance(schedule, pd.Series):
+        idx = schedule.dropna().index
+    elif isinstance(schedule, pd.DataFrame):
+        idx = schedule.dropna(how='all').index
+    elif isinstance(schedule, dict):
+        idx = pd.DatetimeIndex([])
+        for value in schedule.values():
+            cur = _v80_b78_coerce_session_index(value)
+            if cur is not None and len(cur) > 0:
+                idx = idx.union(cur)
+    else:
+        try:
+            idx = pd.DatetimeIndex(pd.to_datetime(schedule))
+        except Exception:
+            return None
+    idx = pd.DatetimeIndex(pd.to_datetime(idx)).sort_values().unique()
+    return idx if len(idx) > 0 else None
+
+def _v80_b78_next_session_day(signal_date, schedule=None):
+    signal_ts = pd.Timestamp(signal_date).normalize()
+    future_schedule = _v80_b78_xnys_schedule(signal_ts + pd.Timedelta(days=1), signal_ts + pd.Timedelta(days=14))
+    if not future_schedule.empty:
+        return pd.Timestamp(future_schedule.index[0])
+    raise poe.BotError(f'XNYS calendar cannot resolve a session after {signal_ts.date().isoformat()}')
+
+def _v80_b78_us_exec_time_str(signal_date, schedule=None):
+    exec_day = _v80_b78_next_session_day(signal_date, schedule)
+    return _v80_b78_beijing_time_str(exec_day, 'US', 'open')
+
+def _v80_b78_lookup_next_open(ticker, signal_date, us_open, us_close_df=None):
+    if us_open is None:
+        return None
+    exec_day = _v80_b78_next_session_day(signal_date)
+    return _v80_b78_lookup_open_on_date(ticker, exec_day, us_open)
+
+def _v80_b78_lookup_open_on_date(ticker, date, us_open):
+    if us_open is None:
+        return None
+    candidates = [ticker]
+    if ticker in _v80_b78_PROD_PORTFOLIO:
+        candidates.append(_v80_b78_PROD_PORTFOLIO[ticker].get('proxy', ticker))
+    if ticker in _v80_b78_US_ROT_ASSETS:
+        candidates.append(_v80_b78_US_ROT_ASSETS[ticker].get('proxy', ticker))
+    live = _v80_b78_ROT_PROXY_TO_LIVE.get(ticker)
+    if live:
+        candidates = [live] + candidates
+    if ticker == 'EMXC' and US_ROT_EMXC_BT_PROXY in us_open:
+        candidates = ['EMXC_raw_open', 'EMXC_native_open']
+    target = pd.Timestamp(date).normalize()
+    for t in candidates:
+        if t not in us_open:
+            continue
+        s = us_open[t]
+        idx = pd.DatetimeIndex(pd.to_datetime(s.index)).normalize()
+        matches = s.iloc[np.where(idx == target)[0]]
+        if len(matches) > 0:
+            value = pd.to_numeric(matches.iloc[0], errors='coerce')
+            if np.isfinite(value) and value > 0:
+                return float(value)
+    return None
+
+def _v80_b78_rebalance_price_text(price, label):
+    return f'${price:.2f}{label}' if price is not None and (not pd.isna(price)) else ''
+
+def _v80_b78_extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    records = []
+    assets = sorted(_v80_b78_weight_columns_assets(us_rot_result, prefixes=('w_', 'actual_w_', 'target_w_', 'model_w_', 'model_target_w_', 'effective_w_')))
+    us_schedule = _v80_b78_coerce_session_index(us_open)
+    if us_schedule is None and us_rot_close is not None:
+        us_schedule = _v80_b78_coerce_session_index(us_rot_close)
+    start_i = 0
+    prev_model_weights = None
+    if since_date is not None and len(us_rot_result) > 0:
+        since_ts = pd.Timestamp(since_date)
+        start_i = int(us_rot_result.index.searchsorted(since_ts, side='left'))
+        if start_i > 0:
+            prev_row = us_rot_result.iloc[start_i - 1]
+            prev_model_weights = _v80_b78_row_prefixed_weights(prev_row, 'model_target_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _v80_b78_row_prefixed_weights(prev_row, 'target_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _v80_b78_row_prefixed_weights(prev_row, 'actual_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _v80_b78_row_prefixed_weights(prev_row, 'w_', assets)
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        date = us_rot_result.index[i]
+        current_actual = _v80_b78_row_prefixed_weights(row, 'actual_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_actual.values())):
+            current_actual = _v80_b78_row_prefixed_weights(row, 'w_', assets)
+        current_target = _v80_b78_row_prefixed_weights(row, 'model_target_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_target.values())):
+            current_target = _v80_b78_row_prefixed_weights(row, 'target_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_target.values())):
+            current_target = current_actual
+        volreg_action = str(row.get('volreg_action', '') or '')
+        is_model_rebalanced = _v80_b78_subb_model_rebalanced_value(row)
+        if not is_model_rebalanced and (bool(row.get('volreg_cash', False)) or bool(row.get('volreg_transition', False)) or volreg_action in ('enter_cash', 'exit_cash', 'enter_defense', 'exit_defense')):
+            prev_model_weights = current_target
+            continue
+        if prev_model_weights is None:
+            prev_model_weights = {'BIL': 1.0}
+        if not is_model_rebalanced:
+            prev_model_weights = current_target
+            continue
+        old_weights = prev_model_weights
+        new_weights = current_target
+        sells, buys = ([], [])
+        sell_prices, buy_prices = ([], [])
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0)
+            prev = old_weights.get(a, 0)
+            diff = cur - prev
+            if abs(diff) > 0.005:
+                if a == 'CASH':
+                    if diff < 0:
+                        sells.append(f'CASH {prev:.1%}->{cur:.1%}')
+                    else:
+                        buys.append(f'CASH {prev:.1%}->{cur:.1%}')
+                    continue
+                live = _v80_b78_ROT_PROXY_TO_LIVE.get(a, a)
+                _p = _v80_b78_lookup_next_open(a, date, us_open)
+                _p_label = '开'
+                if _p is None and us_rot_close is not None and (date in us_rot_close.index):
+                    if live in us_rot_close.columns:
+                        _p = us_rot_close.loc[date, live]
+                    elif a in us_rot_close.columns:
+                        _p = us_rot_close.loc[date, a]
+                    _p_label = '收'
+                _p_str = _v80_b78_rebalance_price_text(_p, _p_label)
+                if diff < 0:
+                    sells.append(f'{live} {prev:.1%}->{cur:.1%}')
+                    if _p_str:
+                        sell_prices.append(f'{live} {_p_str}')
+                elif diff > 0:
+                    buys.append(f'{live} {prev:.1%}->{cur:.1%}')
+                    if _p_str:
+                        buy_prices.append(f'{live} {_p_str}')
+        if sells or buys:
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': _v80_b78_us_exec_time_str(date, us_schedule), '策略': 'Sub-B', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None})
+        prev_model_weights = current_target
+    return records
+
+def _v80_subb_account_rebalance_records(result, us_rot_close=None, us_open=None, since_date=None, *, label='B7.9', event_kind=None):
+    records = []
+    assets = sorted(_weight_columns_assets(result, prefixes=('subb_execution_before_w_', 'subb_execution_after_w_')))
+    mapping = _v80_subb_mapping(label)
+    lookup_open = _v80_b78_lookup_open_on_date if label == 'B7.8' else _lookup_open_on_date
+    start_i = int(result.index.searchsorted(pd.Timestamp(since_date), side='left')) if since_date is not None else 0
+    for i in range(start_i, len(result)):
+        row = result.iloc[i]
+        model = bool(row.get('subb_model_execution', False))
+        risk = bool(row.get('subb_volreg_execution', False))
+        if not (model or risk) or (event_kind == 'volreg' and (not risk)):
+            continue
+        date = result.index[i]
+        old_weights = _row_prefixed_weights(row, 'subb_execution_before_w_', assets)
+        new_weights = _row_prefixed_weights(row, 'subb_execution_after_w_', assets)
+        sells, buys, sell_prices, buy_prices = ([], [], [], [])
+        for asset in assets:
+            previous, current = (old_weights.get(asset, 0.0), new_weights.get(asset, 0.0))
+            difference = current - previous
+            if abs(difference) <= 0.005:
+                continue
+            live = mapping.get(asset, asset)
+            entries, prices = (sells, sell_prices) if difference < 0 else (buys, buy_prices)
+            entries.append(f'{live} {previous:.1%}->{current:.1%}')
+            if asset == 'CASH':
+                continue
+            price = lookup_open(asset, date, us_open)
+            price_label = '开'
+            if live == 'EMXC' and price is not None and lookup_open('EMXC_raw_open', date, us_open) is None:
+                price_label = '（ETF复权开）'
+            if price is None and live != 'EMXC' and us_rot_close is not None and (date in us_rot_close.index):
+                price = us_rot_close.loc[date].get(live, us_rot_close.loc[date].get(asset, np.nan))
+                price_label = '收'
+            price_text = _rebalance_price_text(price, price_label)
+            if price_text:
+                prices.append(f'{live} {price_text}')
+        if not (sells or buys):
+            continue
+        explanation = '模型调仓与VolReg同开盘净成交' if model and risk else str(row.get('volreg_action', '') or '') if risk else ''
+        records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'US', 'open'), '策略': 'Sub-B' if model else 'Sub-B VolReg', '日期口径': 'execution_day', 'record_kind': 'model' if model else 'volreg', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None, '说明': explanation})
+    return records
+
+def _v80_b78_extract_subb_volreg_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    if 'subb_volreg_execution' in us_rot_result.columns:
+        return _v80_subb_account_rebalance_records(us_rot_result, us_rot_close, us_open, since_date, label='B7.8', event_kind='volreg')
+    records = []
+    if 'volreg_transition' not in us_rot_result.columns and 'volreg_rebalanced' not in us_rot_result.columns:
+        return records
+    assets = sorted(_v80_b78_weight_columns_assets(us_rot_result, prefixes=('effective_w_', 'w_')))
+    start_i = 0
+    if since_date is not None and len(us_rot_result) > 0:
+        start_i = int(us_rot_result.index.searchsorted(pd.Timestamp(since_date), side='left'))
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        is_transition = bool(row.get('volreg_transition', row.get('volreg_rebalanced', False)))
+        if not is_transition:
+            continue
+        date = us_rot_result.index[i]
+        new_weights = _v80_b78_row_prefixed_weights(row, 'effective_w_', assets)
+        if not any((abs(v) > 1e-12 for v in new_weights.values())):
+            new_weights = _v80_b78_row_prefixed_weights(row, 'w_', assets)
+        if i > 0:
+            prev_row = us_rot_result.iloc[i - 1]
+            old_weights = _v80_b78_row_prefixed_weights(prev_row, 'effective_w_', assets)
+            if not any((abs(v) > 1e-12 for v in old_weights.values())):
+                old_weights = _v80_b78_row_prefixed_weights(prev_row, 'w_', assets)
+        else:
+            old_weights = {}
+        sells, buys = ([], [])
+        sell_prices, buy_prices = ([], [])
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0)
+            prev = old_weights.get(a, 0)
+            diff = cur - prev
+            if abs(diff) <= 0.005:
+                continue
+            if a == 'CASH':
+                if diff < 0:
+                    sells.append(f'CASH {prev:.1%}->{cur:.1%}')
+                else:
+                    buys.append(f'CASH {prev:.1%}->{cur:.1%}')
+                continue
+            live = _v80_b78_ROT_PROXY_TO_LIVE.get(a, a)
+            _p = _v80_b78_lookup_open_on_date(a, date, us_open)
+            _p_label = '开'
+            if _p is None and us_rot_close is not None and (date in us_rot_close.index):
+                if live in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, live]
+                elif a in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, a]
+                _p_label = '收'
+            _p_str = _v80_b78_rebalance_price_text(_p, _p_label)
+            if diff < 0:
+                sells.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    sell_prices.append(f'{live} {_p_str}')
+            elif diff > 0:
+                buys.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    buy_prices.append(f'{live} {_p_str}')
+        if sells or buys:
+            action = row.get('volreg_action', '')
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': _v80_b78_beijing_time_str(date, 'US', 'open'), '策略': 'Sub-B VolReg', '日期口径': 'execution_day', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None, '说明': action})
+    return records
+V80_SUBB_V78_SLEEVE_WEIGHT = 0.5
+V80_SUBB_V79_SLEEVE_WEIGHT = 0.5
+V80_SUBB_V78_TOP_N = 3
+V80_SUBB_V78_PORTFOLIO_WEIGHT = PERFORMANCE_COMBO_WEIGHTS['B7.8']
+V80_SUBB_V79_PORTFOLIO_WEIGHT = PERFORMANCE_COMBO_WEIGHTS['B7.9']
+if not np.isclose(sum(PERFORMANCE_COMBO_WEIGHTS.values()), 1.0):
+    raise RuntimeError('V8.0 portfolio weights must sum to 100%')
+if not np.isclose(V80_SUBB_V78_SLEEVE_WEIGHT + V80_SUBB_V79_SLEEVE_WEIGHT, 1.0):
+    raise RuntimeError('V8.0 B7.8/B7.9 sleeve weights must sum to 100%')
+if not np.isclose(COMBINED_WEIGHTS['Sub-B'] * V80_SUBB_V78_SLEEVE_WEIGHT, V80_SUBB_V78_PORTFOLIO_WEIGHT):
+    raise RuntimeError('V8.0 B7.8 portfolio weight is inconsistent with the Sub-B split')
+if not np.isclose(COMBINED_WEIGHTS['Sub-B'] * V80_SUBB_V79_SLEEVE_WEIGHT, V80_SUBB_V79_PORTFOLIO_WEIGHT):
+    raise RuntimeError('V8.0 B7.9 portfolio weight is inconsistent with the Sub-B split')
+SUBB_REQUIRED_PRICE_TICKERS = tuple(dict.fromkeys(list(SUBB_REQUIRED_PRICE_TICKERS) + list(_v80_b78_SUBB_REQUIRED_PRICE_TICKERS)))
+SUBB_REQUIRED_LIVE_PRICE_TICKERS = tuple(dict.fromkeys(list(SUBB_REQUIRED_LIVE_PRICE_TICKERS) + list(_v80_b78_SUBB_REQUIRED_LIVE_PRICE_TICKERS)))
+US_ALL_TICKERS = sorted(set(list(US_ALL_TICKERS) + list(SUBB_REQUIRED_PRICE_TICKERS) + list(SUBB_REQUIRED_LIVE_PRICE_TICKERS)))
+
+def _v80_subb_all_rot_tickers(available_tickers=None):
+    available = set(US_ALL_TICKERS if available_tickers is None else available_tickers)
+    return list(dict.fromkeys(list(US_ROT_POOL) + list(_v80_b78_US_ROT_POOL) + ['BIL'] + list(SUBB_INFLATION_GATE_TICKERS) + list(_v80_b78_SUBB_INFLATION_GATE_TICKERS) + [ticker for ticker in SUBB_OPTIONAL_MACRO_TICKERS if ticker in available]))
+
+def _v80_require_volreg_input(us_rot_close, *, enabled, label, long_window):
+    if not enabled:
+        return
+    if not isinstance(us_rot_close, pd.DataFrame) or 'SPY' not in us_rot_close.columns:
+        raise ValueError(f'{label} VolReg requires SPY close data; field is missing')
+    spy = pd.to_numeric(us_rot_close['SPY'], errors='coerce')
+    finite_positive = spy.where(np.isfinite(spy) & (spy > 0)).dropna()
+    minimum = int(long_window) + 2
+    if len(finite_positive) < minimum:
+        raise ValueError(f'{label} VolReg requires at least {minimum} finite positive SPY closes; got {len(finite_positive)}')
+    if finite_positive.index[-1] != us_rot_close.index[-1]:
+        raise ValueError(f'{label} VolReg SPY is stale: latest valid {finite_positive.index[-1]} vs market data {us_rot_close.index[-1]}')
+
+def _run_v80_subb_v79(us_rot_close, us_open=None, strict_open_execution=True):
+    _v80_require_volreg_input(us_rot_close, enabled=US_ROT_VOLREG_ENABLED, label='B7.9', long_window=US_ROT_VOLREG_LONG_W)
+    official = run_us_rotation_mix(us_rot_close, US_ROT_BASE_POOL, top_n=US_ROT_TOP_N, us_open=us_open, ranking_code_selector=_subb_active_ranking_codes, weight_assets=US_ROT_POOL, strict_open_execution=strict_open_execution)
+    ema = run_subb_v75_ema_base7_rotation(us_rot_close, base_codes=US_ROT_POOL, top_n=US_ROT_TOP_N, us_open=us_open, weight_assets=US_ROT_POOL, strict_open_execution=strict_open_execution)
+    v77 = blend_subb_v75_results(official, ema)
+    bias = run_v78_subb_new_line(us_rot_close, line='bias', us_open=us_open, strict_open_execution=strict_open_execution)
+    logvol = run_v78_subb_new_line(us_rot_close, line='logvol', us_open=us_open, strict_open_execution=strict_open_execution)
+    result = blend_v78_subb_results(v77, bias, logvol)
+    if US_ROT_VOLREG_ENABLED:
+        result = apply_vol_regime_overlay(result, us_rot_close['SPY'], close_df=us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+    return _rebuild_subb_account_execution_costs(result, close_df=us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+
+def _run_v80_subb_v78(us_rot_close, us_open=None, strict_open_execution=True):
+    if 'VGIT' not in us_rot_close:
+        raise ValueError('B7.8 requires native VGIT history')
+    vg = pd.to_numeric(us_rot_close['VGIT'], errors='coerce')
+    native_start = pd.Timestamp('2009-11-23')
+    if vg.loc[vg.index < native_start].notna().any():
+        raise ValueError('B7.8 VGIT price before first native trading session')
+    first = vg.first_valid_index()
+    if first is None:
+        raise ValueError('B7.8 VGIT native close history missing')
+    # A research slice that starts after inception remains a valid common slice.
+    # An internal missing mark or a missing inception on a longer panel is not.
+    if strict_open_execution:
+        expected = _expected_us_ohlc_index(max(native_start, us_rot_close.index[0]), us_rot_close.index[-1])
+        values = vg.reindex(expected)
+        if values.isna().any() or not np.isfinite(values.to_numpy(dtype=float)).all() or (values <= 0).any():
+            raise ValueError('B7.8 VGIT native close history missing or invalid; refusing silent ranking changes')
+        if isinstance(us_open, dict) and 'VGIT_native_volume' in us_open and 'VGIT' in us_open:
+            us_open = dict(us_open)
+            volume = us_open['VGIT_native_volume'].map(_vgit_volume_value)
+            us_open['VGIT'] = us_open['VGIT'].where(volume.reindex(us_open['VGIT'].index).gt(0))
+    us_rot_close = us_rot_close.loc[first:]
+    _v80_require_volreg_input(us_rot_close, enabled=_v80_b78_US_ROT_VOLREG_ENABLED, label='B7.8', long_window=_v80_b78_US_ROT_VOLREG_LONG_W)
+    official = _v80_b78_run_us_rotation_mix(us_rot_close, _v80_b78_US_ROT_BASE_POOL, top_n=V80_SUBB_V78_TOP_N, us_open=us_open, ranking_code_selector=_v80_b78_subb_active_ranking_codes, weight_assets=_v80_b78_US_ROT_POOL, strict_open_execution=strict_open_execution)
+    ema = _v80_b78_run_subb_v75_ema_base7_rotation(us_rot_close, base_codes=_v80_b78_US_ROT_POOL, top_n=V80_SUBB_V78_TOP_N, us_open=us_open, weight_assets=_v80_b78_US_ROT_POOL, strict_open_execution=strict_open_execution)
+    v77 = _v80_b78_blend_subb_v75_results(official, ema)
+    bias = _v80_b78_run_v78_subb_new_line(us_rot_close, line='bias', us_open=us_open, strict_open_execution=strict_open_execution)
+    logvol = _v80_b78_run_v78_subb_new_line(us_rot_close, line='logvol', us_open=us_open, strict_open_execution=strict_open_execution)
+    result = _v80_b78_blend_v78_subb_results(v77, bias, logvol)
+    if _v80_b78_US_ROT_VOLREG_ENABLED:
+        result = _v80_b78_apply_vol_regime_overlay(result, us_rot_close['SPY'], close_df=us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+    return _v80_b78_rebuild_subb_account_execution_costs(result, close_df=us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+
+def _run_v80_subb_variants(us_rot_close, us_open=None, strict_open_execution=True):
+    b79 = _run_v80_subb_v79(us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+    b78 = _run_v80_subb_v78(us_rot_close, us_open=us_open, strict_open_execution=strict_open_execution)
+    b79.attrs['v80_b78'] = b78
+    b79.attrs['v80_subb_weights'] = {'B7.8': V80_SUBB_V78_SLEEVE_WEIGHT, 'B7.9': V80_SUBB_V79_SLEEVE_WEIGHT}
+    b79.attrs['v80_execution_boundary'] = 'B7.8 and B7.9 are independent after-cost subaccounts; portfolio/PV uses 50%/50% inside Sub-B'
+    return b79
+
+def _v80_subb_results(us_rot_result):
+    if us_rot_result is None:
+        return (None, None)
+    b78 = us_rot_result.attrs.get('v80_b78')
+    if b78 is None:
+        raise ValueError('V8.0 performance requires the independently computed B7.8 result')
+    return (b78, us_rot_result)
+
+def _v80_performance_daily_returns(cn_return, adk_return, us_rot_result, subc_return, *, end_date):
+    b78, b79 = _v80_subb_results(us_rot_result)
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    daily_returns = {'Sub-A': cn_return, 'Sub-A-DK': adk_return, 'B7.8': empty if b78 is None else b78['return'], 'B7.9': empty if b79 is None else b79['return'], 'Sub-C': subc_return}
+    cutoff = pd.Timestamp(end_date).normalize()
+    daily_returns = {name: series.loc[series.index <= cutoff] for name, series in daily_returns.items()}
+    daily_returns['Combined'] = _performance_combined_daily_returns(daily_returns)
+    return daily_returns
+
+def _v80_subb_mapping(label):
+    return _v80_b78_ROT_PROXY_TO_LIVE if label == 'B7.8' else _ROT_PROXY_TO_LIVE
+
+def _v80_subb_model_reference_weights(close_df, result, label):
+    """Reprice a hypothetical weekly decision without changing the account ledger."""
+    if label not in {'B7.8', 'B7.9'} or result is None or len(result) == 0:
+        raise ValueError('Sub-B model reference requires a valid variant and result')
+    is_b78 = label == 'B7.8'
+    pool = _v80_b78_US_ROT_POOL if is_b78 else US_ROT_POOL
+    lbs = _v80_b78_US_ROT_LBS if is_b78 else US_ROT_LBS
+    vol_lb = _v80_b78_US_ROT_VOL_LB if is_b78 else US_ROT_VOL_LB
+    trading_days = _v80_b78_US_TRADING_DAYS if is_b78 else US_TRADING_DAYS
+    threshold = _v80_b78_US_ROT_REBALANCE_THRESHOLD if is_b78 else US_ROT_REBALANCE_THRESHOLD
+    top_n = V80_SUBB_V78_TOP_N if is_b78 else US_ROT_TOP_N
+    required_prices = list(dict.fromkeys(list(pool) + ['BIL', 'SPY', 'TLT']))
+    _validate_subb_price_input(close_df, required_prices, max(lbs) + 2, f'{label} model reference')
+    date = result.index[-1]
+    if close_df.index[-1] != date:
+        raise ValueError(f'{label} model reference price/result date mismatch')
+    components = {}
+    for line in ('bias', 'logvol'):
+        component = result.attrs.get(f'v78_subb_{line}')
+        if component is None or len(component) == 0 or component.index[-1] != date:
+            raise ValueError(f'{label} model reference {line} component date missing/mismatch')
+        components[line] = component
+
+    def scale_at(frame, column):
+        value = float(frame.iloc[-1].get(column, np.nan))
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f'{label} model reference missing/invalid {column}')
+        return value
+    official_scale = scale_at(result, 'official_scale')
+    ema_scale = scale_at(result, 'ema_scale')
+    line_scales = {line: scale_at(frame, 'target_vol_scale') for line, frame in components.items()}
+    prices = (_v80_b78_apply_subb_btc_start_filter if is_b78 else _apply_subb_btc_start_filter)(close_df)
+    for asset in required_prices:
+        series = prices[asset]
+        numeric = pd.to_numeric(series, errors='coerce')
+        invalid = series.notna() & (~np.isfinite(numeric) | (numeric <= 0.0))
+        first_valid = numeric.first_valid_index()
+        if first_valid is not None:
+            invalid |= numeric.isna() & (numeric.index >= first_valid)
+        elif asset in {'BIL', 'SPY', 'TLT', 'DBC'} or any((float(result.iloc[-1].get(f'{prefix}{asset}', 0.0)) > 0.0 for prefix in ('effective_w_', 'actual_w_', 'model_w_', 'ema_actual_w_', 'official_actual_w_', 'official_w_'))):
+            raise ValueError(f'{label} model reference missing price history for {asset}')
+        if invalid.any():
+            bad_date = numeric.index[invalid][0]
+            raise ValueError(f'{label} model reference invalid/missing finite positive price for {asset} at {bad_date:%Y-%m-%d}')
+        prices[asset] = numeric
+    vol_row = prices.pct_change().rolling(vol_lb).std().mul(np.sqrt(trading_days)).iloc[-1]
+    momentum_rows = {lb: prices.div(prices.shift(lb)).sub(1).iloc[-1] for lb in lbs}
+    previous_mix = _us_mix_prev_risky_by_lb_from_result(result, date, include_current=False)
+    ema_row = result.iloc[-1]
+    ema_holdings = {}
+    for asset in pool:
+        column = f'ema_actual_w_{asset}'
+        value = float(ema_row.get(column, np.nan))
+        if not np.isfinite(value) or value < 0:
+            raise ValueError(f'{label} model reference missing/invalid current EMA holding {asset}')
+        ema_holdings[asset] = value
+    previous_ema = {asset for asset, weight in ema_holdings.items() if weight > 0.001} or None
+    if is_b78:
+        ranking = _v80_b78_subb_active_ranking_codes(prices, -1)
+        official, _ = _v80_b78_us_mix_target_weights(momentum_rows, vol_row, ranking, official_scale, top_n=top_n, abs_threshold=_v80_b78_US_ROT_ABS_THRESHOLD, prev_risky_by_lb=previous_mix, threshold=threshold)
+        ema_score = _v80_b78_subb_v75_ema_score(prices).iloc[-1]
+        ema_raw = _v80_b78_us_raw_weights(ema_score, vol_row, pool, top_n, _v80_b78_SUBB_V75_EMA_ABS_THRESHOLD, prev_risky=previous_ema, threshold=threshold)
+        ema = _v80_b78_apply_subb_btc_cap(_v80_b78_us_model_b(ema_raw, ema_scale))
+        bias = _v80_b78_v78_target_from_scores(_v80_b78_v78_score_bias_level(prices).iloc[-1], vol_row, line_scales['bias'], top_n=top_n)
+        logvol = _v80_b78_v78_target_from_scores(_v80_b78_v78_score_log_weighted(prices).iloc[-1], vol_row, line_scales['logvol'], top_n=top_n)
+        weights = _weighted_average_weight_dicts([(official, _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_OFFICIAL_WEIGHT), (ema, _v80_b78_V78_SUBB_V77_WEIGHT * _v80_b78_SUBB_V75_EMA_WEIGHT), (bias, _v80_b78_V78_SUBB_NEW_BIAS_WEIGHT), (logvol, _v80_b78_V78_SUBB_NEW_LOGVOL_WEIGHT)])
+        enabled, next_state, overlay = (_v80_b78_US_ROT_VOLREG_ENABLED, _v80_b78_volreg_next_cash_state, _v80_b78_apply_subb_volreg_defense_scale_to_weights)
+    else:
+        ranking = _subb_active_ranking_codes(prices, -1)
+        official, _ = _us_mix_target_weights(momentum_rows, vol_row, ranking, official_scale, top_n=top_n, abs_threshold=US_ROT_ABS_THRESHOLD, prev_risky_by_lb=previous_mix, threshold=threshold)
+        ema, _, _ = _subb_v75_ema_snapshot(prices, -1, ema_scale, ranking_codes=pool, prev_risky=previous_ema, threshold=threshold)
+        bias = _v78_subb_new_line_hypo_weights(prices, components['bias'], line='bias')
+        logvol = _v78_subb_new_line_hypo_weights(prices, components['logvol'], line='logvol')
+        weights = _blend_v78_subb_weight_dicts(_blend_subb_v75_weight_dicts(official, ema), bias, logvol)
+        enabled, next_state, overlay = (US_ROT_VOLREG_ENABLED, _volreg_next_cash_state, _apply_subb_volreg_defense_scale_to_weights)
+    last = result.iloc[-1]
+    if enabled:
+        current_defense = last.get('volreg_defense')
+        if not isinstance(current_defense, (bool, np.bool_)) or 'volreg_ratio' not in result.columns:
+            raise ValueError(f'{label} model reference missing/invalid VolReg state')
+        ratio = float(last['volreg_ratio'])
+        if np.isinf(ratio) or ratio < 0.0:
+            raise ValueError(f'{label} model reference invalid VolReg ratio')
+        if next_state(current_defense, ratio):
+            weights, _ = overlay(weights, True)
+    if not weights or any((not np.isfinite(float(value)) or float(value) < 0 for value in weights.values())):
+        raise ValueError(f'{label} model reference invalid weights')
+    return weights
+
+def _write_v80_subb_model_reference(w, result, close_df, label, *, us_intraday=False):
+    try:
+        targets = _v80_subb_model_reference_weights(close_df, result, label)
+        rows = _v80_subb_variant_rows(result, label=label, target_weights=targets)
+    except (DataSchemaError, TypeError, ValueError, KeyError, IndexError) as exc:
+        w(f'\n⚠️ 今日模型参考不可用：{_short_error(exc)}；不能据此判断模型没有变化。\n')
+        return
+    basis = '盘中快照' if us_intraday else '收盘数据'
+    w(f'\n**今日模型参考｜假设今天是周度信号日**（{result.index[-1]:%Y-%m-%d} {basis}）\n\n')
+    w('| ETF | 当前已生效 | 今日模型参考 | 参考差额 |\n|:-|------:|------:|------:|\n')
+    for item in rows:
+        delta = f"{item['delta']:+.1%}" if abs(item['delta']) >= 0.0005 else '—'
+        w(f"| {item['live_name']} | {item['current']:.1%} | **{item['target']:.1%}** | {delta} |\n")
+    w('\n本表仅供参考，不生成调仓指令；实际操作仍按上方执行目标与周度/VolReg确认规则。\n')
+
+def _v80_subb_variant_rows(result, idx=-1, min_weight=0.0005, label='B7.9', *, target_weights=None):
+    if result is None or len(result) == 0:
+        return []
+    row = result.iloc[idx]
+    target_prefix = 'execution_target_w_' if any((isinstance(col, str) and col.startswith('execution_target_w_') for col in result.columns)) else 'target_w_'
+    prefixes = ('w_', 'effective_w_', 'actual_w_', target_prefix)
+    assets = {col[len(prefix):] for col in result.columns if isinstance(col, str) for prefix in prefixes if col.startswith(prefix)}
+    if target_weights is not None:
+        assets.update(target_weights)
+    if not assets or (target_weights is None and (not any((f'{target_prefix}{asset}' in result.columns for asset in assets)))):
+        raise DataSchemaError(f'{label} missing target weight fields')
+    rows = []
+    mapping = _v80_subb_mapping(label)
+    for asset in sorted(assets):
+        current_col = next((f'{prefix}{asset}' for prefix in ('effective_w_', 'w_', 'actual_w_') if f'{prefix}{asset}' in result.columns), None)
+        if current_col is None:
+            raise DataSchemaError(f'{label} missing current weight for {asset}')
+        current = float(row[current_col])
+        target_col = f'{target_prefix}{asset}'
+        if target_weights is None and target_col not in result.columns:
+            raise DataSchemaError(f'{label} missing {target_col}')
+        target = float(row.get(target_col)) if target_weights is None else float(target_weights.get(asset, 0.0))
+        if not np.isfinite(current) or not np.isfinite(target):
+            raise DataSchemaError(f'{label} non-finite weight for {asset}')
+        if max(abs(current), abs(target), abs(target - current)) < min_weight:
+            continue
+        rows.append({'asset': asset, 'live_name': mapping.get(asset, asset), 'current': current, 'target': target, 'delta': target - current})
+    rows.sort(key=lambda item: (-abs(item['target']), item['asset']))
+    return rows
+
+def _v80_subb_execution_state(result, rows, label, is_signal_day=None):
+    """Separate weekly model events from daily close-confirmed risk events.
+
+    Weight drift alone is not an order. The account ledger supplies execution
+    targets separately from hypothetical model targets.
+    """
+    last = result.iloc[-1]
+    changed = any((abs(item['delta']) >= 0.0005 for item in rows))
+    is_b78 = label == 'B7.8'
+    enabled = _v80_b78_US_ROT_VOLREG_ENABLED if is_b78 else US_ROT_VOLREG_ENABLED
+    scaled_assets = _v80_b78_US_ROT_VOLREG_SCALE_ASSETS if is_b78 else US_ROT_VOLREG_SCALE_ASSETS
+    next_state_fn = _v80_b78_volreg_next_cash_state if is_b78 else _volreg_next_cash_state
+    ratio = last.get('volreg_ratio', np.nan)
+    current_defense = last.get('volreg_defense', np.nan)
+    valid_state = pd.notna(current_defense) and pd.notna(ratio) and np.isfinite(float(ratio))
+    transition = bool(enabled and valid_state and (bool(current_defense) != next_state_fn(bool(current_defense), ratio)))
+    risk_changed = any((item['asset'] in scaled_assets and abs(item['delta']) >= 0.0005 for item in rows))
+    risk_pending = bool(last.get('subb_pending_volreg_transition', transition))
+    risk_action = transition and risk_pending and risk_changed
+    weekly_day = bool(is_signal_day) if is_signal_day is not None else bool(last.get('subb_pending_model_rebalance', pd.Timestamp(result.index[-1]).dayofweek == 3))
+    model_action = weekly_day and bool(last.get('subb_pending_model_rebalance', changed)) and changed
+    return {'changed': changed, 'model_action': model_action, 'risk_action': risk_action, 'actionable': model_action or risk_action, 'weekly_day': weekly_day}
+
+def _v80_map_rebalance_record(record, label):
+    out = dict(record)
+    out['strategy_family'] = 'Sub-B'
+    out['variant'] = label
+    out['record_kind'] = record.get('record_kind', 'volreg' if record.get('日期口径') == 'execution_day' or record.get('策略') == 'Sub-B VolReg' else 'model')
+    out['策略'] = label
+    mapping = _v80_subb_mapping(label)
+    for field in ('卖出', '买入'):
+        text = str(out.get(field, ''))
+        for proxy, live in mapping.items():
+            text = re.sub(f'\\b{re.escape(proxy)}\\b', live, text)
+        out[field] = text
+    return out
+
+def _v80_extract_subb_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    b78, b79 = _v80_subb_results(us_rot_result)
+    records = []
+    for label, result in (('B7.8', b78), ('B7.9', b79)):
+        if 'subb_model_execution' in result.columns:
+            records.extend((_v80_map_rebalance_record(item, label) for item in _v80_subb_account_rebalance_records(result, us_rot_close, us_open, since_date, label=label)))
+            continue
+        base_extractor = _v80_b78_extract_us_rot_rebalances if label == 'B7.8' else extract_us_rot_rebalances
+        overlay_extractor = _v80_b78_extract_subb_volreg_rebalances if label == 'B7.8' else extract_subb_volreg_rebalances
+        base = base_extractor(result, us_rot_close=us_rot_close, us_open=us_open, since_date=since_date)
+        overlay = overlay_extractor(result, us_rot_close=us_rot_close, us_open=us_open, since_date=since_date)
+        records.extend((_v80_map_rebalance_record(item, label) for item in base + overlay))
+    return records
+
+def _v80_subb_risk_leg_rows(result, label):
+    """Return the four independent risk scales; the blend has no fifth scale."""
+    if result is None or len(result) == 0:
+        return []
+    is_b78 = label == 'B7.8'
+    trading_days = _v80_b78_US_TRADING_DAYS if is_b78 else US_TRADING_DAYS
+    vol_window = _v80_b78_US_ROT_VOL_WINDOW if is_b78 else US_ROT_VOL_WINDOW
+    ema_halflife = _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS if is_b78 else SUBB_V75_EMA_VOL_HALFLIFE_DAYS
+    last = result.iloc[-1]
+
+    def _rolling_rv(column):
+        if column not in result.columns:
+            return np.nan
+        hist = pd.to_numeric(result[column], errors='coerce').dropna().iloc[:-1]
+        if len(hist) < vol_window:
+            return np.nan
+        return float(np.std(hist.iloc[-vol_window:].to_numpy(), ddof=1) * np.sqrt(trading_days))
+
+    def _ema_rv():
+        if 'ema_return' not in result.columns:
+            return np.nan
+        hist = pd.to_numeric(result['ema_return'], errors='coerce').dropna().iloc[:-1]
+        if len(hist) < max(vol_window, ema_halflife):
+            return np.nan
+        return float(hist.ewm(halflife=ema_halflife, adjust=False).std().iloc[-1] * np.sqrt(trading_days))
+
+    def _component_row(attr_name):
+        component = result.attrs.get(attr_name)
+        if component is None or len(component) == 0:
+            return pd.Series(dtype=object)
+        date = result.index[-1]
+        try:
+            source = component.loc[date]
+            return source.iloc[-1] if isinstance(source, pd.DataFrame) else source
+        except Exception:
+            return component.iloc[-1]
+    official_scale = last.get('official_scale', np.nan)
+    if pd.isna(official_scale):
+        if 'official_return' in result.columns or 'return' in result.columns:
+            scale_kwargs = {'target_vol': _v80_b78_US_ROT_TARGET_VOL, 'max_lev': _v80_b78_US_ROT_MAX_LEV, 'vol_window': vol_window, 'trading_days': trading_days} if is_b78 else {}
+            official_scale = _subb_official_scale_from_result(result, **scale_kwargs)
+        else:
+            official_scale = last.get('scale_raw', np.nan)
+    ema_scale = last.get('ema_scale', np.nan)
+    if pd.isna(ema_scale):
+        ema_scale = _v80_b78_subb_v75_ema_scale_from_hist(pd.to_numeric(result.get('ema_return', pd.Series(dtype=float)), errors='coerce').dropna().iloc[:-1].to_numpy()) if is_b78 else _subb_v75_ema_scale_from_result(result)
+    bias = _component_row('v78_subb_bias')
+    logvol = _component_row('v78_subb_logvol')
+    return [{'leg': '官方', 'realized_vol': _rolling_rv('official_return'), 'scale': official_scale}, {'leg': 'EMA', 'realized_vol': _ema_rv(), 'scale': ema_scale}, {'leg': 'Bias', 'realized_vol': bias.get('realized_vol', np.nan), 'scale': bias.get('target_vol_scale', np.nan)}, {'leg': 'LogVol', 'realized_vol': logvol.get('realized_vol', np.nan), 'scale': logvol.get('target_vol_scale', np.nan)}]
+
+def _write_v80_subb_risk_chain(w, result, label):
+    if result is None or len(result) == 0:
+        return
+    is_b78 = label == 'B7.8'
+    short_w = _v80_b78_US_ROT_VOLREG_SHORT_W if is_b78 else US_ROT_VOLREG_SHORT_W
+    long_w = _v80_b78_US_ROT_VOLREG_LONG_W if is_b78 else US_ROT_VOLREG_LONG_W
+    enter = _v80_b78_US_ROT_VOLREG_THRESHOLD if is_b78 else US_ROT_VOLREG_THRESHOLD
+    recover = _v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD if is_b78 else US_ROT_VOLREG_EXIT_THRESHOLD
+    defense_scale = _v80_b78_US_ROT_VOLREG_DEFENSE_SCALE if is_b78 else US_ROT_VOLREG_DEFENSE_SCALE
+    next_state_fn = _v80_b78_volreg_next_cash_state if is_b78 else _volreg_next_cash_state
+    last = result.iloc[-1]
+    ratio = last.get('volreg_ratio', np.nan)
+    current_defense = bool(last.get('volreg_defense', False))
+    current_overlay = float(last.get('volreg_effective_scale', defense_scale if current_defense else 1.0) or 0.0)
+    next_defense = next_state_fn(current_defense, ratio)
+    next_overlay = float(defense_scale if next_defense else 1.0)
+    leg_parts = []
+    for item in _v80_subb_risk_leg_rows(result, label):
+        rv_text = f"{float(item['realized_vol']):.1%}" if pd.notna(item['realized_vol']) else '样本不足'
+        scale_text = f"{float(item['scale']):.2f}x" if pd.notna(item['scale']) else '字段缺失'
+        leg_parts.append(f"{item['leg']} {rv_text}/{scale_text}")
+    w('\n关键风控：\n\n')
+    w('- 四腿已实现波动/VolScale（各腿独立）：' + '｜'.join(leg_parts) + '\n')
+    ratio_text = f'{float(ratio):.2f}' if pd.notna(ratio) else '数据不可用'
+    if pd.isna(ratio):
+        conclusion = '本收盘比率不可判定，沿用当前VolReg状态。'
+    elif next_defense:
+        conclusion = 'VolReg防守开启；被覆盖的股票风险资产目标降至防守比例，差额转入BIL。'
+    else:
+        conclusion = 'VolReg未触发或已恢复；不因VolReg削减风险资产。'
+    w(f'- VolReg：本收盘SPY {short_w}/{long_w}日波动比={ratio_text}｜进入 **>{enter:.2f}**｜恢复 **<{recover:.2f}**｜当前生效Overlay={current_overlay:.2f}x（由上一收盘比率决定）｜下一目标Overlay={next_overlay:.2f}x。{conclusion}\n')
+
+def _write_v80_subb_overview(w, us_rot_result, *, query_kind='signal', us_intraday=False, us_rot_close=None, is_signal_day=None):
+    us_intraday = us_intraday or bool(getattr(us_rot_close, 'attrs', {}).get('us_data_status', {}).get('intraday_snapshot'))
+    w('## 🇺🇸 B策略总览｜B7.8 / B7.9独立账户\n\n')
+    w('> Sub-B内部各占50%（总组合各20%）；独立计算、扣费和执行。组合从50:50起始后随净值自然漂移，不做日频再平衡。\n\n')
+    w('> 执行时序：**常规周四收盘确认周度信号，下一美股交易日（通常周五）开盘执行**；VolReg风控每日收盘检查，确认进入或恢复后于下一美股交易日开盘执行。盘中目标均须等收盘确认；非周度日的普通模型变化不执行。遇休市按实际交易日调整。\n\n')
+    variants = [('B7.8', us_rot_result.attrs.get('v80_b78') if us_rot_result is not None else None), ('B7.9', us_rot_result)]
+    signal_info = {}
+    for label, result in variants:
+        if result is None or len(result) == 0:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w('本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
+        try:
+            rows = _v80_subb_variant_rows(result, -1, label=label)
+        except (DataSchemaError, TypeError, ValueError, IndexError) as exc:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w(f'权重状态无效：{_short_error(exc)}；本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
+        if not rows:
+            w(f'### {label}｜⚠️ 状态不可用\n\n')
+            w('没有可验证的当前/目标权重；本次不生成目标或调整指令。\n\n')
+            signal_info[label] = {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+            continue
+        state = _v80_subb_execution_state(result, rows, label, is_signal_day)
+        changed = state['actionable']
+        if query_kind in {'params', 'live_params'}:
+            mark, status_text, target_title = ('🔴' if changed else '🟢', '执行目标变化' if changed else '执行目标维持', '下一执行目标')
+        elif state['risk_action']:
+            mark, status_text, target_title = ('🟡' if us_intraday else '🔴', 'VolReg盘中假设调整' if us_intraday else 'VolReg收盘确认调整', '盘中假设目标' if us_intraday else '下一开盘风控目标')
+        elif is_signal_day is False:
+            mark, status_text, target_title = ('🟡', '非信号日参考', '下一执行目标（非周度日）')
+        elif us_intraday:
+            mark, status_text, target_title = ('🟡', '信号日盘中假设变化' if changed else '信号日盘中假设维持', '盘中假设目标')
+        else:
+            mark, status_text, target_title = ('🔴' if changed else '🟢', '周度目标变化' if changed else '周度目标维持', '本周确认目标')
+        w(f'### {label}｜Sub-B的50% / 总组合20%｜{mark} {status_text}\n\n')
+        last = result.iloc[-1]
+        if query_kind in {'params', 'live_params'}:
+            if label == 'B7.8':
+                top_n = V80_SUBB_V78_TOP_N
+                abs_threshold = _v80_b78_US_ROT_ABS_THRESHOLD
+                ema_half_life = _v80_b78_SUBB_V75_EMA_HALF_LIFE
+                ema_abs_threshold = _v80_b78_SUBB_V75_EMA_ABS_THRESHOLD
+                rebalance_threshold = _v80_b78_US_ROT_REBALANCE_THRESHOLD
+                target_vol = _v80_b78_US_ROT_TARGET_VOL
+                max_lev = _v80_b78_US_ROT_MAX_LEV
+                volreg_enter = _v80_b78_US_ROT_VOLREG_THRESHOLD
+                volreg_exit = _v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD
+            else:
+                top_n = US_ROT_TOP_N
+                abs_threshold = US_ROT_ABS_THRESHOLD
+                ema_half_life = SUBB_V75_EMA_HALF_LIFE
+                ema_abs_threshold = SUBB_V75_EMA_ABS_THRESHOLD
+                rebalance_threshold = US_ROT_REBALANCE_THRESHOLD
+                target_vol = US_ROT_TARGET_VOL
+                max_lev = US_ROT_MAX_LEV
+                volreg_enter = US_ROT_VOLREG_THRESHOLD
+                volreg_exit = US_ROT_VOLREG_EXIT_THRESHOLD
+            w(f'规则：四腿各25%（官方/EMA/Bias/LogVol）｜Top{top_n}｜官方腿绝对动量>{abs_threshold:.0%}｜EMA评分半衰期{ema_half_life}日/年化评分>{ema_abs_threshold:.0%}｜挑战者/持仓比>{rebalance_threshold:.2f}x｜VolReg进入/恢复={volreg_enter:.2f}/{volreg_exit:.2f}\n\n')
+            if label == 'B7.8':
+                window, ema_window = (_v80_b78_US_ROT_VOL_WINDOW, _v80_b78_SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+                bias_config = (_v80_b78_V78_SUBB_BIAS_TARGET_VOL, _v80_b78_V78_SUBB_BIAS_VOL_WINDOW, _v80_b78_V78_SUBB_BIAS_MAX_LEV)
+                logvol_config = (_v80_b78_V78_SUBB_LOGVOL_TARGET_VOL, _v80_b78_V78_SUBB_LOGVOL_VOL_WINDOW, _v80_b78_V78_SUBB_LOGVOL_MAX_LEV)
+            else:
+                window, ema_window = (US_ROT_VOL_WINDOW, SUBB_V75_EMA_VOL_HALFLIFE_DAYS)
+                bias_config = _v79_subb_new_line_risk_parameters('bias')
+                logvol_config = _v79_subb_new_line_risk_parameters('logvol')
+            w('| 腿 | 目标波动 | 波动估计 | 杠杆上限 |\n|:-|------:|:-|------:|\n')
+            for leg, config, mode in [('官方', (target_vol, window, max_lev), '滚动窗口'), ('EMA', (target_vol, ema_window, max_lev), 'EWMA半衰期'), ('Bias', bias_config, '滚动窗口'), ('LogVol', logvol_config, '滚动窗口')]:
+                target, days, cap = config
+                w(f'| {leg} | {target:.0%} | {mode}{days}日 | {cap:.2f}x |\n')
+            w('\n')
+        if rows:
+            w(f'| ETF | 当前已生效 | {target_title} | 调整量 |\n')
+            w('|:-|------:|------:|------:|\n')
+            for item in rows:
+                delta_text = f"{item['delta']:+.1%}" if abs(item['delta']) >= 0.0005 else '—'
+                w(f"| {item['live_name']} | {item['current']:.1%} | **{item['target']:.1%}** | {delta_text} |\n")
+        else:
+            w('⚠️ 本版本 B 状态不可用。\n')
+        if not state['weekly_day']:
+            _write_v80_subb_model_reference(w, result, us_rot_close, label, us_intraday=us_intraday)
+        _write_v80_subb_risk_chain(w, result, label)
+        if query_kind in {'params', 'live_params'}:
+            action = '本页只核对参数；实际操作以“实时信号”为准。'
+        elif state['risk_action']:
+            if us_intraday:
+                action = 'VolReg当前仅为盘中假设；现在不执行，等待收盘确认。确认后于下一美股交易日开盘执行。'
+            elif state['model_action']:
+                action = '周度模型目标与VolReg风控调整均已收盘确认；按合成目标于下一美股交易日开盘执行。已执行则勿重复。'
+            else:
+                action = 'VolReg每日风控调整已收盘确认；按风控目标于下一美股交易日开盘执行，不等待下周周度信号。已执行则勿重复。'
+        elif is_signal_day is False:
+            if us_intraday and pd.Timestamp(result.index[-1]).dayofweek == 4:
+                action = '今天（周五）是上一周四信号的执行日，不是新信号日；只按周四收盘确认目标在本次开盘执行，**不要把周五盘中变化当成新调仓指令**。'
+            else:
+                action = '本收盘不是B策略周度信号日；今日模型参考即使变化也**不调仓**。等待常规周四收盘确认，下一美股交易日（通常周五）开盘执行。'
+        elif us_intraday:
+            action = '今天是B策略周度信号日，但当前只是盘中假设；**现在不调仓**。等待收盘确认，若目标变化则下一美股交易日（通常周五）开盘执行。'
+        elif changed:
+            action = '本周信号日收盘目标已确认；下一美股交易日（通常周五）开盘执行。已执行则勿重复。'
+        else:
+            action = '本周信号日收盘目标已确认且不变；下一交易日无需调仓。'
+        if query_kind not in {'params', 'live_params'}:
+            w(f'\n**现在怎么做：{action}**\n\n')
+        confirmed = bool(state['actionable'] and (not us_intraday))
+        if state['risk_action']:
+            note = '独立账户；VolReg盘中假设，等待收盘确认' if us_intraday else '独立账户；VolReg收盘确认，下一美股交易日开盘执行'
+        elif is_signal_day is False:
+            note = '独立账户；非周度信号日，仅供参考，不执行'
+        elif us_intraday:
+            note = '独立账户；周度信号日盘中假设，等待收盘确认'
+        else:
+            note = '独立账户；周度收盘确认后于下一美股交易日开盘执行'
+        signal_info[label] = {'is_signal': bool(changed and confirmed), 'signal_text': ', '.join((f"{item['live_name']} {item['target']:.1%}" for item in rows)) or '无目标', 'note': note}
+    w('> B7.8与B7.9必须分别核对、分别下单，不合并持仓。\n\n')
+    return signal_info
+
+def _subc_query_clock(us_prod_daily, now=None):
+    """C's bar confirmation and next execution belong to its own calendar."""
+    if us_prod_daily is None or len(us_prod_daily) == 0:
+        return {}
+    asof = pd.Timestamp(us_prod_daily.index[-1]).normalize()
+    current = pd.Timestamp(beijing_now() if now is None else now)
+    current = current.tz_localize('Asia/Shanghai') if current.tzinfo is None else current.tz_convert('Asia/Shanghai')
+    close_at = _subc_close_execution_at(asof)
+    execution_at = _subc_open_execution_at(_next_session_day(asof))
+    captured_intraday = bool(us_prod_daily.attrs.get('us_data_status', {}).get('intraday_snapshot'))
+    return {'asof': asof, 'close_at': close_at, 'execution_at': execution_at, 'unconfirmed': captured_intraday or current < close_at, 'execution_elapsed': current >= execution_at}
+
+def _us_query_coverage(frame):
+    status = frame.attrs.get('us_data_status', {})
+    state = status.get('status')
+    if state is None or state == 'current':
+        return ''
+    labels = {'historical': '仅有历史收盘', 'unavailable': '数据不可用', 'partial_intraday': '盘中报价不完整', 'verified_backup': '已核验备用行情'}
+    asof = status.get('asof')
+    required = status.get('required')
+    dates = f'可核验截至 {pd.Timestamp(asof):%Y-%m-%d}' if pd.notna(asof) else '无可核验历史日期'
+    if pd.notna(required):
+        dates += f'，本次要求 {pd.Timestamp(required):%Y-%m-%d}'
+    reason = status.get('reason') or ''
+    return f"美股 B7.8 / B7.9 / Sub-C：{labels.get(state, '状态不可判定')}，{dates}。{reason}"
+
+def _us_current_query_limited(frame):
+    return frame.attrs.get('us_data_status', {}).get('status', 'current') not in ('current', 'verified_backup')
+
+def _write_v80_subc_overview(w, info=None, *, query_kind='signal', us_intraday=False, clock=None):
+    w('## 🌐 C策略总览｜总组合30%\n\n')
+    clock = clock or {}
+    if clock:
+        us_intraday = bool(clock['unconfirmed'])
+        confirmation = '未收盘确认' if us_intraday else '已收盘确认'
+        w(f"> C数据截至 **{clock['asof']:%Y-%m-%d}**（{confirmation}）；该日收盘 {clock['close_at']:%Y-%m-%d %H:%M} 北京时间；缩放计划执行 **{clock['execution_at']:%Y-%m-%d %H:%M} 北京时间**，下一美股交易日开盘。\n\n")
+    if query_kind in {'params', 'live_params'}:
+        w(f'> 历史样本：{SUBC_FORMAL_START.date().isoformat()}起含BTC日线代理；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段不能按统一美股收盘/次日开盘口径认证。\n\n')
+    info = info or {}
+    if not info:
+        w('⚠️ C策略当前状态不可用；本次不生成正式调整指令。\n\n')
+        return {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+    try:
+        equity_current = float(info.get('current_scale', info.get('actual_scale')))
+        equity_raw = float(info.get('next_target_scale', info.get('target_scale')))
+        equity_next = float(info.get('next_scale'))
+        gold_current = float(info.get('gold_current_scale'))
+        gold_raw = float(info.get('gold_target_scale'))
+        gold_next = float(info.get('gold_next_scale'))
+        if not all((np.isfinite(v) and v >= 0.0 for v in (equity_current, equity_raw, equity_next, gold_current, gold_raw, gold_next))):
+            raise ValueError('non-finite scale')
+    except (TypeError, ValueError):
+        w('⚠️ C策略缩放状态缺失或无效；本次不生成正式调整指令。\n\n')
+        return {'is_signal': False, 'signal_text': '状态不可用', 'note': '不生成正式调整指令'}
+    equity_changed = bool(info.get('pending_adjustment', abs(equity_next - equity_current) > 0.001))
+    gold_changed = bool(info.get('gold_pending_adjustment', abs(gold_next - gold_current) > 0.001))
+    annual_due = bool(info.get('annual_rebalance_due', False))
+    scale_execution_elapsed = bool(clock.get('execution_elapsed', False) and (equity_changed or gold_changed))
+    if scale_execution_elapsed:
+        w('⚠️ 该收盘目标已确认，但缩放计划时点已过；表中是数据日的持仓与目标。请先核对账户是否已执行并刷新C数据，不应据此重复下单或直接补单。\n\n')
+    rv = info.get('rv_latest_no_shift', info.get('realized_vol'))
+    if query_kind in {'params', 'live_params'}:
+        w(f'规则：10ETF多资产｜股票袖SPY目标波动{PROD_VS_TARGET_VOL:.0%}/{PROD_VS_VOL_WINDOW}日｜黄金袖相对波动{PROD_GOLD_VS_SHORT_WINDOW}/{PROD_GOLD_VS_LONG_WINDOW}日｜scale {PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x｜调整死区{PROD_VS_THRESHOLD:.2f}｜缩放于下一美股开盘执行；年度基础重配于年末最后美股交易日收盘执行\n\n')
+    w('| 模块 | 当前已生效 | 最新raw | 下一执行 | 状态 |\n')
+    w('|:-|------:|------:|------:|:-|\n')
+    w(f"| 股票袖 | {equity_current:.2f}x | {equity_raw:.2f}x | **{equity_next:.2f}x** | {('调整' if equity_changed else '维持')} |\n")
+    w(f"| 黄金袖 | {gold_current:.2f}x | {gold_raw:.2f}x | **{gold_next:.2f}x** | {('调整' if gold_changed else '维持')} |\n")
+    w('| BTC/债券/CTA | 1.00x | 1.00x | **1.00x** | 固定 |\n')
+    w('\n**各标的目标持仓（占C策略）**\n\n')
+    w('| ETF | 资产 | 基础权重 | 动量持有 | 当前已生效 | 下一执行 | 调整量 |\n')
+    w('|:-|:-|------:|------:|------:|------:|------:|\n')
+    current_asset_weights = info.get('current_asset_weights', {}) or {}
+    next_asset_weights = info.get('next_asset_weights', {}) or {}
+    momentum_signals = info.get('asset_momentum_signal', {}) or {}
+    for name, cfg in PROD_PORTFOLIO.items():
+        if cfg['cls'] in PROD_VS_SCALE_CLASSES:
+            current_asset_scale, next_asset_scale = (equity_current, equity_next)
+        elif name == 'GLDM':
+            current_asset_scale, next_asset_scale = (gold_current, gold_next)
+        else:
+            current_asset_scale = next_asset_scale = 1.0
+        momentum_signal = float(momentum_signals.get(name, 1.0))
+        current_weight = float(current_asset_weights.get(name, float(cfg['w']) * momentum_signal * current_asset_scale))
+        next_weight = float(next_asset_weights.get(name, float(cfg['w']) * momentum_signal * next_asset_scale))
+        if not all((np.isfinite(v) and v >= 0.0 for v in (momentum_signal, current_weight, next_weight))):
+            w(f"| {name} | {cfg['label']} | {float(cfg['w']):.1%} | N/A | N/A | N/A | 数据无效 |\n")
+            continue
+        delta = next_weight - current_weight
+        delta_text = f'{delta:+.1%}' if abs(delta) >= 0.0005 else '—'
+        w(f"| {name} | {cfg['label']} | {float(cfg['w']):.1%} | {momentum_signal:.0%} | {current_weight:.1%} | **{next_weight:.1%}** | {delta_text} |\n")
+    current_cash = float(info.get('current_cash_exposure', 0.0))
+    next_cash = float(info.get('next_cash_exposure', current_cash))
+    cash_delta = next_cash - current_cash
+    cash_delta_text = f'{cash_delta:+.1%}' if abs(cash_delta) >= 0.0005 else '—'
+    w(f'| {PROD_CASH} | Cash ETF | 0.0% | — | {current_cash:.1%} | **{next_cash:.1%}** | {cash_delta_text} |\n')
+    measurement = f'SPY已实现波动={float(rv):.1%}｜' if rv is not None and pd.notna(rv) else 'SPY已实现波动=N/A｜'
+    w('\n当前测量: ' + measurement + f"总毛敞口={float(info.get('next_gross_exposure', 1.0)):.1%}｜" + f"BIL={float(info.get('next_cash_exposure', 0.0)):.1%}｜" + f"融资={float(info.get('next_borrow_exposure', 0.0)):.1%}｜" + f"Overlay乘数={float(info.get('overlay_multiplier', 1.0)):.2f}x\n\n")
+    if annual_due:
+        annual_at = pd.Timestamp(info['annual_execution_at'])
+        w(f"**年度基础再平衡待执行：{annual_at.strftime('%Y-%m-%d %H:%M')} 北京时间，美股年末最后交易日收盘。**\n\n")
+        w('| ETF | 年度重配前参考 | 年度收盘目标 | 调整量 |\n|:-|------:|------:|------:|\n')
+        for name in PROD_PORTFOLIO:
+            before = float(info['annual_reference_weights'][name])
+            target = float(info['annual_target_weights'][name])
+            w(f'| {name} | {before:.2%} | {target:.2%} | {target - before:+.2%} |\n')
+        w(f"\n基础换手参考={float(info['annual_base_turnover_estimate']):.2%}，费率={PROD_COMMISSION:.2%}；收盘前按届时价格复核。股票/黄金沿用该日已生效scale；新的缩放信号仍于下一开盘执行。\n\n")
+    changed = equity_changed or gold_changed or annual_due
+    if query_kind in {'params', 'live_params'}:
+        action = '本页只核对参数；实际操作以“实时信号”为准。'
+    elif annual_due:
+        action = '年度重配在上述美股收盘时点执行；按年度目标复核，不因scale维持而漏调仓。' + ('缩放计划时点已过，先核对账户是否已执行，勿重复下单。' if scale_execution_elapsed else '缩放raw仍是盘中假设，等待收盘确认。' if us_intraday else '若缩放也有变更，另按上述缩放计划时点执行。')
+    elif scale_execution_elapsed:
+        action = '收盘目标已确认，但计划时点已过；先核对账户是否已执行并刷新C数据，不应据此重复下单或直接补单。'
+    elif us_intraday:
+        action = '美股盘中raw可能变化；现在不执行，等待收盘确认。'
+    elif changed:
+        action = '收盘目标已确认；下一美股开盘执行。已执行则勿重复。'
+    else:
+        action = '股票袖与黄金袖均维持；无需下单。'
+    if query_kind not in {'params', 'live_params'}:
+        w(f'**现在怎么做：{action}**\n\n')
+    signal_text = f'股票袖 {equity_next:.2f}x；黄金袖 {gold_next:.2f}x'
+    if annual_due:
+        signal_text += '；年度MOC目标：' + ', '.join((f'{name} {float(weight):.2%}' for name, weight in info['annual_target_weights'].items()))
+    note = '年度基础重配在年末最后美股交易日收盘执行；scale变更另按下一开盘' if annual_due else '计划时点已过，先核对执行状态，勿重复下单' if scale_execution_elapsed else '盘中假设，等待收盘确认' if us_intraday else '收盘确认后于下一美股开盘执行'
+    if clock:
+        note += f"；C数据日{clock['asof']:%Y-%m-%d}；缩放计划{clock['execution_at']:%Y-%m-%d %H:%M}北京时间"
+    return {'is_signal': bool(annual_due or (changed and (not us_intraday) and (not scale_execution_elapsed))), 'signal_text': signal_text, 'note': note}
+
+def _latest_series_value_at(series, date):
+    if series is None:
+        return np.nan
+    values = pd.to_numeric(series, errors='coerce')
+    try:
+        value = values.loc[pd.Timestamp(date)]
+        if isinstance(value, pd.Series):
+            value = value.iloc[-1]
+        return float(value) if pd.notna(value) else np.nan
+    except Exception:
+        history = values.loc[values.index <= pd.Timestamp(date)].dropna()
+        return float(history.iloc[-1]) if len(history) else np.nan
+
+def _adk_pair_score_detail_rows(cn_dk_result, idx=-1):
+    if cn_dk_result is None or len(cn_dk_result) == 0:
+        return []
+    signals_df = cn_dk_result.attrs.get('signals_df')
+    pair_data = cn_dk_result.attrs.get('pair_data', {})
+    if signals_df is None or len(signals_df) == 0:
+        return []
+    date = pd.Timestamp(cn_dk_result.index[idx])
+    if date not in signals_df.index:
+        return []
+    raw_scores = pd.to_numeric(signals_df.loc[date], errors='coerce')
+    all_pairs = list(_v78_all_adk_pair_order())
+    score_row = pd.Series({pair: raw_scores.get(pair, np.nan) for pair in all_pairs}, dtype=float)
+    ordered_pairs = sorted(all_pairs, key=lambda pair: (pd.isna(score_row[pair]), -float(score_row[pair]) if pd.notna(score_row[pair]) else 0.0, all_pairs.index(pair)))
+    current_pair = str(cn_dk_result.iloc[idx].get('top_pair', 'none') or 'none')
+    rows = []
+    for rank, pair in enumerate(ordered_pairs, 1):
+        score = score_row[pair]
+        pdata = pair_data.get(pair)
+        source = pd.Series(dtype=object)
+        if pdata is not None and date in pdata.index:
+            source = pdata.loc[date]
+            if isinstance(source, pd.DataFrame):
+                source = source.iloc[-1]
+        r2 = source.get('signal_r2', np.nan)
+        realized_vol = source.get('realized_vol', np.nan)
+        current_scale = source.get('scale', np.nan)
+        direction_value = source.get('signal', source.get('position', np.nan))
+        direction = int(direction_value) if pd.notna(direction_value) else 0
+        scale_update_date = None
+        if pdata is not None and 'scale' in pdata.columns:
+            scale_history = pd.to_numeric(pdata.loc[pdata.index <= date, 'scale'], errors='coerce').dropna()
+            if len(scale_history):
+                changed = scale_history.diff().abs().gt(1e-12)
+                changed.iloc[0] = True
+                scale_update_date = pd.Timestamp(changed[changed].index[-1])
+        if pd.notna(realized_vol) and pd.notna(current_scale):
+            latest_raw, next_scale, pending = _compute_next_vol_scale(float(realized_vol), float(current_scale), CN_DK_TARGET_VOL if CN_DK_VOL_SCALE_ENABLED else None, CN_DK_MIN_LEV, CN_DK_MAX_LEV, CN_DK_SCALE_THRESHOLD)
+        else:
+            latest_raw, next_scale, pending = (np.nan, current_scale, False)
+        tags = []
+        if pair == current_pair:
+            tags.append('当前配对')
+        if rank == 1 and pd.notna(score):
+            tags.append('收盘Top-1')
+        rows.append({'rank': rank, 'pair': pair, 'pair_display': _dk_pair_display(pair), 'score': float(score) if pd.notna(score) else np.nan, 'r2': float(r2) if pd.notna(r2) else np.nan, 'direction': direction, 'position_text': _dk_pos_str(f'{pair}_{direction}') if direction else '方向不可用', 'realized_vol': float(realized_vol) if pd.notna(realized_vol) else np.nan, 'current_scale': float(current_scale) if pd.notna(current_scale) else np.nan, 'scale_update_date': scale_update_date, 'latest_raw': float(latest_raw) if pd.notna(latest_raw) else np.nan, 'next_scale': float(next_scale) if pd.notna(next_scale) else np.nan, 'pending': bool(pending), 'tag': '、'.join(tags) if tags else '数据缺失，不参与排序' if pd.isna(score) else '—'})
+    return rows
+
+def _write_v80_a_adk_score_details(w, cn_result, cn_dk_result):
+    w('## 🔎 A / ADK基础评分明细\n\n')
+    w('> 本区统一放在C策略之后，只解释基础排名与VolScale来源；前面的操作结论不变。\n\n')
+    w('### A策略｜全部候选标的\n\n')
+    a_rows = []
+    if cn_result is not None and len(cn_result) > 0:
+        date = pd.Timestamp(cn_result.index[-1])
+        score_map = cn_result.attrs.get('suba_bias_mom', {})
+        r2_map = cn_result.attrs.get('suba_r2', {})
+        codes = cn_result.attrs.get('suba_score_codes', list(CN_EQUITY_CODES) + [CN_BOND_CODE])
+        for code in codes:
+            score = _latest_series_value_at(score_map.get(code), date)
+            r2 = _latest_series_value_at(r2_map.get(code), date)
+            a_rows.append({'code': code, 'name': CN_NAMES.get(code, code), 'score': score, 'r2': r2})
+    a_rows.sort(key=lambda row: (pd.isna(row['score']), -float(row['score']) if pd.notna(row['score']) else 0.0))
+    if a_rows:
+        w(f'规则：按score降序取原始Top-1；Top-1需score>0且R²≥{CN_R2_THRESHOLD:.2f}。\n\n')
+        w('| # | 标的 | score | R² | 判定 |\n|:-|:-|------:|------:|:-|\n')
+        for rank, row in enumerate(a_rows, 1):
+            score_text = f"{row['score']:.2f}" if pd.notna(row['score']) else 'N/A'
+            r2_text = f"{row['r2']:.3f}" if pd.notna(row['r2']) else 'N/A'
+            if pd.isna(row['score']):
+                verdict = '数据缺失，不参与排序'
+            elif rank == 1:
+                passed = row['score'] > 0 and pd.notna(row['r2']) and (row['r2'] >= CN_R2_THRESHOLD)
+                verdict = 'Top-1通过' if passed else 'Top-1未通过→Cash'
+            else:
+                verdict = '候选（不递补）'
+            w(f"| {rank} | {row['name']} | {score_text} | {r2_text} | {verdict} |\n")
+    else:
+        w('⚠️ A策略逐标的score/R²字段不可用。\n')
+    w('\n### ADK策略｜全部10个配对\n\n')
+    adk_rows = _adk_pair_score_detail_rows(cn_dk_result, -1)
+    if not adk_rows:
+        w('⚠️ ADK逐配对score/R²字段不可用。\n\n')
+        return
+    w(f'VolScale公式：`raw = clip({CN_DK_TARGET_VOL:.0%} / {CN_DK_VOL_WINDOW}日已实现波动率, {CN_DK_MIN_LEV:.1f}, {CN_DK_MAX_LEV:.1f})`；仅当|raw−当前|≥{CN_DK_SCALE_THRESHOLD:.2f}才更新。每个配对独立保存自己的VolScale。\n\n')
+    current = next((row for row in adk_rows if '当前配对' in row['tag']), None)
+    target = adk_rows[0]
+    if current is not None and pd.notna(current['current_scale']) and pd.notna(target['next_scale']):
+        current_raw_text = f"{current['latest_raw']:.2f}x" if pd.notna(current['latest_raw']) else 'N/A'
+        target_raw_text = f"{target['latest_raw']:.2f}x" if pd.notna(target['latest_raw']) else 'N/A'
+        current_update = current['scale_update_date'].strftime('%Y-%m-%d') if current['scale_update_date'] is not None else '日期不可用'
+        target_update = target['scale_update_date'].strftime('%Y-%m-%d') if target['scale_update_date'] is not None else '日期不可用'
+        if current['pair'] == target['pair']:
+            if abs(float(current['current_scale']) - float(target['next_scale'])) < 1e-12:
+                w(f"本次敞口来源：当前配对与收盘Top-1均为 **{current['pair_display']}**，配对未切换；沿用其在{current_update}更新的独立VolScale **{current['current_scale']:.2f}x**（最新raw {current_raw_text}，未跨死区）。\n\n")
+            else:
+                w(f"本次敞口来源：当前配对与收盘Top-1均为 **{current['pair_display']}**，配对未切换；最新raw {target_raw_text}已跨死区，VolScale由 **{current['current_scale']:.2f}x** 更新为 **{target['next_scale']:.2f}x**。\n\n")
+        else:
+            w(f"本次敞口来源：当前配对 **{current['pair_display']}** 沿用其在{current_update}更新的独立VolScale **{current['current_scale']:.2f}x**（最新raw {current_raw_text}）；收盘Top-1切换为 **{target['pair_display']}**，其下一VolScale为 **{target['next_scale']:.2f}x**（最近更新{target_update}，最新raw {target_raw_text}）。因此配对切换同时表现为 **{current['current_scale']:.2f}x → {target['next_scale']:.2f}x**。\n\n")
+    w('| # | 配对 | score | R² | 方向 | 已实现波动 | 当前VolScale（更新日） | 最新raw | 下一VolScale | 标记 |\n')
+    w('|:-|:-|------:|------:|:-|------:|------:|------:|------:|:-|\n')
+    for row in adk_rows:
+        score_text = f"{row['score']:.2f}" if pd.notna(row['score']) else 'N/A'
+        r2_text = f"{row['r2']:.3f}" if pd.notna(row['r2']) else 'N/A'
+        rv_text = f"{row['realized_vol']:.1%}" if pd.notna(row['realized_vol']) else 'N/A'
+        update_text = row['scale_update_date'].strftime('%m-%d') if row['scale_update_date'] is not None else 'N/A'
+        current_scale_text = f"{row['current_scale']:.2f}x（{update_text}）" if pd.notna(row['current_scale']) else 'N/A'
+        raw_text = f"{row['latest_raw']:.2f}x" if pd.notna(row['latest_raw']) else 'N/A'
+        next_scale_text = f"{row['next_scale']:.2f}x" if pd.notna(row['next_scale']) else 'N/A'
+        w(f"| {row['rank']} | {row['pair_display']} | {score_text} | {r2_text} | {row['position_text']} | {rv_text} | {current_scale_text} | {raw_text} | {next_scale_text} | {row['tag']} |\n")
+    w('\n')
+
+def _write_v80_b78_detail(w, us_rot_result, *, query_kind='signal'):
+    b78, _ = _v80_subb_results(us_rot_result)
+    if b78 is None or len(b78) == 0:
+        w('### B7.8详细依据（Sub-B）\n\n⚠️ B7.8状态不可用。\n')
+        return
+    date_text = pd.Timestamp(b78.index[-1]).strftime('%Y-%m-%d')
+    w('### B7.8详细依据（Sub-B）｜V7.8四腿综合\n\n')
+    w(f'数据日期: **{date_text}**｜执行: **T收盘确认 → T+1 adjusted open**\n\n')
+    changed = {live: cfg['proxy'] for live, cfg in _v80_b78_US_ROT_ASSETS.items() if live != cfg['proxy']}
+    if changed:
+        w('实盘→proxy: ' + ', '.join((f'{live}→{proxy}' for live, proxy in changed.items())) + '\n\n')
+    if query_kind in {'params', 'live_params'}:
+        _v80_b78_write_v78_subb_param_tables(w)
+    else:
+        w(f'规则: Top{V80_SUBB_V78_TOP_N}｜官方腿绝对动量>{_v80_b78_US_ROT_ABS_THRESHOLD:.0%}｜EMA评分半衰期{_v80_b78_SUBB_V75_EMA_HALF_LIFE}日/年化评分>{_v80_b78_SUBB_V75_EMA_ABS_THRESHOLD:.0%}｜挑战者/持仓比>{_v80_b78_US_ROT_REBALANCE_THRESHOLD:.2f}x｜目标波动{_v80_b78_US_ROT_TARGET_VOL:.0%}｜VolReg进入/恢复={_v80_b78_US_ROT_VOLREG_THRESHOLD:.2f}/{_v80_b78_US_ROT_VOLREG_EXIT_THRESHOLD:.2f}\n\n')
+        _v80_b78_write_v78_subb_component_leg_tables(w, b78, -1)
+        _v80_b78_write_v78_subb_blend_table(w, b78, -1)
+        warning = _v80_b78_v78_subb_volume_warning(b78)
+        if warning:
+            w('\n' + warning + '\n')
+    w('\n**B7.8当前风控链**\n')
+    _write_v80_subb_risk_chain(w, b78, 'B7.8')
+
+def _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=False, top_n=3):
+    specs = [(label, result_df, scope) for label, scope, _weight, result_df, _is_new in _v80_adk_component_specs(cn_dk_result)]
+    sections = []
+    for label, result_df, scope in specs:
+        rows = _build_dk_rank_rows_at(result_df, idx=idx, use_shifted=use_shifted, top_n=top_n)
+        if rows:
+            sections.append({'leg': label, 'scope': scope, 'rows': rows})
+    return sections
+
+def _v78_adk_close_target_change_rows(cn_dk_result, idx=-1):
+    resolved_idx, date = _v78_resolve_display_idx_date(cn_dk_result, idx)
+    if resolved_idx is None:
+        return []
+    specs = [(label, result_df) for label, _scope, _weight, result_df, _is_new in _v80_adk_component_specs(cn_dk_result)]
+    rows = []
+    for label, result_df in specs:
+        current = _v78_row_for_display(result_df, resolved_idx, date)
+        if current is None:
+            continue
+        try:
+            component_idx = int(result_df.index.get_loc(pd.Timestamp(date)))
+        except Exception:
+            component_idx = resolved_idx
+        targets = _build_dk_rank_rows_at(result_df, idx=component_idx, use_shifted=False, top_n=1)
+        current_pair = str(current.get('top_pair', 'none') or 'none')
+        current_direction = int(current.get('direction', 0) or 0)
+        if targets:
+            target_pair = str(targets[0]['pair'])
+            target_direction = int(targets[0]['direction'] or 0)
+            target_text = targets[0]['position_text']
+        else:
+            target_pair = current_pair
+            target_direction = current_direction
+            target_text = _dk_pos_str(f'{current_pair}_{current_direction}')
+        current_text = _dk_pos_str(f'{current_pair}_{current_direction}')
+        rows.append({'leg': label, 'current_pair': current_pair, 'current_direction': current_direction, 'current_text': current_text, 'target_pair': target_pair, 'target_direction': target_direction, 'target_text': target_text, 'changed': current_pair != target_pair or current_direction != target_direction})
+    return rows
+
+def _v78_adk_close_target_signal_text(change_rows):
+    changed = [row for row in change_rows if row.get('changed')]
+    if not changed:
+        return 'ADK本日收盘配对/方向目标无变化'
+    details = '; '.join((f"{row['leg']}: {row['current_text']} -> {row['target_text']}" for row in changed))
+    return f'ADK本日收盘配对/方向目标变化: {details}'
+
+def _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False):
+    sections = _v78_adk_leg_rank_sections(cn_dk_result, idx, use_shifted=use_shifted, top_n=3)
+    if not sections:
+        return
+    execution_by_leg = {row['leg']: row for row in _v79_adk_leg_execution_rows(cn_dk_result, idx)}
+    if use_shifted:
+        score_label = '确认分数'
+        timing = '当前基础Top-3'
+        hint = '这里只展示基础排名，不等于最终持仓；Top-1行同时给出覆盖层后的当前最终持仓'
+    else:
+        score_label = '实时分数'
+        timing = '实时基础Top-3'
+        hint = '这里只展示若现在收盘的基础排名，不等于最终执行；Top-1行同时给出score-hot/过热/VolScale后的最终结论'
+    title = '单策略Top-3' if _v80_adk_is_new_only(cn_dk_result) else '两个子策略Top-3'
+    w(f'\n**V8.0 ADK {title}（{hint}）:**\n')
+    for section in sections:
+        w(f"\n**{section['leg']}（{section['scope']}） {timing}**\n")
+        execution = execution_by_leg.get(section['leg'])
+        for row in section['rows']:
+            score = row['score_used'] if use_shifted else row['score_live']
+            score_text = f'{score:.2f}' if not np.isnan(score) else 'NA'
+            mark = ''
+            if row['rank'] == 1:
+                if execution is None:
+                    mark = ' ← 基础Top-1（非最终执行结论）'
+                elif use_shifted:
+                    if execution['current_weight'] <= 1e-12:
+                        mark = f" ← 当前基础Top-1；{execution['current_overlay_text']}；覆盖层后当前最终为空仓"
+                    else:
+                        mark = f" ← 当前基础Top-1；覆盖层后当前最终持仓 {execution['current_final_text']}"
+                elif execution['target_weight'] <= 1e-12:
+                    mark = f" ← 收盘基础Top-1；{execution['target_overlay_text']}；过滤后最终为空仓，**不会执行该配对**"
+                else:
+                    mark = f" ← 收盘基础Top-1；{execution['target_overlay_text']}；过滤后最终执行 {execution['target_final_text']}"
+            w(f"- {row['rank']}. **{row['pair_display']}** | {score_label} `{score_text}` | 方向 {row['direction']:+d} | {row['position_text']}{mark}\n")
+
+def _write_v78_adk_new_leg_rank_table(w, cn_dk_result, idx, use_shifted=False):
+    _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=use_shifted)
+
+def _v78_adk_position_context_labels(position_context, new_only=False):
+    if new_only:
+        if not position_context:
+            return ('当前配对/方向', 'Top-1配对/方向')
+        if str(position_context).startswith('若现在收盘'):
+            return ('若现在收盘配对/方向', '若现在收盘Top-1配对/方向')
+        if '当前已生效' in str(position_context):
+            return ('当前已生效配对/方向', '当前已生效Top-1配对/方向')
+        return (f'{position_context}配对/方向', f'{position_context}Top-1配对/方向')
+    if not position_context:
+        return ('当前双腿配对/方向', '分腿Top-1配对/方向')
+    if str(position_context).startswith('若现在收盘'):
+        return ('若现在收盘双腿配对/方向', '若现在收盘分腿Top-1配对/方向')
+    if '当前已生效' in str(position_context):
+        return ('当前已生效双腿配对/方向', '当前已生效分腿Top-1配对/方向')
+    return (f'{position_context}双腿配对/方向', f'{position_context}分腿Top-1配对/方向')
+
+def _write_v78_adk_position_context_note(w, position_context, new_only=False):
+    if not position_context:
+        return
+    w(f'\n**ADK持仓口径:** **{position_context}**')
+    if '非当前正式持仓' in str(position_context) or str(position_context).startswith('若现在收盘'):
+        holding_label = '当前已生效持仓' if new_only else '当前已生效双腿持仓'
+        w(f'；当前正式持仓以上方“{holding_label}”和“账户级净敞口”表为准。')
+    else:
+        detail = '单策略与账户级净敞口状态' if new_only else '综合、分腿与账户级净敞口状态'
+        w(f'；下方表格展示当前正式持有的{detail}。')
+    w('\n')
+
+def _write_v78_adk_new_leg_then_summary(w, cn_dk_result, idx, use_shifted=False, position_context=None):
+    is_close_target = not use_shifted and position_context is not None and ('目标' in str(position_context) or str(position_context).startswith('若现在收盘'))
+    if is_close_target:
+        unit = '策略' if _v80_adk_is_new_only(cn_dk_result) else '各腿'
+        w(f'\n**ADK收盘目标口径:** 下表仅用当日未移位分数判断{unit}配对/方向目标；当前正式持仓与账户级净敞口仍以上方已生效表为准。\n')
+        _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=False)
+        return
+    new_only = _v80_adk_is_new_only(cn_dk_result)
+    blend_col, status_col = _v78_adk_position_context_labels(position_context, new_only=new_only)
+    _write_v78_adk_position_context_note(w, position_context, new_only=new_only)
+    _write_v78_adk_blend_table(w, cn_dk_result, idx, position_col_label=blend_col)
+    _write_v78_adk_net_exposure_table(w, cn_dk_result, idx)
+    _write_v78_adk_leg_status_table(w, cn_dk_result, idx, position_col_label=status_col)
+    _write_v78_adk_leg_rank_tables(w, cn_dk_result, idx, use_shifted=use_shifted)
+
+def _v78_subb_four_leg_weight_rows(us_rot_result, idx, min_weight=0.0005):
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return []
+    idx, date = _v78_resolve_display_idx_date(us_rot_result, idx)
+    if idx is None:
+        return []
+    row = us_rot_result.iloc[idx]
+    v77 = us_rot_result.attrs.get('v78_subb_v77')
+    bias = us_rot_result.attrs.get('v78_subb_bias')
+    logvol = us_rot_result.attrs.get('v78_subb_logvol')
+    v77_row = _v78_row_for_display(v77, idx, date)
+    bias_row = _v78_row_for_display(bias, idx, date)
+    logvol_row = _v78_row_for_display(logvol, idx, date)
+    assets = set()
+    for source_row in (row, v77_row, bias_row, logvol_row):
+        if source_row is None:
+            continue
+        for col in source_row.index:
+            if not isinstance(col, str):
+                continue
+            for prefix in ('w_', 'official_w_', 'official_contrib_w_', 'ema_w_', 'ema_contrib_w_'):
+                if col.startswith(prefix):
+                    assets.add(col[len(prefix):])
+    rows = []
+    for asset in sorted(assets):
+        official_raw = float(v77_row.get(f'official_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+        ema_raw = float(v77_row.get(f'ema_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+        official_inner = float(v77_row.get(f'official_contrib_w_{asset}', SUBB_V75_OFFICIAL_WEIGHT * official_raw) or 0.0) if v77_row is not None else 0.0
+        ema_inner = float(v77_row.get(f'ema_contrib_w_{asset}', SUBB_V75_EMA_WEIGHT * ema_raw) or 0.0) if v77_row is not None else 0.0
+        official_contrib = V78_SUBB_V77_WEIGHT * official_inner
+        ema_contrib = V78_SUBB_V77_WEIGHT * ema_inner
+        bias_w = float(bias_row.get(f'target_w_{asset}', bias_row.get(f'w_{asset}', 0.0)) or 0.0) if bias_row is not None else 0.0
+        logvol_w = float(logvol_row.get(f'target_w_{asset}', logvol_row.get(f'w_{asset}', 0.0)) or 0.0) if logvol_row is not None else 0.0
+        bias_contrib = V78_SUBB_NEW_BIAS_WEIGHT * bias_w
+        logvol_contrib = V78_SUBB_NEW_LOGVOL_WEIGHT * logvol_w
+        final_weight = float(row.get(f'target_w_{asset}', official_contrib + ema_contrib + bias_contrib + logvol_contrib) or 0.0)
+        if max(abs(official_contrib), abs(ema_contrib), abs(bias_contrib), abs(logvol_contrib), abs(final_weight)) < min_weight:
+            continue
+        rows.append({'asset': asset, 'live_name': _ROT_PROXY_TO_LIVE.get(asset, asset), 'official_contrib': official_contrib, 'ema_contrib': ema_contrib, 'bias_contrib': bias_contrib, 'logvol_contrib': logvol_contrib, 'final_weight': final_weight})
+    rows.sort(key=lambda item: item['final_weight'], reverse=True)
+    return rows
+
+def _v78_subb_component_leg_rows(us_rot_result, idx, include_official=True, min_weight=0.0005):
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return []
+    idx, date = _v78_resolve_display_idx_date(us_rot_result, idx)
+    if idx is None:
+        return []
+    v77 = us_rot_result.attrs.get('v78_subb_v77')
+    bias = us_rot_result.attrs.get('v78_subb_bias')
+    logvol = us_rot_result.attrs.get('v78_subb_logvol')
+    v77_row = _v78_row_for_display(v77, idx, date)
+    bias_row = _v78_row_for_display(bias, idx, date)
+    logvol_row = _v78_row_for_display(logvol, idx, date)
+    assets = set()
+    for source_row in (v77_row, bias_row, logvol_row):
+        if source_row is None:
+            continue
+        for col in source_row.index:
+            if not isinstance(col, str):
+                continue
+            for prefix in ('official_w_', 'official_contrib_w_', 'ema_w_', 'ema_contrib_w_', 'target_w_', 'w_'):
+                if col.startswith(prefix):
+                    assets.add(col[len(prefix):])
+    leg_specs = []
+    if include_official:
+        leg_specs.append(('官方腿', V78_SUBB_V77_WEIGHT * SUBB_V75_OFFICIAL_WEIGHT))
+    leg_specs.extend([('EMA腿', V78_SUBB_V77_WEIGHT * SUBB_V75_EMA_WEIGHT), ('Bias腿', V78_SUBB_NEW_BIAS_WEIGHT), ('LogVol腿', V78_SUBB_NEW_LOGVOL_WEIGHT)])
+    rows = []
+    for leg, blend_weight in leg_specs:
+        for asset in sorted(assets):
+            if leg == '官方腿':
+                raw_weight = float(v77_row.get(f'official_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+                contrib = V78_SUBB_V77_WEIGHT * float(v77_row.get(f'official_contrib_w_{asset}', SUBB_V75_OFFICIAL_WEIGHT * raw_weight) or 0.0) if v77_row is not None else 0.0
+            elif leg == 'EMA腿':
+                raw_weight = float(v77_row.get(f'ema_w_{asset}', 0.0) or 0.0) if v77_row is not None else 0.0
+                contrib = V78_SUBB_V77_WEIGHT * float(v77_row.get(f'ema_contrib_w_{asset}', SUBB_V75_EMA_WEIGHT * raw_weight) or 0.0) if v77_row is not None else 0.0
+            elif leg == 'Bias腿':
+                raw_weight = float(bias_row.get(f'target_w_{asset}', bias_row.get(f'w_{asset}', 0.0)) or 0.0) if bias_row is not None else 0.0
+                contrib = V78_SUBB_NEW_BIAS_WEIGHT * raw_weight
+            else:
+                raw_weight = float(logvol_row.get(f'target_w_{asset}', logvol_row.get(f'w_{asset}', 0.0)) or 0.0) if logvol_row is not None else 0.0
+                contrib = V78_SUBB_NEW_LOGVOL_WEIGHT * raw_weight
+            if max(abs(raw_weight), abs(contrib)) < min_weight:
+                continue
+            rows.append({'leg': leg, 'blend_weight': blend_weight, 'asset': asset, 'live_name': _ROT_PROXY_TO_LIVE.get(asset, asset), 'leg_weight': raw_weight, 'contribution': contrib})
+    rows.sort(key=lambda item: (item['leg'], -abs(item['contribution']), item['asset']))
+    return rows
+
+def _write_v78_subb_component_leg_tables(w, us_rot_result, idx, include_official=True):
+    rows = _v78_subb_component_leg_rows(us_rot_result, idx, include_official=include_official)
+    if not rows:
+        return
+    w('\n**V7.9 Sub-B 子策略腿状态（腿内目标 -> 组合贡献）**\n\n')
+    for leg in ['官方腿', 'EMA腿', 'Bias腿', 'LogVol腿']:
+        leg_rows = [row for row in rows if row['leg'] == leg]
+        if not leg_rows:
+            continue
+        blend_weight = leg_rows[0]['blend_weight']
+        w(f'**{leg}（{blend_weight:.0%}）**\n\n')
+        w('| ETF | 腿内目标权重 | 组合贡献 |\n|:-|------:|------:|\n')
+        for row in leg_rows:
+            w(f"| {row['live_name']} | {row['leg_weight']:.1%} | {row['contribution']:.1%} |\n")
+        w('\n')
+
+def _write_v78_subb_blend_table(w, us_rot_result, idx):
+    if 'v78_subb_v77_return' not in us_rot_result.columns:
+        return
+    rows = _v78_subb_four_leg_weight_rows(us_rot_result, idx)
+    w('\n**V7.9 Sub-B 四腿拆分与综合目标**（官方腿25% + EMA腿25% + Bias腿25% + LogVol腿25%）\n\n')
+    if rows:
+        w('| ETF | 官方腿贡献 | EMA腿贡献 | Bias腿贡献 | LogVol腿贡献 | V7.9综合目标 |\n')
+        w('|:-|------:|------:|------:|------:|------:|------:|\n')
+        for row in rows:
+            w(f"| {row['live_name']} | {row['official_contrib']:.1%} | {row['ema_contrib']:.1%} | {row['bias_contrib']:.1%} | {row['logvol_contrib']:.1%} | **{row['final_weight']:.1%}** |\n")
+    return
+
+def _v78_subb_volume_warning(us_rot_result):
+    if us_rot_result is None:
+        return ''
+    labels = {'v78_subb_bias': 'Bias', 'v78_subb_logvol': 'LogVol'}
+    failed = []
+    for key, label in labels.items():
+        comp = us_rot_result.attrs.get(key)
+        if comp is None or len(comp) == 0 or 'volume_source' not in comp.columns:
+            continue
+        src = str(comp.iloc[-1].get('volume_source', '') or '')
+        if src.startswith('unavailable:') or 'unresolved SPY volume' in src:
+            failed.append(label)
+    if not failed:
+        return ''
+    mode = str(globals().get('V78_SUBB_SPY_VOLUME_FAIL_MODE', 'warn_open') or 'warn_open').lower()
+    if mode == 'fail_closed':
+        return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 已按 fail-closed 保守降权。"
+    if mode == 'raise':
+        return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 配置为 raise，应中止本次信号。"
+    return f"⚠️ SPY volume unavailable，{', '.join(failed)} volume gate 本次未执行（fail-open：本次未降权）。"
+
+def _v78_subb_current_vs_hypothetical_rows(us_rot_result, idx, min_weight=0.0005, current_weights=None, target_weights=None):
+    if us_rot_result is None or len(us_rot_result) == 0:
+        return []
+    idx, _date = _v78_resolve_display_idx_date(us_rot_result, idx)
+    if idx is None:
+        return []
+    row = us_rot_result.iloc[idx]
+    assets = set(_weight_columns_assets(us_rot_result, prefixes=('actual_w_', 'target_w_', 'w_')))
+    if current_weights is not None:
+        assets.update(current_weights.keys())
+    if target_weights is not None:
+        assets.update(target_weights.keys())
+    assets = sorted(assets)
+    rows = []
+    for asset in assets:
+        if current_weights is not None:
+            current = current_weights.get(asset, 0.0)
+        else:
+            current = row.get(f'actual_w_{asset}', row.get(f'w_{asset}', 0.0))
+        if target_weights is not None:
+            target = target_weights.get(asset, 0.0)
+        else:
+            target = row.get(f'target_w_{asset}', current)
+        current = float(current) if pd.notna(current) else 0.0
+        target = float(target) if pd.notna(target) else 0.0
+        diff = target - current
+        if max(abs(current), abs(target), abs(diff)) < min_weight:
+            continue
+        rows.append({'asset': asset, 'live_name': _ROT_PROXY_TO_LIVE.get(asset, asset), 'current_weight': current, 'hypothetical_target': target, 'diff': diff})
+    rows.sort(key=lambda item: max(abs(item['current_weight']), abs(item['hypothetical_target'])), reverse=True)
+    return rows
+
+def _write_v78_subb_current_vs_hypothetical_table(w, us_rot_result, idx, min_weight=0.0005, current_weights=None, target_weights=None):
+    rows = _v78_subb_current_vs_hypothetical_rows(us_rot_result, idx, min_weight=min_weight, current_weights=current_weights, target_weights=target_weights)
+    if not rows:
+        return
+    w('\n**V7.9 Sub-B 当前持有 vs 假设今日调仓**\n\n')
+    w('| ETF | 当前持有 | 假设今日调仓目标 | 假设调仓差异 |\n')
+    w('|:-|------:|------:|------:|\n')
+    for row in rows:
+        diff = row['diff']
+        diff_text = f'{diff:+.1%}' if abs(diff) >= 0.0005 else '—'
+        w(f"| {row['live_name']} | {row['current_weight']:.1%} | **{row['hypothetical_target']:.1%}** | {diff_text} |\n")
+    turnover = sum((abs(row['diff']) for row in rows if row['asset'] not in ('BIL', 'CASH')))
+    w(f'\n假设今日是Sub-B调仓日，按上表目标执行；单边调整合计约 **{turnover:.1%}**。非信号日仅作参考，不生成正式调仓指令。\n')
+
+def _subb_guard_pct_text(value, signed=False):
+    if pd.isna(value):
+        return 'N/A'
+    try:
+        value = float(value)
+    except Exception:
+        return 'N/A'
+    return f'{value:+.2%}' if signed else f'{value:.2%}'
+
+def _write_subb_dbc_profit_guard_status(w, us_rot_result, idx=-1):
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED or us_rot_result is None or len(us_rot_result) == 0 or ('dbc_profit_guard_next_scale' not in us_rot_result.columns):
+        return
+    try:
+        row = us_rot_result.loc[idx] if idx in us_rot_result.index else us_rot_result.iloc[idx]
+    except Exception:
+        return
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    profit = row.get('dbc_profit_guard_profit', np.nan)
+    peak = row.get('dbc_profit_guard_peak_profit', np.nan)
+    retain = row.get('dbc_profit_guard_retain_ratio', np.nan)
+    today_scale = _subb_row_float(row, 'dbc_profit_guard_scale_today', 1.0)
+    next_scale = _subb_row_float(row, 'dbc_profit_guard_next_scale', today_scale)
+    raw_weight = float(row.get(f'pre_dbc_profit_guard_w_{asset}', row.get(f'w_{asset}', 0.0)) or 0.0)
+    final_weight = float(row.get(f'w_{asset}', 0.0) or 0.0)
+    target_weight = float(row.get(f'target_w_{asset}', final_weight) or 0.0)
+    target_shift = float(row.get('dbc_profit_guard_target_removed_weight', 0.0) or 0.0)
+    action = str(row.get('dbc_profit_guard_action', '') or '')
+    if action:
+        action_text = f' | action {action}'
+    elif next_scale < 1.0 - 1e-09:
+        action_text = ' | action guard_on'
+    else:
+        action_text = ' | action normal'
+    w(f'**DBC/PDBC profit guard:** {_subb_dbc_profit_guard_rule_text()}; profit {_subb_guard_pct_text(profit, signed=True)}, peak {_subb_guard_pct_text(peak, signed=True)}, retain {_subb_guard_pct_text(retain)}; raw {raw_weight:.1%}, today scale {today_scale:.2f}, next scale {next_scale:.2f}, final {final_weight:.1%}, target {target_weight:.1%}, {cash_asset} shift {target_shift:.1%}{action_text}\n')
+
+def _subb_row_float(row, key, default=0.0):
+    try:
+        value = row.get(key, default)
+        if pd.isna(value):
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+def _write_v78_subb_param_tables(w):
+    n_etfs = len(US_ROT_ASSETS)
+    etf_labels = [f"{k}({v['label']})" for k, v in US_ROT_ASSETS.items()]
+    base_labels = ', '.join((f"{live}/{cfg['proxy']}({cfg['label']})" for live, cfg in US_ROT_BASE_ASSETS.items()))
+    macro_labels = ', '.join((f"{live}({cfg['label']})" for live, cfg in US_ROT_MACRO_ASSETS.items()))
+    pool_label = f'{len(US_ROT_BASE_ASSETS)}ETF+通胀宏观{len(US_ROT_MACRO_ASSETS)}ETF'
+    w('**全局执行口径**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 四腿混合 | **官方腿25% / EMA腿25% / Bias腿25% / LogVol腿25%** | 四腿分别计算目标，再汇总为V7.9综合执行目标 |\n')
+    w(f'| 混合后波动口径 | **不二次归一** | {SUBB_BLEND_VOL_NOTE} |\n')
+    w('| V7.9 NAV成本口径 | **final-account net** | 四腿与VolReg先合成最终账户目标，再按相邻最终有效仓位净变化只收一次成交成本；组件腿成本仅作诊断，不重复扣费。 |\n')
+    w(f'| 最小调仓幅度 | **{US_ROT_MIN_TURNOVER:.0%}** | 低于阈值不调 |\n')
+    w(f'| 调仓保护 | **{US_ROT_REBALANCE_THRESHOLD}x** | 逐窗口挑战者保护；新资产需超过最弱在位者{US_ROT_REBALANCE_THRESHOLD:.2f}x才允许替换 |\n')
+    w(f'| 可加杠杆ETF | **QQQM/GLDM** | US_ROT_FUTURES={sorted(US_ROT_FUTURES)}；只放大自己那一份，不承接其他ETF杠杆缺口 |\n')
+    w(f'| 目标年化波动率/最大杠杆 | **{US_ROT_TARGET_VOL:.0%} / {US_ROT_MAX_LEV:.1f}x** | 各腿按自己的波动率口径计算scale |\n')
+    w(f'| 交易成本 | **{US_ROT_COMMISSION:.1%}** | 单边手续费 |\n')
+    w(f'| 毛敞口>100%融资 | **{US_ROT_FINANCING_BENCHMARK}+{US_ROT_FINANCING_SPREAD_BPS}bp** | 按最终账户超额毛敞口逐日扣除，可通过US_ROT_FINANCING_SPREAD_BPS配置 |\n')
+    w(f'| 信号频率 | **周度** | 每周最后一个交易日(≤周四) |\n')
+    if US_ROT_VOLREG_ENABLED:
+        w(f'| VolReg风险过热 | **开启** | {_subb_volreg_rule_text()}；{US_ROT_VOLREG_BACKTEST_NOTE} |\n')
+    w(f'| 历史可比性 | **phased/proxy** | {_subb_history_disclosure_text()} |\n')
+    w('\n**官方腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f"| 排名池 | **{pool_label}** | 基础池: {base_labels}；宏观扩展: {macro_labels}，仅在通胀开关ON时进入官方腿候选池；观察项: {', '.join(SUBB_OPTIONAL_MACRO_TICKERS)}（不属于交易必需集合） |\n")
+    w(f"| 动量窗口 | **{_subb_window_label_for_display(' / ')}日** | 三个窗口分别生成目标仓位后按{US_ROT_WINDOW_WEIGHT_LABEL}加权平均 |\n")
+    w(f'| 波动率窗口(权重) | **{US_ROT_VOL_LB}日** | 各窗口内使用反波动率加权 |\n')
+    w(f'| 波动率缩放 | **{US_ROT_VOL_WINDOW}日rolling** | Model B 目标波动率scale |\n')
+    w(f'| Top N / 绝对动量 | **{US_ROT_TOP_N} / >{US_ROT_ABS_THRESHOLD:.0%}** | 动量需超过阈值才持有，否则转BIL |\n')
+    w('\n**EMA腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 排名池 | **US_ROT_POOL全池** | {_v78_subb_inflation_participation_note()} |\n')
+    w(f'| EMA半衰期 / 阈值 | **hl{SUBB_V75_EMA_HALF_LIFE} / {SUBB_V75_EMA_ABS_THRESHOLD:.0%}** | 使用年化EWM日收益 |\n')
+    w(f'| EMA腿VolScale | **{SUBB_V75_EMA_VOL_MODE}** | 目标波动率scale用6个月EWMA已实现波动率，半衰期{SUBB_V75_EMA_VOL_HALFLIFE_DAYS}日 |\n')
+    w(f'| 波动率窗口(权重) | **{US_ROT_VOL_LB}日rolling** | 资产反波动率权重仍用rolling口径 |\n')
+    w(f'| target-vol / 最大杠杆 | **{US_ROT_TARGET_VOL:.0%} / {US_ROT_MAX_LEV:.1f}x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w('\n**Bias腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n')
+    w('| score口径 | **price/MA160,260,390 = 3/2/1加权** | 按price/MA(lb)-1排名；不是官方腿动量窗口 |\n')
+    w('| target-vol / 窗口 / 最大杠杆 | **25% / 40日 / max1.5x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w('\n**LogVol腿参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 排名池 | **US_ROT_POOL全池** | 不受通胀开关裁剪；DBMF/KMLM始终参与排名 |\n')
+    w('| score口径 | **log return 120/200/320 = 60%/30%/10%** | 独立于官方腿160/260/390窗口 |\n')
+    w('| target-vol / 窗口 / 最大杠杆 | **30% / 40日 / max1.25x** | 本腿独立scale；低波动只放大QQQM/GLDM自身权重 |\n')
+    w(f"\n资产池: **{n_etfs}只** | {', '.join(etf_labels)}\n")
+
+def _write_v78_suba_param_tables(w):
+    all_names = [CN_NAMES.get(c, c) for c in CN_EQUITY_CODES + [CN_BOND_CODE]]
+    w('**全局执行口径**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| V8.0生产模式 | **A策略（单一生产策略）** | 仅此一条生产腿，不做版本区分 |\n')
+    w(f'| 信号频率 | **日频** | 每个交易日检查信号 |\n')
+    w(f'| 交易成本 | **{CN_COMMISSION:.1%}** | 单边手续费 |\n')
+    w(f'| 无风险利率 | **3%/年** | Cash日收益 = (1.03^(1/244))-1 |\n')
+    w(f"| 资产池 | **{len(CN_EQUITY_CODES) + 1}只** | {', '.join(all_names)} |\n")
+    w('\n**A策略参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 均线周期 | **{CN_BIAS_N}日** | price/MA{CN_BIAS_N}计算乖离率 |\n')
+    w(f'| 斜率拟合窗口 | **{CN_MOM_DAY}日** | 乖离率归一化后线性拟合 |\n')
+    w(f'| 动量时间加权 | **1.0 → {CN_BIAS_MOM_WEIGHT_END:.1f}** | 越近的数据权重越高 |\n')
+    w('| 排名有效条件 | **score > 0** | 原始Top-1动量必须为正，否则持Cash |\n')
+    w('| 选拔/递补顺序 | **原始Top-1失败不递补** | 只检查排名第1的score与R²；失败即持Cash，不改选第2名 |\n')
+    w(f'| R²滚动窗口/门槛 | **{CN_R2_WINDOW}日 / {CN_R2_THRESHOLD}** | 所有资产(含国债)需R²≥门槛才持有 |\n')
+    w('\n**Sub-A风控与执行参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 波动率缩放目标/窗口 | **{CN_TARGET_VOL:.0%} / {CN_VOL_WINDOW}日** | 用策略收益率计算已实现波动率 |\n')
+    w(f'| 最大/最小杠杆 | **{CN_MAX_LEV:.2f}x / {CN_MIN_LEV:.2f}x** | VolScale上下限 |\n')
+    w(f"| Sub-A成交额风控 | **{('启用' if CN_SA_VOLUME_OVERLAY_ENABLED else '关闭')}** | ZZ2000 MA{CN_SA_VOLUME_ZZ2000_MA}/{CN_SA_VOLUME_ZZ2000_DAYS}天 OR CYB MA{CN_SA_VOLUME_CYB_MA}/{CN_SA_VOLUME_CYB_DAYS}天，触发后{CN_SA_VOLUME_SCALE:.0%} |\n")
+
+def _write_v78_adk_param_tables(w):
+    w('**V8.0 ADK生产口径**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w('| 生产策略 | **ADK策略（全10配对 + score-hot）** | 单一生产策略，不区分新旧 |\n')
+    w('| 指数池 | **5指数 / 全10对** | 上证50、沪深300、中证500、中证1000、创业板两两组合全池排名 |\n')
+    w('| 选拔数量 | **固定Top-1** | 只执行绝对乖离动量分数最高的一个配对 |\n')
+    w(f'| 均线周期/斜率窗口 | **MA{CN_DK_BIAS_N} / {CN_DK_MOM_DAY}日** | 每对计算乖离动量并按绝对分数排名 |\n')
+    w(f'| score-hot 进入/退出/乘数 | **{V78_ADK_NEW_SCORE_HOT_ENTER:.0f} / {V78_ADK_NEW_SCORE_HOT_EXIT:.0f} / {V78_ADK_NEW_SCORE_HOT_SCALE:.0f}x** | 用前一收盘的Top-1分数触发或恢复；触发时清空ADK敞口 |\n')
+    w(f'| 年化交易日 | **{CN_DK_TRADING_DAYS}日** | 波动率年化基数 |\n')
+    w('\n**ADK风控与执行参数**\n\n')
+    w('| 参数 | 值 | 说明 |\n|:-|:-|:-|\n')
+    w(f'| 波动率缩放目标/窗口 | **{CN_DK_TARGET_VOL:.0%} / {CN_DK_VOL_WINDOW}日** | 用spread收益率计算已实现波动率 |\n')
+    w(f'| 最大/最小杠杆 | **{CN_DK_MAX_LEV:.1f}x / {CN_DK_MIN_LEV:.1f}x** | VolScale上下限 |\n')
+    w(f'| Scale调整阈值 | **Δ≥{CN_DK_SCALE_THRESHOLD:.2f}** | |Δscale|≥阈值才实际调整 |\n')
+    w(f'| 交易成本 | **每条多/空腿单边{CN_DK_COMMISSION:.3%}** | 按实际多空腿换手计费；整组方向翻转对应4条单边换手 |\n')
+    w(f'| ADK成交额风险警示 | **仅提示** | {CN_DK_VOLUME_YELLOW_LABEL}成交额连续低于MA{CN_DK_VOLUME_YELLOW_MA}满{CN_DK_VOLUME_YELLOW_DAYS}天时只进警示板，不改仓位 |\n')
+
+def _us_threshold_check(available_scores, prev_w, threshold):
+    if threshold <= 1.0:
+        return None
+    top_n = US_ROT_TOP_N
+    prev_risky = {a for a, w in prev_w.items() if a != 'BIL' and w > 0.001}
+    if not prev_risky:
+        return None
+    sorted_scores = sorted(available_scores.items(), key=lambda x: x[1], reverse=True)
+    pure_top = set((a for a, _ in sorted_scores[:top_n]))
+    selected = set()
+    for a in prev_risky:
+        if a in available_scores:
+            selected.add(a)
+    if len(selected) < top_n:
+        for a, _ in sorted_scores:
+            if a not in selected:
+                selected.add(a)
+            if len(selected) >= top_n:
+                break
+    if len(selected) > top_n:
+        selected = set((a for a, _ in sorted([(a, available_scores[a]) for a in selected], key=lambda x: x[1], reverse=True)[:top_n]))
+    blocked_info = []
+    non_selected = sorted([(a, s) for a, s in available_scores.items() if a not in selected], key=lambda x: x[1], reverse=True)
+    for challenger, ch_score in non_selected:
+        if not selected:
+            break
+        weakest = min(selected, key=lambda a: available_scores[a])
+        w_score = available_scores[weakest]
+        if ch_score <= w_score:
+            break
+        if w_score <= 0:
+            selected.remove(weakest)
+            selected.add(challenger)
+        elif ch_score > w_score * threshold:
+            selected.remove(weakest)
+            selected.add(challenger)
+        else:
+            ratio = ch_score / w_score if w_score != 0 else float('inf')
+            blocked_info.append((challenger, weakest, ratio, ch_score, w_score))
+    if selected == pure_top:
+        return f'✅ Top{US_ROT_TOP_N}一致，阈值不影响选择'
+    parts = []
+    for ch, wk, ratio, ch_s, wk_s in blocked_info:
+        ch_name = _ROT_PROXY_TO_LIVE.get(ch, ch)
+        wk_name = _ROT_PROXY_TO_LIVE.get(wk, wk)
+        parts.append(f'{ch_name}({ch_s:+.1%}) vs {wk_name}({wk_s:+.1%}) = {ratio:.2f}x < {threshold}x → {wk_name}被保护')
+    if parts:
+        return '⚠️ ' + '; '.join(parts)
+    kept = selected - pure_top
+    dropped = pure_top - selected
+    kept_names = ', '.join((_ROT_PROXY_TO_LIVE.get(a, a) for a in sorted(kept)))
+    dropped_names = ', '.join((_ROT_PROXY_TO_LIVE.get(a, a) for a in sorted(dropped)))
+    return f'⚠️ 保留 {kept_names}，不换入 {dropped_names}'
+
+def _us_mix_threshold_check(momentum_rows, vol_row, ranking_codes, prev_risky_by_lb, threshold):
+    if threshold <= 1.0 or not prev_risky_by_lb:
+        return None
+    parts = []
+    for lb in US_ROT_LBS:
+        prev_risky = prev_risky_by_lb.get(lb)
+        if not prev_risky:
+            continue
+        mom_row = momentum_rows.get(lb)
+        if mom_row is None:
+            continue
+        selected_raw = _us_raw_weights(mom_row, vol_row, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=US_ROT_ABS_THRESHOLD, prev_risky=prev_risky, threshold=threshold)
+        pure_raw = _us_raw_weights(mom_row, vol_row, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=US_ROT_ABS_THRESHOLD, prev_risky=None, threshold=1.0)
+        selected = _us_selected_risky_from_raw(selected_raw)
+        pure_selected = _us_selected_risky_from_raw(pure_raw)
+        if selected == pure_selected:
+            continue
+        kept = selected - pure_selected
+        skipped = pure_selected - selected
+        kept_names = ', '.join((_ROT_PROXY_TO_LIVE.get(a, a) for a in sorted(kept))) or '-'
+        skipped_names = ', '.join((_ROT_PROXY_TO_LIVE.get(a, a) for a in sorted(skipped))) or '-'
+        parts.append(f'{lb}d: threshold result kept {kept_names}; skipped {skipped_names}')
+    if not parts:
+        return None
+    return ' | '.join(parts)
+
+def _us_weighted_return(weights, prev_prices, curr_prices):
+    pr = 0.0
+    for a, w in weights.items():
+        try:
+            active_weight = float(w or 0.0)
+        except (TypeError, ValueError):
+            raise ValueError(f'US return: invalid active weight for {a}: {w!r}')
+        if abs(active_weight) <= 1e-12:
+            continue
+        prev_px = prev_prices.get(a, np.nan)
+        curr_px = curr_prices.get(a, np.nan)
+        try:
+            prev_px = float(prev_px)
+            curr_px = float(curr_px)
+        except (TypeError, ValueError):
+            raise ValueError(f'US return: active asset {a} has non-numeric price')
+        if not np.isfinite(prev_px) or not np.isfinite(curr_px) or prev_px <= 0.0 or (curr_px <= 0.0):
+            raise ValueError(f'US return: active asset {a} has invalid price (previous={prev_px!r}, current={curr_px!r})')
+        pr += active_weight * (curr_px / prev_px - 1)
+    return pr
+
+def _assert_subb_full_session_index(index, context):
+    """Validate every US session, including warmup and non-execution days."""
+    if index.hasnans or index.tz is not None or (not index.equals(index.normalize())):
+        raise ValueError(f'{context}: invalid daily market session index')
+    if len(index) == 0:
+        raise ValueError(f'{context}: empty market session index')
+    expected = _expected_us_ohlc_index(index[0], index[-1])
+    missing, extra = (expected.difference(index), index.difference(expected))
+    if len(missing) or len(extra):
+        detail = []
+        if len(missing):
+            detail.append(f'missing market session {missing[0].date().isoformat()}')
+        if len(extra):
+            detail.append(f'non-market session {extra[0].date().isoformat()}')
+        raise ValueError(f'{context}: incomplete/invalid US calendar; ' + '; '.join(detail))
+
+def _validate_subb_price_input(close_df, required_columns, min_rows, context, *, strict_calendar=False):
+    if close_df is None or not isinstance(close_df, pd.DataFrame):
+        raise ValueError(f'{context}: price history must be a DataFrame')
+    if not isinstance(close_df.index, pd.DatetimeIndex):
+        raise ValueError(f'{context}: price history requires a DatetimeIndex')
+    if not close_df.index.is_monotonic_increasing or close_df.index.has_duplicates:
+        raise ValueError(f'{context}: price history index must be sorted and unique')
+    missing = sorted(set(required_columns) - set(close_df.columns))
+    if missing:
+        raise ValueError(f"{context}: missing required price columns: {', '.join(missing)}")
+    if len(close_df) < int(min_rows):
+        raise ValueError(f'{context}: insufficient price history; rows={len(close_df)}, required>={int(min_rows)}')
+    if strict_calendar:
+        _assert_subb_full_session_index(close_df.index, context)
+
+def _active_weight_assets(*weight_dicts, min_abs=1e-12):
+    assets = set()
+    for weights in weight_dicts:
+        for asset, raw_weight in (weights or {}).items():
+            try:
+                weight = float(raw_weight or 0.0)
+            except Exception:
+                weight = 0.0
+            if abs(weight) > min_abs:
+                assets.add(asset)
+    return sorted(assets)
+
+def _us_open_row(date, assets, us_open, close_df, *, strict=False, context='US open execution'):
+    if strict:
+        _assert_us_execution_session(date, close_df, context=context)
+    prices = {}
+    missing = []
+    fallback_assets = []
+    for a in assets:
+        px = np.nan
+        if us_open is not None and a in us_open:
+            s = us_open[a]
+            if date in s.index:
+                px = s.loc[date]
+        if pd.isna(px):
+            if strict:
+                missing.append(a)
+            elif close_df is not None and a in close_df.columns and (date in close_df.index):
+                px = close_df.loc[date, a]
+                fallback_assets.append(a)
+        prices[a] = px
+    if missing:
+        dt = pd.Timestamp(date).date().isoformat()
+        assets_text = ', '.join(sorted(missing))
+        raise ValueError(f'{context}: missing T+1 adjusted open price on {dt} for {assets_text}. Formal model execution requires T+1 adjusted open; refusing close fallback.')
+    row = pd.Series(prices)
+    if fallback_assets:
+        row.attrs['open_price_close_fallback_assets'] = tuple(sorted(fallback_assets))
+    return row
+
+def run_us_rotation(close_df, ranking_codes, top_n=US_ROT_TOP_N, abs_threshold=US_ROT_ABS_THRESHOLD, min_turnover=US_ROT_MIN_TURNOVER, threshold=US_ROT_REBALANCE_THRESHOLD, btc_ticker=None, btc_start=None, btc_max_w=None, us_open=None, strict_open_execution=False):
+    if btc_ticker and btc_start is not None and (btc_ticker in close_df.columns):
+        close_df = close_df.copy()
+        close_df.loc[close_df.index < btc_start, btc_ticker] = np.nan
+    start_idx = max(US_ROT_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
+    _validate_subb_price_input(close_df, list(ranking_codes) + ['BIL'], start_idx + 1, 'Sub-B legacy rotation', strict_calendar=strict_open_execution)
+    momentum = close_df.div(close_df.shift(US_ROT_LB)).sub(1)
+    vol_df = close_df.pct_change().rolling(US_ROT_VOL_LB).std() * np.sqrt(US_TRADING_DAYS)
+    signal_days = _us_signal_days(close_df, start_idx)
+    raw_w = {'BIL': 1.0}
+    act = {'BIL': 1.0}
+    holdings = {'BIL': 1.0}
+    pending_act = None
+    pending_comm = 0.0
+    scale = 1.0
+    w_assets = list(ranking_codes) + (['BIL'] if 'BIL' not in ranking_codes else [])
+    rows, hist = ([], [])
+    for i in range(start_idx, len(close_df)):
+        if len(hist) >= US_ROT_VOL_WINDOW:
+            rv = np.std(hist[-US_ROT_VOL_WINDOW:], ddof=1) * np.sqrt(US_TRADING_DAYS)
+            scale = min(max(US_ROT_TARGET_VOL / rv, 0.05), US_ROT_MAX_LEV) if rv > 0.001 else US_ROT_MAX_LEV
+        if pending_act is not None:
+            open_assets = _active_weight_assets(holdings, pending_act)
+            open_row = _us_open_row(close_df.index[i], open_assets, us_open, close_df, strict=strict_open_execution, context='Sub-B legacy rotation')
+            overnight = _us_weighted_return(holdings, close_df.iloc[i - 1], open_row)
+            intraday = _us_weighted_return(pending_act, open_row, close_df.iloc[i])
+            adj = (1 + overnight) * (1 + intraday) * (1 - pending_comm) - 1
+            holdings = dict(pending_act)
+            pending_act = None
+            pending_comm = 0.0
+        else:
+            adj = _us_weighted_return(holdings, close_df.iloc[i - 1], close_df.iloc[i])
+        hist.append(adj)
+        is_sig = i in signal_days
+        rebalanced = False
+        new_act = dict(act)
+        if is_sig:
+            prev_risky = {a for a in w_assets if a != 'BIL' and act.get(a, 0.0) > 0.001}
+            raw_w = _us_raw_weights(momentum.iloc[i], vol_df.iloc[i], ranking_codes, top_n, abs_threshold, prev_risky=prev_risky if prev_risky else None, threshold=threshold)
+            new_act = _us_model_b(raw_w, scale)
+            if btc_max_w is not None and btc_ticker:
+                new_act = _apply_btc_cap(new_act, btc_ticker, btc_max_w)
+            prev_a = {a: act.get(a, 0.0) for a in w_assets} if rows else {'BIL': 1.0}
+            all_a = set(list(new_act.keys()) + list(prev_a.keys()))
+            to = sum((abs(new_act.get(a, 0) - prev_a.get(a, 0)) for a in all_a if a != 'BIL'))
+            if _subb_should_rebalance(to, min_turnover):
+                pending_act = dict(new_act)
+                pending_comm = to * US_ROT_COMMISSION if to > 0 else 0.0
+                act = new_act
+                rebalanced = True
+        row = {'date': close_df.index[i], 'return': adj, 'is_signal': is_sig, 'rebalanced': rebalanced}
+        for a in w_assets:
+            row[f'w_{a}'] = act.get(a, 0.0)
+        if is_sig:
+            for a in w_assets:
+                row[f'hypo_w_{a}'] = new_act.get(a, 0.0)
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index('date')
+    df['nav'] = (1 + df['return']).cumprod()
+    return df
+
+def _prefixed_weight_dict(row, prefix, assets):
+    out = {}
+    for asset in assets:
+        value = row.get(f'{prefix}{asset}', 0.0)
+        if pd.notna(value):
+            out[asset] = float(value)
+    return out
+
+def _subb_v75_leg_weight_rows(result_df, row_key, min_weight=0.001):
+    if result_df is None or len(result_df) == 0:
+        return []
+    try:
+        row = result_df.loc[row_key] if row_key in result_df.index else result_df.iloc[row_key]
+    except Exception:
+        return []
+    assets = sorted({col[len('target_w_'):] for col in result_df.columns if col.startswith('target_w_')} | {col[len('official_w_'):] for col in result_df.columns if col.startswith('official_w_')} | {col[len('ema_w_'):] for col in result_df.columns if col.startswith('ema_w_')} | {col[len('w_'):] for col in result_df.columns if col.startswith('w_')})
+    rows = []
+    for asset in assets:
+        official_raw = float(row.get(f'official_w_{asset}', 0.0) or 0.0)
+        ema_raw = float(row.get(f'ema_w_{asset}', 0.0) or 0.0)
+        official_contrib = float(row.get(f'official_contrib_w_{asset}', SUBB_V75_OFFICIAL_WEIGHT * official_raw) or 0.0)
+        ema_contrib = float(row.get(f'ema_contrib_w_{asset}', SUBB_V75_EMA_WEIGHT * ema_raw) or 0.0)
+        final_w = float(row.get(f'target_w_{asset}', official_contrib + ema_contrib) or 0.0)
+        if max(abs(final_w), abs(official_raw), abs(ema_raw), abs(official_contrib), abs(ema_contrib)) < min_weight:
+            continue
+        rows.append({'asset': asset, 'live_name': _ROT_PROXY_TO_LIVE.get(asset, asset), 'official_raw': official_raw, 'ema_raw': ema_raw, 'official_contrib': official_contrib, 'ema_contrib': ema_contrib, 'final_weight': final_w})
+    rows.sort(key=lambda item: item['final_weight'], reverse=True)
+    return rows
+
+def _write_subb_v75_leg_weight_table(write, result_df, row_key, title):
+    return
+
+def _weight_columns_assets(df, prefixes=('w_', 'actual_w_', 'target_w_')):
+    assets = set()
+    for col in df.columns:
+        for prefix in prefixes:
+            if col.startswith(prefix):
+                assets.add(col[len(prefix):])
+    return sorted(assets)
+
+def _volreg_next_cash_state(current_cash, ratio):
+    if pd.isna(ratio):
+        return bool(current_cash)
+    ratio = float(ratio)
+    if not current_cash and ratio > US_ROT_VOLREG_THRESHOLD:
+        return True
+    if current_cash and ratio < US_ROT_VOLREG_EXIT_THRESHOLD:
+        return False
+    return bool(current_cash)
+
+def _volreg_scale_for_state(active):
+    return float(US_ROT_VOLREG_DEFENSE_SCALE) if bool(active) else 1.0
+
+def _volreg_scaled_assets_in(weights_or_assets):
+    if isinstance(weights_or_assets, dict):
+        assets = set(weights_or_assets)
+    else:
+        assets = set(weights_or_assets or [])
+    return [asset for asset in US_ROT_VOLREG_SCALE_ASSETS if asset in assets]
+
+def _prefixed_weight_dict_with_asset_fallback(row, primary_prefix, fallback_prefix, assets):
+    primary = _prefixed_weight_dict(row, primary_prefix, assets)
+    if not any((abs(v) > 1e-12 for v in primary.values())):
+        return _prefixed_weight_dict(row, fallback_prefix, assets)
+    fallback = _prefixed_weight_dict(row, fallback_prefix, assets)
+    out = {}
+    for asset in assets:
+        key = f'{primary_prefix}{asset}'
+        raw = row.get(key, np.nan)
+        out[asset] = fallback.get(asset, 0.0) if pd.isna(raw) else primary.get(asset, 0.0)
+    return out
+
+def _apply_subb_volreg_defense_scale_to_weights(weights, active=True):
+    out = {asset: float(weight or 0.0) for asset, weight in dict(weights or {}).items()}
+    if not active:
+        out['CASH'] = 0.0
+        return (out, {asset: 0.0 for asset in _volreg_scaled_assets_in(out)})
+    removed = {}
+    for asset in _volreg_scaled_assets_in(out):
+        old = float(out.get(asset, 0.0) or 0.0)
+        new = old * float(US_ROT_VOLREG_DEFENSE_SCALE)
+        out[asset] = new
+        removed[asset] = old - new
+    moved_to_bil = sum(removed.values())
+    out['BIL'] = float(out.get('BIL', 0.0) or 0.0) + moved_to_bil
+    out['CASH'] = 0.0
+    return (out, removed)
+
+def _subb_volreg_scaled_assets_text(live=False):
+    assets = [_ROT_PROXY_TO_LIVE.get(asset, asset) if live else asset for asset in US_ROT_VOLREG_SCALE_ASSETS]
+    return '/'.join(assets)
+
+def _subb_volreg_rule_text():
+    proxy_assets = _subb_volreg_scaled_assets_text()
+    live_assets = _subb_volreg_scaled_assets_text(live=True)
+    live_note = '' if live_assets == proxy_assets else f' (实盘{live_assets})'
+    return f'SPY {US_ROT_VOLREG_SHORT_W}d/{US_ROT_VOLREG_LONG_W}d vol比 >{US_ROT_VOLREG_THRESHOLD:.1f} -> {proxy_assets}{live_note} x{US_ROT_VOLREG_DEFENSE_SCALE:.2f}, 差额进BIL；低于{US_ROT_VOLREG_EXIT_THRESHOLD:.1f}恢复'
+
+def _subb_history_disclosure_text():
+    return f'Sub-B历史为phased/proxy口径：EMXC在{US_ROT_EMXC_BT_START.date().isoformat()}前使用{US_ROT_EMXC_BT_PROXY}收益代理、之后切换实盘EMXC；BTC在{US_ROT_BTC_START.date().isoformat()}前禁用，之后先用BTC-USD UTC日线代理，日K时钟不等于美股16:00收盘/次日09:30开盘；IBIT上市日保留BTC代理开盘，下一交易日起用IBIT调整开盘，收盘按首日重叠价拼接；DBMF/KMLM仅从各自真实有效行情起参与。代理段不能按统一美股开收盘口径认证，早期窗口不是当前全池同质样本。'
+
+def _should_force_volreg_cash_display(volreg_enabled, volreg_cash_next):
+    return False
+
+def _subb_model_rebalanced_value(row):
+    return bool(row.get('model_rebalanced', row.get('rebalanced', False)))
+
+def _row_prefixed_weights(row, prefix, assets):
+    weights = {}
+    for asset in assets:
+        value = row.get(f'{prefix}{asset}', 0.0)
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+def _subb_signal_display_source_weights(result_df, signal_date, rot_w_cols):
+    row = result_df.loc[signal_date]
+    use_target = _subb_model_rebalanced_value(row)
+    assets = set()
+    for col in list(rot_w_cols or []) + list(result_df.columns):
+        if col.startswith('w_'):
+            assets.add(col[len('w_'):])
+        elif col.startswith('target_w_'):
+            assets.add(col[len('target_w_'):])
+    weights = {}
+    for asset in sorted(assets):
+        if use_target:
+            value = row.get(f'target_w_{asset}', 0.0)
+        else:
+            value = row.get(f'w_{asset}', 0.0)
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+def _subb_effective_display_weights(signal_weights, prev_weights=None, force_cash=False):
+    signal_weights = dict(signal_weights or {})
+    prev_weights = dict(prev_weights or {})
+    assets = set(signal_weights) | set(prev_weights)
+    if force_cash:
+        assets.add('CASH')
+        display_weights = {asset: 0.0 for asset in assets}
+        display_weights['CASH'] = 1.0
+        return (display_weights, assets)
+    return (dict(signal_weights), assets)
+
+def _is_v78_subb_blend(result):
+    return result is not None and 'v78_subb_v77_return' in result.columns and ('v78_subb_bias_return' in result.columns) and ('v78_subb_logvol_return' in result.columns)
+
+def apply_vol_regime_overlay(us_rot_result, spy_close, close_df=None, us_open=None, strict_open_execution=False):
+    spy_ret = spy_close.pct_change()
+    short_vol = spy_ret.rolling(US_ROT_VOLREG_SHORT_W).std() * np.sqrt(US_TRADING_DAYS)
+    long_vol = spy_ret.rolling(US_ROT_VOLREG_LONG_W).std() * np.sqrt(US_TRADING_DAYS)
+    vol_ratio = (short_vol / long_vol).reindex(us_rot_result.index).ffill()
+    ratio_shifted = vol_ratio.shift(1)
+    defense_state = False
+    mask_values = []
+    for value in ratio_shifted:
+        defense_state = _volreg_next_cash_state(defense_state, value)
+        mask_values.append(defense_state)
+    mask = pd.Series(mask_values, index=us_rot_result.index, dtype=bool)
+    result = us_rot_result.copy()
+    close_aligned = close_df.reindex(result.index) if close_df is not None else None
+    pre_volreg_return = pd.to_numeric(result['return'], errors='coerce').fillna(0.0)
+    base_ret = pd.to_numeric(result.get('return_before_subb_execution_cost', result.get('return_before_execution_cost', result['return'])), errors='coerce').fillna(0.0)
+    assets = _weight_columns_assets(result)
+    if 'BIL' not in assets:
+        assets.append('BIL')
+    if 'CASH' not in assets:
+        assets.append('CASH')
+    prev_effective = None
+    prev_removed = None
+    prev_defense = False
+    turnovers = []
+    costs = []
+    gross_returns = []
+    final_returns = []
+    volreg_actions = []
+    moved_to_bil_values = []
+    model_records = []
+    effective_records = []
+    model_target_records = []
+    effective_target_records = []
+    for pos, dt in enumerate(result.index):
+        row = result.loc[dt]
+        model_w = _prefixed_weight_dict_with_asset_fallback(row, 'actual_w_', 'w_', assets)
+        defense_active = bool(mask.loc[dt])
+        effective_w, removed_w = _apply_subb_volreg_defense_scale_to_weights(model_w, defense_active)
+        model_target_w = _prefixed_weight_dict_with_asset_fallback(row, 'target_w_', 'actual_w_', assets)
+        target_defense_active = _volreg_next_cash_state(defense_active, vol_ratio.loc[dt]) if pd.notna(vol_ratio.loc[dt]) else defense_active
+        effective_target_w, _ = _apply_subb_volreg_defense_scale_to_weights(model_target_w, target_defense_active)
+        for asset in assets:
+            effective_w.setdefault(asset, 0.0)
+            effective_target_w.setdefault(asset, 0.0)
+            removed_w.setdefault(asset, 0.0)
+        moved_to_bil_values.append(sum((float(v or 0.0) for v in removed_w.values())))
+        if prev_effective is None:
+            turnover = 0.0
+        elif defense_active == prev_defense:
+            turnover = 0.0
+        else:
+            cur_scale = _volreg_scale_for_state(defense_active)
+            prev_scale = _volreg_scale_for_state(prev_defense)
+            scaled_model_weight = sum((float(model_w.get(asset, 0.0) or 0.0) for asset in _volreg_scaled_assets_in(model_w)))
+            turnover = scaled_model_weight * abs(cur_scale - prev_scale)
+        has_open_execution_prices = close_aligned is not None and prev_effective is not None and (us_open is not None or strict_open_execution)
+        gross_ret = float(base_ret.loc[dt])
+        if has_open_execution_prices:
+            adjusted_assets = [asset for asset in _volreg_scaled_assets_in(assets) if float((prev_removed or {}).get(asset, 0.0) or 0.0) > 1e-12 or float(removed_w.get(asset, 0.0) or 0.0) > 1e-12]
+            if adjusted_assets:
+                open_row = _us_open_row(dt, ['BIL', *adjusted_assets], us_open, close_aligned, strict=strict_open_execution, context='Sub-B VolReg equity defense')
+                prev_close = close_aligned.iloc[pos - 1] if pos > 0 else close_aligned.loc[dt]
+                cur_close = close_aligned.loc[dt]
+                delta = 0.0
+                for asset in adjusted_assets:
+                    prev_removed_weight = float((prev_removed or {}).get(asset, 0.0) or 0.0)
+                    cur_removed_weight = float(removed_w.get(asset, 0.0) or 0.0)
+                    if prev_removed_weight > 1e-12:
+                        delta += prev_removed_weight * (_subb_price_return('BIL', prev_close, open_row) - _subb_price_return(asset, prev_close, open_row))
+                    if cur_removed_weight > 1e-12:
+                        delta += cur_removed_weight * (_subb_price_return('BIL', open_row, cur_close) - _subb_price_return(asset, open_row, cur_close))
+                gross_ret += delta
+        cost = turnover * US_ROT_COMMISSION
+        gross_returns.append(gross_ret)
+        final_returns.append(gross_ret)
+        turnovers.append(turnover)
+        costs.append(cost)
+        if defense_active and (not prev_defense):
+            volreg_actions.append('enter_defense')
+        elif prev_defense and (not defense_active):
+            volreg_actions.append('exit_defense')
+        else:
+            volreg_actions.append('')
+        model_records.append({asset: model_w.get(asset, 0.0) for asset in assets})
+        effective_records.append({asset: effective_w.get(asset, 0.0) for asset in assets})
+        model_target_records.append({asset: model_target_w.get(asset, 0.0) for asset in assets})
+        effective_target_records.append({asset: effective_target_w.get(asset, 0.0) for asset in assets})
+        prev_effective = effective_w
+        prev_removed = removed_w
+        prev_defense = defense_active
+    model_df = pd.DataFrame.from_records(model_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_df = pd.DataFrame.from_records(effective_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    model_target_df = pd.DataFrame.from_records(model_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    effective_target_df = pd.DataFrame.from_records(effective_target_records, index=result.index).reindex(columns=assets).fillna(0.0)
+    for asset in assets:
+        result[f'model_w_{asset}'] = model_df[asset]
+        result[f'model_target_w_{asset}'] = model_target_df[asset]
+        result[f'effective_w_{asset}'] = effective_df[asset]
+        result[f'w_{asset}'] = effective_df[asset]
+        result[f'target_w_{asset}'] = effective_target_df[asset]
+    result['pre_volreg_return'] = pre_volreg_return
+    result['gross_return_before_volreg_cost'] = pd.Series(gross_returns, index=result.index, dtype=float)
+    result['model_full_day_return_before_volreg'] = base_ret
+    result['return_before_volreg'] = pre_volreg_return
+    result['volreg_action'] = pd.Series(volreg_actions, index=result.index, dtype=object)
+    result['subb_effective_turnover'] = 0.0
+    result['subb_effective_cost'] = 0.0
+    base_rebalanced = result.get('rebalanced', pd.Series(False, index=result.index)).fillna(False).astype(bool)
+    effective_rebalanced = pd.Series(turnovers, index=result.index, dtype=float).abs() > 1e-09
+    result['model_rebalanced'] = base_rebalanced
+    result['effective_rebalanced'] = effective_rebalanced
+    result['volreg_transition'] = result['volreg_action'].isin(['enter_defense', 'exit_defense'])
+    result['volreg_transition_turnover'] = pd.Series(turnovers, index=result.index, dtype=float).where(result['volreg_transition'], 0.0)
+    result['volreg_transition_cost'] = pd.Series(costs, index=result.index, dtype=float).where(result['volreg_transition'], 0.0)
+    result['volreg_rebalanced'] = result['volreg_transition']
+    result['rebalanced'] = base_rebalanced
+    result['return'] = pd.Series(final_returns, index=result.index, dtype=float)
+    result['nav'] = (1 + result['return']).cumprod()
+    result['volreg_ratio'] = vol_ratio
+    result['volreg_defense'] = mask
+    result['volreg_cash'] = False
+    result['volreg_effective_scale'] = pd.Series(np.where(mask, float(US_ROT_VOLREG_DEFENSE_SCALE), 1.0), index=result.index, dtype=float)
+    result['volreg_moved_to_bil'] = pd.Series(moved_to_bil_values, index=result.index, dtype=float)
+    result['volreg_scaled_assets'] = ','.join(US_ROT_VOLREG_SCALE_ASSETS)
+    return result
+
+def _subb_dbc_profit_guard_rule_text():
+    live = _ROT_PROXY_TO_LIVE.get(SUBB_DBC_PROFIT_GUARD_ASSET, SUBB_DBC_PROFIT_GUARD_ASSET)
+    return f'{live}/{SUBB_DBC_PROFIT_GUARD_ASSET}: retain<={SUBB_DBC_PROFIT_GUARD_RETAIN_L1:.0%} -> scale {SUBB_DBC_PROFIT_GUARD_SCALE_L1:.2f}; retain<={SUBB_DBC_PROFIT_GUARD_RETAIN_L2:.0%} -> scale {SUBB_DBC_PROFIT_GUARD_SCALE_L2:.2f}; moved weight -> {SUBB_DBC_PROFIT_GUARD_CASH_ASSET}'
+
+def _subb_dbc_profit_guard_scale_from_retain(retain_ratio):
+    if pd.isna(retain_ratio):
+        return (1.0, 0)
+    retain_ratio = float(retain_ratio)
+    tol = 1e-09
+    if retain_ratio <= SUBB_DBC_PROFIT_GUARD_RETAIN_L2 + tol:
+        return (SUBB_DBC_PROFIT_GUARD_SCALE_L2, 2)
+    if retain_ratio <= SUBB_DBC_PROFIT_GUARD_RETAIN_L1 + tol:
+        return (SUBB_DBC_PROFIT_GUARD_SCALE_L1, 1)
+    return (1.0, 0)
+
+def _subb_dbc_profit_guard_level_from_scale(scale):
+    try:
+        scale = float(scale)
+    except Exception:
+        return 0
+    if abs(scale - SUBB_DBC_PROFIT_GUARD_SCALE_L2) <= 1e-09:
+        return 2
+    if abs(scale - SUBB_DBC_PROFIT_GUARD_SCALE_L1) <= 1e-09:
+        return 1
+    return 0
+
+def _subb_price_return(asset, prev_prices, curr_prices):
+    if asset is None:
+        return 0.0
+    prev_px = prev_prices.get(asset, np.nan)
+    curr_px = curr_prices.get(asset, np.nan)
+    if pd.isna(prev_px) or pd.isna(curr_px) or float(prev_px) == 0.0:
+        return 0.0
+    return float(curr_px) / float(prev_px) - 1.0
+
+def _subb_price_value(asset, prices):
+    value = prices.get(asset, np.nan)
+    if pd.isna(value):
+        return np.nan
+    try:
+        return float(value)
+    except Exception:
+        return np.nan
+
+def _subb_weights_from_prefixes(row, prefixes, assets):
+    weights = {}
+    for asset in assets:
+        value = np.nan
+        for prefix in prefixes:
+            raw = row.get(f'{prefix}{asset}', np.nan)
+            if pd.notna(raw):
+                value = raw
+                break
+        weights[asset] = float(value) if pd.notna(value) else 0.0
+    return weights
+
+def _apply_subb_dbc_profit_guard_scale_to_weights(weights, scale):
+    out = dict(weights or {})
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED:
+        return out
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    try:
+        scale = float(scale)
+    except Exception:
+        scale = 1.0
+    asset_weight = float(out.get(asset, 0.0) or 0.0)
+    if asset_weight <= 1e-12:
+        return out
+    final_weight = asset_weight * max(scale, 0.0)
+    removed_weight = asset_weight - final_weight
+    out[asset] = final_weight
+    out[cash_asset] = float(out.get(cash_asset, 0.0) or 0.0) + removed_weight
+    return out
+
+def _subb_dbc_profit_guard_latest_next_scale(us_rot_result):
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED or us_rot_result is None or len(us_rot_result) == 0 or ('dbc_profit_guard_next_scale' not in us_rot_result.columns):
+        return 1.0
+    value = us_rot_result['dbc_profit_guard_next_scale'].iloc[-1]
+    if pd.isna(value):
+        return 1.0
+    return float(value)
+
+def _subb_dbc_profit_guard_display_target_weights(us_rot_result, row_key=-1):
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED or us_rot_result is None or len(us_rot_result) == 0 or ('dbc_profit_guard_next_scale' not in us_rot_result.columns):
+        return None
+    try:
+        row = us_rot_result.loc[row_key] if row_key in us_rot_result.index else us_rot_result.iloc[row_key]
+    except Exception:
+        return None
+    assets = _weight_columns_assets(us_rot_result, prefixes=('target_w_', 'w_', 'actual_w_', 'effective_w_'))
+    weights = _row_prefixed_weights(row, 'target_w_', assets)
+    if not any((abs(v) > 1e-12 for v in weights.values())):
+        weights = _row_prefixed_weights(row, 'w_', assets)
+    return weights
+
+def _subb_dbc_profit_guard_pending(row):
+    if row is None:
+        return False
+    try:
+        today = _subb_row_float(row, 'dbc_profit_guard_scale_today', 1.0)
+        nxt = _subb_row_float(row, 'dbc_profit_guard_next_scale', today)
+        current_removed = _subb_row_float(row, 'dbc_profit_guard_removed_weight', 0.0)
+        target_removed = _subb_row_float(row, 'dbc_profit_guard_target_removed_weight', 0.0)
+    except Exception:
+        return False
+    return abs(nxt - today) > 1e-09 or abs(target_removed - current_removed) > 0.005
+
+def apply_subb_dbc_profit_guard_overlay(us_rot_result, close_df, us_open=None, strict_open_execution=False):
+    if not SUBB_DBC_PROFIT_GUARD_ENABLED or us_rot_result is None or len(us_rot_result) == 0 or (close_df is None):
+        return us_rot_result
+    asset = SUBB_DBC_PROFIT_GUARD_ASSET
+    cash_asset = SUBB_DBC_PROFIT_GUARD_CASH_ASSET
+    if asset not in close_df.columns:
+        return us_rot_result
+    result = us_rot_result.copy()
+    close_aligned = close_df.reindex(result.index)
+    assets = _weight_columns_assets(result, prefixes=('w_', 'actual_w_', 'target_w_', 'model_w_', 'effective_w_'))
+    for required_asset in (asset, cash_asset):
+        if required_asset not in assets:
+            assets.append(required_asset)
+    assets = sorted(assets)
+    base_return = pd.to_numeric(result['return'], errors='coerce').fillna(0.0)
+    scale_today = 1.0
+    prev_scale = 1.0
+    prev_pre_asset_weight = 0.0
+    wave_entry = np.nan
+    wave_peak_profit = 0.0
+    final_returns = []
+    pre_current_records = []
+    final_current_records = []
+    pre_target_records = []
+    final_target_records = []
+    scale_today_records = []
+    next_scale_records = []
+    level_today_records = []
+    next_level_records = []
+    entry_records = []
+    profit_records = []
+    peak_records = []
+    retain_records = []
+    removed_records = []
+    target_removed_records = []
+    turnover_records = []
+    cost_records = []
+    pending_records = []
+    action_records = []
+    for i, dt in enumerate(result.index):
+        row = result.iloc[i]
+        pre_current = _subb_weights_from_prefixes(row, ('w_', 'effective_w_', 'actual_w_'), assets)
+        pre_target = _subb_weights_from_prefixes(row, ('target_w_', 'w_', 'effective_w_', 'actual_w_'), assets)
+        pre_asset_weight = max(float(pre_current.get(asset, 0.0) or 0.0), 0.0)
+        guard_turnover = 0.0
+        guard_cost = 0.0
+        adjusted_return = float(base_return.iloc[i])
+        if i > 0:
+            prev_dt = result.index[i - 1]
+            prev_close = close_aligned.loc[prev_dt]
+            overnight_removed = max(prev_pre_asset_weight, 0.0) * max(1.0 - prev_scale, 0.0)
+            intraday_removed = pre_asset_weight * max(1.0 - scale_today, 0.0)
+            return_split_assets = [asset]
+            if overnight_removed > 1e-12 or intraday_removed > 1e-12:
+                return_split_assets.append(cash_asset)
+            cur_open = _us_open_row(dt, return_split_assets, us_open, close_aligned, strict=strict_open_execution, context='Sub-B DBC profit guard return split')
+            cur_close = close_aligned.loc[dt]
+            overnight_delta = 0.0
+            if overnight_removed > 1e-12:
+                overnight_delta = overnight_removed * (_subb_price_return(cash_asset, prev_close, cur_open) - _subb_price_return(asset, prev_close, cur_open))
+            intraday_delta = 0.0
+            if intraday_removed > 1e-12:
+                intraday_delta = intraday_removed * (_subb_price_return(cash_asset, cur_open, cur_close) - _subb_price_return(asset, cur_open, cur_close))
+            guard_turnover = pre_asset_weight * abs(scale_today - prev_scale)
+            guard_cost = guard_turnover * US_ROT_COMMISSION
+            adjusted_return = adjusted_return + overnight_delta + intraday_delta
+        final_current = _apply_subb_dbc_profit_guard_scale_to_weights(pre_current, scale_today)
+        removed_weight = pre_asset_weight - float(final_current.get(asset, 0.0) or 0.0)
+        if pre_asset_weight <= 1e-12:
+            wave_entry = np.nan
+            wave_peak_profit = 0.0
+            profit = np.nan
+            retain_ratio = np.nan
+            next_scale = 1.0
+            next_level = 0
+        else:
+            cur_open = _us_open_row(dt, [asset], us_open, close_aligned, strict=strict_open_execution, context='Sub-B DBC profit guard entry price')
+            cur_close = close_aligned.loc[dt]
+            if pd.isna(wave_entry):
+                wave_entry = _subb_price_value(asset, cur_open)
+                if pd.isna(wave_entry) or wave_entry <= 0.0:
+                    wave_entry = _subb_price_value(asset, cur_close)
+            close_price = _subb_price_value(asset, cur_close)
+            profit = close_price / wave_entry - 1.0 if pd.notna(close_price) and pd.notna(wave_entry) and (wave_entry > 0.0) else np.nan
+            if pd.notna(profit):
+                wave_peak_profit = max(wave_peak_profit, float(profit))
+            if wave_peak_profit > SUBB_DBC_PROFIT_GUARD_MIN_PEAK_PROFIT and pd.notna(profit):
+                retain_ratio = float(profit) / wave_peak_profit
+                next_scale, next_level = _subb_dbc_profit_guard_scale_from_retain(retain_ratio)
+            else:
+                retain_ratio = np.nan
+                next_scale = 1.0
+                next_level = 0
+        final_target = _apply_subb_dbc_profit_guard_scale_to_weights(pre_target, next_scale)
+        pre_target_asset_weight = max(float(pre_target.get(asset, 0.0) or 0.0), 0.0)
+        target_removed_weight = pre_target_asset_weight - float(final_target.get(asset, 0.0) or 0.0)
+        pending = abs(next_scale - scale_today) > 1e-09 or abs(target_removed_weight - removed_weight) > 0.005
+        if next_scale < scale_today - 1e-09:
+            action = f'derisk_l{next_level}'
+        elif next_scale > scale_today + 1e-09:
+            action = 'restore'
+        elif scale_today < 1.0 - 1e-09:
+            action = f'hold_l{_subb_dbc_profit_guard_level_from_scale(scale_today)}'
+        else:
+            action = ''
+        final_returns.append(adjusted_return)
+        pre_current_records.append(pre_current)
+        final_current_records.append(final_current)
+        pre_target_records.append(pre_target)
+        final_target_records.append(final_target)
+        scale_today_records.append(scale_today)
+        next_scale_records.append(next_scale)
+        level_today_records.append(_subb_dbc_profit_guard_level_from_scale(scale_today))
+        next_level_records.append(next_level)
+        entry_records.append(wave_entry)
+        profit_records.append(profit)
+        peak_records.append(wave_peak_profit if wave_peak_profit > 0.0 else np.nan)
+        retain_records.append(retain_ratio)
+        removed_records.append(removed_weight)
+        target_removed_records.append(target_removed_weight)
+        turnover_records.append(guard_turnover)
+        cost_records.append(guard_cost)
+        pending_records.append(pending)
+        action_records.append(action)
+        prev_scale = scale_today
+        scale_today = next_scale
+        prev_pre_asset_weight = pre_asset_weight
+    index = result.index
+    pre_current_df = pd.DataFrame.from_records(pre_current_records, index=index).reindex(columns=assets).fillna(0.0)
+    final_current_df = pd.DataFrame.from_records(final_current_records, index=index).reindex(columns=assets).fillna(0.0)
+    pre_target_df = pd.DataFrame.from_records(pre_target_records, index=index).reindex(columns=assets).fillna(0.0)
+    final_target_df = pd.DataFrame.from_records(final_target_records, index=index).reindex(columns=assets).fillna(0.0)
+    for a in assets:
+        result[f'pre_dbc_profit_guard_w_{a}'] = pre_current_df[a]
+        result[f'pre_dbc_profit_guard_target_w_{a}'] = pre_target_df[a]
+        result[f'w_{a}'] = final_current_df[a]
+        result[f'actual_w_{a}'] = final_current_df[a]
+        result[f'effective_w_{a}'] = final_current_df[a]
+        result[f'target_w_{a}'] = final_target_df[a]
+    guard_return = pd.Series(final_returns, index=index, dtype=float)
+    guard_turnover = pd.Series(turnover_records, index=index, dtype=float)
+    guard_cost = pd.Series(cost_records, index=index, dtype=float)
+    result['return_before_dbc_profit_guard'] = base_return
+    result['dbc_profit_guard_overlay_return_delta'] = guard_return - base_return
+    result['dbc_profit_guard_enabled'] = True
+    result['dbc_profit_guard_scale_today'] = pd.Series(scale_today_records, index=index, dtype=float)
+    result['dbc_profit_guard_next_scale'] = pd.Series(next_scale_records, index=index, dtype=float)
+    result['dbc_profit_guard_level'] = pd.Series(level_today_records, index=index, dtype=int)
+    result['dbc_profit_guard_next_level'] = pd.Series(next_level_records, index=index, dtype=int)
+    result['dbc_profit_guard_entry_price'] = pd.Series(entry_records, index=index, dtype=float)
+    result['dbc_profit_guard_profit'] = pd.Series(profit_records, index=index, dtype=float)
+    result['dbc_profit_guard_peak_profit'] = pd.Series(peak_records, index=index, dtype=float)
+    result['dbc_profit_guard_retain_ratio'] = pd.Series(retain_records, index=index, dtype=float)
+    result['dbc_profit_guard_removed_weight'] = pd.Series(removed_records, index=index, dtype=float)
+    result['dbc_profit_guard_target_removed_weight'] = pd.Series(target_removed_records, index=index, dtype=float)
+    result['dbc_profit_guard_turnover'] = guard_turnover
+    result['dbc_profit_guard_cost'] = guard_cost
+    result['dbc_profit_guard_pending'] = pd.Series(pending_records, index=index, dtype=bool)
+    result['dbc_profit_guard_action'] = pd.Series(action_records, index=index, dtype=object)
+    result['dbc_profit_guard_active'] = result['dbc_profit_guard_scale_today'] < 1.0 - 1e-09
+    result['dbc_profit_guard_rebalanced'] = guard_turnover.abs() > 1e-09
+    prior_effective_rebalanced = result.get('effective_rebalanced', pd.Series(False, index=index)).fillna(False).astype(bool)
+    result['subb_effective_turnover'] = 0.0
+    result['subb_effective_cost'] = 0.0
+    result['effective_rebalanced'] = prior_effective_rebalanced | result['dbc_profit_guard_rebalanced']
+    result['return'] = guard_return
+    result['nav'] = (1.0 + result['return'].fillna(0.0)).cumprod()
+    result.attrs['dbc_profit_guard'] = {'asset': asset, 'cash_asset': cash_asset, 'retain_l1': SUBB_DBC_PROFIT_GUARD_RETAIN_L1, 'retain_l2': SUBB_DBC_PROFIT_GUARD_RETAIN_L2, 'scale_l1': SUBB_DBC_PROFIT_GUARD_SCALE_L1, 'scale_l2': SUBB_DBC_PROFIT_GUARD_SCALE_L2, 'score_decay': False}
+    return result
+
+def _subb_account_gross_exposure(weights):
+    return float(sum((abs(float(weight or 0.0)) for asset, weight in (weights or {}).items() if asset != 'CASH' and abs(float(weight or 0.0)) > 1e-12)))
+
+def _subb_final_effective_weights(row, assets):
+    return _subb_weights_from_prefixes(row, ('effective_w_', 'actual_w_', 'w_'), assets)
+
+def _rebuild_subb_account_execution_costs(us_rot_result, close_df, us_open=None, strict_open_execution=False, strict=None):
+    if strict is not None:
+        strict_open_execution = bool(strict)
+    return _v80_rebuild_subb_self_financing(us_rot_result, close_df, us_open, strict_open_execution, commission=US_ROT_COMMISSION, benchmark=US_ROT_FINANCING_BENCHMARK, spread_bps=US_ROT_FINANCING_SPREAD_BPS, trading_days=US_TRADING_DAYS, covered_assets=US_ROT_VOLREG_SCALE_ASSETS, defense_scale=US_ROT_VOLREG_DEFENSE_SCALE, next_defense_func=_volreg_next_cash_state)
+
+def make_abs_mom_signals(monthly_prices, lookback=6):
+    ret_n = monthly_prices / monthly_prices.shift(lookback) - 1
+    raw = (ret_n > 0).astype(float)
+    return raw.shift(1)
+
+def _sma_raw_signals(monthly_prices, window=12, band=0.0):
+    sma = monthly_prices.rolling(window).mean()
+    if band <= 0:
+        return (monthly_prices > sma).astype(float)
+    upper = sma * (1 + band)
+    lower = sma * (1 - band)
+    sig = pd.DataFrame(np.nan, index=monthly_prices.index, columns=monthly_prices.columns)
+    for col in monthly_prices.columns:
+        prev = 0.0
+        for i in range(len(monthly_prices)):
+            price = monthly_prices.iloc[i][col]
+            u = upper.iloc[i][col] if col in upper.columns else np.nan
+            l = lower.iloc[i][col] if col in lower.columns else np.nan
+            if pd.isna(u) or pd.isna(l) or pd.isna(price):
+                sig.iloc[i, sig.columns.get_loc(col)] = np.nan
+                continue
+            if price > u:
+                prev = 1.0
+            elif price < l:
+                prev = 0.0
+            sig.iloc[i, sig.columns.get_loc(col)] = prev
+    return sig
+
+def make_sma_signals(monthly_prices, window=12, band=0.0):
+    return _sma_raw_signals(monthly_prices, window, band).shift(1)
+
+def simulate_prod(portfolio, monthly_ret, sig_a, cash_ret, rebal_month=12, sig_b=None, blend_a=0.5, commission=0.0):
+    dates = monthly_ret.index
+    current_val = 1.0
+    blend_b = 1 - blend_a
+    use_blend = sig_b is not None
+    if use_blend:
+        pos_a = {t: current_val * c['w'] * blend_a for t, c in portfolio.items()}
+        pos_b = {t: current_val * c['w'] * blend_b for t, c in portfolio.items()}
+    else:
+        pos_a = {t: current_val * c['w'] for t, c in portfolio.items()}
+    prev_sig_a = {}
+    prev_sig_b = {}
+    vals, details = ([], [])
+    for dt in dates:
+        month_detail = {'date': dt}
+        month_cost = 0.0
+        for t, c in portfolio.items():
+            proxy = c['proxy']
+            sa = sig_a.loc[dt, proxy] if proxy in sig_a.columns else 1.0
+            if pd.isna(sa):
+                sa = 0.0
+            r_asset = monthly_ret.loc[dt, proxy] if proxy in monthly_ret.columns else 0.0
+            r_cash = cash_ret.loc[dt] if dt in cash_ret.index else 0.0
+            if pd.isna(r_asset):
+                r_asset = 0.0
+            if pd.isna(r_cash):
+                r_cash = 0.0
+            if commission > 0 and t in prev_sig_a and (sa != prev_sig_a[t]):
+                cost = pos_a[t] * commission
+                pos_a[t] -= cost
+                month_cost += cost
+            prev_sig_a[t] = sa
+            pos_a[t] *= 1 + (r_asset if sa == 1.0 else r_cash)
+            month_detail[f'sig_am_{t}'] = sa
+            if use_blend:
+                sb = sig_b.loc[dt, proxy] if proxy in sig_b.columns else 1.0
+                if pd.isna(sb):
+                    sb = 0.0
+                if commission > 0 and t in prev_sig_b and (sb != prev_sig_b[t]):
+                    cost = pos_b[t] * commission
+                    pos_b[t] -= cost
+                    month_cost += cost
+                prev_sig_b[t] = sb
+                pos_b[t] *= 1 + (r_asset if sb == 1.0 else r_cash)
+                month_detail[f'sig_sma_{t}'] = sb
+                month_detail[f'sig_{t}'] = blend_a * sa + blend_b * sb
+            else:
+                month_detail[f'sig_{t}'] = sa
+        current_val = sum(pos_a.values()) + (sum(pos_b.values()) if use_blend else 0)
+        vals.append(current_val)
+        month_detail['cost'] = month_cost
+        details.append(month_detail)
+        if dt.month == rebal_month:
+            if commission > 0 and current_val > 0:
+                rebal_to = 0.0
+                for t, c in portfolio.items():
+                    tgt_a = c['w'] * (blend_a if use_blend else 1.0)
+                    act_a = pos_a[t] / current_val
+                    rebal_to += abs(tgt_a - act_a)
+                    if use_blend:
+                        tgt_b = c['w'] * blend_b
+                        act_b = pos_b[t] / current_val
+                        rebal_to += abs(tgt_b - act_b)
+                current_val *= 1 - rebal_to * commission
+            if use_blend:
+                pos_a = {t: current_val * c['w'] * blend_a for t, c in portfolio.items()}
+                pos_b = {t: current_val * c['w'] * blend_b for t, c in portfolio.items()}
+            else:
+                pos_a = {t: current_val * c['w'] for t, c in portfolio.items()}
+    nav = pd.Series(vals, index=dates)
+    return (nav, pd.DataFrame(details).set_index('date'))
+
+def simulate_prod_btc_phased(monthly_ret, sig_a, cash_ret, rebal_month=12, sig_b=None, blend_a=0.5, commission=0.0):
+    formal_ret = monthly_ret.loc[monthly_ret.index >= SUBC_FORMAL_START]
+    if formal_ret.empty:
+        return (pd.Series(dtype=float), pd.DataFrame())
+    return simulate_prod(PROD_PORTFOLIO, formal_ret, sig_a, cash_ret, rebal_month, sig_b=sig_b, blend_a=blend_a, commission=commission)
+
+def _max_drawdown_pct_from_nav(nav):
+    nav = pd.to_numeric(pd.Series(nav), errors='coerce').dropna()
+    if len(nav) == 0:
+        return np.nan
+    values = pd.concat([pd.Series([1.0], dtype=float), nav.reset_index(drop=True)], ignore_index=True)
+    peak = values.cummax()
+    return ((values - peak) / peak).min() * 100
+
+def _nav_from_period_returns(returns):
+    return (1.0 + pd.to_numeric(returns, errors='coerce').fillna(0.0)).cumprod()
+
+def calc_daily_metrics(ret_series, rf_daily, td, *, history_returns=None, first_period_start=None):
+    ret_series = _performance_clean_daily_returns(ret_series, name='legacy daily metrics')
+    if len(ret_series) < 20:
+        return None
+    preceding = pd.DatetimeIndex([])
+    if history_returns is not None:
+        history = _performance_clean_daily_returns(history_returns, name='legacy daily metrics history')
+        preceding = history.index[history.index < ret_series.index[0]]
+    if len(preceding):
+        period_start = pd.Timestamp(preceding[-1])
+    elif first_period_start is not None:
+        period_start = pd.Timestamp(first_period_start).normalize()
+    else:
+        raise ValueError('legacy daily metrics: preceding source close is required for first dated return')
+    if period_start >= ret_series.index[0]:
+        raise ValueError('legacy daily metrics: preceding source close must be before first dated return')
+    years = (ret_series.index[-1] - period_start).days / 365.25
+    if years < 0.25:
+        return None
+    nav = (1 + ret_series).cumprod()
+    annual = (nav.iloc[-1] ** (1 / years) - 1) * 100
+    excess = ret_series - rf_daily
+    sharpe = excess.mean() / excess.std() * np.sqrt(td) if excess.std() > 0 else 0
+    vol = ret_series.std() * np.sqrt(td) * 100
+    dd = _max_drawdown_pct_from_nav(nav)
+    calmar = annual / abs(dd) if dd != 0 else 0
+    monthly = ret_series.groupby(ret_series.index.to_period('M')).apply(lambda x: (1 + x).prod() - 1)
+    win_rate = (monthly > 0).mean() * 100
+    yearly = {}
+    for year in sorted(ret_series.index.year.unique()):
+        yr_data = ret_series[ret_series.index.year == year]
+        if len(yr_data) > 10:
+            yearly[year] = ((1 + yr_data).prod() - 1) * 100
+    return {'annual': annual, 'vol': vol, 'sharpe': sharpe, 'max_dd': dd, 'calmar': calmar, 'win_rate': win_rate, 'years': years, 'total_return': (nav.iloc[-1] - 1) * 100, 'yearly': yearly}
+
+def calc_monthly_metrics(ret_series, rf_monthly=0.0, *, complete_months=None):
+    nav = (1 + ret_series).cumprod()
+    n_months = len(ret_series)
+    years = n_months / 12
+    total_return = (nav.iloc[-1] - 1) * 100
+    dd = _max_drawdown_pct_from_nav(nav)
+    if complete_months is None:
+        complete_months = ret_series.attrs.get('complete_months')
+    sample = ret_series if complete_months is None else ret_series.loc[ret_series.index.isin(complete_months)]
+    win_rate = (sample > 0).mean() * 100 if len(sample) else None
+    if n_months < 3:
+        return {'annual': None, 'vol': None, 'sharpe': None, 'max_dd': dd, 'calmar': None, 'win_rate': win_rate, 'years': years, 'total_return': total_return, 'yearly': {}}
+    annual = (nav.iloc[-1] ** (1 / years) - 1) * 100
+    excess = sample - rf_monthly
+    sharpe = vol = None
+    if len(sample) >= 3:
+        sharpe = excess.mean() / excess.std() * np.sqrt(12) if excess.std() > 0 else 0
+        vol = sample.std() * np.sqrt(12) * 100
+    calmar = annual / abs(dd) if dd != 0 else 0
+    yearly = {}
+    for year in sorted(ret_series.index.year.unique()):
+        yr_data = ret_series[ret_series.index.year == year]
+        if len(yr_data) >= 1:
+            yearly[year] = ((1 + yr_data).prod() - 1) * 100
+    return {'annual': annual, 'vol': vol, 'sharpe': sharpe, 'max_dd': dd, 'calmar': calmar, 'win_rate': win_rate, 'years': years, 'total_return': total_return, 'yearly': yearly}
+
+def _performance_clean_daily_returns(ret_series, *, name='series'):
+    raw = pd.Series(ret_series).copy()
+    if len(raw) == 0:
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    if not isinstance(raw.index, pd.DatetimeIndex):
+        try:
+            parsed_index = pd.to_datetime(raw.index, errors='raise')
+        except Exception as exc:
+            raise ValueError(f'{name}: daily returns require a DatetimeIndex') from exc
+        if not isinstance(parsed_index, pd.DatetimeIndex):
+            raise ValueError(f'{name}: mixed-timezone or invalid daily index')
+        raw.index = parsed_index
+    if raw.index.tz is not None:
+        raw.index = raw.index.tz_localize(None)
+    raw.index = raw.index.normalize()
+    if raw.index.hasnans:
+        raise ValueError(f'{name}: invalid daily date index (NaT)')
+    if raw.index.has_duplicates:
+        duplicates = raw.index[raw.index.duplicated()].unique()
+        raise ValueError(f'{name}: duplicate daily dates: {duplicates[0].date()}')
+    raw = raw.sort_index()
+    values = pd.to_numeric(raw, errors='coerce')
+    valid = values.notna()
+    if not valid.any():
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    first = int(np.flatnonzero(valid.to_numpy())[0])
+    last = int(np.flatnonzero(valid.to_numpy())[-1])
+    values = values.iloc[first:last + 1]
+    if values.isna().any():
+        bad_date = values.index[values.isna()][0]
+        raise ValueError(f'{name}: internal missing return at {bad_date.date()}')
+    arr = values.to_numpy(dtype=float)
+    if not np.isfinite(arr).all():
+        bad_date = values.index[~np.isfinite(arr)][0]
+        raise ValueError(f'{name}: non-finite return at {bad_date.date()}')
+    if (arr <= -1.0).any():
+        bad_date = values.index[arr <= -1.0][0]
+        raise ValueError(f'{name}: return must be greater than -100% at {bad_date.date()}')
+    return values.astype(float)
+
+def _performance_annualized_pct(period_returns, history_returns, name, first_period_start=None):
+    period = _performance_clean_daily_returns(period_returns, name=name)
+    if len(period) < 2:
+        raise ValueError(f'{name}: insufficient dated returns for annualization')
+    preceding = pd.DatetimeIndex([])
+    if history_returns is not None:
+        history = _performance_clean_daily_returns(history_returns, name=name)
+        preceding = history.index[history.index < period.index[0]]
+    if len(preceding):
+        start = pd.Timestamp(preceding[-1])
+    elif first_period_start is not None:
+        start = pd.Timestamp(first_period_start).normalize()
+    else:
+        raise ValueError(f'{name}: preceding source close is required for first dated return')
+    if start >= period.index[0]:
+        raise ValueError(f'{name}: preceding source close must be before first dated return')
+    years = (period.index[-1] - start).days / 365.25
+    if years <= 0:
+        raise ValueError(f'{name}: nonpositive return-period calendar span')
+    nav = float((1.0 + period).prod())
+    return (nav ** (1.0 / years) - 1.0) * 100.0
+
+def _performance_initial_period_anchors(daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+    source = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close, 'B7.8': us_rot_close, 'B7.9': us_rot_close, 'Sub-C': us_prod_daily}
+    anchors = {}
+    for name, frame in source.items():
+        returns = _performance_clean_daily_returns(daily_returns.get(name), name=name)
+        if returns.empty:
+            continue
+        earlier = pd.DatetimeIndex(frame.index)[pd.DatetimeIndex(frame.index) < returns.index[0]]
+        if len(earlier) == 0:
+            raise ValueError(f'{name}: source close before first return unavailable')
+        anchors[name] = pd.Timestamp(earlier[-1]).normalize()
+    combined = _performance_clean_daily_returns(daily_returns.get('Combined'), name='Combined')
+    if not combined.empty:
+        candidates = []
+        for frame in source.values():
+            index = pd.DatetimeIndex(frame.index)
+            earlier = index[index < combined.index[0]]
+            if len(earlier):
+                candidates.append(pd.Timestamp(earlier[-1]).normalize())
+        if not candidates:
+            raise ValueError('Combined: source close before first return unavailable')
+        anchors['Combined'] = max(candidates)
+    return anchors
+
+def _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+    """One session-aware, confirmed cutoff for text, charts and workbooks."""
+    start, requested_end = (pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize())
+    sources = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close, 'B7.8': us_rot_close, 'B7.9': us_rot_close, 'Sub-C': us_prod_daily}
+    omit_us = _us_current_query_limited(us_rot_close) and (us_rot_close.empty or us_prod_daily.empty or min(us_rot_close.index[-1], us_prod_daily.index[-1]) < start)
+    if omit_us:
+        sources = {'Sub-A': cn_close, 'Sub-A-DK': cn_dk_close}
+    panel_errors = {name: frame.attrs['cn_panel_error'] for name, frame in sources.items()
+                    if name in ('Sub-A', 'Sub-A-DK') and frame is not None and frame.attrs.get('cn_panel_error')}
+    ends = {}
+    for name, frame in sources.items():
+        if frame is None or len(frame) == 0:
+            if name in ('Sub-A', 'Sub-A-DK'):
+                continue
+            raise ValueError(f'{name}: 报告无可用源数据')
+        ends[name] = pd.Timestamp(frame.index[-1]).normalize()
+    if not ends:
+        raise ValueError('请求区间没有可用的确认收盘数据')
+    sources = {name: sources[name] for name in ends}
+    cutoff = min(requested_end, max(ends.values()))
+    while True:
+        earlier = cutoff
+        for name, last in ends.items():
+            if last < cutoff:
+                required = _performance_expected_sessions(name, last + pd.Timedelta(days=1), cutoff)
+                if len(required):
+                    earlier = min(earlier, last)
+        if earlier == cutoff:
+            break
+        cutoff = earlier
+    available = pd.DatetimeIndex(sorted(set().union(*(frame.index[frame.index <= cutoff] for frame in sources.values()))))
+    if len(available) == 0 or available[-1] < start:
+        raise ValueError('请求区间没有可用的确认收盘数据')
+    cutoff = pd.Timestamp(available[-1]).normalize()
+    generated = pd.Timestamp(beijing_now())
+    generated = generated.tz_localize('Asia/Shanghai') if generated.tzinfo is None else generated.tz_convert('Asia/Shanghai')
+    return {'requested_start': start, 'requested_end': requested_end, 'actual_start': start, 'actual_end': cutoff, 'sleeve_asof': {name: pd.Timestamp(frame.index[frame.index <= cutoff][-1]).normalize() for name, frame in sources.items() if len(frame.index[frame.index <= cutoff])}, 'generated_at': generated.isoformat(), 'run_id': uuid.uuid4().hex[:12], 'omit_us': omit_us, 'us_data_coverage': _us_query_coverage(us_rot_close), 'panel_errors': panel_errors}
+
+def _finalize_performance_report_context(context, daily_returns):
+    ranges = {}
+    for name, series in daily_returns.items():
+        clean = _performance_clean_daily_returns(series, name=name)
+        if not clean.empty:
+            ranges[name] = (clean.index[0], clean.index[-1])
+    if not ranges:
+        raise ValueError('请求区间没有可用策略收益')
+    context['sleeve_return_ranges'] = ranges
+    context['unavailable_returns'] = {name: context.get('panel_errors', {}).get(name, '区间内无已成立且完成预热的可用收益，或数据未覆盖该区间')
+                                      for name in PERFORMANCE_COLUMNS if name not in ranges}
+    if 'Combined' not in ranges:
+        context['unavailable_returns']['Combined'] = '五袖无共同可用收益区间'
+    context['actual_start'] = min((bounds[0] for bounds in ranges.values()))
+    context['actual_end'] = max((bounds[1] for bounds in ranges.values()))
+    return context
+
+def _performance_report_filename(prefix, extension, context):
+
+    def stamp(key):
+        return pd.Timestamp(context[key]).strftime('%Y%m%d')
+    return f"{prefix}_req_{stamp('requested_start')}_{stamp('requested_end')}_actual_{stamp('actual_start')}_{stamp('actual_end')}_{context['run_id']}.{extension}"
+
+def _write_performance_report_context(w, context):
+    if 'Sub-A' in context.get('sleeve_return_ranges', {}):
+        w(f'> Sub-A 计价口径：{CN_SA_MODEL_CLOCK_NOTE}\n\n')
+    for name, reason in context.get('unavailable_returns', {}).items():
+        w(f'> {name}：N/A（{reason}）。\n')
+    if context.get('us_data_coverage'):
+        w(f"> {context['us_data_coverage']}\n\n")
+    if context.get('omit_us'):
+        w('> 请求区间内没有可核验的美股历史，本报告只列独立 A 股结果；美股各袖和 PV 组合缺少输入。\n\n')
+    w(f"> 请求区间：{context['requested_start']:%Y-%m-%d} 至 {context['requested_end']:%Y-%m-%d}；实际收益覆盖：{context['actual_start']:%Y-%m-%d} 至 {context['actual_end']:%Y-%m-%d}。\n\n")
+    w('> 各袖确认收盘：' + '；'.join((f'{name} {date:%Y-%m-%d}' for name, date in context['sleeve_asof'].items())) + '。真实休市按零收益承接，交易日缺行拒绝计算。\n\n')
+    w('> 查询组合按区间起点重新配置初始权重；查询前已成立且状态完整的休市袖从首日承接零收益。尚未成立的袖仍限制共同起点；标准窗口沿用全历史资金漂移。\n\n')
+    w(f"> 生成时间（北京时间）：{context['generated_at']}；报告编号：{context['run_id']}。\n\n")
+
+def _performance_expected_sessions(name, start, end):
+    if name in ('Sub-A', 'Sub-A-DK'):
+        return _expected_cn_sessions(start, end)
+    return _expected_us_ohlc_index(start, end)
+
+def _complete_performance_months(dates, name):
+    if not len(dates):
+        return pd.PeriodIndex([], freq='M')
+    periods = dates.to_period('M')
+    first, last = periods.min().start_time.normalize(), periods.max().end_time.normalize()
+    if name == 'Combined':
+        expected = _expected_cn_sessions(first, last).union(_expected_us_ohlc_index(first, last))
+    else:
+        expected = _performance_expected_sessions(name, first, last)
+    incomplete = expected.difference(dates).to_period('M').unique()
+    return periods.unique().difference(incomplete)
+
+def _performance_combined_daily_returns(daily_returns, *, expected_sessions=None, history_returns=None, query_start=None):
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    query_mode = history_returns is not None and query_start is not None
+    if (history_returns is None) != (query_start is None):
+        raise ValueError('Combined query requires both untrimmed history and query_start')
+    series_map = {}
+    history_map = {}
+    for name in PERFORMANCE_COMBO_ORDER:
+        value = daily_returns.get(name)
+        if value is None:
+            continue
+        cleaned = _performance_clean_daily_returns(value, name=name)
+        if query_mode:
+            history = _performance_clean_daily_returns(history_returns.get(name), name=f'{name} history')
+            if history.empty:
+                return empty
+            history_map[name] = history
+        if len(cleaned) > 0 or query_mode:
+            series_map[name] = cleaned
+    if len(series_map) < len(PERFORMANCE_COMBO_ORDER):
+        return empty
+    observed_ends = [series.index[-1] for series in series_map.values() if not series.empty]
+    if not observed_ends:
+        return empty
+    common_end = max(observed_ends)
+    coverage = history_map if query_mode else series_map
+    common_start = max((series.index[0] for series in coverage.values()))
+    if query_mode:
+        common_start = max(common_start, pd.Timestamp(query_start).tz_localize(None).normalize())
+    if common_end < common_start:
+        return empty
+    latest_by_name = {name: series.loc[:common_end].index[-1] for name, series in coverage.items()}
+    earliest_end = min(latest_by_name.values())
+    if common_end - earliest_end > pd.Timedelta(days=10):
+        stale = min(latest_by_name, key=latest_by_name.get)
+        raise ValueError(f'{stale}: stale sleeve end {latest_by_name[stale].date()} vs combined end {common_end.date()}')
+    for name, series in series_map.items():
+        if query_mode:
+            earlier = history_map[name].loc[history_map[name].index < common_start]
+            if not earlier.empty:
+                required_prior = _performance_expected_sessions(name, earlier.index[-1] + pd.Timedelta(days=1), common_start - pd.Timedelta(days=1))
+                if len(required_prior):
+                    raise ValueError(f'{name}: missing pre-query market-session return at {required_prior[0].date()}')
+        expected = (expected_sessions or {}).get(name)
+        if expected is None:
+            expected = _performance_expected_sessions(name, common_start, common_end)
+        else:
+            expected = pd.DatetimeIndex(expected)
+            expected = expected[(expected >= common_start) & (expected <= common_end)]
+        missing = expected.difference(series.index)
+        if len(missing):
+            raise ValueError(f'{name}: missing market-session return at {missing[0].date()}; refusing zero fill')
+    union_dates = pd.DatetimeIndex(sorted(set().union(*(series.loc[common_start:common_end].index for series in series_map.values()))))
+    if len(union_dates) == 0:
+        return empty
+    component_nav = {}
+    for name, series in series_map.items():
+        aligned_returns = series.reindex(union_dates).fillna(0.0)
+        component_nav[name] = (1.0 + aligned_returns).cumprod()
+    nav_df = pd.DataFrame(component_nav, index=union_dates)
+    weights = _performance_combo_weights()
+    combined_nav = sum((nav_df[name] * weights[name] for name in PERFORMANCE_COMBO_ORDER))
+    combined = combined_nav.pct_change()
+    combined.iloc[0] = combined_nav.iloc[0] - 1.0
+    return combined.astype(float)
+
+def _performance_daily_window_metric(ret_series, requested_start, end_date, name='Combined', first_period_start=None):
+    try:
+        s = _performance_clean_daily_returns(ret_series, name='performance window')
+    except ValueError as exc:
+        return {'annual': None, 'max_dd': None, 'reason': str(exc)}
+    if len(s) == 0:
+        return {'annual': None, 'max_dd': None, 'reason': 'no data'}
+    end_ts = pd.Timestamp(end_date).tz_localize(None).normalize()
+    s = s[s.index <= end_ts]
+    if len(s) == 0:
+        return {'annual': None, 'max_dd': None, 'reason': 'no data before end date'}
+    if end_ts - s.index[-1] > pd.Timedelta(days=10):
+        return {'annual': None, 'max_dd': None, 'reason': f"stale end: latest {s.index[-1].strftime('%Y-%m-%d')} before required {end_ts.strftime('%Y-%m-%d')}"}
+    if requested_start is not None:
+        requested_start = pd.Timestamp(requested_start).tz_localize(None).normalize()
+        first_available = s.index[0]
+        if first_available > requested_start + pd.Timedelta(days=7):
+            return {'annual': None, 'max_dd': None, 'reason': f"insufficient post-start history: starts {first_available.strftime('%Y-%m-%d')} after required {requested_start.strftime('%Y-%m-%d')}"}
+        s = s[s.index >= requested_start]
+    if len(s) < PERFORMANCE_STANDARD_MIN_DAILY_ROWS:
+        return {'annual': None, 'max_dd': None, 'reason': f'insufficient post-start history: {len(s)} daily rows'}
+    nav = (1.0 + s).cumprod()
+    try:
+        annual = _performance_annualized_pct(s, ret_series, name, first_period_start=first_period_start)
+    except ValueError as exc:
+        return {'annual': None, 'max_dd': None, 'reason': str(exc)}
+    return {'annual': float(annual), 'max_dd': float(_max_drawdown_pct_from_nav(nav)), 'reason': None, 'start': s.index[0], 'end': s.index[-1]}
+
+def _performance_standard_window_rows(daily_returns, end_date=None, columns=None, first_period_starts=None):
+    if columns is None:
+        columns = PERFORMANCE_COLUMNS
+    cleaned = {}
+    for name, s in dict(daily_returns or {}).items():
+        if s is None:
+            continue
+        ser = _performance_clean_daily_returns(s, name=name)
+        if len(ser) > 0:
+            cleaned[name] = ser
+    if end_date is None:
+        latest = [s.index[-1] for s in cleaned.values() if len(s) > 0]
+        end_date = max(latest) if latest else pd.Timestamp.today().normalize()
+    end_ts = pd.Timestamp(end_date)
+    rows = []
+    for label, offset in PERFORMANCE_STANDARD_WINDOWS:
+        requested_start = None if offset is None else end_ts - offset
+        row = {'window': label, 'start': requested_start, 'end': end_ts, 'metrics': {}}
+        for col in columns:
+            row['metrics'][col] = _performance_daily_window_metric(cleaned.get(col, pd.Series(dtype=float)), requested_start, end_ts, name=col, first_period_start=(first_period_starts or {}).get(col))
+        rows.append(row)
+    return rows
+
+def _format_performance_standard_window_cell(metric):
+    if not metric or metric.get('annual') is None or metric.get('max_dd') is None:
+        reason = (metric or {}).get('reason') or 'N/A'
+        return f'N/A ({reason})'
+    return f"{metric['annual']:.2f}% / {metric['max_dd']:.2f}%"
+
+def _performance_basis_notes():
+    weights = _performance_combo_weight_label()
+    return {'查询区间PV组合': f'本次查询的净值图、主指标和月度收益在查询区间各袖共同可用起点按{weights}建仓，此后买入持有、权重漂移。', '标准窗口PV组合': f'标准窗口表先在全历史各袖共同起点按{weights}建仓并持续漂移，再截取Full/10Y/5Y/3Y/1Y；各窗口不重置权重，与查询区间PV不是同一建仓起点。', '指标频率': '年化收益、最大回撤及卡尔玛使用日收益；波动率、夏普仅用至少三个完整交易月的月收益年化，夏普无风险基准为0。月胜率仅统计完整月，累计收益保留首尾零头。', '短窗限制': '不足1年的年化仅为短期收益外推，不宜推断长期表现；不足3个完整交易月时月度波动率、夏普记为N/A。', 'Sub-A样本': 'Sub-A价格从930955发布日2017-05-26起；中证2000成交额从发布日2023-08-11起用于风控。此前有创业板成交额腿运行，不能将旧版使用回填的净值当作可知历史；其他价格与国债指数口径另见来源。', 'Sub-C样本': f'Sub-C自{SUBC_FORMAL_START.date().isoformat()}起的分阶段历史含BTC日线代理，其UTC日K时钟不等于美股16:00收盘及次日09:30开盘；十只ETF均已上市后的首个完整收益日为{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}。代理段仅作研究，不能认证统一开收盘成交口径。', '国债口径': '自2026-11-05起，国债腿明确改为000012上证国债指数（全期限，2003-01-02发布），直接使用该指数历史及当日报价，不再拼接H11077。与旧10年期国债组合属于不同标的口径，旧净值不能沿用；具体来源见行情获取输出。'}
+
+def _write_performance_standard_window_table(w, daily_returns, end_date=None, first_period_starts=None):
+    rows = _performance_standard_window_rows(daily_returns, end_date=end_date, first_period_starts=first_period_starts)
+    w('\n### 标准窗口指标（年化收益 / 最大回撤）\n\n')
+    w(f'| Window | Sub-A | A-DK | B7.8 | B7.9 | Sub-C | PV组合({_performance_combo_weight_label()}) |\n')
+    w('|:-|------:|------:|------:|------:|------:|------:|\n')
+    for row in rows:
+        cells = []
+        for col in PERFORMANCE_COLUMNS:
+            cells.append(_format_performance_standard_window_cell(row['metrics'].get(col)))
+        w(f"| {row['window']} | " + ' | '.join(cells) + ' |\n')
+    w('\n')
+    notes = _performance_basis_notes()
+    for key in ('标准窗口PV组合', 'Sub-A样本', 'Sub-C样本', '国债口径'):
+        w(f'> {notes[key]}\n\n')
+    w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
+    return rows
+
+def _monthly_returns_from_daily_window(ret_series, start_date, end_date, *, name='Combined'):
+    ret_series = _performance_clean_daily_returns(ret_series, name='monthly aggregation')
+    period = ret_series[(ret_series.index >= start_date) & (ret_series.index <= end_date)].dropna()
+    if len(period) == 0:
+        return pd.Series(dtype=float, index=pd.PeriodIndex([], freq='M'))
+    monthly = period.groupby(period.index.to_period('M')).apply(lambda x: (1 + x).prod() - 1)
+    monthly.attrs['complete_months'] = tuple(_complete_performance_months(period.index, name))
+    return monthly
+
+def _cn_report_price_window(frame, end_date):
+    out = _drop_cn_rows_after(frame, end_date).copy()
+    out.attrs['historical_report_window'] = True
+    confirmation = out.attrs.get('cn_confirmed_close')
+    if len(out) and confirmation is not None and pd.Timestamp(confirmation) > out.index[-1]:
+        out.attrs['cn_confirmed_close'] = out.index[-1]
+        out.attrs.pop('cn_final_amounts', None)
+    return out
+
+def _empty_historical_sleeve(reason):
+    result = pd.DataFrame({'return': pd.Series(dtype=float)}, index=pd.DatetimeIndex([], name='date'))
+    result.attrs['report_unavailable_reason'] = reason
+    return result
+
+def _apply_nav_axis_scale(ax, nav_series, spread_threshold=2.0):
+    values = []
+    for nav in nav_series.values():
+        s = pd.to_numeric(pd.Series(nav), errors='coerce').dropna()
+        s = s[s > 0]
+        if len(s) > 0:
+            values.append(s)
+    if not values:
+        ax.set_ylabel('NAV (start=1.0)', fontsize=11)
+        return False
+    all_values = pd.concat(values)
+    min_nav = float(all_values.min())
+    max_nav = float(all_values.max())
+    spread = max_nav / min_nav if min_nav > 0 else 1.0
+    if spread >= spread_threshold:
+        ax.set_yscale('log')
+        ax.set_ylabel('NAV (start=1.0, log scale)', fontsize=11)
+        return True
+    ax.set_ylabel('NAV (start=1.0)', fontsize=11)
+    return False
+
+def _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date):
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.ticker import PercentFormatter
+    fig, (nav_ax, dd_ax) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, height_ratios=[3, 1])
+    for name, nav in nav_series.items():
+        marker = 'o' if len(nav) == 1 else None
+        nav_ax.plot(nav.index, nav.values, label=f'{chart_labels[name]}  ({(nav.iloc[-1] - 1) * 100:+.1f}%)', color=colors[name], linewidth=1.8, marker=marker)
+        peaks = pd.concat([pd.Series([1.0]), nav.reset_index(drop=True)], ignore_index=True).cummax().iloc[1:].set_axis(nav.index)
+        drawdown = nav / peaks - 1.0
+        dd_ax.plot(drawdown.index, drawdown.values, color=colors[name], linewidth=1.2, alpha=0.85, marker=marker)
+    nav_ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    nav_ax.set_title(f"NAV Curve: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}", fontsize=14, fontweight='bold')
+    _apply_nav_axis_scale(nav_ax, nav_series)
+    nav_ax.legend(loc='best', fontsize=10, framealpha=0.9)
+    nav_ax.grid(True, alpha=0.3)
+    dd_ax.axhline(y=0.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    dd_ax.set_ylabel('Drawdown', fontsize=11)
+    dd_ax.yaxis.set_major_formatter(PercentFormatter(1.0))
+    dd_ax.grid(True, alpha=0.3)
+    if start_date == end_date:
+        margin = pd.Timedelta(hours=12)
+        dd_ax.set_xlim(start_date - margin, end_date + margin)
+        dd_ax.set_xticks([start_date])
+        dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    else:
+        dd_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    fig.autofmt_xdate(rotation=30)
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+def beijing_now():
+    from datetime import timezone
+    utc_now = datetime.now(timezone.utc)
+    bj_now = utc_now + timedelta(hours=8)
+    return bj_now.replace(tzinfo=None)
+
+def is_cn_market_open():
+    bj = beijing_now()
+    weekday = bj.weekday()
+    if weekday >= 5:
+        return (False, bj)
+    morning_open = bj.replace(hour=9, minute=30, second=0)
+    morning_close = bj.replace(hour=11, minute=30, second=0)
+    afternoon_open = bj.replace(hour=13, minute=0, second=0)
+    afternoon_close = bj.replace(hour=15, minute=0, second=0)
+    return (morning_open <= bj <= morning_close or afternoon_open <= bj <= afternoon_close, bj)
+
+def _is_cn_unconfirmed_at(bj):
+    if not _is_cn_required_close_day(bj.date()):
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return session_start <= bj < session_close
+
+def _is_cn_today_preclose_unconfirmed_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_close = bj.replace(hour=15, minute=0, second=0, microsecond=0)
+    return bj < session_close
+
+def _can_use_cn_realtime_snapshot_at(bj):
+    if bj.weekday() >= 5:
+        return False
+    session_start = bj.replace(hour=9, minute=30, second=0, microsecond=0)
+    return bj >= session_start
+
+def is_cn_unconfirmed_intraday_snapshot():
+    bj = beijing_now()
+    return (_is_cn_unconfirmed_at(bj), bj)
+
+def _cn_data_is_unconfirmed_today(data_date, bj_now=None):
+    if bj_now is None:
+        bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
+    if data_date is None:
+        return False
+    return cn_unconfirmed and pd.Timestamp(data_date).date() == bj_now.date()
+
+def _drop_cn_unconfirmed_today(df):
+    bj_now = beijing_now()
+    cn_unconfirmed = _is_cn_today_preclose_unconfirmed_at(bj_now)
+    if df is None or len(df) == 0 or (not cn_unconfirmed):
+        return df
+    today = bj_now.date()
+    keep = [pd.Timestamp(idx).date() != today for idx in df.index]
+    return df.loc[keep]
+
+def _drop_cn_rows_after(df, cutoff_date):
+    if df is None or len(df) == 0:
+        return df
+    dates = pd.DatetimeIndex(pd.to_datetime(df.index, errors='coerce')).normalize()
+    cutoff = pd.Timestamp(cutoff_date).normalize()
+    return df.loc[dates <= cutoff].copy()
+
+def _latest_confirmed_cn_rule_date(index, bj_now=None):
+    """Return the latest confirmed CN close for close-only daily overlays."""
+    dates = pd.DatetimeIndex(pd.to_datetime(index, errors='coerce')).dropna().sort_values()
+    if len(dates) == 0:
+        return None
+    latest = pd.Timestamp(dates[-1]).normalize()
+    bj_now = beijing_now() if bj_now is None else bj_now
+    if _is_cn_today_preclose_unconfirmed_at(bj_now) and latest.date() == bj_now.date():
+        confirmed = dates[dates.date < bj_now.date()]
+        if len(confirmed) > 0:
+            return pd.Timestamp(confirmed[-1]).normalize()
+    return latest
+
+def _cn_record_close_confirmed(rec_date, bj_now, rec_time_text=None, confirmation_not_before=None):
+    if rec_date is None:
+        return False
+    if confirmation_not_before is not None:
+        now_at = pd.Timestamp(bj_now)
+        now_at = now_at.tz_localize('Asia/Shanghai') if now_at.tzinfo is None else now_at
+        if now_at < confirmation_not_before:
+            return False
+    rec_day = pd.Timestamp(rec_date).date()
+    today = bj_now.date()
+    if rec_time_text and '09:30' in str(rec_time_text):
+        if rec_day < today:
+            return True
+        if rec_day > today:
+            return False
+        return bj_now.hour > 9 or (bj_now.hour == 9 and bj_now.minute >= 35)
+    if rec_day < today:
+        return True
+    if rec_day > today:
+        return False
+    return not _is_cn_unconfirmed_at(bj_now) and bj_now.hour >= 15
+
+def _is_edt(d):
+    if hasattr(d, 'date'):
+        d = d.date()
+    et = datetime(d.year, d.month, d.day, 12, 0, tzinfo=ZoneInfo('America/New_York'))
+    return et.utcoffset() == timedelta(hours=-4)
+
+def is_us_market_open():
+    bj = beijing_now()
+    if bj.tzinfo is None:
+        bj_aware = bj.replace(tzinfo=ZoneInfo('Asia/Shanghai'))
+    else:
+        bj_aware = bj.astimezone(ZoneInfo('Asia/Shanghai'))
+    now_et = bj_aware.astimezone(ZoneInfo('America/New_York'))
+    session = pd.Timestamp(now_et.date())
+    if not _is_us_market_session(session):
+        return (False, bj)
+    minute = now_et.hour * 60 + now_et.minute
+    close_minute = 13 * 60 if _is_us_early_close_session(session) else 16 * 60
+    return (9 * 60 + 30 <= minute < close_minute, bj)
+
+def beijing_time_str(date, market='CN', event='close'):
+    date = pd.Timestamp(date)
+    if market == 'CN':
+        if event == 'open':
+            return f"{date.strftime('%Y-%m-%d')} 09:30 北京时间"
+        return f"{date.strftime('%Y-%m-%d')} 15:00 北京时间"
+    else:
+        hour, minute = (9, 30) if event == 'open' else (13, 0) if _is_us_early_close_session(date) else (16, 0)
+        event_et = datetime(date.year, date.month, date.day, hour, minute, tzinfo=ZoneInfo('America/New_York'))
+        event_bj = event_et.astimezone(ZoneInfo('Asia/Shanghai'))
+        return f"{event_bj.strftime('%Y-%m-%d %H:%M')} 北京时间"
+
+def _next_biz_day(date):
+    d = date + timedelta(days=1)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+def _coerce_session_index(schedule):
+    if schedule is None:
+        return None
+    if isinstance(schedule, pd.Series):
+        idx = schedule.dropna().index
+    elif isinstance(schedule, pd.DataFrame):
+        idx = schedule.dropna(how='all').index
+    elif isinstance(schedule, dict):
+        idx = pd.DatetimeIndex([])
+        for value in schedule.values():
+            cur = _coerce_session_index(value)
+            if cur is not None and len(cur) > 0:
+                idx = idx.union(cur)
+    else:
+        try:
+            idx = pd.DatetimeIndex(pd.to_datetime(schedule))
+        except Exception:
+            return None
+    idx = pd.DatetimeIndex(pd.to_datetime(idx)).sort_values().unique()
+    return idx if len(idx) > 0 else None
+
+def _next_session_day(signal_date, schedule=None):
+    signal_ts = pd.Timestamp(signal_date).normalize()
+    candidate = signal_ts + pd.Timedelta(days=1)
+    for _ in range(14):
+        if _is_us_market_session(candidate):
+            return candidate
+        candidate += pd.Timedelta(days=1)
+    raise ValueError(f'XNYS calendar cannot resolve next session after {signal_ts.date().isoformat()}')
+
+def us_exec_time_str(signal_date, schedule=None):
+    exec_day = _next_session_day(signal_date, schedule)
+    return beijing_time_str(exec_day, 'US', 'open')
+
+def _has_execution_happened(signal_date, market, bj_now, schedule=None):
+    exec_day = _next_session_day(signal_date, schedule)
+    exec_day_date = exec_day.date() if hasattr(exec_day, 'date') else exec_day
+    today_date = bj_now.date()
+    if today_date > exec_day_date:
+        return True
+    elif today_date == exec_day_date:
+        if market == 'CN':
+            return bj_now.hour > 9 or (bj_now.hour == 9 and bj_now.minute >= 35)
+        else:
+            open_h = 21 if _is_edt(exec_day) else 22
+            return bj_now.hour > open_h or (bj_now.hour == open_h and bj_now.minute >= 35)
+    return False
+
+def _us_open_on_record_date_happened(record_date, bj_now):
+    if record_date is None:
+        return False
+    rec_ts = pd.Timestamp(record_date)
+    rec_day = rec_ts.date()
+    today = bj_now.date()
+    if today > rec_day:
+        return True
+    if today < rec_day:
+        return False
+    open_h = 21 if _is_edt(rec_ts) else 22
+    return bj_now.hour > open_h or (bj_now.hour == open_h and bj_now.minute >= 35)
+
+def _subb_turnover_execution_status_text(turnover, rebalanced, execution_happened, min_turnover=US_ROT_MIN_TURNOVER):
+    threshold = max(float(min_turnover), 1e-09)
+    if rebalanced:
+        if execution_happened:
+            return f' 🟢 超{min_turnover:.0%}阈值，已调仓\n'
+        return f' 🟢 超{min_turnover:.0%}阈值，等待执行\n'
+    if float(turnover or 0.0) > threshold:
+        return f' 🟢 超{min_turnover:.0%}阈值，**应调仓**\n'
+    return f' ❌ 低于{min_turnover:.0%}阈值，维持原仓位\n'
+
+def _is_tentative_subb_date(date):
+    rec_date = pd.Timestamp(date)
+    now_yr, now_wk, _ = beijing_now().isocalendar()
+    rec_yr, rec_wk, _ = rec_date.isocalendar()
+    return (rec_yr, rec_wk) == (now_yr, now_wk) and rec_date.dayofweek < 3
+
+def _filter_confirmed_records(records, bj_now=None, us_schedule=None):
+    if bj_now is None:
+        bj_now = beijing_now()
+    confirmed = []
+    for rec in records:
+        strat = rec.get('策略', '')
+        rec_date = rec.get('日期')
+        rec_time = rec.get('北京时间', '')
+        if rec.get('execution_at') is not None:
+            try:
+                execution_at = pd.Timestamp(rec['execution_at'])
+                now_at = pd.Timestamp(bj_now)
+                execution_at = execution_at.tz_localize('Asia/Shanghai') if execution_at.tzinfo is None else execution_at.tz_convert('Asia/Shanghai')
+                now_at = now_at.tz_localize('Asia/Shanghai') if now_at.tzinfo is None else now_at.tz_convert('Asia/Shanghai')
+                if pd.isna(execution_at):
+                    raise ValueError('missing execution timestamp')
+            except (TypeError, ValueError) as exc:
+                raise DataSchemaError(f'{strat}: invalid execution_at') from exc
+            if execution_at > now_at:
+                continue
+        is_cn = rec.get('strategy_family') in {'Sub-A', 'Sub-A-DK'} or strat in {'Sub-A', 'Sub-A-DK'}
+        if is_cn and (not _cn_record_close_confirmed(rec_date, bj_now, rec_time, rec.get('confirmation_not_before'))):
+            continue
+        is_subb = rec.get('strategy_family') == 'Sub-B' or strat in {'B7.8', 'B7.9'} or 'Sub-B' in strat
+        if is_subb and rec.get('execution_at') is None:
+            is_execution_day_record = rec.get('record_kind') == 'volreg' or rec.get('日期口径') == 'execution_day' or strat == 'Sub-B VolReg'
+            if is_execution_day_record:
+                if not _us_open_on_record_date_happened(rec_date, bj_now):
+                    continue
+            elif not _has_execution_happened(rec_date, 'US', bj_now, us_schedule):
+                continue
+        confirmed.append(rec)
+    return confirmed
+_CN_NUM = {'一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '半': 0.5}
+
+def _parse_cn_num(s):
+    s = s.strip()
+    if s.isdigit():
+        return int(s)
+    if s in _CN_NUM:
+        return _CN_NUM[s]
+    if '十' in s:
+        parts = s.split('十')
+        tens = _CN_NUM.get(parts[0], 1) if parts[0] else 1
+        ones = _CN_NUM.get(parts[1], 0) if len(parts) > 1 and parts[1] else 0
+        return tens * 10 + ones
+    return None
+
+_QUERY_RANGE_SEPARATOR = r'(?:到|至|—|–|-|~|～)'
+_QUERY_UNSUPPORTED_PERIOD = re.compile(
+    r'季度|财季|财年|[一二三四1234]季|[Qq][1-4]|[上下]半(?:年|年度)|'
+    r'[上中下]旬|(?:周|星期)[一二三四五六日天末]|[春夏秋冬]季'
+)
+_QUERY_DATE_TOKEN = re.compile(
+    r'(?<![A-Za-z0-9])(?:'
+    r'(?P<absolute>(?:19|20)\d{2})(?:'
+    r'(?P<compact>\d{2})(?!\d)|'
+    r'(?:[-/.]|年\s*)(?P<month>\d{1,2})(?!\d)'
+    r'(?:(?:[-/.]|月\s*)(?P<day>\d{1,2})(?!\d)[日号]?|月份?)?|年(?:度)?)?'
+    r'|(?P<relative>(?:最近|过去|近)\s*(?P<count>[一二两三四五六七八九十\d半]+)\s*个?\s*(?P<unit>[年月]))'
+    r'|(?P<named>今年|去年|前年|今天|(?<=[至到])现在|(?<=[至到])今(?!年))'
+    r'|(?P<short_month>\d{1,2})(?:[-/.月](?P<short_day>\d{1,2})[日号]?|月份?)'
+    r'|(?P<day_only>\d{1,2})[日号]'
+    r')(?!\d)'
+)
+
+
+def _query_date_bounds(token, now, anchor=None):
+    if token['relative']:
+        count = _parse_cn_num(token['count'])
+        if count is None or count <= 0:
+            raise ValueError('日期窗口长度无效。')
+        months = count * (12 if token['unit'] == '年' else 1)
+        return now - pd.DateOffset(months=max(1, int(months))), now
+    if token['named']:
+        if token['named'] in ('今天', '现在', '今'):
+            return now, now
+        year = now.year - {'今年': 0, '去年': 1, '前年': 2}[token['named']]
+        return pd.Timestamp(year, 1, 1), now if year == now.year else pd.Timestamp(year, 12, 31)
+    year = int(token['absolute']) if token['absolute'] else (anchor or now).year
+    month = token['compact'] or token['month'] or token['short_month']
+    day = token['day'] or token['short_day'] or token['day_only']
+    if token['day_only']:
+        if anchor is None:
+            raise ValueError('日期缺少年月。')
+        month = anchor.month
+    if month is None:
+        return pd.Timestamp(year, 1, 1), pd.Timestamp(year, 12, 31)
+    start = pd.Timestamp(year, int(month), int(day or 1))
+    return start, start if day else start + pd.offsets.MonthEnd(0)
+
+
+def _parse_query_date_clause(text, anchor):
+    text = re.sub(r'(?<=\d)\s+(?=[年月日号])|(?<=[年月至到])\s+(?=[\d今现])', '', text)
+    now = pd.Timestamp(beijing_now()).normalize()
+    dates = list(_QUERY_DATE_TOKEN.finditer(text))
+    if not dates:
+        if re.search(r'(?<!\d)(?:19|20)\d{2}(?:\d|[-/.年]\d)', text):
+            raise ValueError('日期格式无效。')
+        return None, None
+    first, last = dates[0], dates[-1]
+    if len(dates) > 2 or (len(dates) == 2 and
+            not re.fullmatch(r'\s*' + _QUERY_RANGE_SEPARATOR + r'\s*', text[first.end():last.start()])):
+        raise ValueError('日期表达式不明确，请用“至”连接区间，用“和”分隔多个区间。')
+    start, end = _query_date_bounds(first, now, anchor)
+    first_implicit = bool(first['short_month']) and anchor is None
+    tail = text[last.end():]
+    if len(dates) == 2:
+        _, end = _query_date_bounds(last, now, start)
+        if first_implicit and last['short_month']:
+            if end < start:
+                start = start.replace(year=start.year - 1)
+            elif end > now:
+                start = start.replace(year=start.year - 1)
+                _, end = _query_date_bounds(last, now, start)
+    else:
+        # A bare number after a month endpoint inherits its year (e.g. 2024-05 至 08).
+        abbreviated = re.match(r'\s*' + _QUERY_RANGE_SEPARATOR + r'\s*(\d{1,2})(?!\d)', tail)
+        if abbreviated and (first['month'] or first['compact']) and not first['day']:
+            end = pd.Timestamp(start.year, int(abbreviated[1]), 1) + pd.offsets.MonthEnd(0)
+            tail = tail[abbreviated.end():]
+        if first_implicit and end > now:
+            start = start.replace(year=start.year - 1)
+            end = start if first['short_day'] else start + pd.offsets.MonthEnd(0)
+        since = re.match(r'\s*(?:以来|开始至今|起(?:至今)?)', tail)
+        if since:
+            end = now
+            tail = tail[since.end():]
+    # Reject leftover temporal syntax before any report is emitted.
+    if (_QUERY_UNSUPPORTED_PERIOD.search(text)
+            or re.search(r'(?:截至|截止|[至到~～—–-])\s*$', text[:first.start()])
+            or re.match(r'\s*(?:[至到~～—–/.\d-]|[日号]|[以之][前后]|起|开始|[年月]?[初底末])', tail)
+            or re.match(r'[A-Za-z_]', tail) and (last['day'] or last['month'] or last['compact'])
+            or re.search(r'\d+\s*(?:个?月|年|日|号|季度|周)', tail)):
+        raise ValueError('日期表达式未完整识别，请明确起止年月日。')
+    if start > end:
+        raise ValueError('日期范围无效：开始日期晚于结束日期。')
+    return start, end
+
+
+def parse_date_range(text, *, anchor=None):
+    try:
+        return _parse_query_date_clause(text, anchor)
+    except (TypeError, ValueError, OverflowError) as exc:
+        if isinstance(exc, ValueError) and '日期' in str(exc):
+            raise
+        raise ValueError('日期无效，请使用有效的年月日或完整起止日期。') from exc
+
+
+def parse_all_date_ranges(text):
+    # Keep the user's order and validate all clauses before dispatching the first.
+    parts = re.split(r'以及|、|[；;]|(?<=[年月日号今\d])\s*(?:[，,]|和|与|及)\s*|'
+                     r'(?:和|与|及|[，,])\s*(?=(?:19|20)\d{2}|今年|去年|前年|最近|过去|近)', text)
+    if len(parts) > 1 and not parts[-1].strip():
+        raise ValueError('日期列表缺少最后一个区间。')
+    if parts and not _QUERY_DATE_TOKEN.search(parts[0]) and parts[0].strip() and len(parts) > 1:
+        # A polite introduction before a comma is not a requested period.
+        if re.match(r'^[^，,；;、]+[，,]', text) and not _QUERY_UNSUPPORTED_PERIOD.search(parts[0]):
+            parts = parts[1:]
+    ranges = []
+    anchor = None
+    has_month_anchor = False
+    for part in parts:
+        if not part.strip():
+            continue
+        tokens = list(_QUERY_DATE_TOKEN.finditer(part))
+        if tokens and tokens[0]['day_only'] and not has_month_anchor:
+            raise ValueError('日期缺少可继承的月份。')
+        start, end = parse_date_range(part.strip(), anchor=anchor)
+        ranges.append((start, end))
+        if tokens and end is not None:
+            last = tokens[-1]
+            has_month_anchor = bool(last['month'] or last['compact'] or last['short_month'] or last['day_only'])
+            if last['absolute'] or last['short_month'] or last['day_only'] or last['named'] in ('今年', '去年', '前年'):
+                anchor = end
+            else:
+                anchor = None
+    if len(ranges) > 1 and any(start is None for start, end in ranges) and any(start is not None for start, end in ranges):
+        raise ValueError('有日期区间未能辨识，请用明确日期分别列出。')
+    return list(dict.fromkeys((start, end) for start, end in ranges if start is not None))
+
+def _parse_json_from_response(text, required_fields=None):
+    m = re.search('```json\\s*(\\{.*?\\})\\s*```', text, re.DOTALL)
+    if m:
+        js = m.group(1).strip()
+    else:
+        m = re.search('\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}', text, re.DOTALL)
+        if not m:
+            raise ValueError('No JSON found')
+        js = m.group(0).strip()
+    parsed = json.loads(js)
+    if required_fields:
+        missing = set(required_fields) - set(parsed.keys())
+        if missing:
+            raise ValueError(f"Missing: {', '.join(missing)}")
+    return parsed
+
+def _call_llm_text_or_raise(prompt, context):
+    try:
+        response = poe.call('Grok-4.1-Fast-Non-Reasoning', prompt)
+        return response.text
+    except Exception as exc:
+        raise poe.BotError(f'{context} LLM解析失败: {_short_error(exc)}') from exc
+
+def _lookup_next_open(ticker, signal_date, us_open, us_close_df=None):
+    if us_open is None:
+        return None
+    exec_day = _next_session_day(signal_date)
+    return _lookup_open_on_date(ticker, exec_day, us_open)
+
+def _lookup_open_on_date(ticker, date, us_open):
+    if us_open is None:
+        return None
+    candidates = [ticker]
+    if ticker in PROD_PORTFOLIO:
+        candidates.append(PROD_PORTFOLIO[ticker].get('proxy', ticker))
+    if ticker in US_ROT_ASSETS:
+        candidates.append(US_ROT_ASSETS[ticker].get('proxy', ticker))
+    live = _ROT_PROXY_TO_LIVE.get(ticker)
+    if live:
+        candidates = [live] + candidates
+    if ticker == 'EMXC' and US_ROT_EMXC_BT_PROXY in us_open:
+        candidates = ['EMXC_raw_open', 'EMXC_native_open']
+    target = pd.Timestamp(date).normalize()
+    for t in candidates:
+        if t not in us_open:
+            continue
+        s = us_open[t]
+        idx = pd.DatetimeIndex(pd.to_datetime(s.index)).normalize()
+        matches = s.iloc[np.where(idx == target)[0]]
+        if len(matches) > 0:
+            value = pd.to_numeric(matches.iloc[0], errors='coerce')
+            if np.isfinite(value) and value > 0:
+                return float(value)
+    return None
+
+def _rebalance_price_text(price, label):
+    return f'${price:.2f}{label}' if price is not None and (not pd.isna(price)) else ''
+
+def extract_cn_rebalances(cn_result, cn_close, strategy_name='Sub-A', names=None, scale_threshold=0.001):
+    if names is None:
+        names = CN_NAMES
+    records = []
+    prev_holding = None
+    prev_weight = None
+    has_weight = 'weight' in cn_result.columns
+    for i in range(len(cn_result)):
+        holding = cn_result['holding'].iloc[i]
+        date = cn_result.index[i]
+        weight = cn_result['weight'].iloc[i] if has_weight else None
+        if prev_holding is not None and holding != prev_holding:
+            price_sell = cn_close.loc[date, prev_holding] if prev_holding != 'cash' and prev_holding in cn_close.columns else None
+            price_buy = cn_close.loc[date, holding] if holding != 'cash' and holding in cn_close.columns else None
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN'), 'strategy_family': 'Sub-A', 'record_kind': 'position', '策略': strategy_name, '卖出': names.get(prev_holding, prev_holding), '卖出价格': price_sell, '买入': names.get(holding, holding), '买入价格': price_buy})
+        elif has_weight and prev_weight is not None and (weight is not None) and (abs(weight - prev_weight) > scale_threshold):
+            h_name = names.get(holding, holding)
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN', 'close'), 'strategy_family': 'Sub-A', 'record_kind': 'scale', '策略': strategy_name, '卖出': f'杠杆 {prev_weight:.4f}x', '卖出价格': None, '买入': f'杠杆 {weight:.4f}x ({h_name})', '买入价格': None})
+        prev_holding = holding
+        prev_weight = weight
+    if strategy_name == 'Sub-A':
+        for record in records:
+            earliest = pd.Timestamp(record['日期'], tz='Asia/Shanghai') + CN_BOND_SESSION_END
+            record.update({
+                '北京时间': f'{earliest:%Y-%m-%d} 收盘纸面计价（最早{earliest:%H:%M}起核验）',
+                'confirmation_not_before': earliest,
+                '信号观察': '股票15:00、国债15:30收盘后比较全池',
+                '价格确认': f'{earliest:%Y-%m-%d %H:%M}起，待各源日线核验',
+                '模型计价': '当日各指数收盘值，实际成交时刻未核验',
+            })
+    return records
+
+def extract_v78_newa_rebalances(new_result, cn_close=None, since_date=None):
+    records = []
+    if new_result is None or len(new_result) == 0:
+        return records
+    for dt, row in new_result.iterrows():
+        if since_date is not None and pd.Timestamp(dt) < pd.Timestamp(since_date):
+            continue
+        if not bool(row.get('is_signal', False)):
+            continue
+        old_h = str(row.get('holding', 'cash') or 'cash')
+        new_h = str(row.get('target', old_h) or old_h)
+        try:
+            old_w = float(row.get('weight', 0.0) or 0.0)
+        except Exception:
+            old_w = 0.0
+        try:
+            new_w = float(row.get('target_weight', old_w) or old_w)
+        except Exception:
+            new_w = old_w
+        if old_h == new_h and abs(old_w - new_w) <= 0.0001:
+            continue
+        sell_price = cn_close.loc[dt, old_h] if cn_close is not None and old_h != 'cash' and (dt in cn_close.index) and (old_h in cn_close.columns) else None
+        buy_price = cn_close.loc[dt, new_h] if cn_close is not None and new_h != 'cash' and (dt in cn_close.index) and (new_h in cn_close.columns) else None
+        records.append({'日期': pd.Timestamp(dt).strftime('%Y-%m-%d'), '北京时间': beijing_time_str(dt, 'CN'), 'strategy_family': 'Sub-A', '策略': f'{V78_SUBA_NEW_LABEL} ({V78_SUBA_NEW_TV10_WEIGHT:.0%})', '卖出': f'{CN_NAMES.get(old_h, old_h)} {old_w:.2f}x' if old_w > 1e-12 else '—', '卖出价格': sell_price, '买入': f'{CN_NAMES.get(new_h, new_h)} {new_w:.2f}x' if new_w > 1e-12 else 'Cash', '买入价格': buy_price})
+    records.sort(key=lambda item: item.get('日期', ''))
+    return records
+
+def extract_v78_suba_rebalances(v78_suba_result, cn_close=None, since_date=None):
+    records = []
+    flag_columns = [name for name in ('suba_volume_unresolved', 'suba_volume_unavailable') if name in v78_suba_result]
+    if flag_columns:
+        unresolved = v78_suba_result[flag_columns].fillna(True).astype(bool).any(axis=1)
+        # A change of holdings or scale refers to both sides of the transition.
+        uncertain_dates = v78_suba_result.index[unresolved | unresolved.shift(1, fill_value=False)]
+        if len(uncertain_dates) == len(v78_suba_result):
+            return []
+    else:
+        uncertain_dates = pd.DatetimeIndex([])
+    v77_component = v78_suba_result.attrs.get('v78_suba_v77')
+    new_component = v78_suba_result.attrs.get('v78_suba_new')
+    if v78_suba_result.attrs.get('suba_production_mode') == 'old_a_only_simplified' and v77_component is None and (new_component is None):
+        records = extract_cn_rebalances(v78_suba_result, cn_close, strategy_name='Sub-A', scale_threshold=1e-12)
+        if since_date is not None:
+            records = [record for record in records if pd.Timestamp(record['日期']) >= pd.Timestamp(since_date)]
+        return [item for item in records if pd.Timestamp(item['日期']) not in uncertain_dates]
+    if v77_component is not None and len(v77_component) > 0:
+        component_records = extract_cn_rebalances(v77_component, cn_close, strategy_name=f'V7.7A ({V78_SUBA_V77_WEIGHT:.0%})')
+        for record in component_records:
+            record['策略'] = f'V7.7A ({V78_SUBA_V77_WEIGHT:.0%})'
+            if since_date is not None:
+                try:
+                    if pd.Timestamp(record.get('日期')) < pd.Timestamp(since_date):
+                        continue
+                except Exception:
+                    pass
+            records.append(record)
+    records.extend(extract_v78_newa_rebalances(new_component, cn_close=cn_close, since_date=since_date))
+    records.sort(key=lambda item: item.get('日期', ''))
+    return [item for item in records if pd.Timestamp(item['日期']) not in uncertain_dates]
+
+def _dk_holding_prices(holding, cn_dk_close, date):
+    if cn_dk_close is None or date not in cn_dk_close.index:
+        return None
+    _idx_map = {v['col'].replace('DK_', ''): v['col'] for k, v in CN_DK_INDICES.items()}
+    _idx_map.update({k: v['col'] for k, v in CN_DK_INDICES.items()})
+    h = str(holding)
+    import re as _re
+    h_clean = _re.sub('_-?\\d+$', '', h)
+    parts = [p.strip() for p in h_clean.split('/') if p.strip()]
+    prices = []
+    for p in parts:
+        col = _idx_map.get(p)
+        if col and col in cn_dk_close.columns:
+            val = cn_dk_close.loc[date, col]
+            if not pd.isna(val):
+                prices.append(f'{p} {val:.2f}')
+    return '; '.join(prices) if prices else None
+
+def parse_dk_holding(holding):
+    if not holding or str(holding) in ('none_0', 'none', 'None'):
+        return None
+    h = str(holding)
+    try:
+        pair_part, dir_part = h.rsplit('_', 1)
+        direction = int(dir_part)
+    except (ValueError, IndexError):
+        return None
+    parts = pair_part.split('/')
+    if len(parts) != 2:
+        return None
+    a, b = (parts[0], parts[1])
+    if direction == 1:
+        long_leg, short_leg = (a, b)
+    elif direction == -1:
+        long_leg, short_leg = (b, a)
+    else:
+        return None
+    return {'pair_a': a, 'pair_b': b, 'direction': direction, 'long_leg': long_leg, 'short_leg': short_leg}
+
+def _dk_leg_name(short_name):
+    if short_name in CN_DK_INDEX_NAMES:
+        return CN_DK_INDEX_NAMES[short_name]
+    col = f'DK_{short_name}'
+    if col in CN_DK_NAMES:
+        return CN_DK_NAMES[col]
+    return short_name
+
+def _dk_pair_display(pair):
+    return '/'.join((_dk_leg_name(p) for p in str(pair).split('/'))) if pair != 'none' else 'none'
+
+def _dk_top_pair_whitelist_warning(pair, label='Top-1'):
+    return ''
+
+def _dk_volume_warning_text(active, label, ma, days):
+    if active:
+        return f'🔴 **成交额警示触发:** {label}成交额连续低于MA{ma}满{days}天；只进警示板，不改变ADK仓位、收益和净值曲线。\n'
+    return f'🟢 **成交额警示未触发:** {label}成交额未连续低于MA{ma}满{days}天；仅提示，不改变ADK仓位。\n'
+
+def _dk_pos_str(holding_str):
+    if holding_str is not None and '|' in str(holding_str):
+        parts = []
+        for item in str(holding_str).split('|'):
+            label, sep, raw_holding = item.partition(':')
+            formatted = _dk_pos_str(raw_holding if sep else item)
+            if formatted == '空仓':
+                continue
+            prefix = f'{label}: ' if sep else ''
+            parts.append(f'{prefix}{formatted}')
+        if parts:
+            return ' | '.join(parts)
+    info = parse_dk_holding(holding_str)
+    if not info:
+        return '空仓'
+    return f"做多 {_dk_leg_name(info['long_leg'])} / 做空 {_dk_leg_name(info['short_leg'])}"
+
+def _series_value_at(series, date, pos):
+    if series is None or len(series) == 0:
+        return np.nan
+    try:
+        if date in series.index:
+            val = series.loc[date]
+            if isinstance(val, pd.Series):
+                val = val.iloc[-1]
+            return float(val)
+    except Exception:
+        pass
+    try:
+        if -len(series) <= pos < len(series):
+            return float(series.iloc[pos])
+    except Exception:
+        pass
+    return np.nan
+
+def _suba_abs_mom_pass(abs_val):
+    return True
+
+def _suba_filter_status(bm, r2_val, abs_val):
+    if pd.notna(bm) and float(bm) <= 0:
+        return '动量≤0 ⛔'
+    if pd.isna(r2_val):
+        return 'R²=N/A ❌'
+    if float(r2_val) < CN_R2_THRESHOLD:
+        return f'R²={float(r2_val):.3f} ❌'
+    return f'R²={float(r2_val):.3f} ✅'
+
+def _format_suba_abs_mom(abs_val):
+    return f'{float(abs_val):+.1%}' if pd.notna(abs_val) else '—'
+
+def _build_suba_momentum_rank_rows(cn_result, bias_mom, r2, codes, abs_mom=None, current_idx=-1, effective_cutoff_idx=None):
+    if cn_result is None or len(cn_result) == 0:
+        return ([], {'effective_date': None, 'current_date': None, 'effective_holding': 'cash'})
+    n = len(cn_result)
+    current_pos = current_idx if current_idx >= 0 else n + current_idx
+    current_pos = int(np.clip(current_pos, 0, n - 1))
+    if effective_cutoff_idx is None:
+        cutoff_pos = current_pos
+    else:
+        cutoff_pos = effective_cutoff_idx if effective_cutoff_idx >= 0 else n + effective_cutoff_idx
+        cutoff_pos = int(np.clip(cutoff_pos, 0, current_pos))
+    if 'holding' in cn_result.columns:
+        holding_s = cn_result['holding'].fillna('cash').astype(str)
+        effective_holding = holding_s.iloc[cutoff_pos]
+        effective_pos = cutoff_pos
+        while effective_pos > 0 and holding_s.iloc[effective_pos - 1] == effective_holding:
+            effective_pos -= 1
+    else:
+        effective_pos = cutoff_pos
+    current_date = cn_result.index[current_pos]
+    effective_date = cn_result.index[effective_pos]
+    effective_holding = cn_result['holding'].iloc[effective_pos] if 'holding' in cn_result.columns else 'cash'
+    rows = []
+    for code in codes:
+        bm_current = _series_value_at(bias_mom.get(code), current_date, current_pos)
+        if np.isnan(bm_current):
+            continue
+        r2_current = _series_value_at(r2.get(code), current_date, current_pos)
+        bm_effective = _series_value_at(bias_mom.get(code), effective_date, effective_pos)
+        r2_effective = _series_value_at(r2.get(code), effective_date, effective_pos)
+        abs_current = _series_value_at(abs_mom.get(code), current_date, current_pos) if abs_mom else np.nan
+        abs_effective = _series_value_at(abs_mom.get(code), effective_date, effective_pos) if abs_mom else np.nan
+        status = _suba_filter_status(bm_current, r2_current, abs_current)
+        rows.append({'code': code, 'asset_name': CN_NAMES.get(code, code), 'marker': '当前已生效' if code == effective_holding else '', 'effective_momentum': bm_effective, 'current_momentum': bm_current, 'effective_r2': r2_effective, 'current_r2': r2_current, 'effective_abs_mom': abs_effective, 'current_abs_mom': abs_current, 'status': status})
+    rows.sort(key=lambda row: row['current_momentum'], reverse=True)
+    for rank, row in enumerate(rows, 1):
+        row['rank'] = rank
+    return (rows, {'effective_date': effective_date, 'current_date': current_date, 'effective_holding': effective_holding})
+
+def _v78_suba_position_text(row, mode='holding'):
+    if mode == 'target':
+        v77_h = row.get('v78_suba_v77_target', row.get('v78_suba_v77_holding', 'cash'))
+        new_h = row.get('v78_suba_new_target', row.get('v78_suba_new_holding', 'cash'))
+        v77_weight_col = 'v78_suba_v77_target_weight'
+        new_weight_col = 'v78_suba_new_target_weight'
+    else:
+        v77_h = row.get('v78_suba_v77_holding', 'cash')
+        new_h = row.get('v78_suba_new_holding', 'cash')
+        v77_weight_col = 'v78_suba_v77_weight'
+        new_weight_col = 'v78_suba_new_weight'
+    try:
+        v77_w = float(row.get(v77_weight_col, row.get('v78_suba_v77_weight', 0.0)) or 0.0)
+    except Exception:
+        v77_w = 0.0
+    try:
+        new_w = float(row.get(new_weight_col, row.get('v78_suba_new_weight', 0.0)) or 0.0)
+    except Exception:
+        new_w = 0.0
+    parts = []
+    if abs(v77_w) > 1e-12:
+        parts.append(f'V7.7A: {CN_NAMES.get(v77_h, v77_h)} {V78_SUBA_V77_WEIGHT * v77_w:.2f}x')
+    if abs(new_w) > 1e-12:
+        parts.append(f'NewA: {CN_NAMES.get(new_h, new_h)} {V78_SUBA_NEW_TV10_WEIGHT * new_w:.2f}x')
+    return ' | '.join(parts) if parts else 'Cash'
+
+def _v78_suba_pre_trade_position_text(cn_result, pos):
+    row = cn_result.iloc[pos]
+    v77_h = row.get('v78_suba_v77_holding', 'cash')
+    v77_w_raw = row.get('v78_suba_v77_weight', 0.0)
+    new_h = row.get('v78_suba_new_holding', 'cash')
+    new_w_raw = row.get('v78_suba_new_weight', 0.0)
+    try:
+        v77_w = float(v77_w_raw or 0.0)
+    except Exception:
+        v77_w = 0.0
+    try:
+        new_w = float(new_w_raw or 0.0)
+    except Exception:
+        new_w = 0.0
+    parts = []
+    if abs(v77_w) > 1e-12:
+        parts.append(f'V7.7A: {CN_NAMES.get(v77_h, v77_h)} {V78_SUBA_V77_WEIGHT * v77_w:.2f}x')
+    if abs(new_w) > 1e-12:
+        parts.append(f'NewA: {CN_NAMES.get(new_h, new_h)} {V78_SUBA_NEW_TV10_WEIGHT * new_w:.2f}x')
+    return ' | '.join(parts) if parts else 'Cash'
+
+def _suba_signal_display_state(cn_result, display_idx=-1):
+    if cn_result is None or len(cn_result) == 0:
+        return {'display_idx': None, 'display_date': None, 'is_signal': False, 'current_holding': 'cash', 'target_holding': 'cash', 'post_signal_holding': 'cash', 'last_signal_date': None}
+    n = len(cn_result)
+    pos = display_idx if display_idx >= 0 else n + display_idx
+    pos = int(np.clip(pos, 0, n - 1))
+    display_date = cn_result.index[pos]
+    post_holding = str(cn_result['holding'].iloc[pos]) if 'holding' in cn_result.columns else 'cash'
+    is_signal = bool(cn_result['is_signal'].iloc[pos]) if 'is_signal' in cn_result.columns else False
+    if is_signal and pos > 0 and ('holding' in cn_result.columns):
+        current_holding = str(cn_result['holding'].iloc[pos - 1])
+    else:
+        current_holding = post_holding
+    target_holding = post_holding
+    if is_signal and 'target' in cn_result.columns:
+        raw_target = cn_result['target'].iloc[pos]
+        if raw_target is not None and (not pd.isna(raw_target)):
+            target_holding = str(raw_target)
+    hist = cn_result.iloc[:pos + 1]
+    if 'is_signal' in hist.columns:
+        past = hist[hist['is_signal'] == True]
+        last_signal_date = past.index[-1] if len(past) > 0 else display_date
+    else:
+        last_signal_date = display_date
+    return {'display_idx': pos, 'display_date': display_date, 'is_signal': is_signal, 'current_holding': current_holding, 'target_holding': target_holding, 'post_signal_holding': post_holding, 'current_display': _v78_suba_pre_trade_position_text(cn_result, pos) if 'v78_suba_v77_holding' in cn_result.columns else CN_NAMES.get(current_holding, current_holding), 'target_display': _v78_suba_position_text(cn_result.iloc[pos], mode='target') if 'v78_suba_v77_holding' in cn_result.columns else CN_NAMES.get(target_holding, target_holding), 'post_display': _v78_suba_position_text(cn_result.iloc[pos], mode='target') if 'v78_suba_v77_holding' in cn_result.columns else CN_NAMES.get(post_holding, post_holding), 'last_signal_date': last_signal_date}
+
+def _build_dk_rank_rows(cn_dk_result, use_shifted=True, top_n=3):
+    signals_df = cn_dk_result.attrs.get('signals_df')
+    pair_data = cn_dk_result.attrs.get('pair_data', {})
+    if signals_df is None or len(cn_dk_result) == 0:
+        return []
+    score_df = signals_df.shift(1) if use_shifted else signals_df
+    date = cn_dk_result.index[-1]
+    if date not in score_df.index:
+        return []
+    row = score_df.loc[date].dropna().sort_values(ascending=False).head(top_n)
+    rows = []
+    for rank, (pair, score_used) in enumerate(row.items(), 1):
+        direction = 0
+        live_score = np.nan
+        if pair in signals_df.columns and date in signals_df.index:
+            live_score = signals_df.loc[date, pair]
+        pdata = pair_data.get(pair)
+        if pdata is not None and date in pdata.index:
+            if use_shifted and 'position' in pdata.columns:
+                direction_series = pdata['position']
+            elif 'signal' in pdata.columns:
+                direction_series = pdata['signal'].shift(1) if use_shifted else pdata['signal']
+            else:
+                direction_series = None
+            if direction_series is not None:
+                sig_val = direction_series.loc[date]
+                direction = int(sig_val) if not pd.isna(sig_val) else 0
+        holding_code = f'{pair}_{direction}' if pair != 'none' and direction != 0 else 'none_0'
+        rows.append({'rank': rank, 'pair': pair, 'pair_display': _dk_pair_display(pair), 'score_used': float(score_used) if not pd.isna(score_used) else np.nan, 'score_live': float(live_score) if not pd.isna(live_score) else np.nan, 'direction': direction, 'position_text': _dk_pos_str(holding_code)})
+    return rows
+
+def _build_dk_rank_rows_at(cn_dk_result, idx=-1, use_shifted=True, top_n=3):
+    signals_df = cn_dk_result.attrs.get('signals_df') if cn_dk_result is not None else None
+    pair_data = cn_dk_result.attrs.get('pair_data', {}) if cn_dk_result is not None else {}
+    if signals_df is None or cn_dk_result is None or len(cn_dk_result) == 0:
+        return []
+    date = cn_dk_result.index[idx]
+    score_df = signals_df.shift(1) if use_shifted else signals_df
+    if date not in score_df.index:
+        return []
+    row = score_df.loc[date].dropna().sort_values(ascending=False).head(top_n)
+    fallback_direction = 0
+    try:
+        result_row = cn_dk_result.iloc[idx]
+        fallback_direction = int(result_row.get('direction', 0) or 0)
+    except Exception:
+        result_row = None
+    rows = []
+    for rank, (pair, score_used) in enumerate(row.items(), 1):
+        direction = 0
+        live_score = np.nan
+        if pair in signals_df.columns and date in signals_df.index:
+            live_score = signals_df.loc[date, pair]
+        pdata = pair_data.get(pair)
+        if pdata is not None and date in pdata.index:
+            if use_shifted and 'position' in pdata.columns:
+                direction_series = pdata['position']
+            elif 'signal' in pdata.columns:
+                direction_series = pdata['signal'].shift(1) if use_shifted else pdata['signal']
+            else:
+                direction_series = None
+            if direction_series is not None:
+                sig_val = direction_series.loc[date]
+                direction = int(sig_val) if not pd.isna(sig_val) else 0
+        if direction == 0 and result_row is not None and (str(result_row.get('top_pair', '')) == str(pair)):
+            direction = fallback_direction
+        holding_code = f'{pair}_{direction}' if pair != 'none' and direction != 0 else 'none_0'
+        rows.append({'rank': rank, 'pair': pair, 'pair_display': _dk_pair_display(pair), 'score_used': float(score_used) if not pd.isna(score_used) else np.nan, 'score_live': float(live_score) if not pd.isna(live_score) else np.nan, 'direction': direction, 'position_text': _dk_pos_str(holding_code)})
+    return rows
+
+def _split_dk_history_trades(dk_period):
+    if dk_period is None or len(dk_period) == 0:
+        return (dk_period, dk_period)
+    idx = dk_period.index
+    holding_s = dk_period.get('holding', pd.Series('none_0', index=idx)).fillna('none_0').astype(str)
+    active_mask = holding_s.map(lambda h: parse_dk_holding(h) is not None)
+    effective_holding = holding_s.where(active_mask, 'none_0')
+    position_mask = effective_holding.ne(effective_holding.shift()).fillna(False)
+    if len(position_mask) > 0:
+        position_mask.iloc[0] = False
+    if 'scale_rebalanced' in dk_period.columns:
+        scale_rebalanced = dk_period.get('scale_rebalanced', pd.Series(False, index=idx)).fillna(False).astype(bool)
+    else:
+        weight_s = pd.to_numeric(dk_period.get('weight', pd.Series(1.0, index=idx)), errors='coerce').fillna(0.0)
+        effective_weight = weight_s.where(active_mask, 0.0)
+        scale_rebalanced = effective_weight.diff().abs().fillna(0.0) > 0.001
+        if len(scale_rebalanced) > 0:
+            scale_rebalanced.iloc[0] = False
+    scale_mask = scale_rebalanced & ~position_mask
+    return (dk_period[position_mask], dk_period[scale_mask])
+
+def extract_dk_rebalances(dk_result, strategy_name='Sub-A-DK', cn_dk_close=None):
+    records = []
+    prev_holding = None
+    prev_weight = None
+    has_weight = 'weight' in dk_result.columns
+    for i in range(len(dk_result)):
+        date = dk_result.index[i]
+        holding = dk_result['holding'].iloc[i]
+        weight = dk_result['weight'].iloc[i] if has_weight else None
+        old_active = parse_dk_holding(prev_holding) is not None
+        new_active = parse_dk_holding(holding) is not None
+        prev_effective_holding = str(prev_holding) if old_active else 'none_0'
+        new_effective_holding = str(holding) if new_active else 'none_0'
+        position_changed = prev_holding is not None and new_effective_holding != prev_effective_holding
+        prev_eff_weight = float(prev_weight) if old_active and prev_weight is not None and pd.notna(prev_weight) else 0.0
+        new_eff_weight = float(weight) if new_active and weight is not None and pd.notna(weight) else 0.0
+        scale_changed = has_weight and prev_weight is not None and (abs(new_eff_weight - prev_eff_weight) > 0.001)
+        execution_date = dk_result.index[i - 1] if i > 0 else date
+        if position_changed:
+            old_info = parse_dk_holding(prev_holding)
+            new_info = parse_dk_holding(holding)
+            if old_info and new_info:
+                sell_text = f"平多{_dk_leg_name(old_info['long_leg'])}/平空{_dk_leg_name(old_info['short_leg'])}"
+                buy_text = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
+            elif old_info and (not new_info):
+                sell_text = f"平多{_dk_leg_name(old_info['long_leg'])}/平空{_dk_leg_name(old_info['short_leg'])}"
+                buy_text = '转现金 / 零敞口'
+            elif not old_info and new_info:
+                sell_text = '现金 / 零敞口'
+                buy_text = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
+            else:
+                sell_text = f'平仓 {prev_holding}'
+                buy_text = f'开仓 {holding}'
+            sell_p = _dk_holding_prices(prev_holding, cn_dk_close, execution_date)
+            buy_p = _dk_holding_prices(holding, cn_dk_close, execution_date)
+            records.append({'日期': execution_date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(execution_date, 'CN', 'close'), 'strategy_family': 'Sub-A-DK', 'record_kind': 'position', '策略': strategy_name, '卖出': sell_text, '卖出价格': sell_p, '买入': buy_text, '买入价格': buy_p})
+        elif scale_changed:
+            new_info = parse_dk_holding(holding)
+            if new_info:
+                h_name = f"做多{_dk_leg_name(new_info['long_leg'])}/做空{_dk_leg_name(new_info['short_leg'])}"
+            else:
+                h_name = CN_DK_NAMES.get(holding, holding)
+            h_prices = _dk_holding_prices(holding, cn_dk_close, execution_date)
+            records.append({'日期': execution_date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(execution_date, 'CN', 'close'), 'strategy_family': 'Sub-A-DK', 'record_kind': 'scale', '策略': strategy_name, '卖出': f'杠杆 {prev_eff_weight:.2f}x', '卖出价格': h_prices, '买入': f'杠杆 {new_eff_weight:.2f}x ({h_name})', '买入价格': h_prices})
+        prev_holding = holding
+        prev_weight = weight
+    return records
+
+def extract_v78_adk_rebalances(v78_adk_result, cn_dk_close=None, since_date=None):
+    records = []
+    if _v80_adk_is_new_only(v78_adk_result):
+        if v78_adk_result.empty:
+            return records
+        start = v78_adk_result.index.searchsorted(pd.Timestamp(since_date)) if since_date is not None else 0
+        close_meta = getattr(cn_dk_close, 'attrs', {})
+        confirmed = close_meta.get('cn_confirmed_close')
+        if confirmed is None and close_meta.get('cn_unconfirmed_snapshot') and len(cn_dk_close):
+            confirmed = cn_dk_close.index[-2] if len(cn_dk_close) > 1 else pd.Timestamp.min
+        dates = v78_adk_result.index[start:]
+        if confirmed is not None:
+            dates = dates[dates <= pd.Timestamp(confirmed)]
+        for date in dates:
+            for row in _v79_adk_leg_execution_rows(v78_adk_result, date):
+                if not row['changed'] or row['current_pair'] == row['target_pair'] == 'none':
+                    continue
+                records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'CN', 'close'),
+                                'strategy_family': 'Sub-A-DK', 'record_kind': 'close_target', '日期口径': 'signal_day',
+                                '策略': f"{row['leg']}（收盘信号）", '卖出': '当前 ' + row['current_final_text'],
+                                '买入': '收盘目标 ' + row['target_final_text'], '卖出价格': None, '买入价格': None,
+                                '说明': '按当日确认收盘计算的模型目标，成交待独立核实。'})
+        return records
+    components = [(label, component_weight, component) for label, _scope, component_weight, component, _is_new in _v80_adk_component_specs(v78_adk_result)]
+    for label, component_weight, component in components:
+        if component is None or len(component) == 0:
+            continue
+        component_records = extract_dk_rebalances(component, strategy_name=f'{label} ({component_weight:.0%})', cn_dk_close=cn_dk_close)
+        for record in component_records:
+            record['策略'] = f'{label} ({component_weight:.0%})'
+            if since_date is not None:
+                try:
+                    record_date = record.get('日期')
+                    if pd.Timestamp(record_date) < pd.Timestamp(since_date):
+                        continue
+                except Exception:
+                    pass
+            records.append(record)
+    records.sort(key=lambda item: item.get('日期', ''))
+    return records
+
+def extract_us_rot_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    records = []
+    assets = sorted(_weight_columns_assets(us_rot_result, prefixes=('w_', 'actual_w_', 'target_w_', 'model_w_', 'model_target_w_', 'effective_w_')))
+    us_schedule = _coerce_session_index(us_open)
+    if us_schedule is None and us_rot_close is not None:
+        us_schedule = _coerce_session_index(us_rot_close)
+    start_i = 0
+    prev_model_weights = None
+    if since_date is not None and len(us_rot_result) > 0:
+        since_ts = pd.Timestamp(since_date)
+        start_i = int(us_rot_result.index.searchsorted(since_ts, side='left'))
+        if start_i > 0:
+            prev_row = us_rot_result.iloc[start_i - 1]
+            prev_model_weights = _row_prefixed_weights(prev_row, 'model_target_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _row_prefixed_weights(prev_row, 'target_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _row_prefixed_weights(prev_row, 'actual_w_', assets)
+            if not any((abs(v) > 1e-12 for v in prev_model_weights.values())):
+                prev_model_weights = _row_prefixed_weights(prev_row, 'w_', assets)
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        date = us_rot_result.index[i]
+        current_actual = _row_prefixed_weights(row, 'actual_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_actual.values())):
+            current_actual = _row_prefixed_weights(row, 'w_', assets)
+        current_target = _row_prefixed_weights(row, 'model_target_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_target.values())):
+            current_target = _row_prefixed_weights(row, 'target_w_', assets)
+        if not any((abs(v) > 1e-12 for v in current_target.values())):
+            current_target = current_actual
+        volreg_action = str(row.get('volreg_action', '') or '')
+        is_model_rebalanced = _subb_model_rebalanced_value(row)
+        if not is_model_rebalanced and (bool(row.get('volreg_cash', False)) or bool(row.get('volreg_transition', False)) or volreg_action in ('enter_cash', 'exit_cash', 'enter_defense', 'exit_defense')):
+            prev_model_weights = current_target
+            continue
+        if prev_model_weights is None:
+            prev_model_weights = {'BIL': 1.0}
+        if not is_model_rebalanced:
+            prev_model_weights = current_target
+            continue
+        old_weights = prev_model_weights
+        new_weights = current_target
+        sells, buys = ([], [])
+        sell_prices, buy_prices = ([], [])
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0)
+            prev = old_weights.get(a, 0)
+            diff = cur - prev
+            if abs(diff) > 0.005:
+                if a == 'CASH':
+                    if diff < 0:
+                        sells.append(f'CASH {prev:.1%}->{cur:.1%}')
+                    else:
+                        buys.append(f'CASH {prev:.1%}->{cur:.1%}')
+                    continue
+                live = _ROT_PROXY_TO_LIVE.get(a, a)
+                _p = _lookup_next_open(a, date, us_open)
+                _p_label = '开'
+                if _p is None and us_rot_close is not None and (date in us_rot_close.index):
+                    if live in us_rot_close.columns:
+                        _p = us_rot_close.loc[date, live]
+                    elif a in us_rot_close.columns:
+                        _p = us_rot_close.loc[date, a]
+                    _p_label = '收'
+                _p_str = _rebalance_price_text(_p, _p_label)
+                if diff < 0:
+                    sells.append(f'{live} {prev:.1%}->{cur:.1%}')
+                    if _p_str:
+                        sell_prices.append(f'{live} {_p_str}')
+                elif diff > 0:
+                    buys.append(f'{live} {prev:.1%}->{cur:.1%}')
+                    if _p_str:
+                        buy_prices.append(f'{live} {_p_str}')
+        if sells or buys:
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': us_exec_time_str(date, us_schedule), '策略': 'Sub-B', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None})
+        prev_model_weights = current_target
+    return records
+
+def extract_subb_volreg_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    if 'subb_volreg_execution' in us_rot_result.columns:
+        return _v80_subb_account_rebalance_records(us_rot_result, us_rot_close, us_open, since_date, event_kind='volreg')
+    records = []
+    if 'volreg_transition' not in us_rot_result.columns and 'volreg_rebalanced' not in us_rot_result.columns:
+        return records
+    assets = sorted(_weight_columns_assets(us_rot_result, prefixes=('effective_w_', 'w_')))
+    start_i = 0
+    if since_date is not None and len(us_rot_result) > 0:
+        start_i = int(us_rot_result.index.searchsorted(pd.Timestamp(since_date), side='left'))
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        is_transition = bool(row.get('volreg_transition', row.get('volreg_rebalanced', False)))
+        if not is_transition:
+            continue
+        date = us_rot_result.index[i]
+        new_weights = _row_prefixed_weights(row, 'effective_w_', assets)
+        if not any((abs(v) > 1e-12 for v in new_weights.values())):
+            new_weights = _row_prefixed_weights(row, 'w_', assets)
+        if i > 0:
+            prev_row = us_rot_result.iloc[i - 1]
+            old_weights = _row_prefixed_weights(prev_row, 'effective_w_', assets)
+            if not any((abs(v) > 1e-12 for v in old_weights.values())):
+                old_weights = _row_prefixed_weights(prev_row, 'w_', assets)
+        else:
+            old_weights = {}
+        sells, buys = ([], [])
+        sell_prices, buy_prices = ([], [])
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0)
+            prev = old_weights.get(a, 0)
+            diff = cur - prev
+            if abs(diff) <= 0.005:
+                continue
+            if a == 'CASH':
+                if diff < 0:
+                    sells.append(f'CASH {prev:.1%}->{cur:.1%}')
+                else:
+                    buys.append(f'CASH {prev:.1%}->{cur:.1%}')
+                continue
+            live = _ROT_PROXY_TO_LIVE.get(a, a)
+            _p = _lookup_open_on_date(a, date, us_open)
+            _p_label = '开'
+            if _p is None and us_rot_close is not None and (date in us_rot_close.index):
+                if live in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, live]
+                elif a in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, a]
+                _p_label = '收'
+            _p_str = _rebalance_price_text(_p, _p_label)
+            if diff < 0:
+                sells.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    sell_prices.append(f'{live} {_p_str}')
+            elif diff > 0:
+                buys.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    buy_prices.append(f'{live} {_p_str}')
+        if sells or buys:
+            action = row.get('volreg_action', '')
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'US', 'open'), '策略': 'Sub-B VolReg', '日期口径': 'execution_day', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None, '说明': action})
+    return records
+
+def extract_subb_dbc_profit_guard_rebalances(us_rot_result, us_rot_close=None, us_open=None, since_date=None):
+    records = []
+    if us_rot_result is None or len(us_rot_result) == 0 or 'dbc_profit_guard_rebalanced' not in us_rot_result.columns:
+        return records
+    assets = sorted(_weight_columns_assets(us_rot_result, prefixes=('pre_dbc_profit_guard_w_', 'effective_w_', 'w_')))
+    start_i = 0
+    if since_date is not None and len(us_rot_result) > 0:
+        start_i = int(us_rot_result.index.searchsorted(pd.Timestamp(since_date), side='left'))
+    for i in range(start_i, len(us_rot_result)):
+        row = us_rot_result.iloc[i]
+        guard_turnover = row.get('dbc_profit_guard_turnover', 0.0)
+        try:
+            guard_turnover = float(guard_turnover) if pd.notna(guard_turnover) else 0.0
+        except Exception:
+            guard_turnover = 0.0
+        is_rebalanced = bool(row.get('dbc_profit_guard_rebalanced', False)) or guard_turnover > 1e-09
+        if not is_rebalanced:
+            continue
+        date = us_rot_result.index[i]
+        old_weights = _row_prefixed_weights(row, 'pre_dbc_profit_guard_w_', assets)
+        if not any((abs(v) > 1e-12 for v in old_weights.values())) and i > 0:
+            prev_row = us_rot_result.iloc[i - 1]
+            old_weights = _row_prefixed_weights(prev_row, 'effective_w_', assets)
+            if not any((abs(v) > 1e-12 for v in old_weights.values())):
+                old_weights = _row_prefixed_weights(prev_row, 'w_', assets)
+        new_weights = _row_prefixed_weights(row, 'effective_w_', assets)
+        if not any((abs(v) > 1e-12 for v in new_weights.values())):
+            new_weights = _row_prefixed_weights(row, 'w_', assets)
+        sells, buys = ([], [])
+        sell_prices, buy_prices = ([], [])
+        for a in sorted(set(list(new_weights.keys()) + list(old_weights.keys()))):
+            cur = new_weights.get(a, 0.0)
+            prev = old_weights.get(a, 0.0)
+            diff = cur - prev
+            if abs(diff) <= 0.005:
+                continue
+            if a == 'CASH':
+                if diff < 0:
+                    sells.append(f'CASH {prev:.1%}->{cur:.1%}')
+                else:
+                    buys.append(f'CASH {prev:.1%}->{cur:.1%}')
+                continue
+            live = _ROT_PROXY_TO_LIVE.get(a, a)
+            _p = _lookup_open_on_date(a, date, us_open)
+            _p_label = '开'
+            if _p is None and us_rot_close is not None and (date in us_rot_close.index):
+                if live in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, live]
+                elif a in us_rot_close.columns:
+                    _p = us_rot_close.loc[date, a]
+                _p_label = '收'
+            _p_str = _rebalance_price_text(_p, _p_label)
+            if diff < 0:
+                sells.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    sell_prices.append(f'{live} {_p_str}')
+            elif diff > 0:
+                buys.append(f'{live} {prev:.1%}->{cur:.1%}')
+                if _p_str:
+                    buy_prices.append(f'{live} {_p_str}')
+        if sells or buys:
+            action = row.get('dbc_profit_guard_action', '')
+            records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'US', 'open'), '策略': 'Sub-B DBC Guard', '日期口径': 'execution_day', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None, '说明': action})
+    return records
+
+def extract_prod_rebalances(prod_details, prod_monthly, include_no_change=False, us_prod_daily=None, us_open=None):
+    records = []
+    if prod_details is None or prod_monthly is None:
+        return records
+    sig_cols = [c for c in prod_details.columns if c.startswith('sig_') and (not c.startswith('sig_am_')) and (not c.startswith('sig_sma_'))]
+    us_schedule = _coerce_session_index(us_open)
+    if us_schedule is None and us_prod_daily is not None:
+        us_schedule = _coerce_session_index(us_prod_daily)
+    prev_sigs = None
+    for i in range(len(prod_details)):
+        dt = prod_details.index[i]
+        sigs = {c.replace('sig_', ''): prod_details.iloc[i][c] for c in sig_cols}
+        if prev_sigs is not None:
+            sells, buys = ([], [])
+            sell_prices, buy_prices = ([], [])
+            for t, s in sigs.items():
+                ps = prev_sigs.get(t, s)
+                if not pd.isna(s) and (not pd.isna(ps)) and (abs(s - ps) > 0.01):
+                    _p = _lookup_next_open(t, dt, us_open)
+                    _p_label = '开'
+                    if _p is None and us_prod_daily is not None and (dt in us_prod_daily.index):
+                        if t in us_prod_daily.columns:
+                            _p = us_prod_daily.loc[dt, t]
+                        else:
+                            proxy = PROD_PORTFOLIO.get(t, {}).get('proxy', t)
+                            if proxy in us_prod_daily.columns:
+                                _p = us_prod_daily.loc[dt, proxy]
+                        _p_label = '收'
+                    _p_str = _rebalance_price_text(_p, _p_label)
+                    if s >= 0.99:
+                        desc = f'{t} 全部持有'
+                    elif s <= 0.01:
+                        desc = f'{t} 全部现金(BIL)'
+                    else:
+                        desc = f'{t} {s:.0%}持有'
+                    if s > ps:
+                        buys.append(desc)
+                        if _p_str:
+                            buy_prices.append(f'{t} {_p_str}')
+                    else:
+                        sells.append(desc)
+                        if _p_str:
+                            sell_prices.append(f'{t} {_p_str}')
+            if sells or buys:
+                records.append({'日期': dt.strftime('%Y-%m-%d'), '北京时间': us_exec_time_str(dt, us_schedule), '策略': 'Sub-C', '卖出': '; '.join(sells) if sells else '—', '卖出价格': '; '.join(sell_prices) if sell_prices else None, '买入': '; '.join(buys) if buys else '—', '买入价格': '; '.join(buy_prices) if buy_prices else None})
+            elif include_no_change:
+                risk_pct = np.mean([s for s in sigs.values() if not pd.isna(s)]) if sigs else 0
+                records.append({'日期': dt.strftime('%Y-%m-%d'), '北京时间': us_exec_time_str(dt, us_schedule), '策略': 'Sub-C', '卖出': '', '卖出价格': None, '买入': f'信号无变更 (平均持仓{risk_pct:.0%})', '买入价格': None})
+        prev_sigs = sigs
+    if us_prod_daily is not None and (not us_prod_daily.empty):
+        if not PROD_USE_TIMING:
+            annual_signals = pd.DataFrame(1.0, index=prod_monthly.index, columns=prod_monthly.columns)
+        else:
+            annual_signals = pd.DataFrame({cfg['proxy']: prod_details[f'sig_{name}'] for name, cfg in PROD_PORTFOLIO.items() if f'sig_{name}' in prod_details})
+        records.extend(_extract_subc_annual_rebalances(us_prod_daily, annual_signals))
+        records.sort(key=lambda item: (item.get('日期', ''), item.get('execution_at', item.get('北京时间', ''))))
+    return records
+_LAST_SUBC_VS_REBALANCE_WARNING = None
+
+def extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=None, msg=None):
+    global _LAST_SUBC_VS_REBALANCE_WARNING
+    _LAST_SUBC_VS_REBALANCE_WARNING = None
+    if not PROD_VS_ENABLED:
+        return []
+    if us_prod_daily is None or prod_sig_a is None:
+        return []
+    try:
+        snapshot = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=us_open, strict_open_execution=us_open is not None)
+        records = []
+        equity_assets = sorted((name for name, cfg in PROD_PORTFOLIO.items() if cfg['cls'] in PROD_VS_SCALE_CLASSES))
+        scale_sleeves = [('股票袖', snapshot['equity_scale'], equity_assets), ('黄金袖', snapshot['gold_scale'], ['GLDM'])]
+        for sleeve_name, scale, sleeve_assets in scale_sleeves:
+            prev_s = None
+            for date, s in scale.items():
+                if prev_s is None or abs(float(s) - float(prev_s)) <= 0.001:
+                    prev_s = float(s)
+                    continue
+                etf_prices = []
+                for etf_name in sleeve_assets:
+                    _p = _lookup_open_on_date(etf_name, date, us_open)
+                    _label = '开'
+                    if _p is None and date in us_prod_daily.index:
+                        if etf_name in us_prod_daily.columns:
+                            _p = us_prod_daily.loc[date, etf_name]
+                        _label = '收'
+                    if _p is not None and (not pd.isna(_p)):
+                        etf_prices.append(f'{etf_name} ${_p:.2f}{_label}')
+                price_str = '; '.join(etf_prices) if etf_prices else None
+                records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'US', 'open'), 'execution_at': _subc_open_execution_at(date).isoformat(), 'strategy_family': 'Sub-C', 'record_kind': 'sleeve_scale', '日期口径': 'execution_day', '策略': 'Sub-C', '卖出': f'{sleeve_name}缩放 {prev_s:.2f}x', '卖出价格': price_str, '买入': f'{sleeve_name}缩放 {s:.2f}x', '买入价格': price_str})
+                prev_s = float(s)
+        return records
+    except (KeyError, ValueError, AttributeError) as exc:
+        _LAST_SUBC_VS_REBALANCE_WARNING = f'extract_subc_vs_rebalances skipped: {_short_error(exc)}'
+        if msg is not None:
+            msg.write(f'  ⚠️ Sub-C分袖缩放调仓记录跳过: {_short_error(exc)}\n')
+        return []
+
+def _subc_open_execution_at(date):
+    date = pd.Timestamp(date).normalize()
+    if not _is_us_market_session(date):
+        raise ValueError(f'Sub-C sleeve scaling: non-session date {date}')
+    open_at = date.tz_localize('America/New_York') + pd.Timedelta(hours=9, minutes=30)
+    return open_at.tz_convert('Asia/Shanghai')
+
+def _subc_close_execution_at(date):
+    date = pd.Timestamp(date).normalize()
+    if not _is_us_market_session(date):
+        raise ValueError(f'Sub-C annual rebalance: non-session date {date}')
+    hour = 13 if _is_us_early_close_session(date) else 16
+    close_at = date.tz_localize('America/New_York') + pd.Timedelta(hours=hour)
+    return close_at.tz_convert('Asia/Shanghai')
+
+def _extract_subc_annual_rebalances(us_prod_daily, signals):
+    components = _compute_daily_subc_components_phased(us_prod_daily, signals, PROD_CASH)
+    if components.empty:
+        return []
+    equity = _subc_absolute_scale(us_prod_daily[PROD_VS_SIGNAL_TICKER], components.index, PROD_VS_TARGET_VOL, PROD_VS_VOL_WINDOW, PROD_VS_MIN_LEV, PROD_VS_MAX_LEV, PROD_VS_THRESHOLD) if PROD_VS_ENABLED else pd.Series(1.0, index=components.index)
+    gold = _subc_relative_scale(us_prod_daily[PROD_GOLD_VS_SIGNAL_TICKER], components.index, PROD_GOLD_VS_SHORT_WINDOW, PROD_GOLD_VS_LONG_WINDOW, PROD_VS_MIN_LEV, PROD_VS_MAX_LEV, PROD_VS_THRESHOLD) if PROD_VS_ENABLED and PROD_GOLD_VS_ENABLED else pd.Series(1.0, index=components.index)
+    records = []
+    for date, row in components.loc[components['annual_rebalanced']].iterrows():
+        sells, buys, sell_prices, buy_prices = ([], [], [], [])
+        for name, cfg in PROD_PORTFOLIO.items():
+            scale = float(equity.loc[date]) if cfg['cls'] in PROD_VS_SCALE_CLASSES else float(gold.loc[date]) if name == 'GLDM' else 1.0
+            signal = float(row[f'signal::{name}'])
+            current = float(row[f'pre_close_weight::{name}']) * signal * scale
+            target = float(row[f'close_weight::{name}']) * signal * scale
+            if abs(target - current) <= 1e-12:
+                continue
+            text = f'{name} {current:.2%}->{target:.2%}'
+            price = us_prod_daily[name].get(date, np.nan) if name in us_prod_daily else np.nan
+            price_text = f'{name} ${float(price):.4f}收' if pd.notna(price) and np.isfinite(price) and (price > 0) else None
+            if target > current:
+                buys.append(text)
+                if price_text:
+                    buy_prices.append(price_text)
+            else:
+                sells.append(text)
+                if price_text:
+                    sell_prices.append(price_text)
+        records.append({'日期': date.strftime('%Y-%m-%d'), '北京时间': beijing_time_str(date, 'US', 'close'), 'execution_at': _subc_close_execution_at(date).isoformat(), 'strategy_family': 'Sub-C', 'record_kind': 'annual_rebalance', '日期口径': 'execution_day', '策略': 'Sub-C', '卖出': '; '.join(sells) or '—', '买入': '; '.join(buys) or '—', '卖出价格': '; '.join(sell_prices) or None, '买入价格': '; '.join(buy_prices) or None, '说明': f"年度基础组合于年末最后XNYS交易日收盘重配；基础换手{float(row['asset_turnover']):.4%}，费率{PROD_COMMISSION:.2%}；缺实盘价格的上市前部分属于代理历史。"})
+    return records
+
+def _subc_annual_close_date(year):
+    candidate = pd.Timestamp(int(year), 12, 31)
+    for _ in range(14):
+        if _is_us_market_session(candidate):
+            return candidate
+        candidate -= pd.Timedelta(days=1)
+    raise ValueError(f'Sub-C annual rebalance: missing XNYS year-end schedule for {year}')
+
+def _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ticker, prod_sig_b=None, blend_a=0.5, annual_rebalance_cost=None):
+    if annual_rebalance_cost is None:
+        annual_rebalance_cost = PROD_COMMISSION
+    if not np.isfinite(annual_rebalance_cost) or not 0.0 <= annual_rebalance_cost < 1.0:
+        raise ValueError('Sub-C annual commission must be finite and in [0, 1)')
+    required = [cfg['proxy'] for cfg in portfolio.values()] + [cash_ticker]
+    missing = sorted(set(required) - set(us_prod_daily.columns))
+    if missing:
+        raise ValueError(f"Sub-C missing required price columns: {', '.join(missing)}")
+    price_frame = us_prod_daily[required].dropna(how='any')
+    daily_ret = price_frame.pct_change(fill_method=None).dropna(how='any')
+    if daily_ret.empty:
+        return pd.DataFrame()
+    day_periods = daily_ret.index.to_period('M')
+    use_blend = prod_sig_b is not None
+    blend_b = 1.0 - blend_a
+    sig_a_lookup = {dt.to_period('M'): prod_sig_a.loc[dt] for dt in prod_sig_a.index}
+    sig_b_lookup = {dt.to_period('M'): prod_sig_b.loc[dt] for dt in prod_sig_b.index} if use_blend else {}
+    asset_returns = {}
+    asset_signals = {}
+    for name, cfg in portfolio.items():
+        proxy = cfg['proxy']
+        asset_daily = daily_ret[proxy].fillna(0.0)
+        daily_sig_a = pd.Series(np.nan, index=daily_ret.index)
+        daily_sig_b = pd.Series(np.nan, index=daily_ret.index)
+        for period in day_periods.unique():
+            mask = day_periods == period
+            row_a = sig_a_lookup.get(period)
+            if row_a is not None and proxy in row_a.index:
+                value = row_a[proxy]
+                daily_sig_a.loc[mask] = 0.0 if pd.isna(value) else float(value)
+            if use_blend:
+                row_b = sig_b_lookup.get(period)
+                if row_b is not None and proxy in row_b.index:
+                    value = row_b[proxy]
+                    daily_sig_b.loc[mask] = 0.0 if pd.isna(value) else float(value)
+        daily_sig_a = daily_sig_a.ffill().fillna(0.0)
+        cash_daily = daily_ret[cash_ticker].fillna(0.0)
+        ret_a = daily_sig_a * asset_daily + (1.0 - daily_sig_a) * cash_daily
+        if use_blend:
+            daily_sig_b = daily_sig_b.ffill().fillna(0.0)
+            ret_b = daily_sig_b * asset_daily + (1.0 - daily_sig_b) * cash_daily
+            asset_returns[name] = blend_a * ret_a + blend_b * ret_b
+            asset_signals[name] = blend_a * daily_sig_a + blend_b * daily_sig_b
+        else:
+            asset_returns[name] = ret_a
+            asset_signals[name] = daily_sig_a
+    holdings = pd.Series({name: cfg['w'] for name, cfg in portfolio.items()}, dtype=float)
+    previous_value = float(holdings.sum())
+    annual_closes = {_subc_annual_close_date(year) for year in daily_ret.index.year.unique()}
+    rows = []
+    for date in daily_ret.index:
+        row = {'asset_cost_return': 0.0, 'asset_turnover': 0.0, 'asset_cost_fraction': 0.0, 'annual_rebalanced': False}
+        base_return = 0.0
+        for name in portfolio:
+            exposure = float(holdings[name] / previous_value)
+            contribution = exposure * float(asset_returns[name].loc[date])
+            row[f'exposure::{name}'] = exposure
+            row[f'signal::{name}'] = float(asset_signals[name].loc[date])
+            row[f'contribution::{name}'] = contribution
+            base_return += contribution
+        holdings = holdings * pd.Series({name: 1.0 + float(asset_returns[name].loc[date]) for name in portfolio})
+        close_value = float(holdings.sum())
+        if not np.isfinite(close_value) or close_value <= 0.0:
+            raise ValueError(f'Sub-C component account has invalid NAV on {date}')
+        before_rebalance = holdings / close_value
+        for name in portfolio:
+            row[f'pre_close_weight::{name}'] = float(before_rebalance[name])
+        if pd.Timestamp(date).normalize() in annual_closes:
+            target = pd.Series({name: cfg['w'] for name, cfg in portfolio.items()}, dtype=float)
+            cost_fraction = 0.0
+            for _ in range(100):
+                turnover = float((target * (1.0 - cost_fraction) - before_rebalance).abs().sum())
+                next_cost = turnover * annual_rebalance_cost
+                if abs(next_cost - cost_fraction) <= 1e-16:
+                    cost_fraction = next_cost
+                    break
+                cost_fraction = next_cost
+            else:
+                raise ValueError('Sub-C annual fee did not converge')
+            turnover = float((target * (1.0 - cost_fraction) - before_rebalance).abs().sum())
+            rebalance_cost = float(close_value * cost_fraction)
+            holdings = target * (close_value - rebalance_cost)
+            row['asset_turnover'] = turnover
+            row['asset_cost_fraction'] = rebalance_cost / close_value
+            row['asset_cost_return'] = -rebalance_cost / previous_value
+            row['annual_rebalanced'] = turnover > 1e-12
+            base_return += row['asset_cost_return']
+        for name in portfolio:
+            row[f'close_weight::{name}'] = float(holdings[name] / holdings.sum())
+        row['base_return'] = base_return
+        direct_return = float(holdings.sum() / previous_value - 1.0)
+        if not np.isclose(base_return, direct_return, atol=2e-14, rtol=0.0):
+            raise RuntimeError(f'Sub-C component reconciliation failed on {date}')
+        rows.append((date, row))
+        previous_value = float(holdings.sum())
+    return pd.DataFrame([row for _, row in rows], index=[date for date, _ in rows])
+
+def _compute_daily_subc(us_prod_daily, prod_sig_a, portfolio, cash_ticker, prod_sig_b=None, blend_a=0.5):
+    components = _compute_daily_subc_components(us_prod_daily, prod_sig_a, portfolio, cash_ticker, prod_sig_b=prod_sig_b, blend_a=blend_a)
+    return components['base_return'] if not components.empty else pd.Series(dtype=float)
+
+def _compute_daily_subc_phased(us_prod_daily, prod_sig_a, cash_ticker, prod_sig_b=None, blend_a=0.5):
+    if len(us_prod_daily) <= 1:
+        return pd.Series(dtype=float)
+    full = _compute_daily_subc(us_prod_daily, prod_sig_a, PROD_PORTFOLIO, cash_ticker, prod_sig_b=prod_sig_b, blend_a=blend_a)
+    return full.loc[full.index >= SUBC_FORMAL_START]
+
+def _compute_daily_subc_components_phased(us_prod_daily, prod_sig_a, cash_ticker, prod_sig_b=None, blend_a=0.5):
+    if len(us_prod_daily) <= 1:
+        return pd.DataFrame()
+    full = _compute_daily_subc_components(us_prod_daily, prod_sig_a, PROD_PORTFOLIO, cash_ticker, prod_sig_b=prod_sig_b, blend_a=blend_a)
+    return full.loc[full.index >= SUBC_FORMAL_START]
+
+def _subc_threshold_scale(raw_target, threshold):
+    target = raw_target.shift(1).fillna(1.0)
+    actual = pd.Series(1.0, index=target.index)
+    current = 1.0
+    for date, value in target.items():
+        if pd.notna(value) and abs(float(value) - current) >= threshold - 1e-09:
+            current = float(value)
+        actual.loc[date] = current
+    return actual
+
+def _subc_absolute_scale(price_series, index, target_vol, vol_window, min_lev, max_lev, threshold):
+    signal_ret = price_series.pct_change(fill_method=None)
+    realized = signal_ret.rolling(vol_window).std() * np.sqrt(US_TRADING_DAYS)
+    raw = (target_vol / realized).clip(min_lev, max_lev)
+    return _subc_threshold_scale(raw, threshold).reindex(index).fillna(1.0)
+
+def _subc_relative_scale(price_series, index, short_window, long_window, min_lev, max_lev, threshold):
+    signal_ret = price_series.pct_change(fill_method=None)
+    short_vol = signal_ret.rolling(short_window).std()
+    long_vol = signal_ret.rolling(long_window).std()
+    raw = (long_vol / short_vol).clip(min_lev, max_lev)
+    return _subc_threshold_scale(raw, threshold).reindex(index).fillna(1.0)
+
+def _subc_price_leg_returns(ticker, date, previous_date, us_prod_daily, us_open, strict_open_execution, context):
+    if ticker not in us_prod_daily.columns:
+        raise ValueError(f'{context}: missing close price column for {ticker}')
+    previous_close = us_prod_daily.loc[previous_date, ticker]
+    current_close = us_prod_daily.loc[date, ticker]
+    open_row = _us_open_row(date, [ticker], us_open, us_prod_daily, strict=strict_open_execution, context=context)
+    open_price = open_row.get(ticker, np.nan)
+    overnight = _us_weighted_return({ticker: 1.0}, pd.Series({ticker: previous_close}), pd.Series({ticker: open_price}))
+    intraday = _us_weighted_return({ticker: 1.0}, pd.Series({ticker: open_price}), pd.Series({ticker: current_close}))
+    return (overnight, intraday)
+
+def _subc_effective_asset_mix(component_return, asset_full_return, cash_full_return):
+    denominator = asset_full_return - cash_full_return
+    if abs(denominator) <= 1e-14:
+        return 1.0
+    return float(np.clip((component_return - cash_full_return) / denominator, 0.0, 1.0))
+
+def _subc_scale_transition_account(components, assets, pos, old_scale, new_scale, us_prod_daily, us_open, strict_open_execution, daily_spread, fee_rate):
+    """Self-financing opening transition within one independently scaled sleeve."""
+    date, previous_date = (components.index[pos], components.index[pos - 1])
+    exposures = {name: float(components[f'exposure::{name}'].iloc[pos]) for name in assets}
+    exposure = sum(exposures.values())
+    if exposure <= 1e-14:
+        return (0.0, 0.0)
+    cash_gap, cash_day = _subc_price_leg_returns(PROD_CASH, date, previous_date, us_prod_daily, us_open, strict_open_execution, 'Sub-C sleeve cash execution')
+    gap_spread, day_spread = _v80_us_spread_time_fractions(previous_date, date)
+    base_risk, risk_gap, risk_day = ({}, {}, {})
+    for name, value in exposures.items():
+        if value <= 1e-14:
+            continue
+        proxy = PROD_PORTFOLIO[name].get('proxy', name)
+        asset_gap, asset_day = _subc_price_leg_returns(proxy, date, previous_date, us_prod_daily, us_open, strict_open_execution, f'Sub-C sleeve {name} execution')
+        signal_col = f'signal::{name}'
+        if signal_col in components:
+            mix = float(components[signal_col].iloc[pos])
+        else:
+            full = (1.0 + asset_gap) * (1.0 + asset_day) - 1.0
+            cash_full = (1.0 + cash_gap) * (1.0 + cash_day) - 1.0
+            mix = _subc_effective_asset_mix(float(components[f'contribution::{name}'].iloc[pos]) / value, full, cash_full)
+        if not np.isfinite(mix) or not 0.0 <= mix <= 1.0:
+            raise ValueError(f'Sub-C invalid component signal for {name} at {date}')
+        base_risk[name] = value / exposure * mix
+        risk_gap[name], risk_day[name] = (asset_gap, asset_day)
+    base_cash = 1.0 - sum(base_risk.values())
+    base_open_nav = sum((weight * (1.0 + risk_gap[name]) for name, weight in base_risk.items())) + base_cash * (1.0 + cash_gap)
+    open_assets = {name: old_scale * weight * (1.0 + risk_gap[name]) for name, weight in base_risk.items()}
+    old_cash = 1.0 - old_scale * sum(base_risk.values())
+    open_cash = old_cash * (1.0 + cash_gap) - max(-old_cash, 0.0) * daily_spread * gap_spread
+    open_nav = sum(open_assets.values()) + open_cash
+    if not np.isfinite(open_nav) or open_nav <= 0.0 or base_open_nav <= 0.0:
+        raise ValueError(f'Sub-C non-positive sleeve NAV at open on {date}')
+    target = {name: new_scale * weight * (1.0 + risk_gap[name]) / base_open_nav for name, weight in base_risk.items()}
+    fee = 0.0
+    for _ in range(30):
+        next_fee = fee_rate * sum((abs(weight * (open_nav - fee) - open_assets[name]) for name, weight in target.items()))
+        if abs(next_fee - fee) <= 1e-14:
+            fee = next_fee
+            break
+        fee = next_fee
+    post_fee_nav = open_nav - fee
+    if post_fee_nav <= 0.0:
+        raise ValueError(f'Sub-C transition fees exhaust NAV on {date}')
+    target_values = {name: weight * post_fee_nav for name, weight in target.items()}
+    cash_value = post_fee_nav - sum(target_values.values())
+    close_nav = sum((value * (1.0 + risk_day[name]) for name, value in target_values.items())) + cash_value * (1.0 + cash_day)
+    close_nav -= max(-cash_value, 0.0) * daily_spread * day_spread
+    if not np.isfinite(close_nav) or close_nav <= 0.0:
+        raise ValueError(f'Sub-C non-positive sleeve NAV at close on {date}')
+    return (exposure * (close_nav - 1.0), exposure * fee)
+
+def _apply_subc_vol_scaling(subc_ret, us_prod_daily, target_vol=None, vol_window=None, max_lev=None, min_lev=None, threshold=None, spread_bps=None, rebal_cost_bps=None, components=None, us_open=None, strict_open_execution=False):
+    if target_vol is None:
+        target_vol = PROD_VS_TARGET_VOL
+    if vol_window is None:
+        vol_window = PROD_VS_VOL_WINDOW
+    if max_lev is None:
+        max_lev = PROD_VS_MAX_LEV
+    if min_lev is None:
+        min_lev = PROD_VS_MIN_LEV
+    if threshold is None:
+        threshold = PROD_VS_THRESHOLD
+    if spread_bps is None:
+        spread_bps = PROD_VS_SPREAD_BPS
+    if rebal_cost_bps is None:
+        rebal_cost_bps = PROD_VS_REBAL_COST_BPS
+    if not PROD_VS_ENABLED:
+        return (subc_ret, pd.Series(1.0, index=subc_ret.index), pd.Series(0.0, index=subc_ret.index))
+    if PROD_VS_SIGNAL_TICKER not in us_prod_daily.columns:
+        raise ValueError(f'Sub-C requires {PROD_VS_SIGNAL_TICKER} for equity scaling')
+    index = subc_ret.index
+    equity_scale = _subc_absolute_scale(us_prod_daily[PROD_VS_SIGNAL_TICKER], index, target_vol, vol_window, min_lev, max_lev, threshold)
+    gold_scale = pd.Series(1.0, index=index)
+    if PROD_GOLD_VS_ENABLED:
+        if PROD_GOLD_VS_SIGNAL_TICKER not in us_prod_daily.columns:
+            raise ValueError(f'Sub-C requires {PROD_GOLD_VS_SIGNAL_TICKER} for gold scaling')
+        gold_scale = _subc_relative_scale(us_prod_daily[PROD_GOLD_VS_SIGNAL_TICKER], index, PROD_GOLD_VS_SHORT_WINDOW, PROD_GOLD_VS_LONG_WINDOW, min_lev, max_lev, threshold)
+    bil = us_prod_daily['BIL'].pct_change(fill_method=None).reindex(subc_ret.index).fillna(0.0)
+    daily_spread = spread_bps / 10000 / US_TRADING_DAYS
+    if components is None:
+        raise ValueError('Sub-C sleeve scaling requires a component contribution ledger')
+    components = components.reindex(index)
+    if components.empty or components.isna().any().any():
+        raise ValueError('Sub-C component ledger is empty or misaligned')
+    out = components['asset_cost_return'].copy()
+    costs = pd.Series(0.0, index=index)
+    covered = set()
+    scale_groups = [(equity_scale, [name for name, cfg in PROD_PORTFOLIO.items() if cfg['cls'] in PROD_VS_SCALE_CLASSES]), (gold_scale, ['GLDM'])]
+    for scale, assets in scale_groups:
+        covered.update(assets)
+        exposure = sum((components[f'exposure::{name}'] for name in assets), start=pd.Series(0.0, index=index))
+        contribution = sum((components[f'contribution::{name}'] for name in assets), start=pd.Series(0.0, index=index))
+        risk_exposure = pd.Series(0.0, index=index)
+        for name in assets:
+            signal_col = f'signal::{name}'
+            if signal_col not in components:
+                raise ValueError(f'Sub-C component ledger is missing {signal_col}')
+            signal = components[signal_col]
+            if not np.isfinite(signal.to_numpy(dtype=float)).all() or not signal.between(0.0, 1.0).all():
+                raise ValueError(f'Sub-C component ledger contains invalid momentum signals for {name}')
+            risk_exposure += components[f'exposure::{name}'] * signal
+        signal_cash = exposure - risk_exposure
+        scaled_contribution = scale * (contribution - signal_cash * bil)
+        scale_changed = scale.diff().abs().fillna(0.0) > 1e-12
+        cash_exposure = exposure - scale * risk_exposure
+        financing_return = cash_exposure * bil - (-cash_exposure).clip(lower=0.0) * daily_spread
+        group_cost = risk_exposure * scale.diff().abs().fillna(0.0) * rebal_cost_bps / 10000
+        group_return = scaled_contribution + financing_return - group_cost
+        if us_open is not None or strict_open_execution:
+            for pos in np.flatnonzero(scale_changed.to_numpy()):
+                if pos > 0:
+                    group_return.iloc[pos], group_cost.iloc[pos] = _subc_scale_transition_account(components, assets, pos, float(scale.iloc[pos - 1]), float(scale.iloc[pos]), us_prod_daily, us_open, strict_open_execution, daily_spread, rebal_cost_bps / 10000)
+        costs += group_cost
+        out += group_return
+    for name in PROD_PORTFOLIO:
+        if name not in covered:
+            out += components[f'contribution::{name}']
+    return (out, equity_scale, costs)
+
+def _build_subc_vs_info(us_prod_daily, components, actual_scale=None, target_vol=None, vol_window=None, min_lev=None, max_lev=None, threshold=None):
+    target_vol = PROD_VS_TARGET_VOL if target_vol is None else target_vol
+    vol_window = PROD_VS_VOL_WINDOW if vol_window is None else vol_window
+    min_lev = PROD_VS_MIN_LEV if min_lev is None else min_lev
+    max_lev = PROD_VS_MAX_LEV if max_lev is None else max_lev
+    threshold = PROD_VS_THRESHOLD if threshold is None else threshold
+    if components is None or components.empty:
+        return {}
+    index = components.index
+    if actual_scale is None:
+        actual_scale = _subc_absolute_scale(us_prod_daily[PROD_VS_SIGNAL_TICKER], index, target_vol, vol_window, min_lev, max_lev, threshold)
+    gold_scale = _subc_relative_scale(us_prod_daily[PROD_GOLD_VS_SIGNAL_TICKER], index, PROD_GOLD_VS_SHORT_WINDOW, PROD_GOLD_VS_LONG_WINDOW, min_lev, max_lev, threshold) if PROD_GOLD_VS_ENABLED else pd.Series(1.0, index=index)
+    spy_ret = us_prod_daily[PROD_VS_SIGNAL_TICKER].pct_change(fill_method=None)
+    spy_rv = spy_ret.rolling(vol_window).std() * np.sqrt(US_TRADING_DAYS)
+    realized_vol = float(spy_rv.dropna().iloc[-1]) if not spy_rv.dropna().empty else None
+    current_scale = float(actual_scale.iloc[-1]) if len(actual_scale) else 1.0
+    equity_raw = float(np.clip(target_vol / realized_vol, min_lev, max_lev)) if realized_vol is not None and realized_vol > 0 else current_scale
+    equity_next = equity_raw if abs(equity_raw - current_scale) >= threshold - 1e-09 else current_scale
+    gold_ret = us_prod_daily[PROD_GOLD_VS_SIGNAL_TICKER].pct_change(fill_method=None)
+    gold_short = gold_ret.rolling(PROD_GOLD_VS_SHORT_WINDOW).std() * np.sqrt(US_TRADING_DAYS)
+    gold_long = gold_ret.rolling(PROD_GOLD_VS_LONG_WINDOW).std() * np.sqrt(US_TRADING_DAYS)
+    gold_short_latest = float(gold_short.dropna().iloc[-1]) if not gold_short.dropna().empty else None
+    gold_long_latest = float(gold_long.dropna().iloc[-1]) if not gold_long.dropna().empty else None
+    gold_current = float(gold_scale.iloc[-1]) if len(gold_scale) else 1.0
+    gold_raw = float(np.clip(gold_long_latest / gold_short_latest, min_lev, max_lev)) if gold_short_latest is not None and gold_short_latest > 0 and (gold_long_latest is not None) else gold_current
+    gold_next = gold_raw if abs(gold_raw - gold_current) >= threshold - 1e-09 else gold_current
+    equity_names = [name for name, cfg in PROD_PORTFOLIO.items() if cfg['cls'] in PROD_VS_SCALE_CLASSES]
+    asset_base_exposure = {name: float(components.get(f'close_weight::{name}', components[f'exposure::{name}']).iloc[-1]) for name in PROD_PORTFOLIO}
+    asset_signal = {name: float(components.get(f'signal::{name}', pd.Series(1.0, index=index)).iloc[-1]) for name in PROD_PORTFOLIO}
+    if not all((np.isfinite(value) and 0.0 <= value <= 1.0 for value in asset_signal.values())):
+        raise DataSchemaError('Sub-C component ledger contains invalid momentum signals')
+    asset_risk_exposure = {name: asset_base_exposure[name] * asset_signal[name] for name in PROD_PORTFOLIO}
+    equity_exposure = float(sum((asset_risk_exposure[n] for n in equity_names)))
+    gold_exposure = float(asset_risk_exposure['GLDM'])
+    total_base_exposure = float(sum(asset_base_exposure.values()))
+    fixed_exposure = float(sum((asset_risk_exposure[name] for name in PROD_PORTFOLIO if name not in equity_names and name != 'GLDM')))
+    equity_group_base = float(sum((asset_base_exposure[name] for name in equity_names)))
+    gold_group_base = float(asset_base_exposure['GLDM'])
+    fixed_signal_cash = float(sum((asset_base_exposure[name] * (1.0 - asset_signal[name]) for name in PROD_PORTFOLIO if name not in equity_names and name != 'GLDM')))
+
+    def _gross(eq_scale, au_scale):
+        return fixed_exposure + equity_exposure * eq_scale + gold_exposure * au_scale
+
+    def _cash(eq_scale, au_scale):
+        return fixed_signal_cash + max(equity_group_base - eq_scale * equity_exposure, 0.0) + max(gold_group_base - au_scale * gold_exposure, 0.0)
+
+    def _borrow(eq_scale, au_scale):
+        return max(eq_scale * equity_exposure - equity_group_base, 0.0) + max(au_scale * gold_exposure - gold_group_base, 0.0)
+    current_asset_weights = {}
+    next_asset_weights = {}
+    for name in PROD_PORTFOLIO:
+        current_asset_scale = current_scale if name in equity_names else gold_current if name == 'GLDM' else 1.0
+        next_asset_scale = equity_next if name in equity_names else gold_next if name == 'GLDM' else 1.0
+        current_asset_weights[name] = asset_risk_exposure[name] * current_asset_scale
+        next_asset_weights[name] = asset_risk_exposure[name] * next_asset_scale
+    return {'signal_ticker': PROD_VS_SIGNAL_TICKER, 'scale_scope': 'equity_only', 'realized_vol': realized_vol, 'rv_latest_no_shift': realized_vol, 'realized_vol_basis': 'SPY_latest_close_for_next_session', 'target_vol': target_vol, 'actual_scale': current_scale, 'current_scale': current_scale, 'prev_actual_scale': float(actual_scale.iloc[-2]) if len(actual_scale) >= 2 else current_scale, 'target_scale': equity_raw, 'next_target_scale': equity_raw, 'next_scale': equity_next, 'pending_adjustment': abs(equity_next - current_scale) > 0.001, 'equity_base_exposure': equity_exposure, 'gold_signal_ticker': PROD_GOLD_VS_SIGNAL_TICKER, 'gold_short_vol': gold_short_latest, 'gold_long_vol': gold_long_latest, 'gold_current_scale': gold_current, 'gold_target_scale': gold_raw, 'gold_next_scale': gold_next, 'gold_pending_adjustment': abs(gold_next - gold_current) > 0.001, 'gold_base_exposure': gold_exposure, 'fixed_base_exposure': fixed_exposure, 'asset_base_exposure': asset_base_exposure, 'asset_momentum_signal': asset_signal, 'current_asset_weights': current_asset_weights, 'next_asset_weights': next_asset_weights, 'current_gross_exposure': _gross(current_scale, gold_current), 'next_gross_exposure': _gross(equity_next, gold_next), 'current_cash_exposure': _cash(current_scale, gold_current), 'next_cash_exposure': _cash(equity_next, gold_next), 'current_borrow_exposure': _borrow(current_scale, gold_current), 'next_borrow_exposure': _borrow(equity_next, gold_next), 'rebalance_deadband': threshold, 'overlay_multiplier': 1.0, 'final_execution_scale': equity_next, 'btc_scale': 1.0}
+
+def _subc_scaled_allocation(base_weights, signals, equity_scale, gold_scale):
+    weights = {}
+    group_cash = {'equity': 0.0, 'gold': 0.0, 'fixed': 0.0}
+    for name, cfg in PROD_PORTFOLIO.items():
+        base = float(base_weights[name])
+        signal = float(signals.get(name, 1.0))
+        if not np.isfinite(base) or base < 0.0 or (not np.isfinite(signal)) or (not 0.0 <= signal <= 1.0):
+            raise ValueError(f'Sub-C invalid base weight or momentum signal for {name}')
+        scale = equity_scale if cfg['cls'] in PROD_VS_SCALE_CLASSES else gold_scale if name == 'GLDM' else 1.0
+        if not np.isfinite(scale) or scale < 0.0:
+            raise ValueError(f'Sub-C invalid scale for {name}')
+        weights[name] = base * signal * scale
+        group = 'equity' if cfg['cls'] in PROD_VS_SCALE_CLASSES else 'gold' if name == 'GLDM' else 'fixed'
+        group_cash[group] += base - weights[name]
+    cash = sum((max(value, 0.0) for value in group_cash.values()))
+    borrow = sum((max(-value, 0.0) for value in group_cash.values()))
+    return (weights, cash, borrow)
+
+def _subc_add_annual_action_info(info, components):
+    if not info or components.empty:
+        return info
+    info = dict(info)
+    latest = pd.Timestamp(components.index[-1]).normalize()
+    annual_date = _subc_annual_close_date(latest.year)
+    execution_at = _subc_close_execution_at(annual_date)
+    now = pd.Timestamp(beijing_now())
+    now = now.tz_localize('Asia/Shanghai') if now.tzinfo is None else now.tz_convert('Asia/Shanghai')
+    annual_due = latest <= annual_date and _next_session_day(latest) >= annual_date and (now < execution_at)
+    info.update({'annual_rebalance_due': False, 'annual_execution_date': annual_date, 'annual_execution_at': execution_at, 'annual_execution_policy': 'last_XNYS_session_of_year_close'})
+    if not annual_due:
+        return info
+    signals = info['asset_momentum_signal']
+    prefix = 'pre_close_weight::' if latest == annual_date else 'close_weight::'
+    current_base = {name: float(components.get(prefix + name, components[f'exposure::{name}']).iloc[-1]) for name in PROD_PORTFOLIO}
+    annual_equity_scale = info['current_scale'] if latest == annual_date else info['next_scale']
+    annual_gold_scale = info['gold_current_scale'] if latest == annual_date else info['gold_next_scale']
+    before, _, _ = _subc_scaled_allocation(current_base, signals, annual_equity_scale, annual_gold_scale)
+    target_base = {name: cfg['w'] for name, cfg in PROD_PORTFOLIO.items()}
+    target, target_cash, target_borrow = _subc_scaled_allocation(target_base, signals, annual_equity_scale, annual_gold_scale)
+    turnover = sum((abs(float(target_base[name]) - current_base[name]) for name in PROD_PORTFOLIO))
+    info.update({'annual_rebalance_due': turnover > 1e-12, 'annual_reference_weights': before, 'annual_target_weights': target, 'annual_target_cash': target_cash, 'annual_target_borrow': target_borrow, 'annual_base_turnover_estimate': turnover})
+    if latest == annual_date:
+        current, cash, borrow = _subc_scaled_allocation(current_base, signals, info['current_scale'], info['gold_current_scale'])
+        next_weights, next_cash, next_borrow = _subc_scaled_allocation(target_base, signals, info['next_scale'], info['gold_next_scale'])
+        info.update({'current_asset_weights': current, 'current_cash_exposure': cash, 'current_borrow_exposure': borrow, 'current_gross_exposure': sum(current.values()), 'next_asset_weights': next_weights, 'next_cash_exposure': next_cash, 'next_borrow_exposure': next_borrow, 'next_gross_exposure': sum(next_weights.values())})
+    return info
+
+def _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b=None, us_open=None, strict_open_execution=False):
+    components = _compute_daily_subc_components_phased(us_prod_daily, prod_sig_a, PROD_CASH, prod_sig_b=prod_sig_b, blend_a=PROD_BLEND_A)
+    if components.empty:
+        return {'components': components, 'raw_return': pd.Series(dtype=float), 'scaled_return': pd.Series(dtype=float), 'equity_scale': pd.Series(dtype=float), 'gold_scale': pd.Series(dtype=float), 'costs': pd.Series(dtype=float), 'info': {}}
+    raw = components['base_return']
+    scaled, equity_scale, costs = _apply_subc_vol_scaling(raw, us_prod_daily, components=components, us_open=us_open, strict_open_execution=strict_open_execution)
+    gold_scale = _subc_relative_scale(us_prod_daily[PROD_GOLD_VS_SIGNAL_TICKER], raw.index, PROD_GOLD_VS_SHORT_WINDOW, PROD_GOLD_VS_LONG_WINDOW, PROD_VS_MIN_LEV, PROD_VS_MAX_LEV, PROD_VS_THRESHOLD) if PROD_GOLD_VS_ENABLED else pd.Series(1.0, index=raw.index)
+    info = _subc_add_annual_action_info(_build_subc_vs_info(us_prod_daily, components, equity_scale), components)
+    return {'components': components, 'raw_return': raw, 'scaled_return': scaled, 'equity_scale': equity_scale, 'gold_scale': gold_scale, 'costs': costs, 'info': info}
+
+def _compute_next_vol_scale(rv_latest, cur_post_thr, tgt_vol, min_l, max_l, thr):
+    cur_post_thr = float(cur_post_thr) if not np.isnan(cur_post_thr) else 1.0
+    if tgt_vol is None:
+        return (1.0, 1.0, False)
+    if rv_latest is None or np.isnan(rv_latest) or rv_latest <= 1e-10:
+        return (cur_post_thr, cur_post_thr, False)
+    raw = float(np.clip(tgt_vol / rv_latest, min_l, max_l))
+    if thr > 0 and abs(raw - cur_post_thr) < thr - 1e-09:
+        final = cur_post_thr
+    else:
+        final = raw
+    return (raw, final, abs(final - cur_post_thr) > 0.001)
+
+def _base_fraction_from_weight_and_scale(weight, raw_scale):
+    if pd.notna(raw_scale) and abs(float(raw_scale)) > 1e-12:
+        return float(weight) / float(raw_scale)
+    return 0.0
+
+def _dk_get_vol_scale(dk_result, idx):
+    if 'top_pair' in dk_result.columns:
+        tp = dk_result['top_pair'].iloc[idx]
+        pd_map = dk_result.attrs.get('pair_data', {})
+        if tp != 'none' and tp in pd_map:
+            pdf = pd_map[tp]
+            dt = dk_result.index[idx]
+            if 'scale' in pdf.columns and dt in pdf.index:
+                v = pdf.loc[dt, 'scale']
+                if not np.isnan(v):
+                    return float(v)
+    bw = float(dk_result['base_weight'].iloc[idx]) if 'base_weight' in dk_result.columns else float(dk_result['weight'].iloc[idx])
+    has_gate = 'risk_gate_scale' in dk_result.columns
+    has_decay = 'overlay_scale' in dk_result.columns
+    if has_gate and has_decay:
+        ov = float(dk_result['overlay_scale'].iloc[idx])
+        return bw / ov if abs(ov) > 1e-10 else bw
+    return bw
+
+def _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b=None, us_open=None, strict_open_execution=False):
+    snapshot = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=us_open, strict_open_execution=strict_open_execution)
+    return snapshot['scaled_return'] if PROD_VS_ENABLED else snapshot['raw_return']
+
+def _write_subc_param_summary(write, info=None):
+    write(f"### Sub-C: 10ETF策略（主组合权重{COMBINED_WEIGHTS['Sub-C']:.0%}）\n\n")
+    write('| 资产 | 基础权重 | 类别 | 波动率处理 |\n|:-|------:|:-|:-|\n')
+    for name, cfg in PROD_PORTFOLIO.items():
+        if cfg['cls'] in PROD_VS_SCALE_CLASSES:
+            rule = f'SPY {PROD_VS_VOL_WINDOW}日 / {PROD_VS_TARGET_VOL:.0%}目标'
+        elif name == 'GLDM':
+            rule = f'自身相对波动 long/short={PROD_GOLD_VS_LONG_WINDOW}/{PROD_GOLD_VS_SHORT_WINDOW}'
+        else:
+            rule = '固定1.0x（不缩放）'
+        write(f"| {name} | {cfg['w']:.1%} | {cfg['cls']} | {rule} |\n")
+    write(f'\n共同规则: lag=1交易日；scale范围{PROD_VS_MIN_LEV:.1f}–{PROD_VS_MAX_LEV:.1f}x；调整死区|Δscale|≥{PROD_VS_THRESHOLD:.2f}；调仓成本{PROD_VS_REBAL_COST_BPS}bp；融资=BIL+{PROD_VS_SPREAD_BPS}bp。\n')
+    write(f'含BTC代理的分阶段样本起点: **{SUBC_FORMAL_START.date().isoformat()}**；十只ETF均已上市后首个完整收益日: **{SUBC_ALL_ETF_FIRST_FULL_RETURN_DATE.date().isoformat()}**。代理段仅作研究。\n')
+    if info:
+        _eq_cur = info.get('current_scale', 1.0)
+        _eq_raw = info.get('next_target_scale', _eq_cur)
+        _eq_next = info.get('next_scale', _eq_cur)
+        _gold_cur = info.get('gold_current_scale', 1.0)
+        _gold_raw = info.get('gold_target_scale', _gold_cur)
+        _gold_next = info.get('gold_next_scale', _gold_cur)
+        _rv = info.get('realized_vol')
+        write('\n| 实时指标 | 当前生效 | 最新raw | 下一执行 |\n|:-|------:|------:|------:|\n')
+        write(f'| 股票袖scale | {_eq_cur:.2f}x | {_eq_raw:.2f}x | **{_eq_next:.2f}x** |\n')
+        write(f'| 黄金袖scale | {_gold_cur:.2f}x | {_gold_raw:.2f}x | **{_gold_next:.2f}x** |\n')
+        write('| BTC/债券/CTA scale | 1.00x | 1.00x | **1.00x** |\n')
+        if _rv is not None:
+            write(f'\nSPY当前{PROD_VS_VOL_WINDOW}日年化已实现波动率: **{_rv:.1%}**。\n')
+        write(f"总毛敞口（下一执行）: **{info.get('next_gross_exposure', 1.0):.1%}**；BIL: {info.get('next_cash_exposure', 0.0):.1%}；融资: {info.get('next_borrow_exposure', 0.0):.1%}；overlay乘数: {info.get('overlay_multiplier', 1.0):.2f}x。\n")
+RebalanceRecord = TypedDict('RebalanceRecord', {'日期': str, '北京时间': str, '策略': str, '卖出': str, '卖出价格': str | None, '买入': str, '买入价格': str | None, '日期口径': str, '说明': str}, total=False)
+
+def _write_rebalance_sheet(wb: Any, rebalance_records: list[RebalanceRecord], header_fmt: Any, cell_fmt: Any, price_fmt: Any) -> None:
+    if not rebalance_records:
+        return
+    ws = wb.add_worksheet('调仓记录')
+    ws.set_column('A:A', 12)
+    ws.set_column('B:B', 25)
+    ws.set_column('C:C', 8)
+    ws.set_column('D:D', 15)
+    ws.set_column('E:E', 12)
+    ws.set_column('F:F', 30)
+    ws.set_column('G:G', 12)
+    headers = ['日期', '北京时间', '策略', '卖出', '卖出价格', '买入', '买入价格']
+    clock_fields = ['信号观察', '价格确认', '模型计价'] if any('模型计价' in rec for rec in rebalance_records) else []
+    if clock_fields:
+        ws.set_column('B:B', 46)
+        ws.set_column('H:J', 43)
+        headers.extend(clock_fields)
+    for j, h in enumerate(headers):
+        ws.write(0, j, h, header_fmt)
+    for i, rec in enumerate(rebalance_records):
+        ws.write(i + 1, 0, rec.get('日期', ''), cell_fmt)
+        ws.write(i + 1, 1, rec.get('北京时间', ''), cell_fmt)
+        ws.write(i + 1, 2, rec.get('策略', ''), cell_fmt)
+        ws.write(i + 1, 3, rec.get('卖出', ''), cell_fmt)
+        sell_price = rec.get('卖出价格')
+        ws.write(i + 1, 4, sell_price if sell_price is not None else '', cell_fmt)
+        ws.write(i + 1, 5, rec.get('买入', ''), cell_fmt)
+        buy_price = rec.get('买入价格')
+        ws.write(i + 1, 6, buy_price if buy_price is not None else '', cell_fmt)
+        for j, field in enumerate(clock_fields, start=7):
+            ws.write(i + 1, j, rec.get(field, ''), cell_fmt)
+
+def _write_adk_net_exposure_sheet(wb, cn_dk_result, header_fmt, cell_fmt, row_idx=-1, date_label='当前已生效'):
+    if cn_dk_result is None or 'adk_net_asset_exposure' not in cn_dk_result.columns or len(cn_dk_result) == 0:
+        return
+    row = cn_dk_result.iloc[row_idx]
+    net = row.get('adk_net_asset_exposure', {}) or {}
+    if not net:
+        return
+    ws = wb.add_worksheet('ADK净敞口')
+    ws.set_column('A:A', 16)
+    ws.set_column('B:C', 14)
+    ws.set_column('D:D', 10)
+    headers = ['指数', '带符号净敞口', '净敞口', '方向']
+    for j, h in enumerate(headers):
+        ws.write(0, j, h, header_fmt)
+    for i, (asset, exposure) in enumerate(sorted(net.items(), key=lambda item: abs(float(item[1])), reverse=True), start=1):
+        exposure = float(exposure)
+        ws.write(i, 0, _dk_leg_name(asset), cell_fmt)
+        ws.write(i, 1, exposure, cell_fmt)
+        ws.write(i, 2, abs(exposure), cell_fmt)
+        ws.write(i, 3, '做多' if exposure > 0 else '做空', cell_fmt)
+    note_row = len(net) + 2
+    ws.write(note_row, 0, '日期口径', header_fmt)
+    ws.write(note_row, 1, date_label, cell_fmt)
+    ws.write(note_row + 1, 0, '净敞口日期', header_fmt)
+    ws.write(note_row + 1, 1, pd.Timestamp(row.name).strftime('%Y-%m-%d'), cell_fmt)
+    basis_row = note_row + 3
+    ws.write(basis_row, 0, 'ADK回测口径', header_fmt)
+    ws.write(basis_row, 1, 'component-net', cell_fmt)
+    ws.write(basis_row + 1, 0, 'ADK执行参考', header_fmt)
+    ws.write(basis_row + 1, 1, '账户级净敞口', cell_fmt)
+
+def generate_signal_excel(date_str, signal_info, rebalance_records, cn_dk_result=None, adk_net_row_idx=-1, adk_net_date_label='当前已生效'):
+    output = io.BytesIO()
+    with xlsxwriter.Workbook(output, {'in_memory': True}) as wb:
+        header_fmt = wb.add_format({'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1})
+        cell_fmt = wb.add_format({'border': 1})
+        pct_fmt = wb.add_format({'border': 1, 'num_format': '0.0%'})
+        price_fmt = wb.add_format({'border': 1, 'num_format': '0.000'})
+        ws = wb.add_worksheet('信号概览')
+        ws.set_column('A:A', 12)
+        ws.set_column('B:B', 18)
+        ws.set_column('C:C', 30)
+        ws.set_column('D:D', 15)
+        headers = ['策略', '信号日?', '当前信号', '备注']
+        for j, h in enumerate(headers):
+            ws.write(0, j, h, header_fmt)
+        for i, (strat, info) in enumerate(signal_info.items()):
+            ws.write(i + 1, 0, strat, cell_fmt)
+            ws.write(i + 1, 1, '是' if info.get('is_signal') else '否', cell_fmt)
+            ws.write(i + 1, 2, info.get('signal_text', ''), cell_fmt)
+            ws.write(i + 1, 3, info.get('note', ''), cell_fmt)
+        _write_adk_net_exposure_sheet(wb, cn_dk_result, header_fmt, cell_fmt, row_idx=adk_net_row_idx, date_label=adk_net_date_label)
+        _write_rebalance_sheet(wb, rebalance_records, header_fmt, cell_fmt, price_fmt)
+    output.seek(0)
+    return output.getvalue()
+
+def generate_performance_excel(date_str, metrics_dict, monthly_returns, rebalance_records, is_short_period=False, *, standard_windows=None, report_context=None):
+    output = io.BytesIO()
+    with xlsxwriter.Workbook(output, {'in_memory': True}) as wb:
+        header_fmt = wb.add_format({'bold': True, 'bg_color': '#4472C4', 'font_color': 'white', 'border': 1})
+        cell_fmt = wb.add_format({'border': 1})
+        pct_fmt = wb.add_format({'border': 1, 'num_format': '0.00%'})
+        num_fmt = wb.add_format({'border': 1, 'num_format': '0.00'})
+        ws = wb.add_worksheet('绩效概览')
+        ws.set_column('A:A', 14)
+        ws.set_column('B:G', 14)
+        metric_headers = ['指标', 'Sub-A', 'A-DK', 'B7.8', 'B7.9', 'Sub-C', f'PV组合({_performance_combo_weight_label()})']
+        for j, h in enumerate(metric_headers):
+            ws.write(0, j, h, header_fmt)
+        pct2_fmt = wb.add_format({'border': 1, 'num_format': '0.00%'})
+        metric_names = [('累计收益', 'total_return', True), ('年化收益', 'annual', True), ('波动率', 'vol', True), ('夏普比率', 'sharpe', False), ('最大回撤', 'max_dd', True), ('卡尔玛比率', 'calmar', False), ('月胜率', 'win_rate', True)]
+        if is_short_period:
+            metric_names.append(('周胜率', 'weekly_win_rate', True))
+        for i, (label, key, is_pct) in enumerate(metric_names):
+            ws.write(i + 1, 0, label, cell_fmt)
+            for j, strat in enumerate(PERFORMANCE_COLUMNS):
+                m = metrics_dict.get(strat)
+                if m and key in m and (m[key] is not None):
+                    if is_pct:
+                        ws.write(i + 1, j + 1, m[key] / 100, pct2_fmt)
+                    else:
+                        ws.write(i + 1, j + 1, round(m[key], 2), num_fmt)
+                else:
+                    ws.write(i + 1, j + 1, 'N/A', cell_fmt)
+        if monthly_returns is not None and len(monthly_returns) > 0:
+            ws2 = wb.add_worksheet('月度收益')
+            ws2.set_column('A:A', 10)
+            ws2.set_column('B:G', 14)
+            mr_headers = ['月份', 'Sub-A', 'A-DK', 'B7.8', 'B7.9', 'Sub-C', f'PV组合({_performance_combo_weight_label()})']
+            for j, h in enumerate(mr_headers):
+                ws2.write(0, j, h, header_fmt)
+            for i in range(len(monthly_returns)):
+                idx = monthly_returns.index[i]
+                ws2.write(i + 1, 0, str(idx), cell_fmt)
+                for j, col in enumerate(monthly_returns.columns):
+                    val = monthly_returns.iloc[i][col]
+                    if not pd.isna(val):
+                        ws2.write(i + 1, j + 1, val, pct_fmt)
+                    else:
+                        ws2.write(i + 1, j + 1, '', cell_fmt)
+        price_fmt = wb.add_format({'border': 1, 'num_format': '0.000'})
+        _write_rebalance_sheet(wb, rebalance_records, header_fmt, cell_fmt, price_fmt)
+        standard = wb.add_worksheet('标准窗口指标')
+        standard.set_column('A:A', 12)
+        standard.set_column('B:G', 32)
+        standard.freeze_panes(1, 1)
+        for j, heading in enumerate(['Window'] + metric_headers[1:]):
+            standard.write(0, j, heading, header_fmt)
+        standard_fmt = wb.add_format({'border': 1, 'text_wrap': True, 'valign': 'top'})
+        if standard_windows is None:
+            standard_windows = [{'window': label, 'metrics': {name: {'reason': 'standard window inputs unavailable'} for name in PERFORMANCE_COLUMNS}} for label, _ in PERFORMANCE_STANDARD_WINDOWS]
+        for i, row in enumerate(standard_windows, 1):
+            standard.write(i, 0, row['window'], cell_fmt)
+            for j, name in enumerate(PERFORMANCE_COLUMNS, 1):
+                standard.write(i, j, _format_performance_standard_window_cell(row['metrics'].get(name)), standard_fmt)
+            standard.set_row(i, 54)
+        basis = wb.add_worksheet('数据与指标口径')
+        basis.set_column('A:A', 24)
+        basis.set_column('B:B', 108)
+        wrap_fmt = wb.add_format({'border': 1, 'text_wrap': True, 'valign': 'top'})
+        for i, (label, note) in enumerate(_performance_basis_notes().items()):
+            basis.write(i, 0, label, header_fmt)
+            basis.write(i, 1, note, wrap_fmt)
+            basis.set_row(i, 46)
+        if report_context is not None:
+            metadata = wb.add_worksheet('报告元数据')
+            metadata.set_column('A:A', 30)
+            metadata.set_column('B:B', 68)
+            fields = [(key, report_context[key]) for key in ('requested_start', 'requested_end', 'actual_start', 'actual_end', 'generated_at', 'run_id')]
+            if report_context.get('us_data_coverage'):
+                fields.append(('美股数据覆盖', report_context['us_data_coverage']))
+            fields += [(f'{name} 确认收盘', date) for name, date in report_context.get('sleeve_asof', {}).items()]
+            fields += [(f'{name} 收益覆盖', f'{bounds[0]:%Y-%m-%d} 至 {bounds[1]:%Y-%m-%d}') for name, bounds in report_context.get('sleeve_return_ranges', {}).items()]
+            fields += [(f'{name} 收益覆盖', f'N/A（{reason}）') for name, reason in report_context.get('unavailable_returns', {}).items()]
+            if 'Sub-A' in report_context.get('sleeve_return_ranges', {}):
+                fields.append(('Sub-A 计价口径', CN_SA_MODEL_CLOCK_NOTE))
+            for i, (key, value) in enumerate(fields):
+                metadata.write(i, 0, key, header_fmt)
+                metadata.write(i, 1, value.strftime('%Y-%m-%d') if isinstance(value, pd.Timestamp) else str(value), cell_fmt)
+    output.seek(0)
+    return output.getvalue()
+
+class CombinedStrategyBase:
+
+    def _fetch_cn_price_panel(self, msg, specifications, clock, required, previous, final_sessions,
+                              *, adk=False, include_snapshot=False, prefer_full_history=False):
+        label = 'ADK' if adk else 'Sub-A'
+        names = CN_DK_NAMES if adk else CN_NAMES
+        raw, sources = {}, {}
+        for column, secid, index_code in specifications:
+            evidence = final_sessions[required].get(secid)
+            confirmation = {'verified_close': evidence['close']} if evidence else {}
+            if not adk and secid != CN_BOND_CODE:
+                if prefer_full_history:
+                    confirmation['prefer_full_history'] = True
+                if previous < required and any(code not in final_sessions[required] for _, code, _ in specifications):
+                    confirmation['confirmed_through'] = previous
+            prior_evidence = final_sessions[previous].get(secid)
+            if prior_evidence and required != previous:
+                confirmation['verified_prior'] = (previous, prior_evidence['close'])
+            if secid == CN_BOND_CODE:
+                stock_days = pd.concat([_price_column_frame(raw[code], 'close', code) for code in CN_STOCK_CODES],
+                                       axis=1, join='inner').dropna().index
+                coverage = stock_days[(stock_days >= CN_STOCK_FORMAL_START) & (stock_days <= previous)]
+                confirmation['required_history'] = coverage
+            try:
+                if adk:
+                    frame, source = _fetch_cn_dk_price_index(index_code, secid, required_date=required, **confirmation)
+                else:
+                    frame, source = fetch_cn_kline(secid, required_date=required, **confirmation)
+            except DataUnavailableError:
+                if secid != CN_BOND_CODE or previous == required:
+                    raise
+                evidence = final_sessions[previous].get(secid)
+                fallback = {'verified_close': evidence['close']} if evidence else {}
+                frame, source = fetch_cn_kline(secid, required_date=previous, required_history=coverage, **fallback)
+            if not adk and secid != CN_BOND_CODE:
+                frame, source = _ensure_cn_history_frame(secid, frame, source, min_rows=CN_MIN_HISTORY_ROWS, write=msg.write)
+            raw[column], sources[column] = frame, source
+        symbols = {column: secid for column, secid, _ in specifications}
+        raw, diagnostics = _prepare_cn_live_panel(raw, symbols, clock, required, previous, msg, label, names,
+                                                  include_snapshot=include_snapshot, final_sessions=final_sessions[required],
+                                                  previous_sessions=final_sessions[previous])
+        if adk:
+            close = _build_cn_dk_close_frame(raw)
+        else:
+            close = _build_cn_stock_close_frame(raw)
+            confirmed_count = int((close.index <= diagnostics['cn_confirmed_close']).sum())
+            if confirmed_count < CN_MIN_HISTORY_ROWS:
+                raise SubaInsufficientHistoryError(f'Sub-A 合并后仅有 {confirmed_count} 个确认交易日；当前及前一日波动仓位需 {CN_MIN_HISTORY_ROWS} 日预热。')
+            bond = _price_column_frame(raw[CN_BOND_CODE], 'close', CN_BOND_CODE)[CN_BOND_CODE]
+            _attach_cn_bond_close(close, bond, 'Sub-A国债避险')
+            diagnostics['cn_final_amounts'] = {
+                code: evidence['amount_cny'] for code, evidence in final_sessions[diagnostics['cn_confirmed_close']].items()
+                if 'amount_cny' in evidence
+            }
+        close.attrs.update(diagnostics)
+        for column, frame in raw.items():
+            msg.write(f"  {names[column]}: {frame.index[-1]:%Y-%m-%d} [{_cn_latest_data_source_label(frame, sources[column])}]\n")
+        msg.write(f"  {'A-DK' if adk else 'Sub-A'}合并截至: {close.index[-1]:%Y-%m-%d}\n")
+        return close
+
+    def _fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False, allow_cn_panel_errors=False):
+        clock = beijing_now()
+        requested_close = _latest_cn_data_required_date(clock)
+        previous_close = _latest_cn_required_close_date(clock.date())
+        adk_specs = [
+            (CN_DK_COLS[0], CN_DK_ZZ1000_SECID, CN_DK_ZZ1000_CODE),
+            (CN_DK_COLS[1], CN_DK_SZ50_SECID, CN_DK_SZ50_CODE),
+            (CN_DK_COLS[2], CN_DK_HS300_SECID, CN_DK_HS300_CODE),
+            (CN_DK_COLS[3], CN_DK_ZZ500_SECID, CN_DK_ZZ500_CODE),
+            (CN_DK_COLS[4], CN_DK_CYB_SECID, CN_DK_CYB_CODE),
+        ]
+        stock_specs = [(secid, secid, None) for secid in CN_ALL_CODES]
+        partial = include_cn_live_snapshot or allow_cn_panel_errors
+        final_sessions = {day: {} for day in (previous_close, requested_close)}
+        msg.write('⏳ 正在核验A股收盘行情与成交额...\n')
+        codes = set(CN_ALL_CODES + [CN_DK_HS300_SECID, CN_SA_VOLUME_ZZ2000_SECID])
+        with ThreadPoolExecutor(max_workers=len(codes)) as executor:
+            tasks = {code: executor.submit(_fetch_cn_final_sessions, code, tuple(final_sessions), clock) for code in codes}
+            for code, task in tasks.items():
+                receipts = task.result()
+                for day, evidence in receipts.items():
+                    final_sessions[day][code] = evidence
+                    if evidence.get('source'):
+                        msg.write(f"  ↳ {CN_NAMES.get(code, code)} {day:%Y-%m-%d} 收盘核验: {evidence['source']}\n")
+                for day, detail in getattr(receipts, 'diagnostics', {}).items():
+                    msg.write(f"  ⚠️ {CN_NAMES.get(code, code)} {day:%Y-%m-%d} 核验诊断: {detail}\n")
+        panels = []
+        for adk, label, specs in ((False, 'Sub-A', stock_specs), (True, 'ADK', adk_specs)):
+            msg.write(f'⏳ 正在获取{label}行情...\n')
+            try:
+                panel = self._fetch_cn_price_panel(msg, specs, clock, requested_close, previous_close,
+                                                   final_sessions, adk=adk, include_snapshot=include_cn_live_snapshot,
+                                                   prefer_full_history=allow_last_confirmed_cn_close)
+            except _fetch_or_bot_errors() as exc:
+                history_short = not adk and allow_last_confirmed_cn_close and isinstance(exc, SubaInsufficientHistoryError)
+                if (not partial and not history_short) or isinstance(exc, VerifiedDataRepairConflict):
+                    raise
+                panel = pd.DataFrame(index=pd.DatetimeIndex([], name='date'))
+                panel.attrs['cn_panel_error'] = _short_error(exc, 500)
+                msg.write(f"  ⚠️ {label}确认历史不可用：{panel.attrs['cn_panel_error']}\n")
+            panels.append(panel)
+        cn_close, cn_dk_close = panels
+        if allow_last_confirmed_cn_close and any(not panel.empty for panel in panels):
+            cutoff = min(panel.attrs['cn_confirmed_close'] for panel in panels if not panel.empty)
+            if not cn_close.empty and cutoff == pd.Timestamp(clock.date()) and CN_SA_VOLUME_OVERLAY_ENABLED:
+                receipts = cn_close.attrs.get('cn_final_amounts', {})
+                amount_codes = {CN_SA_VOLUME_ZZ2000_SECID, CN_SA_VOLUME_CYB_SECID}
+                if not amount_codes.issubset(receipts):
+                    cutoff = previous_close
+            if cutoff < requested_close:
+                available = 'A与ADK' if not cn_close.empty else 'ADK'
+                msg.write(f'  ⚠️ 当日收盘尚未完整核验；{available}按共同确认收盘 {cutoff:%Y-%m-%d} 计算。\n')
+                for i, panel in enumerate(panels):
+                    if panel.empty:
+                        continue
+                    panels[i] = _drop_cn_rows_after(panel, cutoff)
+                    panels[i].attrs['cn_confirmed_close'] = cutoff
+                cn_close, cn_dk_close = panels
+                cn_close.attrs['cn_final_amounts'] = {
+                    code: evidence['amount_cny'] for code, evidence in final_sessions[cutoff].items()
+                    if 'amount_cny' in evidence
+                }
+        msg.write('⏳ 正在获取美股数据...\n')
+        us_raw, us_sources = ({}, {})
+        _expected_us_date = _latest_us_required_close_date()
+        _us_input_cutoff = _expected_us_date
+        if include_us_live_snapshot:
+            _us_market_open, _us_now_bj = is_us_market_open()
+            if _us_market_open:
+                _us_input_cutoff = _bj_naive_to_utc(_us_now_bj).astimezone(ZoneInfo('America/New_York')).date()
+        for ticker in US_ALL_TICKERS:
+            try:
+                df, source = fetch_yahoo(ticker)
+            except _DATA_FETCH_ERRORS:
+                msg.write(f'  ⚠️ {ticker} 暂无可用历史，将按全池共同覆盖核验。\n')
+                continue
+            if df is not None and len(df) > 50:
+                df = _drop_us_unconfirmed_rows(df, _us_input_cutoff)
+                us_raw[ticker] = df
+                us_sources[ticker] = source
+            time.sleep(0.1)
+        _formal_us_history_tickers = _v80_us_required_history()
+        _retry_incomplete_us_price_history(us_raw, us_sources, _formal_us_history_tickers, msg=msg)
+        _v80_assert_integrity(_v80_integrity_generation())
+        confirmed, us_status = _v80_us_confirmed_prefix(us_raw, us_sources, _expected_us_date,
+                                                        _formal_us_history_tickers, msg)
+        self._us_sources = dict(us_sources)
+        msg.write('  美股来源: ' + '；'.join((f'{ticker}={source}' for ticker, source in sorted(us_sources.items()))) + '\n')
+        if us_status['status'] == 'unavailable':
+            msg.write('  美股无共同完整历史：' + us_status['reason'] + '\n')
+            self._us_open = {}
+            empty = pd.DataFrame(index=pd.DatetimeIndex([]))
+            empty.attrs['us_data_status'] = us_status
+            return cn_close, cn_dk_close, empty, empty.copy()
+        live_day = pd.Timestamp(_us_input_cutoff)
+        vgit_confirmed = confirmed.get('VGIT')
+        vgit_volume = _vgit_volume_value(vgit_confirmed.at[us_status['asof'], 'volume']) if vgit_confirmed is not None and 'volume' in vgit_confirmed and us_status['asof'] in vgit_confirmed.index else np.nan
+        vgit_liquid = bool(np.isfinite(vgit_volume) and vgit_volume > 0)
+        if not vgit_liquid:
+            us_status['status'] = 'historical'
+            us_status['reason'] = (str(us_status.get('reason',''))+'；VGIT 最新确认成交量为零或不可核验，暂停本次新增调仓').strip('；')
+        if include_us_live_snapshot and vgit_liquid and live_day > _expected_us_date and us_status['asof'] == _expected_us_date:
+            us_raw = _v80_us_live_panel(confirmed, us_raw, _formal_us_history_tickers, live_day, us_status, msg)
+        else:
+            us_raw = confirmed
+        _expected_us_date = us_status['asof']
+        if us_status['status'] in ('historical', 'partial_intraday'):
+            msg.write(f"  美股回退至共同确认收盘 {_expected_us_date:%Y-%m-%d}：{us_status['reason']}。\n")
+        _assert_columns_fresh(us_raw, [ticker for ticker in SUBB_REQUIRED_PRICE_TICKERS if ticker != US_ROT_BTC_TICKER], expected_date=_expected_us_date, max_lag_days=0, label='Sub-B核心价格')
+        _assert_columns_fresh(us_raw, SUBB_REQUIRED_LIVE_PRICE_TICKERS, expected_date=_expected_us_date, max_lag_days=0, label='Sub-B实盘ETF价格')
+        _formal_validation_raw = dict(us_raw)
+        _formal_validation_tickers = [ticker for ticker in _formal_us_history_tickers if ticker != US_ROT_BTC_TICKER]
+        _formal_validation_raw['BTC/IBIT'] = _build_btc_ibit_formal_ohlc(us_raw)
+        _formal_validation_tickers.append('BTC/IBIT')
+        _formal_expected_starts = {ticker: _us_history_expected_start(ticker, '2003-01-01', _formal_validation_raw.get(ticker)) for ticker in _formal_validation_tickers if ticker != 'BTC/IBIT'}
+        _formal_expected_starts['BTC/IBIT'] = _us_history_expected_start('BTC-USD', '2003-01-01', us_raw.get('BTC-USD'))
+        _assert_us_internal_price_history(_formal_validation_raw, _formal_validation_tickers, label='Formal US price history', expected_starts=_formal_expected_starts)
+        rot_tickers = _v80_subb_all_rot_tickers(us_raw)
+        _late_rot = _us_rot_late_history_tickers()
+        rot_tickers_core = [t for t in rot_tickers if t not in _late_rot]
+        if 'EMXC' in US_ROT_POOL and US_ROT_EMXC_BT_PROXY not in rot_tickers_core:
+            if US_ROT_EMXC_BT_PROXY in us_raw:
+                rot_tickers_core.append(US_ROT_EMXC_BT_PROXY)
+        us_rot_close = pd.concat([us_raw[t][['close']].rename(columns={'close': t}) for t in rot_tickers_core if t in us_raw], axis=1).ffill().dropna()
+        if 'EMXC' in US_ROT_POOL and US_ROT_EMXC_BT_PROXY in us_raw:
+            eem_col = us_rot_close[US_ROT_EMXC_BT_PROXY].copy() if US_ROT_EMXC_BT_PROXY in us_rot_close.columns else None
+            emxc_raw = us_raw.get('EMXC')
+            if eem_col is not None:
+                hybrid = eem_col.rename('EMXC')
+                if emxc_raw is not None and len(emxc_raw) > 0:
+                    emxc_ser = emxc_raw['close'].reindex(hybrid.index)
+                    switch_idx = hybrid.index >= US_ROT_EMXC_BT_START
+                    if switch_idx.any() and emxc_ser.loc[switch_idx].first_valid_index() is not None:
+                        first_emxc_date = emxc_ser.loc[switch_idx].first_valid_index()
+                        scale_factor = hybrid.loc[first_emxc_date] / emxc_ser.loc[first_emxc_date]
+                        hybrid.loc[switch_idx] = emxc_ser.loc[switch_idx] * scale_factor
+                us_rot_close['EMXC'] = hybrid
+                if US_ROT_EMXC_BT_PROXY in us_rot_close.columns and US_ROT_EMXC_BT_PROXY not in US_ROT_POOL:
+                    us_rot_close = us_rot_close.drop(columns=[US_ROT_EMXC_BT_PROXY])
+        for t in _late_rot:
+            if t == 'EMXC':
+                continue
+            if t in us_raw:
+                us_rot_close = us_rot_close.join(us_raw[t][['close']].rename(columns={'close': t}), how='left')
+        if 'BTC-USD' in us_rot_close.columns and 'IBIT' in us_raw and ('close' in us_raw['IBIT'].columns):
+            us_rot_close['BTC-USD'] = build_ibit_spliced(pd.DataFrame({'BTC-USD': us_rot_close['BTC-USD'], 'IBIT': us_raw['IBIT']['close'].reindex(us_rot_close.index)}))
+        for _live_ticker, _cfg in {**_v80_b78_US_ROT_BASE_ASSETS, **US_ROT_BASE_ASSETS}.items():
+            _proxy_ticker = _cfg.get('proxy', _live_ticker)
+            if _proxy_ticker in {_live_ticker, 'EMXC', US_ROT_BTC_TICKER}:
+                continue
+            if _proxy_ticker in us_rot_close.columns and _live_ticker in us_raw and ('close' in us_raw[_live_ticker].columns):
+                us_rot_close[_proxy_ticker] = _build_proxy_live_spliced_series(us_rot_close[_proxy_ticker], us_raw[_live_ticker]['close'], name=_proxy_ticker, live_name=_live_ticker)
+        prod_proxies = list(dict.fromkeys([c['proxy'] for c in PROD_PORTFOLIO.values()] + [PROD_CASH, PROD_VS_SIGNAL_TICKER, PROD_GOLD_VS_SIGNAL_TICKER]))
+        if PROD_VS_SIGNAL_TICKER not in us_raw:
+            raise poe.BotError(f'Sub-C缺少{PROD_VS_SIGNAL_TICKER}波动率信号')
+        if _subc_enabled():
+            _assert_columns_fresh(us_raw, [ticker for ticker in prod_proxies if ticker != US_ROT_BTC_TICKER], expected_date=_expected_us_date, max_lag_days=0, label='Sub-C原始价格')
+            _assert_columns_fresh(us_raw, list(PROD_PORTFOLIO), expected_date=_expected_us_date, max_lag_days=0, label='Sub-C实盘ETF价格')
+        _prod_calendar = us_raw[PROD_VS_SIGNAL_TICKER].index
+        us_prod_daily = pd.DataFrame(index=_prod_calendar)
+        for t in prod_proxies:
+            if t in us_raw:
+                us_prod_daily[t] = us_raw[t]['close'].reindex(_prod_calendar).ffill()
+        for _live_ticker, _cfg in PROD_PORTFOLIO.items():
+            _proxy_ticker = _cfg.get('proxy', _live_ticker)
+            if _proxy_ticker != _live_ticker and _proxy_ticker in us_prod_daily.columns and (_live_ticker in us_raw) and ('close' in us_raw[_live_ticker].columns):
+                us_prod_daily[_proxy_ticker] = _build_proxy_live_spliced_series(us_prod_daily[_proxy_ticker], us_raw[_live_ticker]['close'], name=_proxy_ticker, live_name=_live_ticker)
+        for _live_ticker in PROD_PORTFOLIO:
+            if _live_ticker in us_raw:
+                us_prod_daily[_live_ticker] = us_raw[_live_ticker]['close'].reindex(_prod_calendar)
+        if 'SPY' not in us_rot_close.columns and 'SPY' in us_raw:
+            us_rot_close['SPY'] = us_raw['SPY']['close'].reindex(us_rot_close.index)
+        _btc_like = {'BTC-USD'}
+        _us_stock_rot = [t for t in rot_tickers if t in us_raw and t not in _btc_like]
+        if _us_stock_rot:
+            _last_stock_date = max((us_raw[t].index[-1] for t in _us_stock_rot))
+            us_rot_close = us_rot_close.loc[:_last_stock_date]
+        _us_stock_prod = [t for t in prod_proxies if t in us_raw and t not in _btc_like]
+        if _us_stock_prod:
+            _prod_latest_dates = [_latest_valid_close_date(us_raw[t]) for t in _us_stock_prod]
+            _prod_latest_dates = [d for d in _prod_latest_dates if d is not None]
+            if _prod_latest_dates:
+                _last_prod_date = min(_prod_latest_dates)
+                us_prod_daily = us_prod_daily.loc[:_last_prod_date]
+        missing_us = set(rot_tickers + prod_proxies) - set(us_raw.keys())
+        if missing_us:
+            msg.write(f"  ⚠️ 缺失: {', '.join(sorted(missing_us))}\n")
+        for _live_ticker in set(list(US_ROT_ASSETS.keys()) + list(_v80_b78_US_ROT_ASSETS.keys()) + list(PROD_PORTFOLIO.keys())):
+            if _live_ticker in us_raw:
+                _live_col = us_raw[_live_ticker]['close']
+                if _live_ticker not in us_rot_close.columns:
+                    us_rot_close[_live_ticker] = _live_col.reindex(us_rot_close.index)
+                if _live_ticker not in us_prod_daily.columns:
+                    us_prod_daily[_live_ticker] = _live_col.reindex(us_prod_daily.index)
+        if _subc_enabled():
+            _assert_price_frame_columns_fresh(us_prod_daily, prod_proxies, expected_date=us_prod_daily.index[-1], max_lag_days=1 if include_us_live_snapshot else 0, label='Sub-C最终价格', names={'BTC-USD': 'BTC/IBIT'})
+        _assert_subb_final_price_frame_fresh(us_rot_close, expected_date=us_rot_close.index[-1], include_us_live_snapshot=include_us_live_snapshot)
+        us_rot_close.attrs['us_data_status'] = us_status
+        us_prod_daily.attrs['us_data_status'] = us_status.copy()
+        self._us_open = _build_us_open_execution_dict(us_raw)
+        us_date = us_rot_close.index[-1]
+        us_close_bj = beijing_time_str(us_date, 'US', 'close')
+        msg.write(f'  美股: {len(us_raw)}个ETF | 收盘: {us_close_bj}\n')
+        return (cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+
+    def _cached_fetch_data(self, msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_last_confirmed_cn_close=False, allow_cn_panel_errors=False):
+        generation = _v80_integrity_generation()
+        if getattr(self, '_request_integrity_generation', None) != generation:
+            self._request_data_cache = {}
+            self._request_strategy_cache = {}
+            self._request_integrity_generation = generation
+        cache = getattr(self, '_request_data_cache', None)
+        if cache is None:
+            cache = {}
+            self._request_data_cache = cache
+        if _v80_integrity_pending():
+            cache.clear()
+            self._request_strategy_cache = {}
+        key = (bool(include_cn_live_snapshot), bool(include_us_live_snapshot), bool(allow_last_confirmed_cn_close), bool(allow_cn_panel_errors))
+        if key not in cache:
+            try:
+                options = {'allow_cn_panel_errors': True} if allow_cn_panel_errors else {}
+                data = self._fetch_data(msg, include_cn_live_snapshot=include_cn_live_snapshot, include_us_live_snapshot=include_us_live_snapshot, allow_last_confirmed_cn_close=allow_last_confirmed_cn_close, **options)
+            except Exception:
+                _v80_assert_integrity(generation)
+                raise
+            with _V80_INTEGRITY_LOCK:
+                _v80_assert_integrity(generation)
+                for frame in data:
+                    if hasattr(frame, 'attrs'):
+                        frame.attrs['verified_integrity_generation'] = generation
+                cache[key] = (data, getattr(self, '_us_open', None), getattr(self, '_us_sources', {}))
+        else:
+            _debug_write(msg, '  DEBUG: reuse fetched market data for this request\n')
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(generation)
+            data, self._us_open, self._us_sources = cache[key]
+            return data
+
+    def _cached_run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
+        generation = _v80_integrity_generation()
+        _v80_assert_integrity(generation)
+        for frame in (cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+            if getattr(frame, 'attrs', {}).get('verified_integrity_generation', generation) != generation:
+                raise _V80IntegrityStateChanged('Market inputs predate a known integrity conflict; fetch complete data again')
+        cache = getattr(self, '_request_strategy_cache', None)
+        if cache is None:
+            cache = {}
+            self._request_strategy_cache = cache
+        key = (generation, _strategy_frame_cache_fingerprint(cn_close), _strategy_frame_cache_fingerprint(cn_dk_close), _strategy_frame_cache_fingerprint(us_rot_close), _strategy_frame_cache_fingerprint(us_prod_daily), _strategy_open_cache_fingerprint(getattr(self, '_us_open', None)), bool(allow_unresolved_suba_volume), bool(strict_subb_open_execution))
+        if key not in cache:
+            result = self._run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=allow_unresolved_suba_volume, strict_subb_open_execution=strict_subb_open_execution)
+            with _V80_INTEGRITY_LOCK:
+                _v80_assert_integrity(generation)
+                cache[key] = result
+        with _V80_INTEGRITY_LOCK:
+            _v80_assert_integrity(generation)
+            return cache[key]
+
+    def _run_suba(self, cn_close, allow_unresolved_suba_volume):
+        historical = cn_close.attrs.get('historical_report_window', False)
+        cutoff = cn_close.attrs.get('cn_confirmed_close')
+        confirmed_count = len(cn_close) if cutoff is None else int((cn_close.index <= pd.Timestamp(cutoff)).sum())
+        if historical and confirmed_count < CN_MIN_HISTORY_ROWS:
+            return _empty_historical_sleeve(cn_close.attrs.get('cn_panel_error') or 'Sub-A 样本尚未成立或目标波动未完成预热')
+        if cn_close.attrs.get('cn_panel_error'):
+            return pd.DataFrame()
+        if confirmed_count < CN_MIN_HISTORY_ROWS:
+            raise SubaInsufficientHistoryError(f'Sub-A 仅有 {confirmed_count} 个确认交易日，仓位计算需 {CN_MIN_HISTORY_ROWS} 日预热。')
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A国债避险')
+        cn_result = run_cn_strategy(cn_close_with_bond, CN_EQUITY_CODES)
+        suba_volume_signal = None
+        suba_volume_feature = None
+        if CN_SA_VOLUME_OVERLAY_ENABLED:
+            try:
+                suba_volume_expected_date = cn_close_with_bond.attrs.get('cn_confirmed_close')
+                if suba_volume_expected_date is None:
+                    suba_volume_expected_date = _latest_confirmed_cn_rule_date(cn_close_with_bond.index)
+                amounts = cn_close_with_bond.attrs.get('cn_final_amounts')
+                proof = {} if amounts is None else {'final_amounts': amounts}
+                suba_volume_signal, suba_volume_feature = _load_suba_volume_signal(expected_date=suba_volume_expected_date, **proof)
+                suba_volume_feature = _annotate_rule_freshness(suba_volume_feature, expected_date=suba_volume_expected_date, rule_key='suba_volume')
+                if not allow_unresolved_suba_volume and _suba_volume_feature_has_unresolved(suba_volume_feature, cn_result.index, confirmed_date=suba_volume_expected_date):
+                    unknown = suba_volume_feature['combined_unresolved'].reindex(cn_result.index).fillna(True).astype(bool) if suba_volume_feature is not None and 'combined_unresolved' in suba_volume_feature else pd.Series(True, index=cn_result.index)
+                    unknown = unknown.loc[unknown.index <= suba_volume_expected_date]
+                    dates = unknown.index[unknown]
+                    details = [f'所需截至 {suba_volume_expected_date:%Y-%m-%d}；不可判定 {len(dates)} 日（{dates[0]:%Y-%m-%d} 至 {dates[-1]:%Y-%m-%d}）']
+                    for name in ('zz2000', 'cyb'):
+                        column = f'{name}_error'
+                        if suba_volume_feature is not None and column in suba_volume_feature:
+                            values = suba_volume_feature[column].dropna()
+                            if len(values):
+                                details.append(f'{name}: {_short_error(values.iloc[-1], 500)}')
+                    raise SubaVolumeDataError('Sub-A成交额风控存在不可判定项，正式回测/绩效查询中止。' + '；'.join(details))
+                cn_result = _apply_suba_volume_overlay_policy(cn_result, cn_close_with_bond, suba_volume_signal, suba_volume_feature, allow_unresolved_suba_volume=allow_unresolved_suba_volume)
+            except _fetch_or_bot_errors() as exc:
+                if isinstance(exc, poe.BotError):
+                    raise
+                if not allow_unresolved_suba_volume:
+                    raise SubaVolumeDataError(f'Sub-A成交额风控数据不可用，正式回测/绩效查询已中止。所需截至 {suba_volume_expected_date:%Y-%m-%d}；来源原因：{_short_error(exc, 1200)}') from exc
+                cn_result = _mark_suba_volume_unavailable(cn_result, exc)
+        cn_result.attrs['suba_production_mode'] = 'old_a_only_simplified'
+        if historical:
+            # Keep the native warmup for state reconstruction; expose returns only
+            # after both sides of the first reported holding transition are mature.
+            cn_result = cn_result.loc[cn_close.index[CN_MIN_HISTORY_ROWS - 1]:]
+        return cn_result
+
+    def _run_strategies(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=False, strict_subb_open_execution=True):
+        cn_result = self._run_suba(cn_close, allow_unresolved_suba_volume)
+        if cn_dk_close.attrs.get('historical_report_window') and len(cn_dk_close) < CN_DK_BIAS_N + CN_DK_MOM_DAY + CN_DK_VOL_WINDOW + 50:
+            cn_dk_result = _empty_historical_sleeve('ADK 五指数共同样本尚未成立或配对未完成预热')
+        else:
+            cn_dk_result = pd.DataFrame() if cn_dk_close.attrs.get('cn_panel_error') else run_v80_adk_new_only(cn_close, cn_dk_close)
+        if us_rot_close.empty and us_rot_close.attrs.get('us_data_status', {}).get('status') == 'unavailable':
+            return cn_result, cn_dk_result, None, None, None, None, None, None
+        us_rot_result = _run_v80_subb_variants(us_rot_close, us_open=getattr(self, '_us_open', None), strict_open_execution=strict_subb_open_execution)
+        prod_monthly = prod_sig_a = prod_sig_b = prod_nav = prod_details = None
+        if _subc_enabled():
+            prod_monthly = us_prod_daily.resample('M').last()
+            _last_daily = us_prod_daily.index[-1]
+            _last_monthly_period = prod_monthly.index[-1].to_period('M')
+            _today_period = pd.Timestamp(beijing_now().date()).to_period('M')
+            if _last_daily.to_period('M') == _last_monthly_period == _today_period:
+                prod_monthly = prod_monthly.iloc[:-1]
+            prod_sig_a = make_abs_mom_signals(prod_monthly, PROD_ABS_MOM_LB)
+            prod_sig_b = make_sma_signals(prod_monthly, PROD_SMA_WINDOW, PROD_SMA_BAND)
+            if not PROD_USE_TIMING:
+                prod_sig_a = pd.DataFrame(1.0, index=prod_sig_a.index, columns=prod_sig_a.columns)
+                prod_sig_b = prod_sig_a.copy()
+            prod_monthly_ret = prod_monthly.pct_change(fill_method=None).dropna(how='all')
+            cash_ret = prod_monthly_ret[PROD_CASH] if PROD_CASH in prod_monthly_ret.columns else pd.Series(0, index=prod_monthly_ret.index)
+            prod_nav, prod_details = simulate_prod_btc_phased(prod_monthly_ret, prod_sig_a, cash_ret, PROD_REBAL_MONTH, sig_b=prod_sig_b, blend_a=PROD_BLEND_A, commission=PROD_COMMISSION)
+        return (cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details)
+
+    def _compute_signal_data(self, cn_close, cn_dk_close, us_rot_close, us_prod_daily):
+        cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=True)
+        cn_date = cn_close.index[-1] if len(cn_close) else pd.NaT
+        cn_display_state = _suba_signal_display_state(cn_result, -1)
+        cn_current = cn_display_state['current_holding']
+        is_cn_signal = bool(cn_display_state['is_signal'])
+        cn_close_with_bond = _add_cn_bond_column(cn_close, context='Sub-A展示') if len(cn_close) else cn_close
+        all_codes_display = CN_EQUITY_CODES + ([CN_BOND_CODE] if CN_BOND_CODE in cn_close_with_bond.columns else [])
+        bias_mom_cn = {}
+        r2_cn = {}
+        abs_mom_cn = {}
+        for code in all_codes_display:
+            if code in cn_close_with_bond.columns:
+                bias_mom_cn[code] = calc_bias_momentum(cn_close_with_bond[code])
+                r2_cn[code] = calc_rolling_r2(cn_close_with_bond[code])
+        scores_today = {}
+        for code in all_codes_display:
+            if code in bias_mom_cn:
+                val = bias_mom_cn[code].iloc[-1]
+                if not np.isnan(val):
+                    scores_today[code] = val
+        us_date = us_rot_close.index[-1]
+        us_start_idx = max(US_ROT_MAX_LB, US_ROT_VOL_LB, US_ROT_VOL_WINDOW) + 1
+        us_signal_set = _us_signal_days(us_rot_close, us_start_idx)
+        is_us_signal = len(us_rot_close) - 1 in us_signal_set
+        if is_us_signal:
+            if _should_suppress_early_week_us_signal(us_date):
+                is_us_signal = False
+        rot_w_cols = [c for c in us_rot_result.columns if c.startswith('w_')]
+        current_us_w = {c.replace('w_', ''): us_rot_result.iloc[-1][c] for c in rot_w_cols}
+        last_confirmed_us_scale = None
+        if not is_us_signal:
+            sigs_confirmed_us = sorted([i for i in us_signal_set if i < len(us_rot_close) - 1])
+            if sigs_confirmed_us:
+                last_conf_date_us = us_rot_close.index[sigs_confirmed_us[-1]]
+                if last_conf_date_us in us_rot_result.index:
+                    last_conf_loc_us = us_rot_result.index.get_loc(last_conf_date_us)
+                    last_confirmed_us_scale = _subb_official_scale_from_result(us_rot_result, end_loc=last_conf_loc_us)
+        us_scale = _subb_official_scale_from_result(us_rot_result)
+        if last_confirmed_us_scale is None:
+            last_confirmed_us_scale = us_scale
+        prev_us_w = None
+        rebalanced_b = None
+        would_rebalance = None
+        turnover_b = 0.0
+        hypo_prev_mix_risky_by_lb = _us_mix_prev_risky_by_lb_from_result(us_rot_result, us_date, include_current=False)
+        hypo_prev_ema_risky = _subb_v75_ema_prev_risky_from_result(us_rot_result, us_date, include_current=False)
+        hypo_ranking_codes = _subb_active_ranking_codes(us_rot_close, -1)
+        model_hypo_us_w, _, _ = _us_mix_snapshot(us_rot_close, -1, hypo_ranking_codes, us_scale, prev_risky_by_lb=hypo_prev_mix_risky_by_lb, threshold=US_ROT_REBALANCE_THRESHOLD)
+        ema_hypo_us_w, _, _ = _subb_v75_ema_snapshot(us_rot_close, -1, _subb_v75_ema_scale_from_result(us_rot_result), ranking_codes=US_ROT_POOL, prev_risky=hypo_prev_ema_risky, threshold=US_ROT_REBALANCE_THRESHOLD)
+        v77_hypo_us_w = _blend_subb_v75_weight_dicts(model_hypo_us_w, ema_hypo_us_w)
+        bias_hypo_us_w = _v78_subb_new_line_hypo_weights_from_blend(us_rot_close, us_rot_result, line='bias', row_idx=-1)
+        logvol_hypo_us_w = _v78_subb_new_line_hypo_weights_from_blend(us_rot_close, us_rot_result, line='logvol', row_idx=-1)
+        blended_hypo_us_w = _blend_v78_subb_weight_dicts(v77_hypo_us_w, bias_hypo_us_w, logvol_hypo_us_w)
+        volreg_defense_today = bool(us_rot_result['volreg_defense'].iloc[-1]) if 'volreg_defense' in us_rot_result.columns else False
+        volreg_cash_today = bool(us_rot_result['volreg_cash'].iloc[-1]) if 'volreg_cash' in us_rot_result.columns else False
+        volreg_ratio_today = float(us_rot_result['volreg_ratio'].iloc[-1]) if 'volreg_ratio' in us_rot_result.columns else None
+        volreg_defense_next = _volreg_next_cash_state(volreg_defense_today, volreg_ratio_today) if US_ROT_VOLREG_ENABLED else False
+        volreg_cash_next = False
+        hypo_us_w = dict(blended_hypo_us_w)
+        if US_ROT_VOLREG_ENABLED and volreg_defense_next:
+            hypo_us_w, _ = _apply_subb_volreg_defense_scale_to_weights(hypo_us_w, True)
+        if is_us_signal:
+            rebalanced_b = _subb_model_rebalanced_value(us_rot_result.iloc[-1])
+            rloc = len(us_rot_result) - 1
+            prev_us_w = {}
+            if rloc > 0:
+                prev_us_w = {c.replace('w_', ''): us_rot_result.iloc[rloc - 1][c] for c in rot_w_cols}
+            if not prev_us_w:
+                prev_us_w = {'CASH': 1.0}
+            all_a = set(list(hypo_us_w.keys()) + list(prev_us_w.keys()))
+            turnover_b = sum((abs(hypo_us_w.get(a, 0) - prev_us_w.get(a, 0)) for a in all_a if a not in ('BIL', 'CASH')))
+        else:
+            all_a = set(list(hypo_us_w.keys()) + list(current_us_w.keys()))
+            turnover_b = sum((abs(hypo_us_w.get(a, 0) - current_us_w.get(a, 0)) for a in all_a if a not in ('BIL', 'CASH')))
+            would_rebalance = _subb_should_rebalance(turnover_b, US_ROT_MIN_TURNOVER)
+        dk_date = cn_dk_close.index[-1] if len(cn_dk_close) else pd.NaT
+        dk_top_pair = cn_dk_result['top_pair'].iloc[-1] if 'top_pair' in cn_dk_result.columns else 'none'
+        dk_direction = int(cn_dk_result['direction'].iloc[-1]) if 'direction' in cn_dk_result.columns else 0
+        dk_current = cn_dk_result['holding'].iloc[-1] if len(cn_dk_result) else 'none_0'
+        is_dk_signal = bool(cn_dk_result['is_signal'].iloc[-1]) if 'is_signal' in cn_dk_result.columns else False
+        dk_pair_changed = bool(cn_dk_result['pair_changed'].iloc[-1]) if 'pair_changed' in cn_dk_result.columns else False
+        dk_direction_changed = bool(cn_dk_result['direction_changed'].iloc[-1]) if 'direction_changed' in cn_dk_result.columns else False
+        dk_long_leg = cn_dk_result['long_leg'].iloc[-1] if 'long_leg' in cn_dk_result.columns else None
+        dk_short_leg = cn_dk_result['short_leg'].iloc[-1] if 'short_leg' in cn_dk_result.columns else None
+        dk_rank_current = _build_dk_rank_rows(cn_dk_result, use_shifted=True, top_n=3)
+        dk_rank_today = _build_dk_rank_rows(cn_dk_result, use_shifted=False, top_n=3)
+        dk_hypo_top_pair = dk_rank_today[0]['pair'] if dk_rank_today else dk_top_pair
+        dk_hypo_direction = int(dk_rank_today[0]['direction']) if dk_rank_today else dk_direction
+        if prod_monthly is not None and len(prod_monthly) > 0:
+            ret_n_prod = prod_monthly / prod_monthly.shift(PROD_ABS_MOM_LB) - 1
+            current_am_raw = (ret_n_prod > 0).astype(float)
+            current_sma_raw = _sma_raw_signals(prod_monthly, PROD_SMA_WINDOW, PROD_SMA_BAND)
+            last_sig_month = current_am_raw.index[-1]
+        else:
+            current_am_raw = pd.DataFrame()
+            current_sma_raw = pd.DataFrame()
+            last_sig_month = None
+        subc_snapshot = None
+        subc_vs_info = {}
+        if prod_sig_a is not None and (not prod_sig_a.empty):
+            subc_snapshot = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+            subc_vs_info = subc_snapshot['info']
+        return {'cn_result': cn_result, 'cn_dk_result': cn_dk_result, 'us_rot_result': us_rot_result, 'prod_monthly': prod_monthly, 'prod_details': prod_details, 'prod_sig_a': prod_sig_a, 'prod_sig_b': prod_sig_b, 'cn_date': cn_date, 'is_cn_signal': is_cn_signal, 'cn_current': cn_current, 'cn_target': cn_display_state['target_holding'], 'cn_post_signal_holding': cn_display_state['post_signal_holding'], 'cn_current_display': cn_display_state.get('current_display'), 'cn_target_display': cn_display_state.get('target_display'), 'cn_post_display': cn_display_state.get('post_display'), 'cn_display_state': cn_display_state, 'bias_mom_cn': bias_mom_cn, 'r2_cn': r2_cn, 'abs_mom_cn': abs_mom_cn, 'scores_today': scores_today, 'dk_date': dk_date, 'is_dk_signal': is_dk_signal, 'dk_current': dk_current, 'dk_top_pair': dk_top_pair, 'dk_direction': dk_direction, 'dk_pair_changed': dk_pair_changed, 'dk_direction_changed': dk_direction_changed, 'dk_long_leg': dk_long_leg, 'dk_short_leg': dk_short_leg, 'dk_rank_current': dk_rank_current, 'dk_rank_today': dk_rank_today, 'dk_hypo_top_pair': dk_hypo_top_pair, 'dk_hypo_direction': dk_hypo_direction, 'us_date': us_date, 'us_signal_set': us_signal_set, 'is_us_signal': is_us_signal, 'current_us_w': current_us_w, 'us_scale': us_scale, 'last_confirmed_us_scale': last_confirmed_us_scale, 'prev_us_w': prev_us_w, 'hypo_us_w': hypo_us_w, 'model_hypo_us_w': model_hypo_us_w, 'effective_hypo_us_w': hypo_us_w, 'ema_hypo_us_w': ema_hypo_us_w, 'blended_hypo_us_w': blended_hypo_us_w, 'hypo_prev_mix_risky_by_lb': hypo_prev_mix_risky_by_lb, 'hypo_prev_ema_risky': hypo_prev_ema_risky, 'rebalanced_b': rebalanced_b, 'would_rebalance': would_rebalance, 'turnover_b': turnover_b, 'all_a': all_a, 'rot_w_cols': rot_w_cols, 'current_am_raw': current_am_raw, 'current_sma_raw': current_sma_raw, 'last_sig_month': last_sig_month, 'subc_vs_info': subc_vs_info, 'subc_snapshot': subc_snapshot, 'volreg_ratio': volreg_ratio_today, 'volreg_cash_today': volreg_cash_today, 'volreg_cash_next': volreg_cash_next, 'volreg_defense_today': volreg_defense_today, 'volreg_defense_next': volreg_defense_next}
+_BOT_SETTINGS = SettingsResponse(allow_attachments=True, introduction_message=f'📊 **Strategy Signal V8.0 — 策略信号查询**\n\nV8.0统一查询（Sub-B内B7.8/B7.9各50%）: Sub-A 15% + Sub-A-DK 15% + B7.8 20% + B7.9 20% + Sub-C 30%（两套B独立计算、独立扣费、独立展示）\n\n**信号查询：**\n- 发送 **"信号"** -> 收盘信号+Excel\n- 发送 **"实时信号"** / **"信号实时"** -> 盘中实时快照\n- 发送 **"参数"** / **"信号参数"** -> 策略参数总览\n- 发送 **"实时参数"** / **"参数实时"** -> 实时参数快照\n\n**绩效分析：**\n- 发送 **"表现核心四袖 过去两年"** / **"表现核心四袖 2024至今"** / **"表现核心四袖 最近6个月"**\n- 发送 **"净值曲线核心四袖 过去两年"** / **"净值曲线核心四袖 今年"**\n\n')
+poe.update_settings(_BOT_SETTINGS)
+
+class CombinedStrategyV78(CombinedStrategyBase):
+
+    def _parse_date_with_llm_fallback(self, query):
+        start, end = parse_date_range(query)
+        if start is not None:
+            return (start, end)
+        try:
+            now_str = pd.Timestamp(beijing_now()).strftime('%Y-%m-%d')
+            resp = poe.call('Grok-4.1-Fast-Non-Reasoning', f'从下面的文本中提取日期范围。今天是{now_str}。\n输出```json格式:\n```json\n{{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}}\n```\n如果结束日期是"至今"或"现在"，end用"{now_str}"。\n如果只有年份没有月日，start用01-01，end用12-31。\n如果只有年月没有日，start用01日，end用该月最后一天。\n如果无法识别日期范围，start和end都输出null。\n\n文本: {query}')
+            parsed = _parse_json_from_response(resp.text, ['start', 'end'])
+        except Exception:
+            return (None, None)
+        if parsed['start'] is not None or parsed['end'] is not None:
+            try:
+                if not all((isinstance(parsed[key], str) and re.fullmatch('\\d{4}-\\d{2}-\\d{2}', parsed[key]) for key in ('start', 'end'))):
+                    raise ValueError('日期字段须使用 YYYY-MM-DD 字符串。')
+                start = pd.Timestamp(parsed['start']) if parsed['start'] else pd.NaT
+                end = pd.Timestamp(parsed['end']) if parsed['end'] else pd.NaT
+                if pd.isna(start) or pd.isna(end):
+                    raise ValueError('日期范围缺少有效起止日期。')
+                if start.tzinfo is not None or end.tzinfo is not None:
+                    raise ValueError('日期范围需使用无时区的年月日。')
+                if start > end:
+                    raise ValueError('日期范围无效：开始日期晚于结束日期。')
+                return (start.normalize(), end.normalize())
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError(f'日期解析无效: {exc}') from exc
+        return (None, None)
+
+    def _parse_all_dates_with_llm_fallback(self, query):
+        ranges = parse_all_date_ranges(query)
+        if ranges:
+            return ranges
+        start, end = self._parse_date_with_llm_fallback(query)
+        if start is not None:
+            return [(start, end)]
+        return []
+
+    @staticmethod
+    def _is_date_query(query):
+        if _QUERY_DATE_TOKEN.search(query):
+            return True
+        if re.search('\\d{4}[-年/.]\\d{1,2}[-月/.]\\d{1,2}', query):
+            return True
+        return bool(re.search('\\d{4}[-年/.]?\\d{0,2}[-月]?\\s*[到至—\\-~]|\\d{1,2}月\\d{1,2}[日号]\\s*[到至—\\-~]|至今|今年|去年|前年|(?:最近|过去|近)\\s*[一二两三四五六七八九十\\d半]+\\s*个?\\s*[年月]|\\d{4}\\s*年', query))
+
+    def run(self):
+        self._request_data_cache = {}
+        self._request_strategy_cache = {}
+        try:
+            self._run_impl()
+        except Exception as exc:
+            with _sm() as msg:
+                msg.write('## ⚠️ 查询入口失败\n\n')
+                if DEBUG_MODE:
+                    import traceback
+                    msg.write('```text\n')
+                    msg.write(traceback.format_exc())
+                    msg.write('\n```\n')
+                else:
+                    msg.write(f'{_short_error(exc, 1600 if isinstance(exc, SubaVolumeDataError) else 120)}\n')
+                if isinstance(exc, SubaVolumeDataError):
+                    msg.write('本次未生成绩效报告。请待上述来源补齐所需成交额后重试原查询；信号查询可降级显示“成交额风控不可判定”，不应按正常仓位执行。\n')
+                else:
+                    msg.write(f'可重新发送原查询“{_short_error(poe.query.text.strip(), 160)}”；若持续失败，请保留上方错误详情用于排查。\n')
+
+    def _dispatch_dated_view(self, query, handler):
+        ranges = parse_all_date_ranges(query)
+        if ranges:
+            for dates in ranges:
+                handler(query, _forced_range=dates)
+        else:
+            handler(query)
+
+    def _run_impl(self):
+        query = poe.query.text.strip()
+        query_compact = re.sub('\\s+', '', query)
+        if '净值曲线' in query:
+            self._dispatch_dated_view(query, self._handle_nav_chart)
+        elif re.search('表现|收益(?!曲线)|回撤|年化|夏普|回报', query):
+            ranges = self._parse_all_dates_with_llm_fallback(query)
+            for r in ranges or [(None, None)]:
+                self._handle_performance(query, _forced_range=r)
+        elif re.search('收益曲线|走势', query):
+            self._dispatch_dated_view(query, self._handle_nav_chart)
+        elif '实时信号' in query_compact or '信号实时' in query_compact:
+            self._handle_live_signal()
+        elif '实时参数' in query_compact or '参数实时' in query_compact:
+            self._handle_live_params()
+        elif '参数' in query:
+            self._handle_params()
+        elif '信号' in query and self._is_date_query(query):
+            self._dispatch_dated_view(query, self._handle_signal_history)
+        elif self._is_date_query(query):
+            for dates in self._parse_all_dates_with_llm_fallback(query) or [(None, None)]:
+                self._handle_performance(query, _forced_range=dates)
+        else:
+            self._handle_signal()
+
+    def _write_limited_us_current(self, msg, frames, query_kind):
+        cn, dk, us, prod = frames
+        msg = _V80VerifiedMessage(msg, _v80_frames_generation(*frames))
+        result_a, result_dk, result_b, _, sig_a, sig_b, _, _ = self._cached_run_strategies(*frames, allow_unresolved_suba_volume=True)
+        labels = {'signal': '操作信号', 'live_signal': '实时信号', 'params': '策略参数', 'live_params': '实时参数'}
+        msg.write(f'## {labels[query_kind]}\n\n')
+        cn_intraday, now = is_cn_unconfirmed_intraday_snapshot()
+        live_query = query_kind in ('live_signal', 'live_params')
+        def intraday(frame):
+            return live_query and cn_intraday and len(frame) > 0 and frame.index[-1].date() == now.date()
+        info = _write_a_adk_query_overview(msg.write, result_a, result_dk, cn_intraday=intraday(cn), dk_intraday=intraday(dk), query_kind=query_kind, cn_price_frame=cn, dk_price_frame=dk)
+        _write_suba_volume_query_warning(msg, result_a)
+        note = _us_query_coverage(us)
+        msg.write(f'\n## 美股行情覆盖\n\n{note}\n\n美股本次无可执行信号。\n\n')
+        cutoff = us.attrs['us_data_status'].get('asof')
+        states = {}
+        if pd.notna(cutoff) and result_b is not None and len(result_b):
+            for label, frame in zip(('B7.8', 'B7.9'), _v80_subb_results(result_b)):
+                if frame is None or frame.empty or frame.index[-1] > pd.Timestamp(cutoff):
+                    continue
+                rows = _v80_subb_variant_rows(frame, -1, label=label, target_weights={})
+                positions = ', '.join(f"{row['live_name']} {row['current']:.1%}" for row in rows)
+                if positions:
+                    states[label] = f'{frame.index[-1]:%Y-%m-%d} 历史持仓：{positions}'
+        if pd.notna(cutoff) and len(prod) and prod.index[-1] <= pd.Timestamp(cutoff) and sig_a is not None:
+            snapshot = _compute_subc_production_snapshot(prod, sig_a, sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+            weights = snapshot['info'].get('current_asset_weights') or {}
+            if weights:
+                positions = ', '.join(f'{name} {weight:.1%}' for name, weight in weights.items())
+                states['Sub-C'] = f'{prod.index[-1]:%Y-%m-%d} 历史持仓：{positions}'
+        for label in ('B7.8', 'B7.9', 'Sub-C'):
+            message = states.get(label, '本次无可展示的已核验历史持仓')
+            msg.write(f'- {label}：{message}\n')
+            info[label] = {'is_signal': False, 'signal_text': message, 'note': note}
+        _write_v80_a_adk_score_details(msg.write, result_a, result_dk)
+        if query_kind == 'signal':
+            since = pd.Timestamp(now).normalize() - pd.Timedelta(days=60)
+            records = []
+            if result_a is not None and len(result_a):
+                records.extend(extract_v78_suba_rebalances(result_a, cn, since_date=since))
+            if result_dk is not None and len(result_dk):
+                records.extend(extract_v78_adk_rebalances(result_dk, cn_dk_close=dk, since_date=since))
+            confirmed = _filter_confirmed_records(records, bj_now=now)
+            dk_current = result_dk
+            if _cn_expect_today_for_query('signal', now) and (not len(dk) or dk.index[-1].date() < now.date()):
+                dk_current = None
+            stamp = now.strftime('%Y%m%d')
+            data = generate_signal_excel(stamp, info, sorted(confirmed, key=lambda r: r['日期'], reverse=True), cn_dk_result=dk_current)
+            msg.attach_file(name=f'signal_{stamp}.xlsx', contents=data, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def _handle_signal(self):
+        with _sm() as msg:
+            w = msg.write
+            try:
+                w('⏳ 正在获取信号数据...\n')
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
+                if _us_current_query_limited(us_rot_close):
+                    return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'signal')
+                if _us_query_coverage(us_rot_close):
+                    w(_us_query_coverage(us_rot_close) + '\n')
+                w('⏳ 正在计算信号...\n')
+            except Exception as exc:
+                w('## 📊 操作信号（收盘确认）\n\n')
+                w(f'⚠️ 信号查询失败: {_short_error(exc)}\n')
+                w('请稍后重试；如果持续为空，说明 Poe 运行环境在数据抓取阶段报错。\n')
+                return
+        try:
+            d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        except Exception as exc:
+            with _sm() as msg:
+                w = msg.write
+                w('## 📊 操作信号（收盘确认）\n\n')
+                w(f'⚠️ 信号计算/展示失败: {_short_error(exc)}\n')
+                if DEBUG_MODE:
+                    import traceback
+                    w('```text\n')
+                    w(traceback.format_exc())
+                    w('\n```\n')
+                w('请重新发送“信号”；如果仍失败，请开启调试模式查看完整堆栈。\n')
+            return
+        cn_date = d['cn_date']
+        us_date = d['us_date']
+        cn_result = d['cn_result']
+        cn_dk_result = d['cn_dk_result']
+        is_us_signal = d['is_us_signal']
+        current_us_w = d['current_us_w']
+        us_scale = d['us_scale']
+        last_confirmed_us_scale = d.get('last_confirmed_us_scale', us_scale)
+        bias_mom_cn = d.get('bias_mom_cn', {})
+        r2_cn = d.get('r2_cn', {})
+        abs_mom_cn = d.get('abs_mom_cn', {})
+        us_signal_set = d['us_signal_set']
+        rot_w_cols = d['rot_w_cols']
+        us_rot_result = d['us_rot_result']
+        dk_date = d['dk_date']
+        dk_current = d['dk_current']
+        dk_top_pair = d.get('dk_top_pair', 'none')
+        dk_direction = d.get('dk_direction', 0)
+        dk_rank_today = d.get('dk_rank_today', [])
+        dk_hypo_top_pair = d.get('dk_hypo_top_pair', dk_top_pair)
+        dk_hypo_direction = d.get('dk_hypo_direction', dk_direction)
+        now_str = beijing_now().strftime('%Y%m%d')
+        signal_info = {}
+        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+        us_open, _ = is_us_market_open()
+        cn_data_is_today = cn_date.date() == bj_now.date()
+        dk_data_is_today = dk_date.date() == bj_now.date()
+        us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
+        bj_time_str_val = bj_now.strftime('%H:%M')
+        bj_date_str = bj_now.strftime('%Y-%m-%d')
+        us_signal_live = is_us_signal and us_open and us_data_is_today
+        us_signal_confirmed = is_us_signal and (not us_signal_live)
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            w('## 📊 操作信号（收盘确认）\n\n')
+            w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}**\n\n')
+            signal_info.update(_write_a_adk_query_overview(w, cn_result, cn_dk_result, query_kind='signal', cn_price_frame=cn_close, dk_price_frame=cn_dk_close))
+            signal_info.update(_write_v80_subb_overview(w, us_rot_result, query_kind='signal', us_intraday=us_signal_live, us_rot_close=us_rot_close, is_signal_day=is_us_signal))
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            signal_info['Sub-C'] = _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
+            _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
+            w('> 前段仅显示可执行目标与关键风控；A/ADK基础评分统一置于C策略之后。\n\n')
+            cutoff = max(day for day in (cn_date, dk_date, us_date) if pd.notna(day)) - timedelta(days=60)
+            all_rebalances = []
+            if len(cn_result):
+                all_rebalances.extend([r for r in extract_v78_suba_rebalances(cn_result, cn_close) if pd.Timestamp(r['日期']) >= cutoff])
+            if len(cn_dk_result):
+                all_rebalances.extend(extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=cutoff))
+            compact_us_open = getattr(self, '_us_open', None)
+            subb_rebs = _v80_extract_subb_rebalances(d['us_rot_result'], us_rot_close=us_rot_close, us_open=compact_us_open, since_date=cutoff)
+            all_rebalances.extend([r for r in subb_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            prod_rebs = extract_prod_rebalances(d['prod_details'], d['prod_monthly'], us_prod_daily=us_prod_daily, us_open=compact_us_open)
+            all_rebalances.extend([r for r in prod_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            vs_rebs = extract_subc_vs_rebalances(us_prod_daily, d.get('prod_sig_a'), d.get('prod_sig_b'), us_open=compact_us_open)
+            all_rebalances.extend([r for r in vs_rebs if pd.Timestamp(r['日期']) >= cutoff])
+            all_rebalances = _filter_confirmed_records(all_rebalances, bj_now=bj_now, us_schedule=compact_us_open)
+            all_rebalances.sort(key=lambda x: x['日期'], reverse=True)
+            adk_net = cn_dk_result
+            if _cn_expect_today_for_query('signal', bj_now) and (pd.isna(dk_date) or dk_date.date() < bj_now.date()):
+                adk_net = None
+            excel_bytes = generate_signal_excel(now_str, signal_info, all_rebalances, cn_dk_result=adk_net, adk_net_row_idx=-1, adk_net_date_label='当前已生效')
+            filename = f'signal_{now_str}.xlsx'
+            msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            w(f'📎 Excel调仓记录: **{filename}**\n')
+            flags = [name for name in ('suba_volume_unresolved', 'suba_volume_unavailable') if name in cn_result]
+            if flags and cn_result[flags].fillna(True).astype(bool).any().any():
+                w('Sub-A 成交额无法核验的持仓变化已从确认调仓记录中排除。\n')
+            if _LAST_SUBC_VS_REBALANCE_WARNING:
+                w(f'⚠️ Sub-C分袖缩放调仓记录跳过: {_LAST_SUBC_VS_REBALANCE_WARNING}\n')
+            w(f'含最近60天 {len(all_rebalances)} 条已确认记录（北京时间；ADK列示收盘目标）' if all_rebalances else '最近60天无已确认记录')
+            return
+
+    def _handle_live_signal(self):
+        with _sm() as msg:
+            w = msg.write
+            try:
+                w('⏳ 正在获取实时信号数据...\n')
+                cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+                if _us_current_query_limited(us_rot_close):
+                    return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'live_signal')
+                if _us_query_coverage(us_rot_close):
+                    w(_us_query_coverage(us_rot_close) + '\n')
+                w('⏳ 正在计算实时信号...\n')
+            except Exception as exc:
+                w('## 📡 实时信号\n\n')
+                w(f'⚠️ 实时信号查询失败: {_short_error(exc)}\n')
+                w('请稍后重试；如果持续为空，说明 Poe 运行环境在数据抓取阶段报错。\n')
+                return
+        try:
+            d = self._compute_signal_data(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        except Exception as exc:
+            with _sm() as msg:
+                w = msg.write
+                w('## ⚡ 实时信号\n\n')
+                w(f'⚠️ 实时信号计算/展示失败: {_short_error(exc)}\n')
+                if DEBUG_MODE:
+                    import traceback
+                    w('```text\n')
+                    w(traceback.format_exc())
+                    w('\n```\n')
+                w('请重新发送“实时信号”；如果仍失败，请开启调试模式查看完整堆栈。\n')
+            return
+        cn_date = d['cn_date']
+        us_date = d['us_date']
+        is_cn_signal = d['is_cn_signal']
+        cn_current = d['cn_current']
+        cn_target = d.get('cn_target', cn_current)
+        cn_post_signal_holding = d.get('cn_post_signal_holding', cn_target)
+        cn_current_display = d.get('cn_current_display')
+        cn_target_display = d.get('cn_target_display')
+        cn_post_display = d.get('cn_post_display')
+        is_us_signal = d['is_us_signal']
+        current_us_w = d['current_us_w']
+        us_scale = d['us_scale']
+        last_confirmed_us_scale = d.get('last_confirmed_us_scale', us_scale)
+        hypo_us_w = d['hypo_us_w']
+        rebalanced_b = d['rebalanced_b']
+        would_rebalance = d['would_rebalance']
+        turnover_b = d['turnover_b']
+        all_a = d['all_a']
+        us_signal_set = d['us_signal_set']
+        bias_mom_cn = d['bias_mom_cn']
+        r2_cn = d['r2_cn']
+        abs_mom_cn = d['abs_mom_cn']
+        scores_today = d['scores_today']
+        cn_result = d['cn_result']
+        cn_dk_result = d['cn_dk_result']
+        us_rot_result = d['us_rot_result']
+        dk_date = d['dk_date']
+        is_dk_signal = d['is_dk_signal']
+        dk_current = d['dk_current']
+        dk_top_pair = d['dk_top_pair']
+        dk_direction = d['dk_direction']
+        dk_pair_changed = d.get('dk_pair_changed', False)
+        dk_direction_changed = d.get('dk_direction_changed', False)
+        dk_rank_current = d.get('dk_rank_current', [])
+        dk_rank_today = d.get('dk_rank_today', [])
+        dk_hypo_top_pair = d.get('dk_hypo_top_pair', dk_top_pair)
+        dk_hypo_direction = d.get('dk_hypo_direction', dk_direction)
+        cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+        us_open, _ = is_us_market_open()
+        cn_data_is_today = cn_date.date() == bj_now.date()
+        dk_data_is_today = dk_date.date() == bj_now.date()
+        us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
+        any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today) or any((bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close)))
+        us_snapshot = bool(us_rot_close.attrs.get('us_data_status', {}).get('intraday_snapshot')) or (us_open and us_data_is_today)
+        any_market_live = any_cn_live or us_snapshot
+        bj_time_str_val = bj_now.strftime('%H:%M')
+        bj_date_str = bj_now.strftime('%Y-%m-%d')
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            w('## 📡 实时信号\n\n')
+            if any_market_live:
+                live_markets = []
+                if any_cn_live:
+                    live_markets.append('A股')
+                if us_snapshot:
+                    live_markets.append('美股')
+                w(f"⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 未确认行情快照（{'、'.join(live_markets)}，须等确认收盘后重新查询）\n\n")
+            else:
+                w(f'⏱ **北京时间 {bj_date_str} {bj_time_str_val}** 基于收盘数据（非盘中）\n\n')
+            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_signal', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
+            _write_v80_subb_overview(w, us_rot_result, query_kind='live_signal', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close, is_signal_day=is_us_signal)
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            _write_v80_subc_overview(w, d.get('subc_vs_info', {}), query_kind='live_signal', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
+            _write_volume_warning_panel(msg, compact=True, cn_dk_result=cn_dk_result)
+            w('> 实时查询前段保留当前→目标→操作→关键风控；基础评分置于末尾，盘中目标均须等收盘确认。\n')
+            return
+
+    def _handle_params(self):
+        cn_result_params = None
+        cn_dk_result_params = None
+        cn_close_p = cn_dk_close_p = None
+        us_rot_result_params = None
+        subc_info_params = {}
+        us_rot_close_p = None
+        us_prod_daily_p = None
+        strategy_params_error = None
+        with _sm() as msg:
+            msg.write('⏳ 正在读取当前Sub-A / ADK持仓...\n')
+            try:
+                cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p = self._cached_fetch_data(msg, include_cn_live_snapshot=False, include_us_live_snapshot=False, allow_cn_panel_errors=True)
+                if _us_current_query_limited(us_rot_close_p):
+                    return self._write_limited_us_current(msg, (cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p), 'params')
+                if _us_query_coverage(us_rot_close_p):
+                    msg.write(_us_query_coverage(us_rot_close_p) + '\n')
+                cn_result_params, cn_dk_result_params, us_rot_result_params, _, prod_sig_a_params, prod_sig_b_params, _, _ = self._cached_run_strategies(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p, allow_unresolved_suba_volume=True)
+                if prod_sig_a_params is not None:
+                    subc_info_params = _compute_subc_production_snapshot(us_prod_daily_p, prod_sig_a_params, prod_sig_b_params, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info']
+            except Exception as exc:
+                strategy_params_error = _short_error(exc)
+        with _sm() as msg:
+            if strategy_params_error is None:
+                msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close_p, cn_dk_close_p, us_rot_close_p, us_prod_daily_p))
+            w = msg.write
+            w('## ⚙️ 策略参数总览\n\n')
+            _write_a_adk_query_overview(w, cn_result_params, cn_dk_result_params, query_kind='params', cn_price_frame=cn_close_p, dk_price_frame=cn_dk_close_p)
+            _write_v80_subb_overview(w, us_rot_result_params, query_kind='params', us_intraday=False, us_rot_close=us_rot_close_p)
+            subc_clock = _subc_query_clock(us_prod_daily_p)
+            _write_v80_subc_overview(w, subc_info_params, query_kind='params', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
+            _write_v80_a_adk_score_details(w, cn_result_params, cn_dk_result_params)
+            if strategy_params_error:
+                w(f'⚠️ 当前状态读取不完整：{strategy_params_error}\n\n')
+            w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；本页保留生产参数、当前风控测量与基础评分。\n')
+            return
+
+    def _handle_live_params(self):
+        with _sm() as msg:
+            w = msg.write
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_cn_live_snapshot=True, include_us_live_snapshot=True)
+            if _us_current_query_limited(us_rot_close):
+                return self._write_limited_us_current(msg, (cn_close, cn_dk_close, us_rot_close, us_prod_daily), 'live_params')
+            if _us_query_coverage(us_rot_close):
+                w(_us_query_coverage(us_rot_close) + '\n')
+            w('⏳ 正在计算实时参数...\n')
+        cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily, allow_unresolved_suba_volume=True)
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            cn_date = cn_close.index[-1] if len(cn_close) else pd.NaT
+            dk_date = cn_dk_close.index[-1] if len(cn_dk_close) else pd.NaT
+            us_date = us_rot_close.index[-1]
+            us_close_bj = beijing_time_str(us_date, 'US', 'close')
+            cn_unconfirmed, bj_now = is_cn_unconfirmed_intraday_snapshot()
+            us_open, _ = is_us_market_open()
+            cn_data_is_today = cn_date.date() == bj_now.date()
+            dk_data_is_today = dk_date.date() == bj_now.date()
+            us_data_is_today = us_date.date() == bj_now.date() or (us_date.date() == (bj_now - timedelta(days=1)).date() and bj_now.hour < 6)
+            any_cn_live = cn_unconfirmed and (cn_data_is_today or dk_data_is_today) or any((bool(frame.attrs.get('cn_unconfirmed_snapshot', False)) for frame in (cn_close, cn_dk_close)))
+            us_snapshot = bool(us_rot_close.attrs.get('us_data_status', {}).get('intraday_snapshot')) or (us_open and us_data_is_today)
+            any_live = any_cn_live or us_snapshot
+            bj_ts = bj_now.strftime('%Y-%m-%d %H:%M')
+            w(f'## 📐 实时参数值\n\n')
+            _write_suba_volume_query_warning(msg, cn_result)
+            if any_live:
+                live_mkts = []
+                if any_cn_live:
+                    live_mkts.append('A股')
+                if us_snapshot:
+                    live_mkts.append('美股')
+                w(f"⏱ **北京时间 {bj_ts}** 未确认行情快照（{'、'.join(live_mkts)}，须等确认收盘后重新查询）\n\n")
+            else:
+                w(f'⏱ **北京时间 {bj_ts}** 基于收盘数据\n\n')
+            labels = []
+            for label, frame, date in (('A', cn_close, cn_date), ('ADK', cn_dk_close, dk_date)):
+                if pd.isna(date):
+                    labels.append(f'{label}：数据不可用')
+                else:
+                    status = '盘中快照' if frame.attrs.get('cn_unconfirmed_snapshot') else '确认收盘'
+                    labels.append(f'{label}：{date:%Y-%m-%d}（{status}）')
+            us_date_label = f'美股盘中快照：{us_date:%Y-%m-%d}' if us_snapshot else f'美股收盘: {us_close_bj}'
+            w(' | '.join([*labels, us_date_label]) + '\n\n')
+            _write_a_adk_query_overview(w, cn_result, cn_dk_result, cn_intraday=cn_unconfirmed and cn_data_is_today and (len(cn_result) >= 2), dk_intraday=cn_unconfirmed and dk_data_is_today and (len(cn_dk_result) >= 2), query_kind='live_params', cn_price_frame=cn_close, dk_price_frame=cn_dk_close)
+            _write_v80_subb_overview(w, us_rot_result, query_kind='live_params', us_intraday=us_open and us_data_is_today, us_rot_close=us_rot_close)
+            _subc_live_info = _compute_subc_production_snapshot(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)['info'] if prod_sig_a is not None else {}
+            subc_clock = _subc_query_clock(us_prod_daily, now=bj_now)
+            _write_v80_subc_overview(w, _subc_live_info, query_kind='live_params', us_intraday=subc_clock.get('unconfirmed', False), clock=subc_clock)
+            _write_v80_a_adk_score_details(w, cn_result, cn_dk_result)
+            w(f'> 组合权重：A/ADK/B7.8/B7.9/C = {_performance_combo_weight_label()}；下单只看“实时信号”。\n')
+            return
+
+    def _handle_signal_history(self, query, _forced_range=None):
+        start_date, end_date = _forced_range or self._parse_date_with_llm_fallback(query)
+        if start_date is None:
+            raise poe.BotError('无法解析日期范围。示例：\n- 2025年3月1日到3月15日的信号\n- 2024-06到2024-12的信号\n- 最近3个月的信号')
+        with _sm() as msg:
+            w = msg.write
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
+            w('⏳ 正在计算策略...\n')
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
+        cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        _cn_market_above_ma = pd.Series(True, index=cn_close.index)
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            w(f"## 📋 信号历史: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')}\n\n")
+            _write_suba_volume_query_warning(msg, cn_result)
+            w('### Sub-A: A股轮动\n\n')
+            w(f'{CN_SA_MODEL_CLOCK_NOTE}\n\n')
+            cn_period = cn_result[(cn_result.index >= start_date) & (cn_result.index <= end_date)]
+            if cn_period.empty:
+                reason = cn_result.attrs.get('report_unavailable_reason', '该区间无完成预热的信号记录')
+                w(f'Sub-A：N/A（{reason}）。\n\n')
+            elif 'v78_suba_final_exposure' in cn_result.columns:
+                cn_rebs = extract_v78_suba_rebalances(cn_result, cn_close, since_date=start_date)
+                cn_rebs = [r for r in cn_rebs if pd.Timestamp(r.get('日期')) <= pd.Timestamp(end_date)]
+                if len(cn_rebs) == 0:
+                    w('该时段无分腿调仓信号。\n')
+                    if len(cn_period) > 0:
+                        w(f"期末收盘后持仓: **{_v78_suba_position_text(cn_period.iloc[-1], mode='target')}**\n\n")
+                    else:
+                        w('\n')
+                else:
+                    w('| 日期 | 策略 | 卖出 | 买入 |\n')
+                    w('|:--|:--|:--|:--|\n')
+                    for rec in cn_rebs:
+                        w(f"| {rec.get('日期', '')} | {rec.get('策略', 'Sub-A')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
+                    w(f'\n共 **{len(cn_rebs)}** 次分腿调仓\n')
+                    if len(cn_period) > 0:
+                        w(f"期末收盘后持仓: **{_v78_suba_position_text(cn_period.iloc[-1], mode='target')}**\n\n")
+            else:
+                cn_trades = cn_period[cn_period['is_signal'] == True]
+                if len(cn_trades) == 0:
+                    w('该时段无调仓信号。\n')
+                    if len(cn_period) > 0:
+                        w(f"持仓: **{CN_NAMES.get(cn_period['holding'].iloc[-1], cn_period['holding'].iloc[-1])}**\n\n")
+                    else:
+                        w('\n')
+                else:
+                    w('| 日期 | 操作 | 从 | 到 |\n')
+                    w('|:--|:--|:--|:--|\n')
+                    for tdate in cn_trades.index:
+                        loc = cn_result.index.get_loc(tdate)
+                        new_h = cn_result.iloc[loc]['holding']
+                        old_h = cn_result.iloc[loc - 1]['holding'] if loc > 0 else 'cash'
+                        new_name = CN_NAMES.get(new_h, new_h)
+                        old_name = CN_NAMES.get(old_h, old_h)
+                        if old_h == new_h:
+                            action = '维持'
+                        elif new_h == 'cash':
+                            action = '清仓'
+                        elif old_h == 'cash':
+                            action = '建仓'
+                        else:
+                            action = '换仓'
+                        w(f"| {tdate.strftime('%Y-%m-%d')} | {action} | {old_name} | **{new_name}** |\n")
+                    w(f'\n共 **{len(cn_trades)}** 次调仓\n')
+                    if len(cn_period) > 0:
+                        w(f"期末持仓: **{CN_NAMES.get(cn_period['holding'].iloc[-1], cn_period['holding'].iloc[-1])}**\n\n")
+            if CN_SCALE_THRESHOLD > 0 and 'v78_suba_final_exposure' not in cn_result.columns and ('weight' in cn_period.columns) and (len(cn_period) >= 2):
+                _cn_scale = cn_period['weight']
+                _cn_scale_diff = _cn_scale.diff().abs()
+                _cn_scale_changes = cn_period[(_cn_scale_diff > 0.001) & (cn_period['is_signal'] == False)]
+                if len(_cn_scale_changes) > 0:
+                    w(f'\n**杠杆缩放调仓 ({len(_cn_scale_changes)}次):**\n\n')
+                    w('| 日期 | 杠杆变动 | 持仓 |\n')
+                    w('|:--|:--|:--|\n')
+                    for tdate in _cn_scale_changes.index:
+                        _loc = cn_result.index.get_loc(tdate)
+                        _prev_w = cn_result['weight'].iloc[_loc - 1] if _loc > 0 else 1.0
+                        _new_w = cn_result.loc[tdate, 'weight']
+                        _h = CN_NAMES.get(cn_result.loc[tdate, 'holding'], cn_result.loc[tdate, 'holding'])
+                        w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_w:.2f}x → **{_new_w:.2f}x** | {_h} |\n")
+                    w('\n')
+            w('### Sub-A-DK: 多空策略\n\n')
+            dk_period = cn_dk_result[(cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
+            if dk_period.empty:
+                w('Sub-A-DK：N/A（该区间无完成预热的信号记录）。\n\n')
+            elif 'v78_adk_final_exposure' in cn_dk_result.columns:
+                dk_rebs = extract_v78_adk_rebalances(cn_dk_result.loc[:end_date], cn_dk_close=cn_dk_close, since_date=start_date)
+                dk_rebs = [r for r in dk_rebs if pd.Timestamp(r.get('日期')) <= pd.Timestamp(end_date)]
+                _dk_history_unit = '收盘目标变化' if _v80_adk_is_new_only(cn_dk_result) else '分腿配对/方向变化'
+                if len(dk_rebs) == 0:
+                    w(f'该时段无{_dk_history_unit}。\n\n')
+                else:
+                    w(f'**{_dk_history_unit}**\n\n')
+                    w('| 日期 | 策略 | 变更前 | 变更后 |\n')
+                    w('|:--|:--|:--|:--|\n')
+                    for rec in dk_rebs:
+                        w(f"| {rec.get('日期', '')} | {rec.get('策略', 'ADK')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
+                    w(f'\n共 **{len(dk_rebs)}** 次{_dk_history_unit}\n\n')
+                if len(dk_period) > 0:
+                    _dk_holding_label = '当前已生效持仓' if _v80_adk_is_new_only(cn_dk_result) else '当前已生效双腿持仓'
+                    w(f'**区间期末 / {_dk_holding_label}:**\n\n')
+                    _write_v78_adk_current_holding_summary(w, dk_period, -1)
+                    _write_v78_adk_net_exposure_table(w, cn_dk_result, dk_period.index[-1])
+                    w('\n')
+            else:
+                dk_position_trades, dk_scale_trades = _split_dk_history_trades(dk_period)
+                if len(dk_position_trades) == 0:
+                    w('该时段无配对/方向变化。\n')
+                    w('\n')
+                else:
+                    w('**配对/方向变化:**\n\n')
+                    w('| 日期 | 动作 | 持仓 | 杠杆 |\n')
+                    w('|:--|:--|:--|------:|\n')
+                    for tdate in dk_position_trades.index:
+                        _dk_h = dk_period.loc[tdate, 'holding']
+                        _dk_w = dk_period.loc[tdate, 'weight'] if 'weight' in dk_period.columns else 1.0
+                        action = '清零敞口' if str(_dk_h) in ('none_0', 'none') else '切换'
+                        w(f"| {tdate.strftime('%Y-%m-%d')} | {action} | **{_dk_pos_str(_dk_h)}** | {_dk_w:.2f}x |\n")
+                    w(f'\n共 **{len(dk_position_trades)}** 次配对/方向变化\n\n')
+                if len(dk_period) > 0:
+                    w('**区间期末 / 当前已生效持仓:**\n\n')
+                    _write_v78_adk_current_holding_summary(w, dk_period, -1)
+                    w('\n')
+                if len(dk_scale_trades) > 0:
+                    w(f'**杠杆缩放调整 ({len(dk_scale_trades)}次):**\n\n')
+                    w('| 日期 | 杠杆变动 | 持仓 |\n')
+                    w('|:--|:--|:--|\n')
+                    for tdate in dk_scale_trades.index:
+                        _loc = cn_dk_result.index.get_loc(tdate)
+                        _prev_w = cn_dk_result['weight'].iloc[_loc - 1] if _loc > 0 else 1.0
+                        _new_w = cn_dk_result.loc[tdate, 'weight']
+                        _h = dk_period.loc[tdate, 'holding']
+                        w(f"| {tdate.strftime('%Y-%m-%d')} | {_prev_w:.2f}x → **{_new_w:.2f}x** | {_dk_pos_str(_h)} |\n")
+                    w('\n')
+            if _us_query_coverage(us_rot_close):
+                w(_us_query_coverage(us_rot_close) + '\n\n')
+                for name, period in (('Sub-A', cn_period), ('Sub-A-DK', dk_period)):
+                    if len(period):
+                        w(f'{name} 区间内可核验日期：{period.index[0]:%Y-%m-%d} 至 {period.index[-1]:%Y-%m-%d}。\n')
+            if _us_current_query_limited(us_rot_close):
+                if us_rot_close.empty or us_prod_daily.empty or us_rot_result is None or us_rot_close.index[-1] < start_date:
+                    w('请求区间内无可核验美股记录，上方为独立 A 股历史。\n')
+                    return
+                w(f'美股历史记录实际截至 {min(end_date, us_rot_close.index[-1], us_prod_daily.index[-1]):%Y-%m-%d}。\n\n')
+            w('### B策略双版本调仓历史（分开展示）\n\n')
+            _us_open = getattr(self, '_us_open', None)
+            _b78_result, _b79_result = _v80_subb_results(us_rot_result)
+            for _label, _result in (('B7.8', _b78_result), ('B7.9', _b79_result)):
+                _records = _v80_extract_subb_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open, since_date=start_date)
+                _records = [rec for rec in _records if rec.get('策略') == _label and start_date <= pd.Timestamp(rec.get('日期')) <= end_date]
+                w(f'#### {_label}\n\n')
+                if not _records:
+                    w('该时段无实际调仓或VolReg切换。\n\n')
+                    continue
+                w('| 日期 | 卖出 | 买入 |\n|:--|:--|:--|\n')
+                for rec in _records:
+                    w(f"| {rec.get('日期', '')} | {rec.get('卖出', '—')} | **{rec.get('买入', '—')}** |\n")
+                w(f'\n共 **{len(_records)}** 条记录\n\n')
+
+    def _handle_nav_chart(self, query, *, chart_only=False, _forced_range=None):
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        start_date, end_date = _forced_range or self._parse_date_with_llm_fallback(query)
+        if start_date is None:
+            raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 净值曲线核心四袖 今年 / 去年\n- 净值曲线核心四袖 过去两年 / 最近6个月\n- 净值曲线核心四袖 2024-01到2025-01\n- 净值曲线核心四袖 2024至今\n- 净值曲线核心四袖 2024年\n- 净值曲线核心四袖 2024年3月15日到2025年1月20日')
+        with _sm() as msg:
+            w = msg.write
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
+            report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            end_date = report_context['actual_end']
+            w('⏳ 正在计算策略净值...\n')
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
+        cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        cn_daily_ret = cn_result['return']
+        dk_daily_ret = cn_dk_result['return']
+        b78_result, _ = _v80_subb_results(us_rot_result)
+        empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        b78_daily_ret = empty if report_context['omit_us'] else b78_result['return']
+        us_daily_ret = empty if report_context['omit_us'] else us_rot_result['return']
+        subc_daily_ret = empty if report_context['omit_us'] or end_date < SUBC_FORMAL_START else _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+        cn_period = cn_daily_ret[(cn_daily_ret.index >= start_date) & (cn_daily_ret.index <= end_date)]
+        dk_period = dk_daily_ret[(dk_daily_ret.index >= start_date) & (dk_daily_ret.index <= end_date)]
+        b78_period = b78_daily_ret[(b78_daily_ret.index >= start_date) & (b78_daily_ret.index <= end_date)]
+        us_period = us_daily_ret[(us_daily_ret.index >= start_date) & (us_daily_ret.index <= end_date)]
+        subc_period = subc_daily_ret[(subc_daily_ret.index >= start_date) & (subc_daily_ret.index <= end_date)]
+        if all((len(s) < 1 for s in (cn_period, dk_period, b78_period, us_period, subc_period))):
+            raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间数据不足")
+        nav_series = {}
+        if len(cn_period) > 0:
+            nav_series['Sub-A'] = _nav_from_period_returns(cn_period)
+        if len(dk_period) > 0:
+            nav_series['Sub-A-DK'] = _nav_from_period_returns(dk_period)
+        if len(b78_period) > 0:
+            nav_series['B7.8'] = _nav_from_period_returns(b78_period)
+        if len(us_period) > 0:
+            nav_series['B7.9'] = _nav_from_period_returns(us_period)
+        if len(subc_period) > 0:
+            nav_series['Sub-C'] = _nav_from_period_returns(subc_period)
+        combined_period = _performance_combined_daily_returns({'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period}, history_returns={'Sub-A': cn_daily_ret, 'Sub-A-DK': dk_daily_ret, 'B7.8': b78_daily_ret, 'B7.9': us_daily_ret, 'Sub-C': subc_daily_ret}, query_start=start_date)
+        if len(combined_period) > 0:
+            nav_series['Combined'] = _nav_from_period_returns(combined_period)
+        _finalize_performance_report_context(report_context, {'Sub-A': cn_period, 'Sub-A-DK': dk_period, 'B7.8': b78_period, 'B7.9': us_period, 'Sub-C': subc_period, 'Combined': combined_period})
+        start_date, end_date = (report_context['actual_start'], report_context['actual_end'])
+        if not nav_series:
+            raise poe.BotError('不能算该时段的净值曲线')
+        colors = {'Sub-A': '#E74C3C', 'Sub-A-DK': '#9B59B6', 'B7.8': '#3498DB', 'B7.9': '#1F4E79', 'Sub-C': '#16A085', 'Combined': '#F39C12'}
+        chart_labels = {'Sub-A': 'Sub-A (CN Long)', 'Sub-A-DK': 'Sub-A-DK (CN Long-Short)', 'B7.8': 'B7.8 (50% of Sub-B)', 'B7.9': 'B7.9 (50% of Sub-B)', 'Sub-C': 'Sub-C (US Multi-Asset)', 'Combined': f'PV 5-line ({_performance_combo_weight_label()})'}
+        labels = {'Sub-A': 'Sub-A (A股做多)', 'Sub-A-DK': 'Sub-A-DK (多空)', 'B7.8': 'B7.8（Sub-B内50% / 总组合20%）', 'B7.9': 'B7.9（Sub-B内50% / 总组合20%）', 'Sub-C': 'Sub-C (美股多资产)', 'Combined': f'PV组合 ({_performance_combo_weight_label()})'}
+        chart_bytes = _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date)
+        max_dd = {}
+        for name, nav in nav_series.items():
+            max_dd[name] = _max_drawdown_pct_from_nav(nav)
+        period_label = f"{start_date.strftime('%Y-%m-%d')}至{end_date.strftime('%Y-%m-%d')}"
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            w(f'## 📈 净值曲线: {period_label}\n\n')
+            _write_performance_report_context(w, report_context)
+            _write_suba_volume_query_warning(msg, cn_result)
+            notes = _performance_basis_notes()
+            if 'Sub-A' in nav_series or 'Combined' in nav_series:
+                w(f"> {notes['Sub-A样本']}\n\n")
+            if 'Sub-C' in nav_series or 'Combined' in nav_series:
+                w(f"> {notes['Sub-C样本']}\n\n")
+            if 'B7.8' in nav_series or 'B7.9' in nav_series or 'Combined' in nav_series:
+                w(f'> Sub-B样本披露：{_subb_history_disclosure_text()}\n\n')
+            if not chart_only:
+                w('| 策略 | 期末净值 | 区间收益 | 最大回撤 |\n|:-|--------:|---------:|---------:|\n')
+                for name in PERFORMANCE_COLUMNS:
+                    if name in nav_series:
+                        final_nav = nav_series[name].iloc[-1]
+                        ret = (final_nav - 1) * 100
+                        dd = max_dd[name]
+                        display = labels[name]
+                        w(f'| {display} | {final_nav:.4f} | {ret:+.2f}% | {dd:.2f}% |\n')
+                w('\n')
+            msg.attach_file(name=_performance_report_filename('nav_chart', 'png', report_context), contents=chart_bytes, content_type='image/png', is_inline=True)
+
+    def _handle_performance(self, query, _forced_range=None):
+        if _forced_range:
+            start_date, end_date = _forced_range
+        else:
+            start_date, end_date = self._parse_date_with_llm_fallback(query)
+        if start_date is None:
+            raise poe.BotError('无法解析日期范围。支持的格式示例：\n- 表现 今年 / 去年\n- 表现 过去两年 / 最近6个月\n- 表现 2024-01到2025-01\n- 表现 2024至今\n- 表现 2024年\n- 表现 2024年3月15日到2025年1月20日')
+        with _sm() as msg:
+            w = msg.write
+            cn_close, cn_dk_close, us_rot_close, us_prod_daily = self._cached_fetch_data(msg, include_us_live_snapshot=False, allow_last_confirmed_cn_close=True)
+            report_context = _performance_report_context(start_date, end_date, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+            end_date = report_context['actual_end']
+            w('⏳ 正在计算策略...\n')
+        cn_close = _cn_report_price_window(cn_close, end_date)
+        cn_dk_close = _cn_report_price_window(cn_dk_close, end_date)
+        cn_result, cn_dk_result, us_rot_result, prod_monthly, prod_sig_a, prod_sig_b, prod_nav, prod_details = self._cached_run_strategies(cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        b78_result, _ = _v80_subb_results(us_rot_result)
+        cn_daily_period = cn_result['return'][(cn_result.index >= start_date) & (cn_result.index <= end_date)]
+        dk_daily_period = cn_dk_result['return'][(cn_dk_result.index >= start_date) & (cn_dk_result.index <= end_date)]
+        empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        b78_daily_all = empty if report_context['omit_us'] else b78_result['return']
+        b79_daily_all = empty if report_context['omit_us'] else us_rot_result['return']
+        b78_daily_period = b78_daily_all.loc[start_date:end_date]
+        us_daily_period = b79_daily_all.loc[start_date:end_date]
+        subc_unavailable = report_context['omit_us'] or end_date < SUBC_FORMAL_START
+        subc_daily_all = empty if subc_unavailable else _get_subc_daily_ret(us_prod_daily, prod_sig_a, prod_sig_b, us_open=getattr(self, '_us_open', None), strict_open_execution=True)
+        subc_daily_period = subc_daily_all[(subc_daily_all.index >= start_date) & (subc_daily_all.index <= end_date)]
+        standard_daily_returns = _v80_performance_daily_returns(cn_result['return'], cn_dk_result['return'], None if report_context['omit_us'] else us_rot_result, subc_daily_all, end_date=end_date)
+        first_period_starts = _performance_initial_period_anchors(standard_daily_returns, cn_close, cn_dk_close, us_rot_close, us_prod_daily)
+        comb_daily = _performance_combined_daily_returns({'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period}, history_returns=standard_daily_returns, query_start=start_date)
+        _finalize_performance_report_context(report_context, {'Sub-A': cn_daily_period, 'Sub-A-DK': dk_daily_period, 'B7.8': b78_daily_period, 'B7.9': us_daily_period, 'Sub-C': subc_daily_period, 'Combined': comb_daily})
+        start_date, end_date = (report_context['actual_start'], report_context['actual_end'])
+        cn_monthly_period = _monthly_returns_from_daily_window(cn_result['return'], start_date, end_date, name='Sub-A')
+        dk_monthly_period = _monthly_returns_from_daily_window(cn_dk_result['return'], start_date, end_date, name='Sub-A-DK')
+        b78_monthly_period = _monthly_returns_from_daily_window(b78_daily_all, start_date, end_date, name='B7.8')
+        us_monthly_period = _monthly_returns_from_daily_window(b79_daily_all, start_date, end_date, name='B7.9')
+        subc_monthly_period = _monthly_returns_from_daily_window(subc_daily_all, start_date, end_date, name='Sub-C')
+        combined_monthly_period = _monthly_returns_from_daily_window(comb_daily, start_date, end_date)
+        aligned = pd.DataFrame({'Sub-A': cn_monthly_period, 'Sub-A-DK': dk_monthly_period, 'B7.8': b78_monthly_period, 'B7.9': us_monthly_period, 'Sub-C': subc_monthly_period, 'Combined': combined_monthly_period}).sort_index()
+        filtered = aligned
+        if all((len(s) < 1 for s in (cn_monthly_period, dk_monthly_period, b78_monthly_period, us_monthly_period, subc_monthly_period))):
+            raise poe.BotError(f"在 {start_date.strftime('%Y-%m-%d')} 到 {end_date.strftime('%Y-%m-%d')} 期间没有数据")
+        metrics = {}
+        for name, monthly in (('Sub-A', cn_monthly_period), ('Sub-A-DK', dk_monthly_period),
+                              ('B7.8', b78_monthly_period), ('B7.9', us_monthly_period),
+                              ('Sub-C', subc_monthly_period), ('Combined', combined_monthly_period)):
+            if len(monthly):
+                metrics[name] = calc_monthly_metrics(monthly)
+        if len(cn_daily_period) > 1 and 'Sub-A' in metrics:
+            nav_a = (1 + cn_daily_period).cumprod()
+            metrics['Sub-A']['max_dd'] = _max_drawdown_pct_from_nav(nav_a)
+        if len(dk_daily_period) > 1 and 'Sub-A-DK' in metrics:
+            nav_dk = (1 + dk_daily_period).cumprod()
+            metrics['Sub-A-DK']['max_dd'] = _max_drawdown_pct_from_nav(nav_dk)
+        if len(b78_daily_period) > 1 and 'B7.8' in metrics:
+            nav_b78 = (1 + b78_daily_period).cumprod()
+            metrics['B7.8']['max_dd'] = _max_drawdown_pct_from_nav(nav_b78)
+        if len(us_daily_period) > 1 and 'B7.9' in metrics:
+            nav_b79 = (1 + us_daily_period).cumprod()
+            metrics['B7.9']['max_dd'] = _max_drawdown_pct_from_nav(nav_b79)
+        if len(subc_daily_period) > 1 and 'Sub-C' in metrics:
+            nav_c = (1 + subc_daily_period).cumprod()
+            metrics['Sub-C']['max_dd'] = _max_drawdown_pct_from_nav(nav_c)
+        if 'Combined' in metrics and len(comb_daily) > 1:
+            nav_comb = (1.0 + comb_daily).cumprod()
+            metrics['Combined']['max_dd'] = _max_drawdown_pct_from_nav(nav_comb)
+        for _sname, _dret, _history in [('Sub-A', cn_daily_period, cn_result['return']), ('Sub-A-DK', dk_daily_period, cn_dk_result['return']), ('B7.8', b78_daily_period, b78_daily_all), ('B7.9', us_daily_period, b79_daily_all), ('Sub-C', subc_daily_period, subc_daily_all)]:
+            if _sname in metrics and len(_dret) > 1:
+                _nav_d = (1 + _dret).cumprod()
+                _total = (_nav_d.iloc[-1] - 1) * 100
+                metrics[_sname]['total_return'] = _total
+                _ann = _performance_annualized_pct(_dret, _history, _sname, first_period_start=first_period_starts.get(_sname))
+                metrics[_sname]['annual'] = _ann
+                _mdd = metrics[_sname]['max_dd']
+                metrics[_sname]['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
+        if 'Combined' in metrics and comb_daily is not None and (len(comb_daily) > 1):
+            _nav_d = (1 + comb_daily).cumprod()
+            _total = (_nav_d.iloc[-1] - 1) * 100
+            metrics['Combined']['total_return'] = _total
+            _ann = _performance_annualized_pct(comb_daily, standard_daily_returns['Combined'], 'Combined', first_period_start=first_period_starts.get('Combined'))
+            metrics['Combined']['annual'] = _ann
+            _mdd = metrics['Combined']['max_dd']
+            metrics['Combined']['calmar'] = _ann / abs(_mdd) if _mdd != 0 else 0
+        excel_monthly = pd.DataFrame({'Sub-A': cn_monthly_period, 'Sub-A-DK': dk_monthly_period, 'B7.8': b78_monthly_period, 'B7.9': us_monthly_period, 'Sub-C': subc_monthly_period}).sort_index()
+        if len(combined_monthly_period) > 0:
+            excel_monthly['Combined'] = combined_monthly_period.reindex(excel_monthly.index)
+        else:
+            excel_monthly['Combined'] = np.nan
+        is_short_period = (end_date - start_date).days < 365
+        if is_short_period:
+
+            def _weekly_win_rate(daily_ret):
+                if daily_ret is None or len(daily_ret) < 5:
+                    return (None, 0)
+                weekday_mask = daily_ret.index.dayofweek < 5
+                wd_ret = daily_ret[weekday_mask]
+                if len(wd_ret) < 5:
+                    return (None, 0)
+                weekly_groups = wd_ret.groupby(wd_ret.index.to_period('W'))
+                weekly = weekly_groups.apply(lambda x: (1 + x).prod() - 1)
+                week_sizes = weekly_groups.size()
+                full_weeks = week_sizes[week_sizes >= 3].index
+                weekly = weekly.reindex(full_weeks)
+                if len(weekly) < 1:
+                    return (None, 0)
+                return ((weekly > 0).mean() * 100, len(weekly))
+            for strat_name, daily_data in [('Sub-A', cn_daily_period), ('Sub-A-DK', dk_daily_period), ('B7.8', b78_daily_period), ('B7.9', us_daily_period), ('Sub-C', subc_daily_period), ('Combined', comb_daily)]:
+                if strat_name in metrics and daily_data is not None and (len(daily_data) > 4):
+                    wwr, n_weeks = _weekly_win_rate(daily_data)
+                    if wwr is not None:
+                        metrics[strat_name]['weekly_win_rate'] = wwr
+                        metrics[strat_name]['weekly_win_weeks'] = n_weeks
+        all_rebalances = []
+        cn_rebs = extract_v78_suba_rebalances(cn_result, cn_close)
+        all_rebalances.extend([r for r in cn_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
+        dk_rebs = extract_v78_adk_rebalances(cn_dk_result, cn_dk_close=cn_dk_close, since_date=start_date)
+        all_rebalances.extend([r for r in dk_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
+        _us_open = getattr(self, '_us_open', None)
+        subb_rebs = [] if report_context['omit_us'] else _v80_extract_subb_rebalances(us_rot_result, us_rot_close=us_rot_close, us_open=_us_open, since_date=start_date)
+        all_rebalances.extend([r for r in subb_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
+        prod_rebs = [] if subc_unavailable else extract_prod_rebalances(prod_details, prod_monthly, us_prod_daily=us_prod_daily, us_open=_us_open)
+        all_rebalances.extend([r for r in prod_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
+        subc_vs_rebs = [] if subc_unavailable else extract_subc_vs_rebalances(us_prod_daily, prod_sig_a, prod_sig_b, us_open=_us_open)
+        all_rebalances.extend([r for r in subc_vs_rebs if start_date <= pd.Timestamp(r['日期']) <= end_date])
+        all_rebalances = _filter_confirmed_records(all_rebalances, us_schedule=_us_open)
+        all_rebalances.sort(key=lambda x: x['日期'])
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        nav_series = {}
+        for name, daily in (('Sub-A', cn_daily_period), ('Sub-A-DK', dk_daily_period),
+                            ('B7.8', b78_daily_period), ('B7.9', us_daily_period),
+                            ('Sub-C', subc_daily_period), ('Combined', comb_daily)):
+            if daily is not None and len(daily):
+                nav_series[name] = _nav_from_period_returns(daily)
+        chart_bytes = None
+        if nav_series:
+            colors = {'Sub-A': '#E74C3C', 'Sub-A-DK': '#9B59B6', 'B7.8': '#3498DB', 'B7.9': '#1F4E79', 'Sub-C': '#16A085', 'Combined': '#F39C12'}
+            chart_labels = {'Sub-A': 'Sub-A (CN Long)', 'Sub-A-DK': 'Sub-A-DK (CN Long-Short)', 'B7.8': 'B7.8 (50% of Sub-B)', 'B7.9': 'B7.9 (50% of Sub-B)', 'Sub-C': 'Sub-C (US Multi-Asset)', 'Combined': f'PV 5-line ({_performance_combo_weight_label()})'}
+            chart_bytes = _render_nav_drawdown_chart(nav_series, chart_labels, colors, start_date, end_date)
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            w(f"## 📈 策略表现: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}\n\n")
+            _write_performance_report_context(w, report_context)
+            _write_suba_volume_query_warning(msg, cn_result)
+            if chart_bytes:
+                msg.attach_file(name=_performance_report_filename('perf_nav', 'png', report_context), contents=chart_bytes, content_type='image/png', is_inline=True)
+                w('\n\n')
+            range_info = {}
+            if len(cn_monthly_period) >= 1:
+                range_info['Sub-A'] = (cn_monthly_period.index[0], cn_monthly_period.index[-1])
+            if len(dk_monthly_period) >= 1:
+                range_info['Sub-A-DK'] = (dk_monthly_period.index[0], dk_monthly_period.index[-1])
+            if len(b78_monthly_period) >= 1:
+                range_info['B7.8'] = (b78_monthly_period.index[0], b78_monthly_period.index[-1])
+            if len(us_monthly_period) >= 1:
+                range_info['B7.9'] = (us_monthly_period.index[0], us_monthly_period.index[-1])
+            if len(subc_monthly_period) >= 1:
+                range_info['Sub-C'] = (subc_monthly_period.index[0], subc_monthly_period.index[-1])
+            if len(combined_monthly_period) >= 1:
+                range_info['Combined'] = (combined_monthly_period.index[0], combined_monthly_period.index[-1])
+            starts = set((v[0] for v in range_info.values()))
+            if len(starts) > 1:
+                w('⚠️ **各策略数据起始日不同:**\n')
+                for name in PERFORMANCE_COLUMNS:
+                    if name in range_info:
+                        s, e = range_info[name]
+                        w(f'- {name}: {s} ~ {e}\n')
+                w('\n')
+            w(f'说明: Sub-B资金由B7.8/B7.9各占50%；两列独立展示，PV按A/ADK/B7.8/B7.9/C={_performance_combo_weight_label()}计算。\n\n')
+            standard_windows = _write_performance_standard_window_table(w, standard_daily_returns, end_date=end_date, first_period_starts=first_period_starts)
+            w('\n### 查询区间指标\n\n')
+            basis_notes = _performance_basis_notes()
+            for key in ('查询区间PV组合', '指标频率'):
+                w(f'> {basis_notes[key]}\n\n')
+            if is_short_period:
+                w(f"> {basis_notes['短窗限制']}\n\n")
+            w(f'| 指标 | Sub-A | A-DK | B7.8 | B7.9 | Sub-C | PV组合({_performance_combo_weight_label()}) |\n|:-|------:|------:|------:|------:|------:|-----:|\n')
+            metric_labels = [('年化收益', 'annual', '%'), ('波动率', 'vol', '%'), ('夏普比率', 'sharpe', ''), ('最大回撤', 'max_dd', '%'), ('卡尔玛比率', 'calmar', ''), ('月胜率', 'win_rate', '%')]
+            if is_short_period:
+                metric_labels.append(('周胜率', 'weekly_win_rate', '%'))
+            metric_labels.append(('累计收益', 'total_return', '%'))
+            for label, key, suffix in metric_labels:
+                row = f'| {label} |'
+                for col in PERFORMANCE_COLUMNS:
+                    m = metrics.get(col)
+                    if m and key in m and (m[key] is not None):
+                        val_str = f'{m[key]:.2f}{suffix}'
+                        if key == 'weekly_win_rate' and 'weekly_win_weeks' in m:
+                            val_str += f" ({m['weekly_win_weeks']}周)"
+                        row += f' {val_str} |'
+                    else:
+                        row += ' — |'
+                w(row + '\n')
+            years_available = set()
+            for m in metrics.values():
+                if 'yearly' in m:
+                    years_available.update(m['yearly'].keys())
+            if years_available:
+                w(f'\n### 年度收益\n')
+                w(f'| 年份 | Sub-A | A-DK | B7.8 | B7.9 | Sub-C | PV组合({_performance_combo_weight_label()}) |\n|:-|------:|------:|------:|------:|------:|-----:|\n')
+                for yr in sorted(years_available):
+                    row = f'| {yr} |'
+                    for col in PERFORMANCE_COLUMNS:
+                        m = metrics.get(col)
+                        if m and yr in m.get('yearly', {}):
+                            row += f" {m['yearly'][yr]:.1f}% |"
+                        else:
+                            row += ' — |'
+                    w(row + '\n')
+            w(f'\n### 调仓记录 ({len(all_rebalances)}条)\n')
+            if all_rebalances:
+                w('| 日期 | 北京时间 | 策略 | 操作 | 价格 |\n|:-|:-|:-|:-|:-|\n')
+                display_rebs = all_rebalances[-20:]
+                for rec in display_rebs:
+                    buy_info = rec.get('买入', '')
+                    sell_info = rec.get('卖出', '')
+                    if sell_info == '—':
+                        sell_info = ''
+                    if buy_info == '—':
+                        buy_info = ''
+                    parts = []
+                    if sell_info:
+                        parts.append(f'减: {sell_info}')
+                    if buy_info:
+                        parts.append(f'加: {buy_info}')
+                    op = ' / '.join(parts) if parts else '—'
+                    price_parts = []
+                    sp = rec.get('卖出价格')
+                    bp = rec.get('买入价格')
+                    if sp:
+                        price_parts.append(f'卖{sp}')
+                    if bp:
+                        price_parts.append(f'买{bp}')
+                    price_str = '; '.join(price_parts) if price_parts else '—'
+                    w(f"| {rec['日期']} | {rec['北京时间']} | {rec['策略']} | {op} | {price_str} |\n")
+                if len(all_rebalances) > 20:
+                    w(f'\n（仅显示最近20条，完整记录见Excel）\n')
+            else:
+                w('该时段无调仓记录\n')
+        now_str = beijing_now().strftime('%Y%m%d')
+        excel_bytes = generate_performance_excel(now_str, metrics, excel_monthly, all_rebalances, is_short_period, standard_windows=standard_windows, report_context=report_context)
+        filename = _performance_report_filename('performance', 'xlsx', report_context)
+        with _sm() as msg:
+            msg = _V80VerifiedMessage(msg, _v80_frames_generation(cn_close, cn_dk_close, us_rot_close, us_prod_daily))
+            w = msg.write
+            msg.attach_file(name=filename, contents=excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            w(f'📎 绩效报告: **{filename}**')
+
+class CombinedStrategyV80(CombinedStrategyV78):
+    pass
+if __name__ == '__main__':
+    CombinedStrategyV80().run()

@@ -1,0 +1,22 @@
+[
+  {
+    "path": "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49\\run.json",
+    "size": 2719,
+    "sha256": "a9cf84d46fcd5844d60060c7ac25c828270d4f75f404bfd4e330be9930ecdba0"
+  },
+  {
+    "path": "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49\\stdout.log",
+    "size": 25495,
+    "sha256": "9b5a0331f469872ee96149271b0db264ce79d979306da55a516d5d71f198c9e9"
+  },
+  {
+    "path": "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49\\stderr.log",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49\\regression.xml",
+    "size": 15845,
+    "sha256": "b57fdbb3f37c0db0fd74507c95b3faec0a8969ff699286504c8fcdd65bc90adf"
+  }
+]

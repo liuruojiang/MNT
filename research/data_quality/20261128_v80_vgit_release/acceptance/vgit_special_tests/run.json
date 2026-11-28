@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "4f322713548345fd92528d9710645163",
+  "nonce": "d7061f9552b4480eb2cf322b3c56410a",
+  "workspace": "D:\\动量策略\\美股多头策略",
+  "label": "美股多头策略-pytest-auto",
+  "state": "completed",
+  "started": 1795852433.291002,
+  "owner": {
+    "pid": 13672,
+    "created": 1795852431.993018
+  },
+  "root": "D:\\ct\\managed\\4f322713548345fd92528d9710645163",
+  "record": "D:\\Codex\\test-lifecycle\\records\\4f322713548345fd92528d9710645163",
+  "children": [
+    {
+      "pid": 28904,
+      "created": 1795852434.6879659
+    },
+    {
+      "pid": 33156,
+      "created": 1795852434.736347
+    }
+  ],
+  "keep": false,
+  "gate_out": null,
+  "preserve_scratch": [],
+  "prior_cleanup": {
+    "examined": 1024,
+    "attempted": [],
+    "skipped": {}
+  },
+  "command": [
+    "C:\\Python314\\python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "D:\\ct\\managed\\4f322713548345fd92528d9710645163\\pytest",
+    "--junitxml",
+    "D:\\Codex\\test-lifecycle\\records\\4f322713548345fd92528d9710645163\\regression.xml",
+    "tests/test_v80_vgit_release_audit.py",
+    "-q"
+  ],
+  "cwd": "D:\\动量策略\\美股多头策略",
+  "space_budget": {
+    "expected_bytes": 0,
+    "copy_estimate_bytes": 0,
+    "minimum_free_bytes": 4294967296,
+    "archives": [],
+    "free_at_check": 11019227136,
+    "other_live_reservations": 0,
+    "required_free_bytes": 4294967296
+  },
+  "exit_code": 0,
+  "ended": 1795852437.4355688,
+  "minimum_free_bytes_observed": 11019218944,
+  "log_capture_complete": true,
+  "log_capture_errors": [],
+  "cleanup": {
+    "status": "deleted",
+    "paths": [
+      "D:\\ct\\managed\\4f322713548345fd92528d9710645163"
+    ],
+    "acceptance_files": 4,
+    "completion_basis": "completed_run",
+    "free_before": 11019206656,
+    "free_after": 11019206656,
+    "completed": 1795852452.4191222
+  }
+}

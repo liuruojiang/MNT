@@ -1,0 +1,66 @@
+{
+  "sha256": "a09da2f68cf30a8668b621bbb5916db669f3ac3da80dc3267e8babf462a13ad8",
+  "observed": {
+    "cn_status": {
+      "cn_unconfirmed_snapshot": false,
+      "cn_confirmed_close": "2026-11-27 00:00:00",
+      "cn_final_amounts": {
+        "0.399006": 550334617172.0,
+        "2.932000": 402837915455.0
+      },
+      "verified_integrity_generation": 0
+    },
+    "dk_status": {
+      "cn_unconfirmed_snapshot": false,
+      "cn_confirmed_close": "2026-11-27 00:00:00",
+      "verified_integrity_generation": 0
+    },
+    "us_status": {
+      "status": "current",
+      "required": "2026-11-27 00:00:00",
+      "asof": "2026-11-27 00:00:00",
+      "reason": "",
+      "repaired": [],
+      "tail_evidence": {},
+      "intraday_snapshot": false
+    },
+    "cn_end": "2026-11-27 00:00:00",
+    "dk_end": "2026-11-27 00:00:00",
+    "us_end": "2026-11-27 00:00:00",
+    "prod_end": "2026-11-27 00:00:00",
+    "sources": {
+      "AVDV": "Yahoo",
+      "AVUV": "Yahoo",
+      "BIL": "Yahoo",
+      "BTC-USD": "Yahoo",
+      "DBC": "Yahoo",
+      "DBMF": "Yahoo",
+      "EEM": "Yahoo",
+      "EFA": "Yahoo",
+      "EMXC": "Yahoo",
+      "GLD": "Yahoo",
+      "GLDM": "Yahoo",
+      "IBIT": "Yahoo",
+      "KMLM": "Yahoo+KMLM-20221228-verified-ordinary-income-repair",
+      "PDBC": "Yahoo",
+      "QQQ": "Yahoo",
+      "QQQM": "Yahoo",
+      "SPY": "Yahoo",
+      "TLT": "Yahoo",
+      "UUP": "Yahoo",
+      "VEA": "Yahoo",
+      "VGIT": "Yahoo",
+      "VTI": "Yahoo"
+    },
+    "us_start": "2007-05-30 00:00:00",
+    "vgit_start": "2009-11-23 00:00:00",
+    "vgit_last_native_volume": 2046700.0
+  },
+  "attachments": [
+    {
+      "name": "signal_20261128.xlsx",
+      "size": 10882
+    }
+  ],
+  "scope": "local real provider route; actual hosted POE acceptance pending"
+}

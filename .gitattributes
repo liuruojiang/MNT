@@ -12,3 +12,12 @@ research/data_quality/20261105_bond_replacement/**/*.raw -diff -whitespace
 research/data_quality/20261106_bond_intraday_acceptance/**/*.raw -diff -whitespace
 research/data_quality/20261106_bond_intraday_acceptance/a_chain/*/live_signal.md -whitespace
 research/data_quality/20261105_bond_replacement/*.patch -whitespace
+
+# 2026-11-28 V8.0 audited POE payload and receipts
+"mnt_bot V 8.0 plus.py" text eol=lf
+tools/source_audit/projects.json text eol=lf
+tools/source_audit/project_requirements.json text eol=lf
+tools/compact_v80_poe_semantic.py text eol=lf
+research/data_quality/20261128_v80_vgit_release/** -text
+research/data_quality/20261128_v80_vgit_release/** whitespace=-blank-at-eof,-blank-at-eol,space-before-tab,cr-at-eol
+"mnt_bot V 8.0 plus.py" whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "894ea0d174f9486aae9fb5da0d1883c7",
+  "nonce": "ffffef60efc445c6b93bf1010b21b068",
+  "workspace": "D:\\workspace\\v80_vgit_compact_gate_20261128",
+  "label": "v80_vgit_compact_gate_20261128-pytest-auto",
+  "state": "completed",
+  "started": 1795853761.9912188,
+  "owner": {
+    "pid": 31660,
+    "created": 1795853760.5828424
+  },
+  "root": "D:\\ct\\managed\\894ea0d174f9486aae9fb5da0d1883c7",
+  "record": "D:\\Codex\\test-lifecycle\\records\\894ea0d174f9486aae9fb5da0d1883c7",
+  "children": [
+    {
+      "pid": 12976,
+      "created": 1795853763.365467
+    },
+    {
+      "pid": 33024,
+      "created": 1795853763.398832
+    }
+  ],
+  "keep": false,
+  "gate_out": null,
+  "preserve_scratch": [],
+  "prior_cleanup": {
+    "examined": 1024,
+    "attempted": [],
+    "skipped": {}
+  },
+  "command": [
+    "C:\\Python314\\python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "D:\\ct\\managed\\894ea0d174f9486aae9fb5da0d1883c7\\pytest",
+    "--junitxml",
+    "D:\\Codex\\test-lifecycle\\records\\894ea0d174f9486aae9fb5da0d1883c7\\regression.xml",
+    "tests/test_v80_vgit_release_audit.py",
+    "-q"
+  ],
+  "cwd": "D:\\workspace\\v80_vgit_compact_gate_20261128",
+  "space_budget": {
+    "expected_bytes": 0,
+    "copy_estimate_bytes": 0,
+    "minimum_free_bytes": 4294967296,
+    "archives": [],
+    "free_at_check": 10989355008,
+    "other_live_reservations": 0,
+    "required_free_bytes": 4294967296
+  },
+  "exit_code": 0,
+  "ended": 1795853768.0291338,
+  "minimum_free_bytes_observed": 10989346816,
+  "log_capture_complete": true,
+  "log_capture_errors": [],
+  "cleanup": {
+    "status": "deleted",
+    "paths": [
+      "D:\\ct\\managed\\894ea0d174f9486aae9fb5da0d1883c7"
+    ],
+    "acceptance_files": 4,
+    "completion_basis": "completed_run",
+    "free_before": 10989268992,
+    "free_after": 10989268992,
+    "completed": 1795853784.1793914
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "id": "2afb6ae3952c4ffb98b026f96f706f49",
+  "nonce": "4cddaf1fb19f4f70a5554ae989f5b1d5",
+  "workspace": "D:\\workspace\\v80_vgit_compact_gate_20261128",
+  "label": "v80-release-gate",
+  "state": "completed",
+  "started": 1795853705.6740754,
+  "owner": {
+    "pid": 26532,
+    "created": 1795853703.5697997
+  },
+  "root": "D:\\ct\\managed\\2afb6ae3952c4ffb98b026f96f706f49",
+  "record": "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49",
+  "children": [
+    {
+      "pid": 6756,
+      "created": 1795853707.0650795
+    },
+    {
+      "pid": 24744,
+      "created": 1795853707.1140642
+    }
+  ],
+  "keep": false,
+  "gate_out": null,
+  "preserve_scratch": [],
+  "prior_cleanup": {
+    "examined": 1024,
+    "attempted": [],
+    "skipped": {}
+  },
+  "command": [
+    "C:\\Python314\\python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "D:\\ct\\managed\\2afb6ae3952c4ffb98b026f96f706f49\\pytest",
+    "--junitxml",
+    "D:\\Codex\\test-lifecycle\\records\\2afb6ae3952c4ffb98b026f96f706f49\\regression.xml",
+    "-p",
+    "tools.v80_release_gate",
+    "-q",
+    "--tb=short",
+    "tests/test_v80_cn_finality_20261118.py",
+    "tests/test_v80_suba_warmup_clock_20261120.py",
+    "tests/test_v80_zz2000_adversarial_native.py",
+    "tests/test_v80_doublecheck_data_math_20261007.py::test_r2_ordinary_scale_matches_independent_normalized_correlation",
+    "tests/test_v80_doublecheck_data_math_20261007.py::test_subc_flat_prices_scaling_transition_reconciles_fees_and_debt",
+    "tests/test_v80_doublecheck_data_math_20261007.py::test_subc_zero_risk_signal_transition_does_not_borrow",
+    "tests/test_v80_doublecheck_execution_20261007.py::test_weekly_model_plus_risk_transition_is_one_open_net_trade",
+    "tests/test_v80_doublecheck_execution_20261007.py::test_b78_actual_trade_record_uses_b78_live_price_mapping",
+    "tests/test_v80_doublecheck_execution_20261007.py::test_simultaneous_model_risk_record_uses_actual_open_net_trade_once",
+    "tests/test_v80_release_rebalance_prefix.py",
+    "tests/test_v80_release_report_parity.py",
+    "tests/test_v80_report_inception_and_complete_months.py"
+  ],
+  "cwd": "D:\\workspace\\v80_vgit_compact_gate_20261128",
+  "space_budget": {
+    "expected_bytes": 0,
+    "copy_estimate_bytes": 0,
+    "minimum_free_bytes": 4294967296,
+    "archives": [],
+    "free_at_check": 10987020288,
+    "other_live_reservations": 0,
+    "required_free_bytes": 4294967296
+  },
+  "exit_code": 0,
+  "ended": 1795853857.0213716,
+  "minimum_free_bytes_observed": 10986995712,
+  "log_capture_complete": true,
+  "log_capture_errors": [],
+  "cleanup": {
+    "status": "deleted",
+    "paths": [
+      "D:\\ct\\managed\\2afb6ae3952c4ffb98b026f96f706f49"
+    ],
+    "acceptance_files": 4,
+    "completion_basis": "completed_run",
+    "free_before": 10988863488,
+    "free_after": 10988859392,
+    "completed": 1795853868.8705878
+  }
+}

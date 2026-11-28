@@ -12,8 +12,8 @@
     "V8.0": {
       "directory": "A股美股动量组合策略",
       "entrypoint": "mnt_bot V 8.0 plus.py",
-      "entrypoint_lf_sha256": "d4531d3ef375cb6a7ec1e85b75857f07c1592972234269e06d3c2395e8eca8d3",
-      "symbols": ["AGG", "AVDV", "AVUV", "BIL", "DBC", "DBMF", "EEM", "EFA", "EMXC", "GLD", "GLDM", "IBIT", "KMLM", "PDBC", "QQQ", "QQQM", "SPY", "TLT", "UUP", "VEA", "VGIT", "VTI", "BTC-USD"],
+      "entrypoint_lf_sha256": "a09da2f68cf30a8668b621bbb5916db669f3ac3da80dc3267e8babf462a13ad8",
+      "symbols": ["AVDV", "AVUV", "BIL", "DBC", "DBMF", "EEM", "EFA", "EMXC", "GLD", "GLDM", "IBIT", "KMLM", "PDBC", "QQQ", "QQQM", "SPY", "TLT", "UUP", "VEA", "VGIT", "VTI", "BTC-USD"],
       "excluded": ["BTC-USD: separate crypto acceptance", "A-share indices and turnover: Wind phase pending", "FRED macro series and fallback indices: outside ETF audit"]
     }
   },
